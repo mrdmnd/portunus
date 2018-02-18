@@ -1,9 +1,11 @@
 syntax = "proto3";
 
-import "encounter.proto";
-import "equipment.proto";
-import "talent.proto";
-import "policy.proto"
+package policygen;
+
+import "proto/encounter.proto";
+import "proto/equipment.proto";
+import "proto/talents.proto";
+import "proto/policy.proto";
 
 // The parameters we feed into the beginning of a simulation.
 // Our goal is to use the simulation engine to evaluate `policy` against these

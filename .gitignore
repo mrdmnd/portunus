@@ -27,3 +27,9 @@
 *.exe
 *.out
 *.app
+
+bazel-bin
+bazel-genfiles
+bazel-out
+bazel-policygen
+bazel-testlogs

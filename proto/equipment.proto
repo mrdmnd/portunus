@@ -1,4 +1,6 @@
-syntax "proto3";
+syntax = "proto3";
+
+package policygen;
 
 enum Slot {
   HEAD = 0;
@@ -37,27 +39,27 @@ message WearableItem {
   // If this item is part of a set bonus, we want to know.
   // I.e. if you have a belt and gloves that are tier, they'd both have the same
   // non-zero value here.
-  int32 set_bonus_id = 12;
+  int32 set_bonus_id = 13;
 }
 
 message EquipmentConfig {
-  WearableItem head = 0;
-  WearableItem neck = 1;
-  WearableItem shoulders = 2;
-  WearableItem back = 3;
-  WearableItem chest = 4;
-  WearableItem wrists = 5;
-  WearableItem hands = 6;
-  WearableItem waist = 7;
-  WearableItem legs = 8;
-  WearableItem feet = 9;
-  WearableItem finger1 = 10;
-  WearableItem finger2 = 11;
-  WearableItem trinket1 = 12;
-  WearableItem trinket2 = 13;
-  WearableItem mainhand = 14;
-  WearableItem offhand = 15;
+  WearableItem head = 1;
+  WearableItem neck = 2;
+  WearableItem shoulders = 3;
+  WearableItem back = 4;
+  WearableItem chest = 5;
+  WearableItem wrists = 6;
+  WearableItem hands = 7;
+  WearableItem waist = 8;
+  WearableItem legs = 9;
+  WearableItem feet = 10;
+  WearableItem finger1 = 11;
+  WearableItem finger2 = 12;
+  WearableItem trinket1 = 13;
+  WearableItem trinket2 = 14;
+  WearableItem mainhand = 15;
+  WearableItem offhand = 16;
 
   // If this gearset represents any full or partial gearsets, keep track here.
-  repeated int32 set_bonus_ids = 16;
+  repeated int32 set_bonus_ids = 17;
 }

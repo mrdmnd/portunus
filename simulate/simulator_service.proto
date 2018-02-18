@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package simulator_service;
+
+import "proto/simulation.proto";
+
+// Think about what to do with strongly non-gaussian distributions.
+message DPSDistribution {
+  double mean = 1;
+  double variance = 2;
+}
+
+message SimulationRequest { policygen.SimulationConfig config = 1; }
+
+message SimulationResponse { DPSDistribution distribution = 1; }
+
+service Simulator {
+  rpc ConductSimulation(SimulationRequest) returns (SimulationResponse) {}
+}
