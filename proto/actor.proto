@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+message Actor {
+  int32 id = 1;
+  string name = 2;
+  int32 hp = 3;
+  int32 hp_max = 4;
+}

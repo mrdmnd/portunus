@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+message TalentConfig {
+  int32 row_1 = 0;
+  int32 row_2 = 1;
+  int32 row_3 = 2;
+  int32 row_4 = 3;
+  int32 row_5 = 4;
+  int32 row_6 = 5;
+  int32 row_7 = 6;
+}

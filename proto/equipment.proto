@@ -1,0 +1,63 @@
+syntax "proto3";
+
+enum Slot {
+  HEAD = 0;
+  NECK = 1;
+  SHOULDERS = 2;
+  BACK = 3;
+  CHEST = 4;
+  WRISTS = 5;
+  HANDS = 6;
+  WAIST = 7;
+  LEGS = 8;
+  FEET = 9;
+  FINGER1 = 10;
+  FINGER2 = 11;
+  TRINKET1 = 12;
+  TRINKET2 = 13;
+  MAINHAND = 14;
+  OFFHAND = 15;
+}
+
+message WearableItem {
+  int32 id = 1;
+  string name = 2;
+  Slot slot = 3;
+
+  int32 main_stat = 4;
+  int32 crit_rating = 5;
+  int32 haste_rating = 6;
+  int32 mastery_rating = 7;
+  int32 versatility_rating = 8;
+  int32 spell_power = 9;
+  int32 attack_power = 10;
+  int32 weapon_dps = 11;
+  int32 weapon_speed = 12;
+
+  // If this item is part of a set bonus, we want to know.
+  // I.e. if you have a belt and gloves that are tier, they'd both have the same
+  // non-zero value here.
+  int32 set_bonus_id = 12;
+}
+
+message EquipmentConfig {
+  WearableItem head = 0;
+  WearableItem neck = 1;
+  WearableItem shoulders = 2;
+  WearableItem back = 3;
+  WearableItem chest = 4;
+  WearableItem wrists = 5;
+  WearableItem hands = 6;
+  WearableItem waist = 7;
+  WearableItem legs = 8;
+  WearableItem feet = 9;
+  WearableItem finger1 = 10;
+  WearableItem finger2 = 11;
+  WearableItem trinket1 = 12;
+  WearableItem trinket2 = 13;
+  WearableItem mainhand = 14;
+  WearableItem offhand = 15;
+
+  // If this gearset represents any full or partial gearsets, keep track here.
+  repeated int32 set_bonus_ids = 16;
+}

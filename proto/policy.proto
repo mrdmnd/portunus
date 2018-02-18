@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+import "tensorflow/graph_def.proto" // TODO(mrdmnd) - get actual path here.
+
+// A protocol buffer to hold the (currently) trained model + weights from RL
+message TrainedPolicy { GraphDef tensorflow_graph = 1; }
