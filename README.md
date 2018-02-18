@@ -195,8 +195,10 @@ game GO as well as top human experts.
 
 ## Architectural components / design
 TODO(mrdmnd) - How do we take advantage of transfer learning?? Seems important.
-Directory Organization
 
+### Directory Organization
+
+```
 BUILD
 .clang-format
 compilation\_database.json
@@ -213,7 +215,7 @@ compilation\_database.json
 |-tooling/
   |-bazel-compilation-database/
   |-dbc-extractor/
-
+```
 
 ### Game Client Data parser
 We need to get client data out of the game files. They're basically encoded in
