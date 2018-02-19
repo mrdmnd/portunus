@@ -1,10 +1,26 @@
+package(default_visibility = ["//visibility:public"])
+
+load("@org_pubref_rules_protobuf//cpp:rules.bzl", "GRPC_COMPILE_DEPS")
+
+################################################################################
+# Common Targets
+
+################################################################################
+# Simulation Service
 cc_binary(
-    name = "simulator_service",
-    srcs = ["simulator_service.cc"],
+    name = "simulation_service",
+    srcs = ["simulation_service.cc"],
+    deps = ["//simulate/proto:simulation_service_proto_lib"] + GRPC_COMPILE_DEPS,
 )
 
-proto_library(
-    name = "simulator_service_proto",
-    srcs = ["simulator_service.proto"],
-    deps = ["//proto:common_protos"],
+cc_binary(
+    name = "simulation_service_client",
+    srcs = ["simulation_service_client.cc"],
+    deps = ["//simulate/proto:simulation_service_proto_lib"] + GRPC_COMPILE_DEPS,
 )
+
+################################################################################
+# Worker
+
+################################################################################
+# Tests

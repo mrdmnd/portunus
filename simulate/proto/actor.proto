@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package policygen;
+package simulate;
 
 message Actor {
   int32 id = 1;

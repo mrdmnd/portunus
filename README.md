@@ -288,7 +288,8 @@ sudo cp bazel-bin/buildifier/buildifier /usr/bin/buildifier
 
 Third-party inclusions:
 - [Bazel CompilationDatabase](https://github.com/grailbio/bazel-compilation-database)
-  to build Compilation Database for CLANG tooling. See tooling/
+  to build Compilation Database for CLANG tooling. After bazel build, run
+  `tooling/bazel-compilation-database/generate.sh` to build compilation database.
 
 
 
