@@ -4,51 +4,116 @@
 
 #include "simulate/proto/simulation_service.grpc.pb.h"
 
-#include <gflags/gflags.h>
-#include <grpc++/grpc++.h>
+#include "absl/strings/str_cat.h"
+#include "gflags/gflags.h"
+#include "grpc++/grpc++.h"
+#include "grpc/support/log.h"
 
+DEFINE_string(host, "localhost", "Which address to serve from.");
 DEFINE_string(port, "50051", "Which port to serve requests from.");
 
 using grpc::Server;
+using grpc::ServerAsyncResponseWriter;
 using grpc::ServerBuilder;
 using grpc::ServerCompletionQueue;
 using grpc::ServerContext;
 using grpc::Status;
 
-class SimulationServiceImpl final
-    : public simulate::SimulationService::Service {
-  Status ConductSimulation(ServerContext *context,
-                           const simulate::SimulationRequest *request,
-                           simulate::SimulationResponse *response) override {
-    std::string hi("Hello.");
-    response->set_response_string(hi);
-    return Status::OK;
+enum class CallStatus { CREATE, PROCESS, FINISH };
+
+class SimulationServiceImpl final {
+public:
+  ~SimulationServiceImpl() {
+    server_->Shutdown();
+    cq_->Shutdown();
   }
+
+  void RunServer(const std::string &address) {
+    ServerBuilder builder;
+
+    // Tell our factor what port to listen on.
+    builder.AddListeningPort(address, grpc::InsecureServerCredentials());
+
+    // Hook the service implementation into the builder.
+    builder.RegisterService(&service_);
+
+    // Set up our work queue.
+    cq_ = builder.AddCompletionQueue();
+
+    // Launch and store the server in a unique_ptr
+    server_ = builder.BuildAndStart();
+    std::cout << "Simulation service listening on " << address << std::endl;
+
+    // Go to server's main loop.
+    HandleRpcs();
+  }
+
+private:
+  //  Set up a class with state and logic necessary to serve a request.
+  class CallData {
+  public:
+    CallData(simulate::SimulationService::AsyncService *service,
+             ServerCompletionQueue *cq)
+        : service_(service), cq_(cq), responder_(&ctx_),
+          status_(CallStatus::CREATE) {
+      // Immediate start the serving logic in this constructor.
+      Proceed();
+    }
+
+    void Proceed() {
+      if (status_ == CallStatus::CREATE) {
+        status_ = CallStatus::PROCESS;
+        service_->RequestConductSimulation(&ctx_, &request_, &responder_, cq_,
+                                           cq_, this);
+      } else if (status_ == CallStatus::PROCESS) {
+        new CallData(service_, cq_);
+        // The actual processing:
+        std::string hi("Hello.");
+        response_.set_response_string(hi);
+
+        // And we're done! Let gRPC runtime know that we're done, using the
+        // memory address of this instance as the unique tag for the event.
+        status_ = CallStatus::FINISH;
+        responder_.Finish(response_, Status::OK, this);
+      } else {
+        GPR_ASSERT(status_ == CallStatus::FINISH);
+        // Once in the finish state, deallocate ourselves (CallData).
+        delete this;
+      }
+    }
+
+  private:
+    simulate::SimulationService::AsyncService *service_;
+    ServerCompletionQueue *cq_;
+    ServerContext ctx_;
+    simulate::SimulationRequest request_;
+    simulate::SimulationResponse response_;
+    ServerAsyncResponseWriter<simulate::SimulationResponse> responder_;
+    CallStatus status_;
+  };
+
+  void HandleRpcs() {
+    new CallData(&service_, cq_.get());
+    void *tag;
+    bool ok;
+    while (true) {
+      // Block waiting to read the next event from the completion queue.. Event
+      // is uniquely identified by its tag, which is the memory location of the
+      // CallData instance associated with it.
+      GPR_ASSERT(cq_->Next(&tag, &ok));
+      GPR_ASSERT(ok);
+      static_cast<CallData *>(tag)->Proceed();
+    }
+  }
+
+  std::unique_ptr<ServerCompletionQueue> cq_;
+  simulate::SimulationService::AsyncService service_;
+  std::unique_ptr<Server> server_;
 };
-
-void RunServer(const std::string &address) {
-  SimulationServiceImpl service;
-  ServerBuilder builder;
-
-  // Tell our factor what port to listen on.
-  builder.AddListeningPort(address, grpc::InsecureServerCredentials());
-
-  // Set up our work queue.
-  std::unique_ptr<ServerCompletionQueue> queue = builder.AddCompletionQueue();
-
-  // Hook the service implementation into the builder.
-  builder.RegisterService(&service);
-
-  // Launch and store the server in a unique_ptr
-  std::unique_ptr<Server> server(builder.BuildAndStart());
-  std::cout << "Simulation service listening on " << address << std::endl;
-
-  // Serve until killed.
-  server->Wait();
-}
 
 int main(int argc, char **argv) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
-  RunServer(FLAGS_port);
+  SimulationServiceImpl server;
+  server.RunServer(absl::StrCat(FLAGS_host, ":", FLAGS_port));
   return 0;
 }

@@ -1,4 +1,3 @@
-#include <grpc++/grpc++.h>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -7,13 +6,18 @@
 
 #include "absl/strings/str_cat.h"
 #include "gflags/gflags.h"
+#include "grpc++/grpc++.h"
+#include "grpc/support/log.h"
 
 DEFINE_string(host, "localhost", "Which port to request on.");
 DEFINE_string(port, "50051", "Which port to request on.");
 
 using grpc::Channel;
+using grpc::ClientAsyncResponseReader;
 using grpc::ClientContext;
+using grpc::CompletionQueue;
 using grpc::Status;
+
 using simulate::EncounterConfig;
 using simulate::EquipmentConfig;
 using simulate::GraphDef;
@@ -76,12 +80,43 @@ public:
     // information to the server or tweak RPC behavior.
     ClientContext context;
 
-    Status status = stub_->ConductSimulation(&context, request, &response);
+    // The producer-consumer queue we use to directly communicate asynchronously
+    // with the gRPC runtime.
+    CompletionQueue cq;
+
+    Status status;
+
+    //  stub_->Prepare... creates an RPC object, returning an instance to store
+    //  in "call", but does not actually start the RPC. Because we're using the
+    //  async API, we need to hold on to the "call" instance in order to get any
+    //  updates on the progress of the ongoing RPC.
+    std::unique_ptr<ClientAsyncResponseReader<SimulationResponse>> rpc(
+        stub_->PrepareAsyncConductSimulation(&context, request, &cq));
+
+    // Request that the RPC starts.
+    rpc->StartCall();
+
+    // Request that the RPC fires the callback when it completes, which
+    // updates`response` with the server's response. Tag the request with
+    // integer 1.
+    void *tag_expected = (void *)1;
+    rpc->Finish(&response, &status, tag_expected);
+
+    void *tag_received;
+    bool ok = false;
+
+    // Block until next result is available in the queue.
+    // Store the tag we got back, as well as the success status.
+    GPR_ASSERT(cq.Next(&tag_received, &ok));
+    // Verify that the respose we receive corresponds to the request we made:
+    GPR_ASSERT(tag_received == tag_expected);
+    GPR_ASSERT(ok);
+
     if (status.ok()) {
       return response.response_string();
     } else {
-      std::cout << status.error_code() << ": " << status.error_message()
-                << std::endl;
+      std::cout << "Error code: " << status.error_code() << std::endl;
+      std::cout << "Error message: " << status.error_message() << std::endl;
       return "RPC Failed.";
     }
   }

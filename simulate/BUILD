@@ -13,6 +13,7 @@ cc_binary(
     deps = [
         "//simulate/proto:simulation_service_proto_lib",
         "@com_github_gflags_gflags//:gflags",
+        "@com_google_absl//absl/strings",
     ] + GRPC_COMPILE_DEPS,
 )
 

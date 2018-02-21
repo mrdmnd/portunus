@@ -1,0 +1,5 @@
+build --show_timestamps --keep_going --jobs=500
+build --color=yes
+build:dbg --strip=never --test_timeout=3600
+build:fdo --fdo_instrument=/tmp/policygen_fdo/
+build:opt --strip=always --copt="O3" -gmlt --fdo_optimize /tmp/policygen_fdo/ --dynamic_mode=off
