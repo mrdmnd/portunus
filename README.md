@@ -1,3 +1,4 @@
+[![Build Status](https://travis-ci.org/mrdmnd/policygen.svg?branch=master)](https://travis-ci.org/mrdmnd/policygen)
 # PolicyGen
 
 PolicyGen is a tool for discovering optimal character control policies in World
