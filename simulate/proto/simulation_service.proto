@@ -147,9 +147,11 @@ message DPSDistribution {
   double variance = 2;
 }
 
-message SimulationRequest { SimulationConfig config = 1; }
+// message SimulationRequest { SimulationConfig config = 1; }
 
-message SimulationResponse { string message = 1; }
+message SimulationRequest { string request_string = 1; }
+
+message SimulationResponse { string response_string = 1; }
 
 service SimulationService {
   rpc ConductSimulation(SimulationRequest) returns (SimulationResponse) {}

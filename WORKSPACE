@@ -1,6 +1,4 @@
 workspace(name = "com_mrdmnd_policygen")
-# Need this because the bazel compiler doesn't have a cc_proto_library that
-# explicitly supports GRPC services yet.
 
 http_archive(
     name = "com_github_gflags_gflags",
@@ -27,6 +25,8 @@ new_http_archive(
     url = "https://github.com/google/benchmark/archive/master.zip",
 )
 
+# Need this because the bazel compiler doesn't have a cc_proto_library that
+# explicitly supports GRPC services yet.
 http_archive(
     name = "org_pubref_rules_protobuf",
     strip_prefix = "rules_protobuf-master",
