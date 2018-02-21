@@ -32,21 +32,11 @@ public:
 
   void RunServer(const std::string &address) {
     ServerBuilder builder;
-
-    // Tell our factor what port to listen on.
     builder.AddListeningPort(address, grpc::InsecureServerCredentials());
-
-    // Hook the service implementation into the builder.
     builder.RegisterService(&service_);
-
-    // Set up our work queue.
     cq_ = builder.AddCompletionQueue();
-
-    // Launch and store the server in a unique_ptr
     server_ = builder.BuildAndStart();
     LOG(INFO) << "Simulation service listening on " << address;
-
-    // Go to server's main loop.
     HandleRpcs();
   }
 

@@ -33,3 +33,8 @@ cc_binary(
 
 ################################################################################
 # Tests
+cc_test(
+    name = "simulation_service_test",
+    size = "small",
+    srcs = ["simulation_service_test.cc"],
+)
