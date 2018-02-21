@@ -14,6 +14,7 @@ cc_binary(
         "//simulate/proto:simulation_service_proto_lib",
         "@com_github_gflags_gflags//:gflags",
         "@com_google_absl//absl/strings",
+        "@com_google_glog//:glog",
     ] + GRPC_COMPILE_DEPS,
 )
 

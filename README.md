@@ -259,25 +259,26 @@ HeroRotation.
 
 ### Get Started
 
-Dependencies:
-- [Bazel](https://bazel.build/)
-- [gTest](https://github.com/google/googletest)
-- [gLog](https://github.com/google/glog)
-- [gRPC](https://github.com/grpc/grpc)
-- [Benchmark](https://github.com/google/benchmark)
-- [Protobuf](https://github.com/google/protobuf)
+Dependencies (some are pulled in automatically)
+- [Bazel](https://bazel.build/) - you must install this.
+- [CUDA](https://developer.nvidia.com/cuda-downloads) - you must install this.
+- [gTest](https://github.com/google/googletest) - automatic.
+- [gLog](https://github.com/google/glog) - automatic.
+- [gFlags](https://github.com/gflags/gflags) - automatic.
+- [gRPC](https://github.com/grpc/grpc) - automatic.
+- [Benchmark](https://github.com/google/benchmark) - automatic.
+- [Protobuf](https://github.com/google/protobuf) - automatic.
 - [Tensorflow](https://github.com/tensorflow/tensorflow)
-- [CUDA](https://developer.nvidia.com/cuda-downloads)
 - C++17 compliant compiler (code built + tested with clang 5.0.1 on Arch Linux)
 - CUDA-supported device
 
 ### Help Develop
 
 Optional Dependencies for developers Linters:
-- [ClangFormat](https://clang.llvm.org/docs/ClangFormat.html) - all code checked
-  is autoformatted to Google style guide conventions.
-- [Buildifier](https://github.com/bazelbuild/buildtools) to format BUILD file
-  changes.  To install, run
+- [ClangFormat](https://clang.llvm.org/docs/ClangFormat.html) - all code
+  is autoformatted to Google's style guide conventions.
+- [Buildifier](https://github.com/bazelbuild/buildtools) - BUILD file is
+  autoformattedto Google's style guide convensions.
 
 ```
 git clone  https://github.com/bazelbuild/buildtools.git
@@ -288,8 +289,9 @@ sudo cp bazel-bin/buildifier/buildifier /usr/bin/buildifier
 
 Third-party inclusions:
 - [Bazel CompilationDatabase](https://github.com/grailbio/bazel-compilation-database)
-  to build Compilation Database for CLANG tooling. After bazel build, run
-  `tooling/bazel-compilation-database/generate.sh` to build compilation database.
+  to build Compilation Database for CLANG tooling. After bazel build, invoke
+  `tools/bazel-compilation-database/generate.sh` to build compilation database.
+  This seeds the rest of the useful clang completion tools.
 
 
 

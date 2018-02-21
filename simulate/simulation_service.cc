@@ -6,6 +6,7 @@
 
 #include "absl/strings/str_cat.h"
 #include "gflags/gflags.h"
+#include "glog/logging.h"
 #include "grpc++/grpc++.h"
 #include "grpc/support/log.h"
 
@@ -24,6 +25,7 @@ enum class CallStatus { CREATE, PROCESS, FINISH };
 class SimulationServiceImpl final {
 public:
   ~SimulationServiceImpl() {
+    LOG(INFO) << "Simulation service shutting down.";
     server_->Shutdown();
     cq_->Shutdown();
   }
@@ -42,7 +44,7 @@ public:
 
     // Launch and store the server in a unique_ptr
     server_ = builder.BuildAndStart();
-    std::cout << "Simulation service listening on " << address << std::endl;
+    LOG(INFO) << "Simulation service listening on " << address;
 
     // Go to server's main loop.
     HandleRpcs();
@@ -67,6 +69,7 @@ private:
                                            cq_, this);
       } else if (status_ == CallStatus::PROCESS) {
         new CallData(service_, cq_);
+        LOG(INFO) << "Simulation service saw new RPC request.";
         // The actual processing:
         std::string hi("Hello.");
         response_.set_response_string(hi);

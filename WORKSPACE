@@ -18,6 +18,12 @@ http_archive(
     url = "https://github.com/google/googletest/archive/master.zip",
 )
 
+http_archive(
+    name = "com_google_glog",
+    strip_prefix = "glog-master",
+    url = "https://github.com/google/glog/archive/master.zip",
+)
+
 new_http_archive(
     name = "com_github_google_benchmark",
     build_file = "@com_github_grpc_grpc//third_party:benchmark.BUILD",
