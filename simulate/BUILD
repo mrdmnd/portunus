@@ -28,6 +28,18 @@ cc_binary(
     ] + GRPC_COMPILE_DEPS,
 )
 
+cc_library(
+    name = "simulation_lib",
+    srcs = [
+        "action.h",
+        "policy.h",
+    ],
+    hdrs = [
+        "action.h",
+        "policy.h",
+    ],
+)
+
 ################################################################################
 # Worker
 
