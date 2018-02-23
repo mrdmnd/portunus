@@ -10,3 +10,4 @@
 
 ## Little:
  - Define a Duration or Timespan class.
+ - Handle signals (CTRL-C, etc) gracefully (see sc_main.cpp in SIMC)
