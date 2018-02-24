@@ -156,8 +156,8 @@ selection. Some talents grant new abilities to the player, while others modify
 the behavior of existing abilities completely. Some talents are better suited to
 multiple target combat, and other talents are optimized for single target
 damage. Players can only choose their talents before combat starts. In practice,
-some talents do not effect combat or damage meaningfully, and their impact can be
-ignored. This will help prune the search space a bit.
+some talents do not effect combat or damage meaningfully, and their impact can
+be ignored. This will help prune the search space a bit.
 
 ### Encounter Configuration
 
@@ -190,65 +190,3 @@ from there, an equivalent formulation is "what states are the best states to
 find yourself, in general?" and choose the actions that lead to those states.
 Google has famously used this technique to great effect to learn how to play the
 game GO as well as top human experts.
-
-
-## Architectural components / design
-TODO(mrdmnd) - How do we take advantage of transfer learning?? Seems important.
-
-### Directory Organization
-
-```
-BUILD
-.clang-format
-compilation\_database.json
-|-proto/
-  |-actor\_state.proto
-  |-?
-|-simulation/
-  |-action.h
-  |-action.cc
-  |-action\_test.cc
-  |-...
-|-learning/
-  |-?
-|-tooling/
-  |-bazel-compilation-database/
-  |-dbc-extractor/
-```
-
-### Game Client Data parser
-We need to get client data out of the game files. They're basically encoded in
-weird database formats, and we need this to be usable for our simulator. This is
-a non-interesting, solved problem by the SimC team, but we need this component,
-unless we want to hardcode every constant for every spell and every item.
-
-### Simulation Service
-
-We implement an RPC service that receives SimulationRequests and produces
-SimulationResponses. This is meant to be horizontally scalable. Each machine
-running this service is running a simulation server binary which is heavily
-multithreaded and multiprocessed. This is an embarassingly parallel problem,
-with minimal data dependencies. Simulation is mostly a CPU-bound problem.
-
-### Deep Reinforcement Learning Client
-
-For a given gearset and encounter, this client trains a policy to handle the
-encounter. It does so by using the simulation service as an oracle for the exact
-DPS value of the policy.
-
-### Constrained Gear Optimization Client
-
-Given an encounter and a set of available gear, identify the gear, talent
-composition, and optimal policy for that encounter.
-
-### LUA Addon
-
-This component takes the trained action policy for the given gearset and
-encounter configuration, and embeds itself directly into the player's in-game
-interface: it uses the existing WoW API to build up an equivalent representation
-of "player state" used by the action policy network, and then runs the model
-forward to determine the optimal action at any moment in time. (In practice,
-we'll want to determine the optimal action at both *this instant* as well as a
-few times in the future, to give the player a bit of predictive breathing room.
-This is similar (almost exactly identical) to existing addons Ovale or
-HeroRotation.

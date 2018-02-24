@@ -1,9 +1,8 @@
 [![Build Status](https://travis-ci.org/mrdmnd/policygen.svg?branch=master)](https://travis-ci.org/mrdmnd/policygen)
 # PolicyGen
 
-PolicyGen is a tool for discovering optimal character control policies in World
-of Warcraft. We compute an optimal control policy through the use of simulation
-and deep reinforcement learning.
+PolicyGen is a tool for learning optimal character control policies in World
+of Warcraft through the use of simulation and deep reinforcement learning.
 
 ## Background
 
@@ -34,9 +33,10 @@ instructions to fit your distro + package manager.
 ### Get Started
 Let's get some dependencies built.
 
-- You need a modern compiler (code built + tested with clang 5.0.1 on Arch Linux)
+- You need a modern compiler (code is tested with clang 5.0.1 on Arch Linux)
 
-- [Bazel](https://bazel.build/) - you need this to build both TensorFlow and PolicyGen.
+- [Bazel](https://bazel.build/) - you need this to build both TensorFlow
+  and PolicyGen.
 
   On my system, this is installed with `sudo pacman -S bazel`.
 
@@ -171,3 +171,52 @@ To run the policy generation tool, invoke
 
 where the $CONF file contains details on the raid encounter as well as available
 player gear.
+
+## Architecture Overview
+
+### Game Client Data parser
+We need to get client data out of the game files. They're basically encoded in
+weird database formats, and we need this to be usable for our simulator. This is
+a non-interesting, solved problem by the SimC team, but we need this component,
+unless we want to hardcode every constant for every spell and every item. We
+rely on this data being available at compile time in the simulation engine code.
+
+### Simulation Service
+
+We implement an RPC service that receives SimulationRequests and produces
+SimulationResponses. This is meant to be horizontally scalable. Each machine
+running this service is running a multithreaded simulation server binary.
+This is an embarassingly parallel problem, with minimal data dependencies.
+Simulation is mostly a CPU-bound problem.
+
+
+### Gearset Generation Tool
+
+This tool takes in a protobuf containing all possible items for each
+player slot as well as a set of pruning constraints, and returns a protobuf
+containing each non-dominated gearset. A "dominated" gearset is one that is
+inferior to another gear-set along every dimension.
+
+### Deep Reinforcement Learning Client
+
+The learning client `policygen` takes in a configuration describing the
+encounter to be simulated, as well as a set of all possible gear for the player
+character (from  the gearset generation tool above).
+
+This component feeds simulation configurations to the simulation service to
+evaluate the quality of an action policy. For each gearset, we learn an optimal
+policy for the given encounter using deep Q learning. Finally, we choose the
+(gearset, policy) pair that performed the best and return them in serialized
+form.
+
+### LUA Addon
+
+This component takes the trained action policy for the given gearset and
+encounter configuration, and embeds itself directly into the player's in-game
+interface: it uses the existing WoW API to build up an equivalent representation
+of "player state" used by the action policy network, and then runs the model
+forward to determine the optimal action at any moment in time. (In practice,
+we'll want to determine the optimal action at both *this instant* as well as a
+few times in the future, to give the player a bit of predictive breathing room.
+This is similar (almost exactly identical) to existing addons Ovale or
+HeroRotation.
