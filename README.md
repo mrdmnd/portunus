@@ -23,7 +23,8 @@ Currently, I've only implemented the "localhost" version of this.
 to evaluate the Q-function, and perform policy gradient descent.
 
 As I'm a Google engineer in my $DAYJOB, most of the building blocks for this
-project are Google open-source libraries. Let's install these now.
+project are Google open-source libraries. Let's install some of these now.
+
 We assume you're on a modern x64 machine running some flavor of linux, ideally
 with an NVIDIA GPU. I'm running on Arch Linux; you may need to translate these
 instructions to fit your distro + package manager.
@@ -31,6 +32,8 @@ instructions to fit your distro + package manager.
 
 ### Get Started
 Let's get some dependencies built.
+
+- C++17 compliant compiler (code built + tested with clang 5.0.1 on Arch Linux)
 
 - [Bazel](https://bazel.build/) - you need this to build both TensorFlow and PolicyGen.
   On my system, this is installed with `sudo pacman -S bazel`.
@@ -49,10 +52,15 @@ Let's get some dependencies built.
   how to do that:
 
   1) Install pip, numpy, and wheel: `sudo pacman -S python-pip python-numpy python-wheel`.
+
      If you're on a distro that doesn't ship headers, you may also need python-dev.
+
      If python3 isn't your default, you may want the python3 versions of these.
+
   2) Clone the TF repo: `git clone https://github.com/tensorflor/tensorflow`
+
   3) Run the configuration script: `cd tensorflow && ./configure`
+
      You want to point the script to your install of CUDA.
 
      Tell the script to target the latest version of CUDA.
@@ -115,7 +123,6 @@ b'Hello!'
   [tensorflow-opt-cuda](https://www.archlinux.org/packages/community/x86_64/tensorflow-opt-cuda/)
   directly.
 
-- C++17 compliant compiler (code built + tested with clang 5.0.1 on Arch Linux)
 
 ### Developers
 
@@ -124,8 +131,8 @@ Optional Dependencies for developers:
   is autoformatted to Google's style guide conventions.
 - [Buildifier](https://github.com/bazelbuild/buildtools) - BUILD file is
   autoformatted to Google's style guide convensions.
-- [Bazel CompilationDatabase](https://github.com/grailbio/bazel-compilation-database)
-  to build Compilation Database for CLANG tooling. After bazel build, invoke
+- [Bazel Compilation Database](https://github.com/grailbio/bazel-compilation-database)
+  to build a Compilation Database for CLANG tooling. After bazel build, invoke
   `tools/bazel-compilation-database/generate.sh` to build compilation database.
   This seeds the rest of the useful clang completion tools.
 
