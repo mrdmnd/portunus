@@ -31,14 +31,42 @@ new_http_archive(
     url = "https://github.com/google/benchmark/archive/master.zip",
 )
 
-# Need this because the bazel compiler doesn't have a cc_proto_library that
+# Need these two because the bazel compiler doesn't have a cc_proto_library that
 # explicitly supports GRPC services yet.
+# See https://github.com/pubref/rules_protobuf
 http_archive(
     name = "org_pubref_rules_protobuf",
     strip_prefix = "rules_protobuf-master",
     url = "https://github.com/pubref/rules_protobuf/archive/master.zip",
 )
 
+# See https://github.com/bazelbuild/rules_python
+http_archive(
+    name = "io_bazel_rules_python",
+    strip_prefix = "rules_python-master",
+    url = "https://github.com/bazelbuild/rules_python/archive/master.zip",
+)
+
+load("@io_bazel_rules_python//python:pip.bzl", "pip_repositories", "pip_import")
+
+pip_repositories()
+
+pip_import(
+    name = "pip_grpcio",
+    requirements = "@org_pubref_rules_protobuf//python:requirements.txt",
+)
+
+load(
+    "@pip_grpcio//:requirements.bzl",
+    pip_grpcio_install = "pip_install",
+)
+
+pip_grpcio_install()
+
 load("@org_pubref_rules_protobuf//cpp:rules.bzl", "cpp_proto_repositories")
 
 cpp_proto_repositories()
+
+load("@org_pubref_rules_protobuf//python:rules.bzl", "py_proto_repositories")
+
+py_proto_repositories()
