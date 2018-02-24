@@ -7,6 +7,7 @@ py_binary(
     ],
     deps = [
         "//simulate/proto:simulation_proto_py_lib",
+        "@org_tensorflow//tensorflow/python",
         requirement("grpcio"),
     ],
 )

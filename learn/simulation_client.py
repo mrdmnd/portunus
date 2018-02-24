@@ -1,5 +1,7 @@
 """ A simple class for communicating with a simulation gRPC service. """
 import grpc
+import tensorflow as tf
+
 from simulate.proto import simulation_service_pb2
 from simulate.proto import simulation_service_pb2_grpc
 

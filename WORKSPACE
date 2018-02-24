@@ -19,6 +19,12 @@ http_archive(
 )
 
 http_archive(
+    name = "org_tensorflow",
+    strip_prefix = "tensorflow-master",
+    url = "https://github.com/tensorflow/tensorflow/archive/master.zip",
+)
+
+http_archive(
     name = "com_google_glog",
     strip_prefix = "glog-master",
     url = "https://github.com/google/glog/archive/master.zip",

@@ -1,6 +1,3 @@
 build --color=yes --show_timestamps
 test --color=yes --show_timestamps --test_output=streamed
-build:dbg --strip=never --test_timeout=3600
-build:fdo --fdo_instrument=/tmp/policygen_fdo/
-build:opt --strip=always --copt="-O3" -gmlt --fdo_optimize /tmp/policygen_fdo/ --dynamic_mode=off
 build:asan --strip=never --copt="-fsanitize=address" --copt="-O1" --copt="-fno-omit-frame-pointer" --linkopt="-fsanitize=address"
