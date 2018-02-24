@@ -2,8 +2,8 @@ syntax = "proto3";
 
 package simulate;
 
-import "simulate/proto/policy.proto";
-import "simulate/proto/actor.proto";
+import "proto/policy.proto";
+import "proto/actor.proto";
 
 //
 //                        Encounter Configuration

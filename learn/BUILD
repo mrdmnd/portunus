@@ -6,8 +6,7 @@ py_binary(
         "simulation_client.py",
     ],
     deps = [
-        "//simulate/proto:simulation_proto_py_lib",
-        "@org_tensorflow//tensorflow/python",
+        "//proto:simulation_proto_py_lib",
         requirement("grpcio"),
     ],
 )

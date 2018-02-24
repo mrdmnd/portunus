@@ -2,7 +2,7 @@
 #include <memory>
 #include <string>
 
-#include "simulate/proto/simulation_service.grpc.pb.h"
+#include "proto/simulation_service.grpc.pb.h"
 
 #include "absl/strings/str_cat.h"
 #include "gflags/gflags.h"
