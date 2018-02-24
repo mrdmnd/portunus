@@ -11,7 +11,8 @@ See [Background](BACKGROUND.md) for the motivation behind PolicyGen.
 
 ## Installation
 
-Policygen is comprised of a few major components
+Policygen is comprised of a few major components:
+
 1) a distributed, CPU-powered RPC simulation service, for evaluating
 policy networks against a minimal simulation engine (sort of like SIMC).
 The idea is to scale this horizontally, with as many copies of the simulation
@@ -22,8 +23,8 @@ Currently, I've only implemented the "localhost" version of this.
 2) a local, GPU-powered learning module that trains a model with deep learning
 to evaluate the Q-function, and perform policy gradient descent.
 
-As I'm a Google engineer in my $DAYJOB, most of the building blocks for this
-project are Google open-source libraries. Let's install some of these now.
+Most of the building blocks for this project are Google open-source libraries.
+Let's install some of these now.
 
 We assume you're on a modern x64 machine running some flavor of linux, ideally
 with an NVIDIA GPU. I'm running on Arch Linux; you may need to translate these
@@ -33,18 +34,21 @@ instructions to fit your distro + package manager.
 ### Get Started
 Let's get some dependencies built.
 
-- C++17 compliant compiler (code built + tested with clang 5.0.1 on Arch Linux)
+- You need a modern compiler (code built + tested with clang 5.0.1 on Arch Linux)
 
 - [Bazel](https://bazel.build/) - you need this to build both TensorFlow and PolicyGen.
+
   On my system, this is installed with `sudo pacman -S bazel`.
 
 - (OPTIONAL) [CUDA](https://developer.nvidia.com/cuda-downloads) and [cuDNN](https://developer.nvidia.com/cuDNN)
   Install these if you want CUDA support. Which you do. Duh.
+
   On my system, this is installed with `sudo pacman -S nvidia cuda cudnn`.
 
 - (OPTIONAL) [Intel MKL](https://software.intel.com/en-us/mkl) - this is a
   useful tool for accelerating linear algebra if you're not planning on using a
   GPU. It might even be helpful for other things. Who knows?! You want this.
+
   On my system, this is installed with `yaourt -S intel-mkl`.
 
 - [Tensorflow](https://github.com/tensorflow/tensorflow) - If you want maximum
@@ -71,6 +75,7 @@ Let's get some dependencies built.
      extras/demo_suite directory).
 
      Tell the script to compile for your cuDNN version.
+
      Accept the defaults for the other options.
 
   4) Run the following command, which builds a PIP package-generator for TF.
@@ -88,7 +93,7 @@ Let's get some dependencies built.
   6) Install the pip package from `/tmp/tensorflow_pkg`. You'll have to replace
      the version number here:
 
-     `sudo pip install /tmp/tensorflow_pkg/tensorflow-{VERSION}.whl
+     `sudo pip install /tmp/tensorflow_pkg/tensorflow-{VERSION}.whl`
 
   7) Verify the installation:
 
