@@ -8,7 +8,7 @@ import "proto/actor.proto";
 // TODO(mrdmnd): make event occurrence probabilistic (maybe X doesn't happen?)
 message ActorSpawnEvent {
   Actor actor = 1;
-  int32 despawn_timestamp = 2; // If -1, actor despawns when HP is zero.
+  int32 duration = 2; // If -1, actor despawns when HP is zero.
 }
 
 message ActorInvulnEvent {
@@ -30,6 +30,22 @@ message TakeDamageEvent {
   int32 damage_amount = 1; // Amount of damage the boss deals to us.
 }
 
+// TODO(mrdmnd)
+// This is a "fixed" lust trigger, if you know exactly when you're going to pop
+// it. There's also a "bloodlust_check" that happens every timeframe in the sim
+// which checks if
+// a) bloodlust is available (not exhausted) and
+// b) bloodlust_percent is reached or time_to_die is less than lust duration.
+message BloodlustEvent {
+  int32 duration = 1;          // How long lust lasts for.
+  double haste_percentage = 1; // How much haste we get.
+}
+
+message PrepotEvent {
+  int32 potion_id = 1; // Which potion was used
+  int32 duration = 2;  // How long it lasts for
+}
+
 message EncounterEvent {
   int32 timestamp = 1; // -1 means event happens before fight starts.
   oneof event {
@@ -38,10 +54,12 @@ message EncounterEvent {
     MovementEvent movement = 4;
     StunEvent stun = 5;
     TakeDamageEvent damage = 6;
+    BloodlustEvent lust = 7;
+    PrepotEvent prepot = 8;
   }
 }
 
 message EncounterConfig {
   string name = 1; // Something like "Patchwork" or "Helter Skelter"
-  repeated EncounterEvent events = 2;
+  repeated EncounterEvent events = 3;
 }

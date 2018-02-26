@@ -57,13 +57,14 @@ def main():
 
     # Simulation configuration
     simulation_config = simulation_pb2.SimulationConfig()
+    simulation_config.max_iterations = 10000
+    simulation_config.error_target = 0.01
+    simulation_config.time_target = 300
+    simulation_config.time_variance = 0.05
     simulation_config.encounter_config.MergeFrom(encounter_config)
     simulation_config.equipment_config.MergeFrom(equipment_config)
     simulation_config.talent_config.MergeFrom(talent_config)
     simulation_config.policy.MergeFrom(policy)
-    simulation_config.target_error = 0.01
-    simulation_config.max_iterations = 10000
-    simulation_config.combat_length_variance = 0.20
 
     # Issue request to RPC stub.
     simulation_request = service_pb2.SimulationRequest()

@@ -1,0 +1,22 @@
+// TODO(mrdmnd) FIX VALUES
+health_estimator {
+  health_after_05pct: 0.95
+  health_after_10pct: 0.90
+  health_after_15pct: 0.85
+  health_after_20pct: 0.80
+  health_after_25pct: 0.75
+  health_after_30pct: 0.70
+  health_after_35pct: 0.65
+  health_after_40pct: 0.60
+  health_after_45pct: 0.55
+  health_after_50pct: 0.50
+  health_after_55pct: 0.45
+  health_after_60pct: 0.40
+  health_after_65pct: 0.35
+  health_after_70pct: 0.30
+  health_after_75pct: 0.25
+  health_after_80pct: 0.20
+  health_after_85pct: 0.15
+  health_after_90pct: 0.10
+  health_after_95pct: 0.05
+}
