@@ -13,6 +13,12 @@ http_archive(
 )
 
 http_archive(
+    name = "io_absl_py",
+    strip_prefix = "abseil-py-master",
+    url = "https://github.com/abseil/abseil-py/archive/master.zip",
+)
+
+http_archive(
     name = "com_google_googletest",
     strip_prefix = "googletest-master",
     url = "https://github.com/google/googletest/archive/master.zip",
