@@ -11,30 +11,16 @@ package simulate;
 // see from uniform raid DPS. BURST assumes you're going to hit the boss extra
 // hard at the beginning. EXECUTE assumes you're going to hit the boss extra
 // hard at the end. BURST_AND_EXECUTE assumes both.
-message HealthEstimator {
-  double health_after_05pct = 1;
-  double health_after_10pct = 2;
-  double health_after_15pct = 3;
-  double health_after_20pct = 4;
-  double health_after_25pct = 5;
-  double health_after_30pct = 6;
-  double health_after_35pct = 7;
-  double health_after_40pct = 8;
-  double health_after_45pct = 9;
-  double health_after_50pct = 10;
-  double health_after_55pct = 11;
-  double health_after_60pct = 12;
-  double health_after_65pct = 13;
-  double health_after_70pct = 14;
-  double health_after_75pct = 15;
-  double health_after_80pct = 16;
-  double health_after_85pct = 17;
-  double health_after_90pct = 18;
-  double health_after_95pct = 19;
-}
+
+enum HealthEstimator {
+  UNIFORM = 0;
+  BURST = 1;
+  EXECUTE = 2;
+  BURST_AND_EXECUTE = 3;
+};
 
 message Actor {
   int32 id = 1;
   string name = 2;
-  HealthEstimator = 3;
+  HealthEstimator health_estimator = 3;
 }

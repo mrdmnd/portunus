@@ -1,6 +1,7 @@
 """ A simple class for communicating with a simulation gRPC service. """
 import grpc
 from google.protobuf.text_format import MessageToString
+from google.protobuf.text_format import Merge
 
 from proto import actor_pb2
 from proto import encounter_pb2
@@ -14,6 +15,7 @@ from proto import service_pb2_grpc
 HOST = "localhost"
 PORT = "50051"
 
+
 def main():
     """ Entry point into simulation client. """
     channel = grpc.insecure_channel(HOST+":"+PORT)
@@ -23,12 +25,11 @@ def main():
     enemy_actor = actor_pb2.Actor()
     enemy_actor.id = 1
     enemy_actor.name = "Patchwork"
-    enemy_actor.hp_max = 1000
-    enemy_actor.hp_current = 1000
+    enemy_actor.health_estimator = actor_pb2.HealthEstimator.Value("UNIFORM")
 
     spawn_event = encounter_pb2.ActorSpawnEvent()
     spawn_event.actor.MergeFrom(enemy_actor)
-    spawn_event.despawn_timestamp = -1
+    spawn_event.duration = -1
 
     encounter_event = encounter_pb2.EncounterEvent()
     encounter_event.timestamp = -1

@@ -16,24 +16,26 @@ message SimulationConfig {
   // Reasonable default: 0.01
   double error_target = 2;
 
-  // We attack for time_target +/- time_variance milliseconds.
+  // We attack for time_target +/- time_variance.
+  // Reasonable default: 5 minutes, or 300s (300000 ms)
   int32 time_target = 3;
 
-  // We want combat to run for not *exactly* as long as the encounter says.
-  double time_variance = 3;
+  // We want combat to run about as long as the encounter says, but not exactly.
+  // Reasonable default: 0.10, or 10%.
+  double time_variance = 4;
 
   // `encounter_config` contains "how long" this fight is.
-  EncounterConfig encounter_config = 4;
+  EncounterConfig encounter_config = 5;
 
   // `equipment_config` contains the gearset we're evaluating our policy on.
-  EquipmentConfig equipment_config = 5;
+  EquipmentConfig equipment_config = 6;
 
   // `talent_config` contains the set of talents we're evaluating our policy on.
-  TalentConfig talent_config = 6;
+  TalentConfig talent_config = 7;
 
-  // `trained_policy` represents the current policy we want our simulator to
-  // evaluate. The model may be either APL (deterministic) or DL (learned).
-  PolicyConfig policy = 7;
+  // `policy` represents the current policy we want our simulator to evaluate.
+  // The model type may be either APL (deterministic) or DL (learned).
+  PolicyConfig policy = 8;
 }
 
 message SimulationResult {

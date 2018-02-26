@@ -38,7 +38,7 @@ message TakeDamageEvent {
 // b) bloodlust_percent is reached or time_to_die is less than lust duration.
 message BloodlustEvent {
   int32 duration = 1;          // How long lust lasts for.
-  double haste_percentage = 1; // How much haste we get.
+  double haste_percentage = 2; // How much haste we get.
 }
 
 message PrepotEvent {
