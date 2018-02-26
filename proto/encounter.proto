@@ -41,7 +41,6 @@ message EncounterEvent {
 }
 
 message EncounterConfig {
-  int32 id = 1;
-  string name = 2; // Something like "Patchwork" or "Helter Skelter"
-  repeated EncounterEvent events = 3;
+  string name = 1; // Something like "Patchwork" or "Helter Skelter"
+  repeated EncounterEvent events = 2;
 }

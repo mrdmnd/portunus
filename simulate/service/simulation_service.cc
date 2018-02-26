@@ -29,7 +29,10 @@ using grpc::Status;
 
 using namespace simulate;
 
-enum class CallStatus { CREATE, PROCESS, FINISH };
+void shutdown_handler(int signal) {
+  LOG(INFO) << "Shutting down simulation service...";
+  exit(signal);
+}
 
 class SimulationServiceImpl final : public SimulationService::Service {
 public:
@@ -44,7 +47,6 @@ public:
     std::string config;
     google::protobuf::TextFormat::PrintToString(request->config(), &config);
     LOG(INFO) << "Configuration: \n" << config;
-
     response->mutable_result()->CopyFrom(engine_->Simulate(request->config()));
     return Status::OK;
   }
@@ -52,11 +54,6 @@ public:
 private:
   std::unique_ptr<Engine> engine_;
 };
-
-void shutdown_handler(int signal) {
-  LOG(INFO) << "Shutting down simulation service...";
-  exit(signal);
-}
 
 int main(int argc, char **argv) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);

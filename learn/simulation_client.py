@@ -26,13 +26,13 @@ def main():
 
     # Talent configuration
     talent_config = talents_pb2.TalentConfig()
-    talent_config.first_row = 1;
-    talent_config.second_row = 1;
-    talent_config.third_row = 1;
-    talent_config.fourth_row = 1;
-    talent_config.fifth_row = 1;
-    talent_config.sixth_row = 1;
-    talent_config.seventh_row = 1;
+    talent_config.row_1 = 1;
+    talent_config.row_2 = 3;
+    talent_config.row_3 = 3;
+    talent_config.row_4 = 1;
+    talent_config.row_5 = 2;
+    talent_config.row_6 = 3;
+    talent_config.row_7 = 1;
 
     # Policy configuration
     policy = policy_pb2.PolicyConfig()
@@ -46,6 +46,7 @@ def main():
     simulation_config.policy.MergeFrom(policy)
     simulation_config.target_error = 0.01
     simulation_config.max_iterations = 10000
+    simulation_config.combat_length_variance = 0.20
 
     simulation_request = service_pb2.SimulationRequest()
     simulation_request.config.MergeFrom(simulation_config)
