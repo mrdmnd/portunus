@@ -30,3 +30,12 @@ cc_library(
         "@com_google_glog//:glog",
     ],
 )
+
+cc_test(
+    name = "engine_test",
+    size = "small",
+    srcs = [
+        "engine_test.cc",
+    ],
+    deps = [":engine"],
+)
