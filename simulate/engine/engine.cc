@@ -10,9 +10,12 @@
 using namespace simulate;
 
 SimulationResult Engine::Simulate(SimulationConfig config) const {
+  Distribution dps_distribution;
+  dps_distribution.set_mean(100.0);
+  dps_distribution.set_variance(10.0);
+
   SimulationResult r;
-  r.set_dps_mean(100.0);
-  r.set_dps_variance(10.0);
+  r.mutable_dps_distribution()->MergeFrom(dps_distribution);
   r.set_metadata("Hello world from engine.cc!");
   return r;
 }

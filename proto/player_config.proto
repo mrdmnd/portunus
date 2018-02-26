@@ -32,13 +32,22 @@ message WearableItem {
   int32 versatility_rating = 8;
   int32 spell_power = 9;
   int32 attack_power = 10;
-  int32 weapon_dps = 11;
-  int32 weapon_speed = 12;
 
   // If this item is part of a set bonus, we want to know.
   // I.e. if you have a belt and gloves that are tier, they'd both have the same
   // non-zero value here.
   int32 set_bonus_id = 13;
+
+  // If this field is set, the item is "enchanted" and we will need to process
+  // the enchantment buff in the sim.
+  int32 enchantment_id = 14;
+
+  // Items may have sockets, if so, the item is "socketed" and we will need to
+  // process the socket bonuses in the sim.
+  repeated int32 gem_id = 15;
+
+  // Item might have some special effects we want to track.
+  int32 special_effect_id = 16;
 }
 
 message EquipmentConfig {
@@ -59,8 +68,12 @@ message EquipmentConfig {
   WearableItem mainhand = 15;
   WearableItem offhand = 16;
 
-  // If this gearset represents any full or partial gearsets, keep track here.
-  repeated int32 set_bonus_ids = 17;
+  int32 mainhand_swing_time = 17;  // Given in MILLISECONDS
+  int32 offhand_swing_time = 18;   // Given in MILLISECONDS
+  int32 mainhand_min_damage = 19;
+  int32 mainhand_max_damage = 20;
+  int32 offhand_min_damage = 21;
+  int32 offhand_max_damage = 22;
 }
 
 message TalentConfig {
@@ -73,7 +86,39 @@ message TalentConfig {
   int32 row_7 = 7;
 }
 
+enum Specialization {
+  ROGUE_ASSASSINATION = 0;
+  ROGUE_OUTLAW = 1;
+  ROGUE_SUBTLETLY = 2;
+}
+
+enum Race {
+  HUMAN = 0;
+  DWARF = 1;
+  NIGHT_ELF = 2;
+  GNOME = 3;
+  ORC = 4;
+  TROLL = 5;
+  UNDEAD = 6;
+  TAUREN = 7;
+  DRAENEI = 8;
+  BLOOD_ELF = 9;
+  WORGEN = 10;
+  GOBLIN = 11;
+  PANDAREN = 12;
+}
+
+message Consumables {
+  int32 flask_id = 1;
+  int32 food_id = 2;
+  int32 augment_id = 3;
+}
+
 message PlayerConfig {
   EquipmentConfig equipment_config = 1;
   TalentConfig talent_config = 2;
+  Specialization spec = 3;
+  Race race = 4;
+  Consumables consumables = 5;
+  string player_name = 6;
 }

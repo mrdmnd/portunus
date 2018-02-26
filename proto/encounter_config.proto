@@ -44,21 +44,21 @@ message EnemySpawnEvent {
 
 message EnemyInvulnEvent {
   Enemy enemy = 1;
-  int32 duration = 2; // Number of timesteps that this actor is invulnerable.
+  int32 duration = 2;  // Number of timesteps that this actor is invulnerable.
 }
 
 // Logically, this is just a constraint meant to keep you casting only instants.
 message MovementEvent {
-  int32 duration = 1; // Number of timesteps that we are forced to move for.
+  int32 duration = 1;  // Number of timesteps that we are forced to move for.
 }
 
 // Logically, this is just a constraint meant to keep you from casting anything.
 message StunEvent {
-  int32 duration = 1; // Number of timesteps that we are unable to act for.
+  int32 duration = 1;  // Number of timesteps that we are unable to act for.
 }
 
 message TakeDamageEvent {
-  int32 damage_amount = 1; // Amount of damage the boss deals to us.
+  int32 damage_amount = 1;  // Amount of damage the boss deals to us.
 }
 
 // TODO(mrdmnd) - implement sensibly.
@@ -67,17 +67,17 @@ message TakeDamageEvent {
 // which checks if a) bloodlust is available (not exhausted), and
 // b) bloodlust_percent is reached or time_to_die is less than lust duration.
 message BloodlustEvent {
-  int32 duration = 1;          // How long lust lasts for.
-  double haste_percentage = 2; // How much haste we get.
+  int32 duration = 1;           // How long this lust variant lasts for.
+  double haste_percentage = 2;  // How much haste we get (drums give less).
 }
 
 message PrepotEvent {
-  int32 potion_id = 1; // Which potion was used
-  int32 duration = 2;  // How long it lasts for
+  int32 potion_id = 1;  // Which potion was used
+  int32 duration = 2;   // How long it lasts for
 }
 
 message EncounterEvent {
-  int32 timestamp = 1; // -1 means event happens before fight starts.
+  int32 timestamp = 1;  // -1 means event happens before fight starts.
   oneof event {
     EnemySpawnEvent spawn = 2;
     EnemyInvulnEvent invuln = 3;

@@ -6,6 +6,11 @@ import "proto/encounter_config.proto";
 import "proto/player_config.proto";
 import "proto/policy.proto";
 
+message Distribution {
+  double mean = 1;
+  double variance = 2;
+}
+
 message SimulationConfig {
   // This represents the maximum number of iterations we're willing to perform.
   // Reasonable default: 10,000
@@ -15,8 +20,12 @@ message SimulationConfig {
   // Reasonable default: 0.01
   double target_error = 2;
 
-  // TODO(mrdmnd) - consider implementing reaction-time primitives, as well as
-  // implementing realistic world lag.
+  // The latency distribution for world lag (units for mean are milliseconds,
+  // despite being of type double)
+  Distribution world_lag = 3;
+
+  // The latency distriution for how well we react to changes in state.
+  Distribution brain_lag = 4;
 
   // `encounter_config` contains all parameters pertaining to the fight script.
   // This proto also holds duration information (how long the fight is).
@@ -32,7 +41,6 @@ message SimulationConfig {
 }
 
 message SimulationResult {
-  double dps_mean = 1;
-  double dps_variance = 2;
-  string metadata = 3;
+  Distribution dps_distribution = 1;
+  string metadata = 2;
 }
