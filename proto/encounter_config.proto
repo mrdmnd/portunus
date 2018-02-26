@@ -61,19 +61,16 @@ message TakeDamageEvent {
   int32 damage_amount = 1;  // Amount of damage the boss deals to us.
 }
 
-// TODO(mrdmnd) - implement sensibly.
 // This is a "fixed" lust trigger, where you know when you're going to pop it.
 // There's also a "bloodlust_check" that happens every timeframe in the sim
 // which checks if a) bloodlust is available (not exhausted), and
 // b) bloodlust_percent is reached or time_to_die is less than lust duration.
 message BloodlustEvent {
-  int32 duration = 1;           // How long this lust variant lasts for.
-  double haste_percentage = 2;  // How much haste we get (drums give less).
+  double haste_percentage = 1;  // How much haste we get (drums give less).
 }
 
 message PrepotEvent {
   int32 potion_id = 1;  // Which potion was used
-  int32 duration = 2;   // How long it lasts for
 }
 
 message EncounterEvent {
