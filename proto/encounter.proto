@@ -5,6 +5,7 @@ package simulate;
 import "proto/actor.proto";
 
 // TODO(mrdmnd): make event timing probabilistic so we don't overfit?
+// TODO(mrdmnd): make event occurrence probabilistic (maybe X doesn't happen?)
 message ActorSpawnEvent {
   Actor actor = 1;
   int32 despawn_timestamp = 2; // If -1, actor despawns when HP is zero.
@@ -30,7 +31,7 @@ message TakeDamageEvent {
 }
 
 message EncounterEvent {
-  int32 timestamp = 1;
+  int32 timestamp = 1; // -1 means event happens before fight starts.
   oneof event {
     ActorSpawnEvent spawn = 2;
     ActorInvulnEvent invuln = 3;

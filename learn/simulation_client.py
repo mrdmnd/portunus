@@ -2,6 +2,7 @@
 import grpc
 from google.protobuf.text_format import MessageToString
 
+from proto import actor_pb2
 from proto import encounter_pb2
 from proto import equipment_pb2
 from proto import talents_pb2
@@ -19,7 +20,23 @@ def main():
     simulation_stub = service_pb2_grpc.SimulationServiceStub(channel)
 
     # Encounter configuration
+    enemy_actor = actor_pb2.Actor()
+    enemy_actor.id = 1
+    enemy_actor.name = "Patchwork"
+    enemy_actor.hp_max = 1000
+    enemy_actor.hp_current = 1000
+
+    spawn_event = encounter_pb2.ActorSpawnEvent()
+    spawn_event.actor.MergeFrom(enemy_actor)
+    spawn_event.despawn_timestamp = -1
+
+    encounter_event = encounter_pb2.EncounterEvent()
+    encounter_event.timestamp = -1
+    encounter_event.spawn.MergeFrom(spawn_event)
+
     encounter_config = encounter_pb2.EncounterConfig()
+    encounter_config.name = "PatchworkFight"
+    encounter_config.events.extend([encounter_event])
 
     # Equipment configuration
     equipment_config = equipment_pb2.EquipmentConfig()
@@ -48,6 +65,7 @@ def main():
     simulation_config.max_iterations = 10000
     simulation_config.combat_length_variance = 0.20
 
+    # Issue request to RPC stub.
     simulation_request = service_pb2.SimulationRequest()
     simulation_request.config.MergeFrom(simulation_config)
     simulation_response = simulation_stub.ConductSimulation(simulation_request)

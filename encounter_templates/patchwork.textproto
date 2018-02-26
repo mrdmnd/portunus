@@ -1,0 +1,16 @@
+encounter_config {
+  name: "PatchworkFight"
+  events {
+    timestamp: -1
+    spawn {
+      actor {
+        id: 1
+        name: "Patchwork"
+        hp_max: 1000
+        hp_current: 1000
+      }
+      despawn_timestamp: -1
+    }
+  }
+}
+ 
