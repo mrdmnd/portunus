@@ -12,6 +12,7 @@
 
 #include "gflags/gflags.h"
 #include "glog/logging.h"
+#include "google/protobuf/text_format.h"
 #include "grpc++/grpc++.h"
 #include "grpc/support/log.h"
 
@@ -39,6 +40,11 @@ public:
   Status ConductSimulation(ServerContext *context,
                            const SimulationRequest *request,
                            SimulationResponse *response) override {
+    LOG(INFO) << "Received simulation request.";
+    std::string config;
+    google::protobuf::TextFormat::PrintToString(request->config(), &config);
+    LOG(INFO) << "Configuration: \n" << config;
+
     response->mutable_result()->CopyFrom(engine_->Simulate(request->config()));
     return Status::OK;
   }
