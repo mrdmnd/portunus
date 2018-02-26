@@ -6,7 +6,7 @@ py_binary(
         "simulation_client.py",
     ],
     deps = [
-        "//proto:simulation_proto_py_lib",
+        "//proto:py_lib",
         requirement("grpcio"),
     ],
 )

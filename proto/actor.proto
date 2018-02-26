@@ -5,6 +5,6 @@ package simulate;
 message Actor {
   int32 id = 1;
   string name = 2;
-  int32 hp = 3;
-  int32 hp_max = 4;
+  int32 max_hp = 3;
+  int32 current_hp = 4;
 }

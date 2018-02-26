@@ -181,6 +181,16 @@ a non-interesting, solved problem by the SimC team, but we need this component,
 unless we want to hardcode every constant for every spell and every item. We
 rely on this data being available at compile time in the simulation engine code.
 
+### Standalone simulation engine binary
+We implement a binary that can take a text-formatted simulation configuration as
+an input file, and dumps a text-formatted simulation result protobuf as output.
+
+To build and invoke the standalone engine binary, run this:
+
+`bazel build simulate/engine:standalone`
+`./bazel-bin/simulate/engine/standalone $CONFIG_FILE_PATH`
+
+
 ### Simulation Service
 
 We implement an RPC service that receives SimulationRequests and produces

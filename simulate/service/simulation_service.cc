@@ -1,10 +1,14 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <thread>
 
-#include "proto/simulation_service.grpc.pb.h"
+#include "proto/service.grpc.pb.h"
+#include "simulate/engine/engine.h"
 
+#include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
+
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "grpc++/grpc++.h"
@@ -12,6 +16,7 @@
 
 DEFINE_string(host, "localhost", "Which address to serve from.");
 DEFINE_string(port, "50051", "Which port to serve requests from.");
+DEFINE_int32(threads, std::thread::hardware_concurrency(), "Num threads.");
 
 using grpc::Server;
 using grpc::ServerAsyncResponseWriter;
@@ -19,6 +24,8 @@ using grpc::ServerBuilder;
 using grpc::ServerCompletionQueue;
 using grpc::ServerContext;
 using grpc::Status;
+
+using namespace simulate;
 
 enum class CallStatus { CREATE, PROCESS, FINISH };
 
@@ -30,13 +37,16 @@ public:
     cq_->Shutdown();
   }
 
-  void RunServer(const std::string &address) {
+  void RunServer(const std::string &address, const int num_threads) {
     ServerBuilder builder;
     builder.AddListeningPort(address, grpc::InsecureServerCredentials());
     builder.RegisterService(&service_);
     cq_ = builder.AddCompletionQueue();
     server_ = builder.BuildAndStart();
+    sim_engine_ = absl::make_unique<Engine>(num_threads);
+
     LOG(INFO) << "Simulation service listening on " << address;
+    LOG(INFO) << "Running with " << num_threads << " threads.";
     HandleRpcs();
   }
 
@@ -44,7 +54,7 @@ private:
   //  Set up a class with state and logic necessary to serve a request.
   class CallData {
   public:
-    CallData(simulate::SimulationService::AsyncService *service,
+    CallData(SimulationService::AsyncService *service,
              ServerCompletionQueue *cq)
         : service_(service), cq_(cq), responder_(&ctx_),
           status_(CallStatus::CREATE) {
@@ -60,9 +70,11 @@ private:
       } else if (status_ == CallStatus::PROCESS) {
         new CallData(service_, cq_);
         LOG(INFO) << "Simulation service saw new RPC request.";
+
         // The actual processing:
         std::string hi("Hello.");
-        response_.set_response_string(hi);
+        // response_.set_allocated_result(result);
+        // response_.set_response_string(hi);
 
         // And we're done! Let gRPC runtime know that we're done, using the
         // memory address of this instance as the unique tag for the event.
@@ -76,12 +88,12 @@ private:
     }
 
   private:
-    simulate::SimulationService::AsyncService *service_;
+    SimulationService::AsyncService *service_;
     ServerCompletionQueue *cq_;
     ServerContext ctx_;
-    simulate::SimulationRequest request_;
-    simulate::SimulationResponse response_;
-    ServerAsyncResponseWriter<simulate::SimulationResponse> responder_;
+    SimulationRequest request_;
+    SimulationResponse response_;
+    ServerAsyncResponseWriter<SimulationResponse> responder_;
     CallStatus status_;
   };
 
@@ -100,13 +112,14 @@ private:
   }
 
   std::unique_ptr<ServerCompletionQueue> cq_;
-  simulate::SimulationService::AsyncService service_;
+  SimulationService::AsyncService service_;
   std::unique_ptr<Server> server_;
+  std::unique_ptr<Engine> sim_engine_;
 };
 
 int main(int argc, char **argv) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   SimulationServiceImpl server;
-  server.RunServer(absl::StrCat(FLAGS_host, ":", FLAGS_port));
+  server.RunServer(absl::StrCat(FLAGS_host, ":", FLAGS_port), FLAGS_threads);
   return 0;
 }

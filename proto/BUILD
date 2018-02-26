@@ -5,21 +5,17 @@ load("@org_pubref_rules_protobuf//python:rules.bzl", "py_proto_library")
 
 filegroup(
     name = "protos",
-    srcs = [
-        "actor.proto",
-        "policy.proto",
-        "simulation_service.proto",
-    ],
+    srcs = glob(["*.proto"]),
 )
 
 cc_proto_library(
-    name = "simulation_proto_cc_lib",
+    name = "cc_lib",
     protos = [":protos"],
     with_grpc = True,
 )
 
 py_proto_library(
-    name = "simulation_proto_py_lib",
+    name = "py_lib",
     protos = [":protos"],
     with_grpc = True,
 )

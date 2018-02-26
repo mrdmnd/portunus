@@ -7,4 +7,4 @@ package simulate;
 message GraphDef { string content = 1; }
 
 // A protocol buffer to hold the (currently) trained model + weights from RL
-message TrainedPolicy { GraphDef tensorflow_graph = 1; }
+message PolicyConfig { GraphDef tensorflow_graph = 1; }

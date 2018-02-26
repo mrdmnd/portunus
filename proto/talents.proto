@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package simulate;
+
+message TalentConfig {
+  int32 first_row = 1;
+  int32 second_row = 2;
+  int32 third_row = 3;
+  int32 fourth_row = 4;
+  int32 fifth_row = 5;
+  int32 sixth_row = 6;
+  int32 sevent_row = 7;
+}

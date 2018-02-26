@@ -190,3 +190,9 @@ from there, an equivalent formulation is "what states are the best states to
 find yourself, in general?" and choose the actions that lead to those states.
 Google has famously used this technique to great effect to learn how to play the
 game GO as well as top human experts.
+
+
+### Deep Learning Model
+Using the standard terminology, we have an efficient oracle that computes
+V^{pi} (s) - the value of a state, using a fixed policy -- this is exactly our
+simulation service.
