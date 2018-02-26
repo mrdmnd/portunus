@@ -9,7 +9,7 @@
 #include "proto/simulation.pb.h"
 using namespace simulate;
 
-SimulationResult Engine::PerformSimulation(SimulationConfig config) const {
+SimulationResult Engine::Simulate(SimulationConfig config) const {
   SimulationResult r;
   r.set_dps_mean(100.0);
   r.set_dps_variance(10.0);

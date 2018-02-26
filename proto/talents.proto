@@ -9,5 +9,5 @@ message TalentConfig {
   int32 fourth_row = 4;
   int32 fifth_row = 5;
   int32 sixth_row = 6;
-  int32 sevent_row = 7;
+  int32 seventh_row = 7;
 }

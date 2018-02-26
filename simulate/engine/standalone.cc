@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
   const Engine e(FLAGS_threads);
 
   const SimulationConfig conf = ParseTextSimulationConfig(config_path);
-  const SimulationResult result = e.PerformSimulation(conf);
+  const SimulationResult result = e.Simulate(conf);
 
   std::string result_string;
   google::protobuf::TextFormat::PrintToString(result, &result_string);

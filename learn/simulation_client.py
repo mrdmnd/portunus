@@ -1,27 +1,58 @@
 """ A simple class for communicating with a simulation gRPC service. """
 import grpc
-import tensorflow as tf
+from google.protobuf.text_format import MessageToString
 
-from simulate.proto import simulation_service_pb2
-from simulate.proto import simulation_service_pb2_grpc
+from proto import encounter_pb2
+from proto import equipment_pb2
+from proto import talents_pb2
+from proto import policy_pb2
+from proto import simulation_pb2
+from proto import service_pb2
+from proto import service_pb2_grpc
 
 HOST = "localhost"
 PORT = "50051"
 
-def issue_query(stub, inp):
-    """ Send out an async request to the ConductSimulation stub. """
-    request = simulation_service_pb2.SimulationRequest(request_string=inp)
-    response_future = stub.ConductSimulation.future(request)
-    return response_future.result().response_string
-
 def main():
     """ Entry point into simulation client. """
     channel = grpc.insecure_channel(HOST+":"+PORT)
-    stub = simulation_service_pb2_grpc.SimulationServiceStub(channel)
-    value = issue_query(stub, "MARIO")
+    simulation_stub = service_pb2_grpc.SimulationServiceStub(channel)
 
-    print(value)
-    return 0
+    # Encounter configuration
+    encounter_config = encounter_pb2.EncounterConfig()
+
+    # Equipment configuration
+    equipment_config = equipment_pb2.EquipmentConfig()
+
+    # Talent configuration
+    talent_config = talents_pb2.TalentConfig()
+    talent_config.first_row = 1;
+    talent_config.second_row = 1;
+    talent_config.third_row = 1;
+    talent_config.fourth_row = 1;
+    talent_config.fifth_row = 1;
+    talent_config.sixth_row = 1;
+    talent_config.seventh_row = 1;
+
+    # Policy configuration
+    policy = policy_pb2.PolicyConfig()
+    policy.contents = "POLICY GRAPH"
+
+    # Simulation configuration
+    simulation_config = simulation_pb2.SimulationConfig()
+    simulation_config.encounter_config.MergeFrom(encounter_config)
+    simulation_config.equipment_config.MergeFrom(equipment_config)
+    simulation_config.talent_config.MergeFrom(talent_config)
+    simulation_config.policy.MergeFrom(policy)
+    simulation_config.target_error = 0.01
+    simulation_config.max_iterations = 10000
+
+    simulation_request = service_pb2.SimulationRequest()
+    simulation_request.config.MergeFrom(simulation_config)
+    simulation_response = simulation_stub.ConductSimulation(simulation_request)
+
+    output = MessageToString(simulation_response.result)
+    print(output)
 
 if __name__ == '__main__':
     main()

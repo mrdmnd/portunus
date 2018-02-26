@@ -8,7 +8,7 @@ public:
   Engine() = default;
   ~Engine() = default;
   Engine(const int num_threads) : num_threads_(num_threads){};
-  SimulationResult PerformSimulation(SimulationConfig config) const;
+  SimulationResult Simulate(SimulationConfig config) const;
 
 private:
   // Disallow copy construction and assignment.
