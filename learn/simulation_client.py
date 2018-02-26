@@ -3,10 +3,8 @@ import grpc
 from google.protobuf.text_format import MessageToString
 from google.protobuf.text_format import Merge
 
-from proto import actor_pb2
-from proto import encounter_pb2
-from proto import equipment_pb2
-from proto import talents_pb2
+from proto import encounter_config_pb2
+from proto import player_config_pb2
 from proto import policy_pb2
 from proto import simulation_pb2
 from proto import service_pb2
@@ -22,22 +20,23 @@ def main():
     simulation_stub = service_pb2_grpc.SimulationServiceStub(channel)
 
     # Encounter configuration
-    enemy_actor = actor_pb2.Actor()
-    enemy_actor.id = 1
-    enemy_actor.name = "Patchwork"
-    enemy_actor.health_estimator = actor_pb2.HealthEstimator.Value("UNIFORM")
+    spawn_event = encounter_pb.EncounterEvent()
+    spawn_event.timestamp = -1 # A value of -1 means "right before combat"
+    spawn_event.spawn = encounter_pb2.ActorSpawnEvent()
+    spawn_event.spawn.enemy.encounter_config_pb2.Enemy()
+    spawn_event.spawn.enemy.id = 1
+    spawn_event.spawn.enemy.name = "Patchwork"
+    spawn_event.spawn.enemy.type = encounter_config_pb2.EnemyType.Value("BOSS")
 
-    spawn_event = encounter_pb2.ActorSpawnEvent()
-    spawn_event.actor.MergeFrom(enemy_actor)
-    spawn_event.duration = -1
-
-    encounter_event = encounter_pb2.EncounterEvent()
-    encounter_event.timestamp = -1
-    encounter_event.spawn.MergeFrom(spawn_event)
+    bloodlust_event = encounter_pb2.EncounterEvent()
+    bloodlust_event.timestamp = 500 # 500ms into the fight
+    bloodlust_event.lust = encounter_pb2.BloodlustEvent()
+    bloodlust_event.lust.duration = 30000 # 30s
+    bloodlust_event.lust.haste_percentage = 0.3
 
     encounter_config = encounter_pb2.EncounterConfig()
     encounter_config.name = "PatchworkFight"
-    encounter_config.events.extend([encounter_event])
+    encounter_config.events.extend([spawn_event, bloodlust_event])
 
     # Equipment configuration
     equipment_config = equipment_pb2.EquipmentConfig()
@@ -53,7 +52,7 @@ def main():
     talent_config.row_7 = 1;
 
     # Policy configuration
-    policy = policy_pb2.PolicyConfig()
+    policy = policy_pb2.Policy()
     policy.contents = "POLICY GRAPH"
 
     # Simulation configuration

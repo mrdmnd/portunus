@@ -2,9 +2,8 @@ syntax = "proto3";
 
 package simulate;
 
-import "proto/encounter.proto";
-import "proto/equipment.proto";
-import "proto/talents.proto";
+import "proto/encounter_config.proto";
+import "proto/player_config.proto";
 import "proto/policy.proto";
 
 message SimulationConfig {
@@ -14,28 +13,22 @@ message SimulationConfig {
 
   // We'll halt a simulation early if the error drops below this threshold.
   // Reasonable default: 0.01
-  double error_target = 2;
+  double target_error = 2;
 
-  // We attack for time_target +/- time_variance.
-  // Reasonable default: 5 minutes, or 300s (300000 ms)
-  int32 time_target = 3;
+  // TODO(mrdmnd) - consider implementing reaction-time primitives, as well as
+  // implementing realistic world lag.
 
-  // We want combat to run about as long as the encounter says, but not exactly.
-  // Reasonable default: 0.10, or 10%.
-  double time_variance = 4;
-
-  // `encounter_config` contains "how long" this fight is.
+  // `encounter_config` contains all parameters pertaining to the fight script.
+  // This proto also holds duration information (how long the fight is).
   EncounterConfig encounter_config = 5;
 
-  // `equipment_config` contains the gearset we're evaluating our policy on.
-  EquipmentConfig equipment_config = 6;
-
-  // `talent_config` contains the set of talents we're evaluating our policy on.
-  TalentConfig talent_config = 7;
+  // `player_config` contains the gearset we're evaluating our policy on, as
+  // well as our current talent setup.
+  PlayerConfig player_config = 6;
 
   // `policy` represents the current policy we want our simulator to evaluate.
-  // The model type may be either APL (deterministic) or DL (learned).
-  PolicyConfig policy = 8;
+  // The policy might come in as a deterministic APL or a deep learning model.
+  Policy policy = 7;
 }
 
 message SimulationResult {

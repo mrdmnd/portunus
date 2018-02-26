@@ -5,4 +5,4 @@ package simulate;
 // import "tensorflow/graph_def.proto" // TODO(mrdmnd) - get actual path here.
 
 // A protocol buffer to hold the (currently) trained model + weights from RL
-message PolicyConfig { string contents = 1; }
+message Policy { string contents = 1; }

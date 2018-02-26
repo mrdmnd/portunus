@@ -62,3 +62,18 @@ message EquipmentConfig {
   // If this gearset represents any full or partial gearsets, keep track here.
   repeated int32 set_bonus_ids = 17;
 }
+
+message TalentConfig {
+  int32 row_1 = 1;
+  int32 row_2 = 2;
+  int32 row_3 = 3;
+  int32 row_4 = 4;
+  int32 row_5 = 5;
+  int32 row_6 = 6;
+  int32 row_7 = 7;
+}
+
+message PlayerConfig {
+  EquipmentConfig equipment_config = 1;
+  TalentConfig talent_config = 2;
+}
