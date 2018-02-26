@@ -151,7 +151,7 @@ TODO(mrdmnd) - revist these targets.
 
 To compile the simulation service, run
 
-`bazel build --config=opt simulate:simulation_service`
+`bazel build --config=opt service/simulate:simulation_service`
 
 To compile the learning module, run
 
@@ -161,13 +161,13 @@ To compile the learning module, run
 
 To run the simulation service, invoke
 
-`./bazel-bin/simulate/simulation_service`.
+`./bazel-bin/simulate/service/simulation_service`.
 
 This starts up an async RPC service running on "localhost:50051"
 
 To run the policy generation tool, invoke
 
-`./bazel-bin/learn/policygen --config=$CONF`,
+`./bazel-bin/learn/policygen $CONFIG_FILE_PATH`,
 
 where the $CONF file contains details on the raid encounter as well as available
 player gear.

@@ -1,16 +1,28 @@
 encounter_config {
   name: "PatchworkFight"
+  health_estimator: HealthEstimator.BURST_AND_EXECUTE
+  time_target: 300000
+  time_variance: 0.10
   events {
     timestamp: -1
     spawn {
-      actor {
+      enemy {
         id: 1
         name: "Patchwork"
-        hp_max: 1000
-        hp_current: 1000
+        type: Enemy.BOSS
       }
-      despawn_timestamp: -1
+    }
+  }
+  events {
+    timestamp: -1
+    prepot {
+      potion_id: 1
+    }
+  }
+  events {
+    timestamp: 500
+    lust {
+      haste_percentage: 0.30
     }
   }
 }
- 
