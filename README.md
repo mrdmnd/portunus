@@ -10,24 +10,24 @@ See [Background](BACKGROUND.md) for the motivation behind PolicyGen.
 
 ## Installation
 
-Policygen is comprised of a few major components:
+Policygen is comprised of two core components:
 
-1) a distributed, CPU-powered RPC simulation service, for evaluating
+1) A distributed, CPU-powered RPC simulation service, for evaluating
 policy networks against a minimal simulation engine (sort of like SIMC).
 The idea is to scale this horizontally, with as many copies of the simulation
 server running as you like. Simulation requests are sent to a load balancer
 which distributes load among the service backends.
 Currently, I've only implemented the "localhost" version of this.
 
-2) a local, GPU-powered learning module that trains a model with deep learning
-to evaluate the Q-function, and perform policy gradient descent.
+2) A local, GPU-powered reinforcement learning module that trains a deep neural
+network to evaluate the (state, action) Q-function, and performs policy gradient
+descent to iteratively improve our policy.
 
 Most of the building blocks for this project are Google open-source libraries.
-Let's install some of these now.
-
-We assume you're on a modern x64 machine running some flavor of linux, ideally
-with an NVIDIA GPU. I'm running on Arch Linux; you may need to translate these
-instructions to fit your distro + package manager.
+Let's install some of these now. We assume a modern 64-bit architecture running
+some flavor of linux, ideally with an NVIDIA GPU. I am running on Arch Linux;
+you may need to translate these instructions to fit your distribution or package
+manager.
 
 
 ### Get Started
@@ -141,13 +141,11 @@ Optional Dependencies for developers:
   `tools/bazel-compilation-database/generate.sh` to build compilation database.
   This seeds the rest of the useful clang completion tools.
 
-## Compile
+## Building Policygen
 
-Policygen is built with `bazel`, which is Google's opensource version of their
+Policygen is built with `bazel`, which is Google's opensource version of our
 internal build tool. Build artifacts are compiled into `./bazel-genfiles/` and
 binaries are placed into `./bazel-bin/`.
-
-TODO(mrdmnd) - revist these targets.
 
 To compile the simulation service, run
 
@@ -157,31 +155,25 @@ To compile the learning module, run
 
 `bazel build --config=opt learn:policygen`.
 
-## Execute
+## Running Policygen
 
 To run the simulation service, invoke
 
 `./bazel-bin/simulate/service/simulation_service`.
 
-This starts up an async RPC service running on "localhost:50051"
+This starts up a local RPC service, with default port 50051.
 
 To run the policy generation tool, invoke
 
-`./bazel-bin/learn/policygen $CONFIG_FILE_PATH`,
+`./bazel-bin/learn/policygen $ENCOUNTER_CONFIG_PATH $SIMC_ADDON_DUMP_PATH`,
 
-where the $CONF file contains details on the raid encounter as well as available
-player gear.
+where `$ENCOUNTER_CONFIG_PATH` contains details on the raid encounter and
+`$SIMC_ADDON_DUMP_PATH` contains details on the player character (gear, etc).
 
-## Architecture Overview
+## Policygen Project Architecture Overview
 
-### Game Client Data parser
-We need to get client data out of the game files. They're basically encoded in
-weird database formats, and we need this to be usable for our simulator. This is
-a non-interesting, solved problem by the SimC team, but we need this component,
-unless we want to hardcode every constant for every spell and every item. We
-rely on this data being available at compile time in the simulation engine code.
+### Standalone Simulation Engine Binary
 
-### Standalone simulation engine binary
 We implement a binary that can take a text-formatted simulation configuration as
 an input file, and dumps a text-formatted simulation result protobuf as output.
 
@@ -190,7 +182,6 @@ To build and invoke the standalone engine binary, run this:
 `bazel build simulate/engine:standalone`
 `./bazel-bin/simulate/engine/standalone $CONFIG_FILE_PATH`
 
-
 ### Simulation Service
 
 We implement an RPC service that receives SimulationRequests and produces
@@ -198,14 +189,6 @@ SimulationResponses. This is meant to be horizontally scalable. Each machine
 running this service is running a multithreaded simulation server binary.
 This is an embarassingly parallel problem, with minimal data dependencies.
 Simulation is mostly a CPU-bound problem.
-
-
-### Gearset Generation Tool
-
-This tool takes in a protobuf containing all possible items for each
-player slot as well as a set of pruning constraints, and returns a protobuf
-containing each non-dominated gearset. A "dominated" gearset is one that is
-inferior to another gear-set along every dimension.
 
 ### Deep Reinforcement Learning Client
 
@@ -219,7 +202,15 @@ policy for the given encounter using deep Q learning. Finally, we choose the
 (gearset, policy) pair that performed the best and return them in serialized
 form.
 
-### LUA Addon
+### Game Client Data Parser (TODO)
+
+We need to get client data out of the game files. They're basically encoded in
+weird database formats, and we need this to be usable for our simulator. This is
+a non-interesting, solved problem by the SimC team, but we need this component,
+unless we want to hardcode every constant for every spell and every item. We
+rely on this data being available at compile time in the simulation engine code.
+
+### LUA Addon (TODO)
 
 This component takes the trained action policy for the given gearset and
 encounter configuration, and embeds itself directly into the player's in-game

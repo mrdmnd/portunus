@@ -13,12 +13,6 @@ http_archive(
 )
 
 http_archive(
-    name = "io_abseil_py",
-    strip_prefix = "abseil-py-master",
-    url = "https://github.com/abseil/abseil-py/archive/master.zip",
-)
-
-http_archive(
     name = "com_google_googletest",
     strip_prefix = "googletest-master",
     url = "https://github.com/google/googletest/archive/master.zip",
@@ -61,19 +55,17 @@ http_archive(
 
 load("@io_bazel_rules_python//python:pip.bzl", "pip_repositories", "pip_import")
 
+# We load all python dependencies in a two-phase process:
 pip_repositories()
 
 pip_import(
-    name = "pip_grpcio",
-    requirements = "@org_pubref_rules_protobuf//python:requirements.txt",
+    name = "policygen_py_deps",
+    requirements = "//learn:requirements.txt",
 )
 
-load(
-    "@pip_grpcio//:requirements.bzl",
-    pip_grpcio_install = "pip_install",
-)
+load("@policygen_py_deps//:requirements.bzl", "pip_install")
 
-pip_grpcio_install()
+pip_install()
 
 load("@org_pubref_rules_protobuf//cpp:rules.bzl", "cpp_proto_repositories")
 

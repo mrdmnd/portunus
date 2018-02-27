@@ -34,3 +34,4 @@ bazel-out
 bazel-policygen
 bazel-testlogs
 compile_commands.json
+__pycache__

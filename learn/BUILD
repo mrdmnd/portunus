@@ -1,4 +1,4 @@
-load("@pip_grpcio//:requirements.bzl", "requirement")
+load("@policygen_py_deps//:requirements.bzl", "requirement")
 
 # This binary trains a policy net for a given (encounter conf, player conf).
 py_binary(
@@ -7,8 +7,17 @@ py_binary(
         "policygen.py",
     ],
     deps = [
+        ":simc_addon_parser",
         "//proto:py_lib",
-        "@io_abseil_py//absl:app",
+        requirement("absl-py"),
         requirement("grpcio"),
     ],
+)
+
+# This library is meant to read data from the SIMC addon's text dump format
+# and generate the various protobufs that our program needs.
+py_library(
+    name = "simc_addon_parser",
+    srcs = ["simc_addon_parser.py"],
+    deps = ["//proto:py_lib"],
 )

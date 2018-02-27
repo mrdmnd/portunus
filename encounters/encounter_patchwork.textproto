@@ -1,28 +1,26 @@
-encounter_config {
-  name: "PatchworkFight"
-  health_estimator: HealthEstimator.BURST_AND_EXECUTE
-  time_target: 300000
-  time_variance: 0.10
-  events {
-    timestamp: -1
-    spawn {
-      enemy {
-        id: 1
-        name: "Patchwork"
-        type: Enemy.BOSS
-      }
+name: "PatchworkFight"
+health_estimator: BURST_AND_EXECUTE
+time_target: 300000
+time_variance: 0.10
+events {
+  timestamp: -1
+  spawn {
+    enemy {
+      id: 1
+      name: "Patchwork"
+      type: ADD
     }
   }
-  events {
-    timestamp: -1
-    prepot {
-      potion_id: 1
-    }
+}
+events {
+  timestamp: -1
+  prepot {
+    potion_id: 1
   }
-  events {
-    timestamp: 500
-    lust {
-      haste_percentage: 0.30
-    }
+}
+events {
+  timestamp: 500
+  lust {
+    haste_percentage: 0.30
   }
 }
