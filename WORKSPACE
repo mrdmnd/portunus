@@ -13,7 +13,7 @@ http_archive(
 )
 
 http_archive(
-    name = "io_absl_py",
+    name = "io_abseil_py",
     strip_prefix = "abseil-py-master",
     url = "https://github.com/abseil/abseil-py/archive/master.zip",
 )
