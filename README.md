@@ -153,24 +153,24 @@ To compile the simulation service, run
 
 To compile the learning module, run
 
-`bazel build --config=opt learn:policygen`.
+`bazel build --config=opt learn:policygen`
 
 ## Running Policygen
 
 To run the simulation service, invoke
 
-`./bazel-bin/simulate/service/simulation_service`.
+`./bazel-bin/simulate/service/simulation_service`
 
 This starts up a local RPC service, with default port 50051.
 
 To run the policy generation tool, invoke
 
-`./bazel-bin/learn/policygen $ENCOUNTER_CONFIG_PATH $SIMC_ADDON_DUMP_PATH`,
+`./bazel-bin/learn/policygen $ENCOUNTER_CONFIG_PATH $SIMC_ADDON_DUMP_PATH`
 
 where `$ENCOUNTER_CONFIG_PATH` contains details on the raid encounter and
 `$SIMC_ADDON_DUMP_PATH` contains details on the player character (gear, etc).
 
-## Policygen Project Architecture Overview
+## Policygen Architecture Overview
 
 ### Standalone Simulation Engine Binary
 
