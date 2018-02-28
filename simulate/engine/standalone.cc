@@ -17,16 +17,16 @@ DEFINE_int32(threads, std::thread::hardware_concurrency(), "Num threads.");
 using namespace simulate;
 
 // Read the file at config_path, parse the contents into a SimulationConfig.
-SimulationConfig ParseTextSimulationConfig(const std::string &config_path) {
+template <class T> T ParseConfig(const std::string &config_path) {
   std::ifstream input(config_path, std::ios::in | std::ios::binary);
   CHECK(input) << "file at " << config_path << " could not be opened.";
   std::ostringstream contents;
   contents << input.rdbuf();
   input.close();
 
-  SimulationConfig sc;
-  google::protobuf::TextFormat::ParseFromString(contents.str(), &sc);
-  return sc;
+  T conf;
+  google::protobuf::TextFormat::ParseFromString(contents.str(), &conf);
+  return conf;
 }
 
 int main(int argc, char **argv) {
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
   const std::string config_path(argv[1]);
   const Engine e(FLAGS_threads);
 
-  const SimulationConfig conf = ParseTextSimulationConfig(config_path);
+  const SimulationConfig conf = ParseConfig<SimulationConfig>(config_path);
   const SimulationResult result = e.Simulate(conf);
 
   std::string result_string;

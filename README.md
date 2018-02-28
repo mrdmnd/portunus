@@ -176,11 +176,12 @@ where `$ENCOUNTER_CONFIG_PATH` contains details on the raid encounter and
 
 We implement a binary that can take a text-formatted simulation configuration as
 an input file, and dumps a text-formatted simulation result protobuf as output.
+This is mostly useful as a debugging tool.
 
 To build and invoke the standalone engine binary, run this:
 
 `bazel build simulate/engine:standalone`
-`./bazel-bin/simulate/engine/standalone $CONFIG_FILE_PATH`
+`./bazel-bin/simulate/engine/standalone $FULL_CONFIG`
 
 ### Simulation Service
 
