@@ -10,14 +10,14 @@ from absl import app
 from absl import flags
 from absl import logging
 from google.protobuf.text_format import MessageToString
-from google.protobuf.text_format import Merge
 from proto import encounter_config_pb2
 from proto import policy_pb2
 from proto import simulation_pb2
 from proto import service_pb2
 from proto import service_pb2_grpc
 
-from simc_addon_parser import SimcAddonReport
+import encounter_builder
+import player_builder
 
 FLAGS = flags.FLAGS
 flags.DEFINE_bool('use_gpu', False, 'Use the GPU for deep learning.')
@@ -27,22 +27,16 @@ flags.DEFINE_integer('sim_max_iterations', 10000, '')
 flags.DEFINE_float('sim_target_error', 0.01, '')
 
 
-def ReadEncounterFile(filepath):
-    """ Returns an encounter_config protobuf from input at `filepath`. """
-    encounter_config = encounter_config_pb2.EncounterConfig()
-    with open(filepath, 'r') as f:
-        Merge(f.read(), encounter_config)
-    return encounter_config
-
 def main(argv):
     # Ensure input files are present.
     if len(argv) is not 3:
-        logging.error("PolicyGen requires two inputs: a path to an "
-                      "encounter file, and a path to a simc addon report file.")
+        logging.error(
+            "PolicyGen currently requires two inputs: a path to an "
+            "encounter file, and a path to a simc addon report file.")
         return 1
 
     encounter_path = argv[1]
-    simc_addon_report_path = argv[2]
+    simc_report_path = argv[2]
 
     # Setup communication with RPC simulation service.
     channel = grpc.insecure_channel(FLAGS.host + ":" + FLAGS.port)
@@ -58,16 +52,16 @@ def main(argv):
     logging.info('Tensorflow has CUDA-supporting GPU available: {0}'.format(
         tf.test.is_gpu_available(cuda_only=True)))
 
-    # Load encounter configuration from encounter_path
+    # Load encounter and player configurations.
     logging.info("Loading encounter from {0}.".format(encounter_path))
-    encounter_config = ReadEncounterFile(encounter_path)
-    logging.info("EncounterConfig\n" + MessageToString(encounter_config))
+    encounter_config = encounter_builder.Textproto(encounter_path).Build()
+    logging.info(
+        "EncounterConfig\n" + MessageToString(encounter_config, as_utf8=True))
 
-    # Load player configuration from simc_addon_report_path
-    logging.info("Loading player from {0}.".format(simc_addon_report_path))
-    simc_addon_report = SimcAddonReport(simc_addon_report_path)
-    player_config = simc_addon_report.GetPlayerConfig()
-    logging.info("PlayerConfig:\n" + MessageToString(player_config))
+    logging.info("Loading player from {0}.".format(simc_report_path))
+    player_config = player_builder.SimcReport(simc_report_path).Build()
+    logging.info(
+        "PlayerConfig:\n" + MessageToString(player_config, as_utf8=True))
 
     # Fixed part of simulation configuration (encounter, player, static params)
     fixed_simulation_config = simulation_pb2.SimulationConfig()
@@ -101,4 +95,4 @@ def main(argv):
 
 
 if __name__ == '__main__':
-  app.run(main)
+    app.run(main)

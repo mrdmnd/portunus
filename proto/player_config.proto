@@ -2,78 +2,32 @@ syntax = "proto3";
 
 package simulate;
 
-message WearableItem {
-  int32 id = 1;
-  string name = 2;
-  enum Slot {
-    HEAD = 0;
-    NECK = 1;
-    SHOULDERS = 2;
-    BACK = 3;
-    CHEST = 4;
-    WRISTS = 5;
-    HANDS = 6;
-    WAIST = 7;
-    LEGS = 8;
-    FEET = 9;
-    FINGER1 = 10;
-    FINGER2 = 11;
-    TRINKET1 = 12;
-    TRINKET2 = 13;
-    MAINHAND = 14;
-    OFFHAND = 15;
-  }
-  Slot slot = 3;
+// We move all of the hard work of actually representing an arbitrary gearset
+// as an equipment summary into the scripting side, rather than the engine.
+// This allows us to pass the engine a very compact representation of equipment
+// which provides a partial ordering.
+message EquipmentSummary {
+  int32 strength = 1;
+  int32 intelligence = 2;
+  int32 agility = 3;
+  int32 stamina = 4;
+  int32 mastery_rating = 5;
+  int32 versatility_rating = 6;
+  int32 haste_rating = 7;
+  int32 crit_rating = 8;
+  int32 attack_power = 9;
+  int32 spell_power = 10;
+  double mainhand_weapon_speed = 11;
+  double mainhand_weapon_damage_dps = 12;
+  double offhand_weapon_speed = 13;
+  double offhand_weapon_damage_dps = 14;
 
-  int32 main_stat = 4;
-  int32 crit_rating = 5;
-  int32 haste_rating = 6;
-  int32 mastery_rating = 7;
-  int32 versatility_rating = 8;
-  int32 spell_power = 9;
-  int32 attack_power = 10;
+  // Things that modify sim behavior, like trinket / enchant procs, or
+  // legendary static effects, or "replacement effects" of any kind.
+  repeated int32 equip_effects = 15;
 
-  // If this item is part of a set bonus, we want to know.
-  // I.e. if you have a belt and gloves that are tier, they'd both have the same
-  // non-zero value here.
-  int32 set_bonus_id = 13;
-
-  // If this field is set, the item is "enchanted" and we will need to process
-  // the enchantment buff in the sim.
-  int32 enchantment_id = 14;
-
-  // Items may have sockets, if so, the item is "socketed" and we will need to
-  // process the socket bonuses in the sim.
-  repeated int32 gem_id = 15;
-
-  // Item might have some special effects we want to track.
-  int32 special_effect_id = 16;
-}
-
-message EquipmentConfig {
-  WearableItem head = 1;
-  WearableItem neck = 2;
-  WearableItem shoulders = 3;
-  WearableItem back = 4;
-  WearableItem chest = 5;
-  WearableItem wrists = 6;
-  WearableItem hands = 7;
-  WearableItem waist = 8;
-  WearableItem legs = 9;
-  WearableItem feet = 10;
-  WearableItem finger1 = 11;
-  WearableItem finger2 = 12;
-  WearableItem trinket1 = 13;
-  WearableItem trinket2 = 14;
-  WearableItem mainhand = 15;
-  WearableItem offhand = 16;
-
-  int32 mainhand_swing_time = 17;  // Given in MILLISECONDS
-  int32 offhand_swing_time = 18;   // Given in MILLISECONDS
-  int32 mainhand_min_damage = 19;
-  int32 mainhand_max_damage = 20;
-  int32 offhand_min_damage = 21;
-  int32 offhand_max_damage = 22;
+  // Things that provide additional "action space" for the player.
+  repeated int32 on_use_effects = 16;
 }
 
 message TalentConfig {
@@ -87,38 +41,62 @@ message TalentConfig {
 }
 
 enum Specialization {
-  ROGUE_ASSASSINATION = 0;
-  ROGUE_OUTLAW = 1;
-  ROGUE_SUBTLETLY = 2;
+  UNUSED_SPECIALIZATION = 0;
+  DRUID_FERAL = 1;
+  DRUID_BALANCE = 2;
+  MAGE_FIRE = 3;
+  MAGE_FROST = 4;
+  MAGE_ARCANE = 5;
+  WARLOCK_DEMONOLOGY = 6;
+  WARLOCK_DESTRUCTION = 7;
+  WARLOCK_AFFLICTION = 8;
+  WARRIOR_ARMS = 9;
+  WARRIOR_FURY = 10;
+  DEATH_KNIGHT_FROST = 11;
+  DEATH_KNIGHT_UNHOLY = 12;
+  PALADIN_RETRIBUTION = 13;
+  HUNTER_BEAST_MASTERY = 14;
+  HUNTER_SURVIVAL = 15;
+  HUNTER_MARKSMANSHIP = 16;
+  PRIEST_SHADOW = 17;
+  SHAMAN_ELEMENTAL = 18;
+  SHAMAN_ENHANCEMENT = 19;
+  MONK_WINDWALKER = 20;
+  DEMON_HUNTER_HAVOC = 23;
+  ROGUE_ASSASSINATION = 24;
+  ROGUE_OUTLAW = 25;
+  ROGUE_SUBTLETLY = 26;
 }
 
 enum Race {
-  HUMAN = 0;
-  DWARF = 1;
-  NIGHT_ELF = 2;
-  GNOME = 3;
-  ORC = 4;
-  TROLL = 5;
-  UNDEAD = 6;
-  TAUREN = 7;
-  DRAENEI = 8;
-  BLOOD_ELF = 9;
-  WORGEN = 10;
-  GOBLIN = 11;
-  PANDAREN = 12;
+  UNUSED_RACE = 0;
+  HUMAN = 1;
+  DWARF = 2;
+  NIGHT_ELF = 3;
+  GNOME = 4;
+  ORC = 5;
+  TROLL = 6;
+  UNDEAD = 7;
+  TAUREN = 8;
+  DRAENEI = 9;
+  BLOOD_ELF = 10;
+  WORGEN = 11;
+  GOBLIN = 12;
+  PANDAREN = 13;
 }
 
 message Consumables {
   int32 flask_id = 1;
   int32 food_id = 2;
   int32 augment_id = 3;
+  int32 prepot_id = 4;
 }
 
 message PlayerConfig {
-  EquipmentConfig equipment_config = 1;
-  TalentConfig talent_config = 2;
+  string name = 1;
+  Race race = 2;
   Specialization spec = 3;
-  Race race = 4;
-  Consumables consumables = 5;
-  string player_name = 6;
+  TalentConfig talents = 4;
+  EquipmentSummary equipment_summary = 5;
+  Consumables consumables = 6;
 }

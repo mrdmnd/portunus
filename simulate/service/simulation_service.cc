@@ -35,7 +35,7 @@ void shutdown_handler(int signal) {
 }
 
 class SimulationServiceImpl final : public SimulationService::Service {
- public:
+public:
   explicit SimulationServiceImpl(const int num_threads) {
     engine_ = absl::make_unique<Engine>(num_threads);
   }
@@ -51,7 +51,7 @@ class SimulationServiceImpl final : public SimulationService::Service {
     return Status::OK;
   }
 
- private:
+private:
   std::unique_ptr<Engine> engine_;
 };
 

@@ -1,3 +1,4 @@
+#pragma once
 #include "proto/simulation.pb.h"
 
 using namespace simulate;
