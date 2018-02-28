@@ -8,7 +8,7 @@ events {
     enemy {
       id: 1
       name: "Patchwork"
-      type: ADD
+      type: BOSS
     }
   }
 }

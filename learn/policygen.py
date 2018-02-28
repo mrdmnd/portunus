@@ -26,21 +26,33 @@ flags.DEFINE_string('port', '50051', '')
 flags.DEFINE_integer('sim_max_iterations', 10000, '')
 flags.DEFINE_float('sim_target_error', 0.01, '')
 
+flags.DEFINE_string('encounter_textproto',
+                    'examples/encounters/encounter_patchwork.textproto',
+                    'A .textproto file containing an encounter_config.')
+
+flags.DEFINE_string('player_textproto',
+                    'examples/players/player_synecdoche.textproto',
+                    'A  .textproto file containing a player_config.')
+
+flags.DEFINE_string('player_simcdump', '',
+                    'A .simcdump file containing player gear information.')
+
 
 def main(argv):
-    # Ensure input files are present.
-    if len(argv) is not 3:
-        logging.error(
-            "PolicyGen currently requires two inputs: a path to an "
-            "encounter file, and a path to a simc addon report file.")
+    # Ensure exactly one encounter builder and one player builder are present.
+    # if FLAGS.encounter_textproto and ... :
+    if FLAGS.player_textproto and FLAGS.player_simcdump:
+        logging.error("Error: >1 arguments provided for player configuration.")
         return 1
 
-    encounter_path = argv[1]
-    simc_report_path = argv[2]
-
-    # Setup communication with RPC simulation service.
-    channel = grpc.insecure_channel(FLAGS.host + ":" + FLAGS.port)
-    stub = service_pb2_grpc.SimulationServiceStub(channel)
+    encounter_factory = encounter_builder.Textproto(FLAGS.encounter_textproto)
+    if FLAGS.player_textproto:
+        player_factory = player_builder.Textproto(FLAGS.player_textproto)
+    elif FLAGS.player_simcdump:
+        player_factory = player_builder.SimcReport(FLAGS.player_simcdump)
+    else:
+        logging.error("Need to pass in at least one player builder flag.")
+        return 1
 
     # Sanity checking our environment.
     logging.info('Running Python {0[0]}.{0[1]}.{0[2]}'.format(
@@ -52,16 +64,15 @@ def main(argv):
     logging.info('Tensorflow has CUDA-supporting GPU available: {0}'.format(
         tf.test.is_gpu_available(cuda_only=True)))
 
-    # Load encounter and player configurations.
-    logging.info("Loading encounter from {0}.".format(encounter_path))
-    encounter_config = encounter_builder.Textproto(encounter_path).Build()
-    logging.info(
-        "EncounterConfig\n" + MessageToString(encounter_config, as_utf8=True))
+    # Setup communication with RPC simulation service.
+    channel = grpc.insecure_channel(FLAGS.host + ":" + FLAGS.port)
+    stub = service_pb2_grpc.SimulationServiceStub(channel)
 
-    logging.info("Loading player from {0}.".format(simc_report_path))
-    player_config = player_builder.SimcReport(simc_report_path).Build()
-    logging.info(
-        "PlayerConfig:\n" + MessageToString(player_config, as_utf8=True))
+    # Load encounter and player configurations.
+    encounter_config = encounter_factory.Build()
+    logging.info("EncounterConfig\n" + MessageToString(encounter_config))
+    player_config = player_factory.Build()
+    logging.info("PlayerConfig:\n" + MessageToString(player_config))
 
     # Fixed part of simulation configuration (encounter, player, static params)
     fixed_simulation_config = simulation_pb2.SimulationConfig()
@@ -83,7 +94,6 @@ def main(argv):
         simulation_config.policy.MergeFrom(policy)
 
         # Issue request to RPC stub.
-        logging.info("Issuing simulation service RPC request.")
         request = service_pb2.SimulationRequest()
         request.config.MergeFrom(simulation_config)
         response = stub.ConductSimulation(request)

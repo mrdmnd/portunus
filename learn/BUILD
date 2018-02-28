@@ -31,14 +31,6 @@ py_library(
     name = "player_builder",
     srcs = ["player_builder.py"],
     deps = [
-        ":gearset_summarizer",
         "//proto:py_lib",
     ],
-)
-
-# This library converts Gearset protos into EquipmentSummary protos.
-py_library(
-    name = "gearset_summarizer",
-    srcs = ["gearset_summarizer.py"],
-    deps = ["//proto:py_lib"],
 )

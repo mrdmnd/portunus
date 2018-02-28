@@ -1,7 +1,6 @@
 """ This module provides an interface to build up player_config objects. """
 from proto import player_config_pb2
-from proto import gearset_pb2
-import gearset_summarizer
+from google.protobuf.text_format import Merge
 
 
 class PlayerBuilder:
@@ -12,6 +11,15 @@ class PlayerBuilder:
 
     def Build(self):
         return self.player_config
+
+
+class Textproto(PlayerBuilder):
+    """ The trivial example. Loads a pre-defined textproto file. """
+
+    def __init__(self, filepath):
+        PlayerBuilder.__init__(self)
+        with open(filepath, 'r') as f:
+            Merge(f.read(), self.player_config)
 
 
 class SimcReport(PlayerBuilder):
@@ -35,12 +43,6 @@ class SimcReport(PlayerBuilder):
         (header, gear, bags) = self.__Partition(filepath)
         self.__SetPlayerConfigMetadata(header)
         self.__SetPlayerConfigEquipmentSummary(gear)
-
-        # TODO(mrdmnd) - implement these methods, and then a pruning pass.
-        # An dictionary mapping each slot to a single piece of gear.
-        # self.current_gear_dict = self.__BuildGear(gear)
-        # A dictionary mapping each slot to a list of pieces for that slot.
-        # self.potential_gear_dict = self.__BuildGear(gear + bags)
 
     def __Partition(self, filepath):
         """ Splits report file into groups: header, current_gear, bag_gear. """
@@ -83,9 +85,9 @@ class SimcReport(PlayerBuilder):
 
     def __SetPlayerConfigEquipmentSummary(self, gear):
         """ Builds a gearset from `gear` lines, then runs GearsetSummarizer. """
-        gearset = gearset_pb2.Gearset()
+        self.player_config.gearset.MergeFrom(player_config_pb2.Gearset())
         for line in gear:
-            item = gearset_pb2.WearableItem()
+            item = player_config_pb2.WearableItem()
             comma_splits = line.split(",")
             for partition in comma_splits:
                 (k, v) = partition.split("=")
@@ -98,7 +100,5 @@ class SimcReport(PlayerBuilder):
                 elif k == "bonus_id":
                     item.bonus_ids.extend([int(b_id) for b_id in v.split("/")])
                 elif k != "relic_id":
-                    item.slot = gearset_pb2.Slot.Value(k.upper())
-            gearset.items.extend([item])
-        equipment_summary = gearset_summarizer.SummarizeGearset(gearset)
-        self.player_config.equipment_summary.MergeFrom(equipment_summary)
+                    item.slot = player_config_pb2.Slot.Value(k.upper())
+            self.player_config.gearset.items.extend([item])

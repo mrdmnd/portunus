@@ -2,34 +2,6 @@ syntax = "proto3";
 
 package simulate;
 
-// We move all of the hard work of actually representing an arbitrary gearset
-// as an equipment summary into the scripting side, rather than the engine.
-// This allows us to pass the engine a very compact representation of equipment
-// which provides a partial ordering.
-message EquipmentSummary {
-  int32 strength = 1;
-  int32 intelligence = 2;
-  int32 agility = 3;
-  int32 stamina = 4;
-  int32 mastery_rating = 5;
-  int32 versatility_rating = 6;
-  int32 haste_rating = 7;
-  int32 crit_rating = 8;
-  int32 attack_power = 9;
-  int32 spell_power = 10;
-  double mainhand_weapon_speed = 11;
-  double mainhand_weapon_damage_dps = 12;
-  double offhand_weapon_speed = 13;
-  double offhand_weapon_damage_dps = 14;
-
-  // Things that modify sim behavior, like trinket / enchant procs, or
-  // legendary static effects, or "replacement effects" of any kind.
-  repeated int32 equip_effects = 15;
-
-  // Things that provide additional "action space" for the player.
-  repeated int32 on_use_effects = 16;
-}
-
 message TalentConfig {
   int32 row_1 = 1;
   int32 row_2 = 2;
@@ -85,6 +57,36 @@ enum Race {
   PANDAREN = 13;
 }
 
+enum Slot {
+  UNUSED_SLOT = 0;
+  HEAD = 1;
+  NECK = 2;
+  SHOULDER = 3;
+  BACK = 4;
+  CHEST = 5;
+  WRIST = 6;
+  HANDS = 7;
+  WAIST = 8;
+  LEGS = 9;
+  FEET = 10;
+  FINGER1 = 11;
+  FINGER2 = 12;
+  TRINKET1 = 13;
+  TRINKET2 = 14;
+  MAIN_HAND = 15;
+  OFF_HAND = 16;
+}
+
+message WearableItem {
+  Slot slot = 1;
+  int32 item_id = 2;
+  int32 enchant_id = 3;
+  repeated int32 gem_ids = 4;
+  repeated int32 bonus_ids = 5;
+}
+
+message Gearset { repeated WearableItem items = 1; }
+
 message Consumables {
   int32 flask_id = 1;
   int32 food_id = 2;
@@ -97,6 +99,6 @@ message PlayerConfig {
   Race race = 2;
   Specialization spec = 3;
   TalentConfig talents = 4;
-  EquipmentSummary equipment_summary = 5;
+  Gearset gearset = 5;
   Consumables consumables = 6;
 }
