@@ -85,7 +85,9 @@ message WearableItem {
   repeated int32 bonus_ids = 5;
 }
 
-message Gearset { repeated WearableItem items = 1; }
+message Gearset {
+  repeated WearableItem items = 1;
+}
 
 message Consumables {
   int32 flask_id = 1;
