@@ -5,21 +5,21 @@ using namespace simulate;
 
 // Takes as input a configuration option, and returns a result.
 class Engine {
-public:
+ public:
   Engine() = default;
-  ~Engine() = default;
   Engine(const int num_threads) : num_threads_(num_threads){};
+  ~Engine() = default;
+
+  // Simulate the input simulation configuration on all threads.
   SimulationResult Simulate(SimulationConfig config) const;
 
-private:
-  // Disallow copy construction and assignment.
+  // Disallow {move,copy} {construction,assignment}.
   Engine(const Engine &other) = delete;
-  Engine &operator=(const Engine &other) = delete;
-
-  // Disallow move construction and assignment.
   Engine(const Engine &&other) = delete;
+  Engine &operator=(const Engine &other) = delete;
   Engine &operator=(const Engine &&other) = delete;
 
+ private:
   // Class members.
   int num_threads_;
 };
