@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package simulate;
+package simulatorproto;
 
 import "proto/encounter_config.proto";
 import "proto/player_config.proto";

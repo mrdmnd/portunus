@@ -1,17 +1,22 @@
 #pragma once
 #include "proto/simulation.pb.h"
 
-using namespace simulate;
+// Engine class is meant to be a "long-running" class that can execute many
+// simulations, one-after-the-other. It keeps a long-lived thread pool alive.
+// Each call to Simulate sets up a new work queue that the threads can pull
+// from, as well as a new statics-tracking object for reporting + early
+// termination.
 
 // Takes as input a configuration option, and returns a result.
 class Engine {
  public:
-  Engine() = delete;
-  Engine(const int num_threads) : num_threads_(num_threads){};
+  Engine(const int num_threads);
+  Engine();
   ~Engine();
 
   // Simulate the input simulation configuration on all threads.
-  SimulationResult Simulate(SimulationConfig config) const;
+  simulatorproto::SimulationResult Simulate(
+      const simulatorproto::SimulationConfig& conf) const;
 
   // Disallow {move,copy} {construction,assignment}.
   Engine(const Engine& other) = delete;
@@ -21,5 +26,5 @@ class Engine {
 
  private:
   // Class members.
-  int num_threads_;
+  const int num_threads_;
 };

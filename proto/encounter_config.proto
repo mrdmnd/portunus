@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package simulate;
+package simulatorproto;
 
 // This is a bit nuanced. A lot of classes need to know when they hit execute
 // range. We can make a few assumptions about how the health of our target

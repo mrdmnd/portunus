@@ -20,9 +20,11 @@ cc_library(
     name = "engine",
     srcs = [
         "engine.cc",
+        "online_statistics.cc",
     ],
     hdrs = [
         "engine.h",
+        "online_statistics.h",
     ],
     deps = [
         "//proto:cc_lib",
@@ -32,10 +34,13 @@ cc_library(
 )
 
 cc_test(
-    name = "engine_test",
+    name = "online_statistics_test",
     size = "small",
     srcs = [
-        "engine_test.cc",
+        "online_statistics_test.cc",
     ],
-    deps = [":engine"],
+    deps = [
+        ":engine",
+        "@com_google_googletest//:gtest_main",
+    ],
 )

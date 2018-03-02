@@ -12,12 +12,11 @@
 #include "glog/logging.h"
 #include "google/protobuf/text_format.h"
 
-DEFINE_int32(threads, std::thread::hardware_concurrency(), "Num threads.");
-
 using namespace simulate;
 
 // Read the file at config_path, parse the contents into a SimulationConfig.
-template <class T> T ParseConfig(const std::string &config_path) {
+template <class T>
+T ParseConfig(const std::string& config_path) {
   std::ifstream input(config_path, std::ios::in | std::ios::binary);
   CHECK(input) << "file at " << config_path << " could not be opened.";
   std::ostringstream contents;
@@ -29,13 +28,11 @@ template <class T> T ParseConfig(const std::string &config_path) {
   return conf;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   CHECK_EQ(argc, 2) << "Required argument [config_path] missing.";
-  const std::string config_path(argv[1]);
-  const Engine e(FLAGS_threads);
-
-  const SimulationConfig conf = ParseConfig<SimulationConfig>(config_path);
+  const Engine e();
+  const SimulationConfig conf = ParseConfig<SimulationConfig>(argv[1]);
   const SimulationResult result = e.Simulate(conf);
 
   std::string result_string;

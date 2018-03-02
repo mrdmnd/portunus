@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package simulate;
+package simulatorproto;
 
 message TalentConfig {
   int32 row_1 = 1;

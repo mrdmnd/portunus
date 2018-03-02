@@ -1,8 +1,10 @@
 syntax = "proto3";
 
-package simulate;
+package simulatorproto;
 
 // import "tensorflow/graph_def.proto" // TODO(mrdmnd) - get actual path here.
 
 // A protocol buffer to hold the (currently) trained model + weights from RL
-message Policy { string contents = 1; }
+message Policy {
+  string contents = 1;
+}

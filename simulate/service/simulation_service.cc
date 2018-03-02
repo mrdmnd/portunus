@@ -18,7 +18,6 @@
 
 DEFINE_string(host, "localhost", "Which address to serve from.");
 DEFINE_string(port, "50051", "Which port to serve requests from.");
-DEFINE_int32(threads, std::thread::hardware_concurrency(), "Num threads.");
 
 using grpc::Server;
 using grpc::ServerAsyncResponseWriter;
@@ -35,14 +34,14 @@ void shutdown_handler(int signal) {
 }
 
 class SimulationServiceImpl final : public SimulationService::Service {
-public:
+ public:
   explicit SimulationServiceImpl(const int num_threads) {
     engine_ = absl::make_unique<Engine>(num_threads);
   }
 
-  Status ConductSimulation(ServerContext *context,
-                           const SimulationRequest *request,
-                           SimulationResponse *response) override {
+  Status ConductSimulation(ServerContext* context,
+                           const SimulationRequest* request,
+                           SimulationResponse* response) override {
     LOG(INFO) << "Received simulation request.";
     std::string config;
     google::protobuf::TextFormat::PrintToString(request->config(), &config);
@@ -51,11 +50,11 @@ public:
     return Status::OK;
   }
 
-private:
+ private:
   std::unique_ptr<Engine> engine_;
 };
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   signal(SIGINT, shutdown_handler);
   signal(SIGTERM, shutdown_handler);
@@ -69,7 +68,6 @@ int main(int argc, char **argv) {
 
   std::unique_ptr<Server> server(builder.BuildAndStart());
   LOG(INFO) << "Simulation server listening at " << address;
-  LOG(INFO) << "Engine running with " << FLAGS_threads << " threads.";
   server->Wait();
   return 0;
 }

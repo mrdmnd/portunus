@@ -1,13 +1,18 @@
 syntax = "proto3";
 
-package simulate;
+package simulatorproto;
 
 import "proto/simulation.proto";
 
-message SimulationRequest { SimulationConfig config = 1; }
+message SimulationRequest {
+  SimulationConfig config = 1;
+}
 
-message SimulationResponse { SimulationResult result = 1; }
+message SimulationResponse {
+  SimulationResult result = 1;
+}
 
 service SimulationService {
-  rpc ConductSimulation(SimulationRequest) returns (SimulationResponse) {}
+  rpc ConductSimulation(SimulationRequest) returns (SimulationResponse) {
+  }
 }
