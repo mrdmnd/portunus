@@ -1,0 +1,15 @@
+---
+BasedOnStyle: Google
+IndentWidth: 2
+---
+Language: Cpp
+DerivePointerAlignment: false
+PointerAlignment: Left
+AccessModifierOffset: -1
+BinPackArguments: false
+BinPackParameters: false
+FixNamespaceComments: true
+ReflowComments: true
+SortIncludes: true
+SortUsingDeclarations: true
+SpaceAfterCStyleCast: true

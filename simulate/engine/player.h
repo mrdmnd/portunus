@@ -26,15 +26,16 @@ class Actor {
   // is either finite or infinite. Auras have stacks.
   std::vector<Aura> active_auras_;
 
-  // Actors have a pointer to a target, but they don't own it, and shouldn't
-  // be able to mutate it. It is nonsensical for an actor to have a null target.
-  // We should guard against that in methods that seek to modify this pointer.
-  // The lifetime of the target must exceed or equal that of the player. We
-  // assume that the player cannot modify their target directly, but we can use
-  // this reference to get debuffs on the target.
+  // Actors have a `target` for all actions, but they don't own it, and
+  // shouldn't be able to mutate it. It is nonsensical for an actor to have a
+  // null target, but we cannot rebind references, so we use a pointer and
+  // explicitly require that any events which change this piece of state do not
+  // set current_target_ to NULLPTR.  The lifetime of the target must exceed or
+  // equal that of the actor.  We assume that the player cannot modify their
+  // target directly, but we can use this reference to get debuffs on the
+  // target.
   const Actor* current_target_;
-
-}
+};
 
 class Player : Actor {
  public:
@@ -45,7 +46,7 @@ class Player : Actor {
   // Players have cooldown status
   std::vector<SpellCooldown> cooldowns_;
 
-  // Players have a global cooldown
+  // Players have a special global cooldown.
   SpellCooldown gcd_;
 
   // Players have resource (power) - energy, mana, focus, fury, rage, runes,
