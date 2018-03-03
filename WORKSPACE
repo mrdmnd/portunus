@@ -1,7 +1,7 @@
 workspace(name = "com_mrdmnd_policygen")
 
 http_archive(
-    name = "com_github_gflags_gflags",
+    name = "com_google_gflags",
     strip_prefix = "gflags-master",
     url = "https://github.com/gflags/gflags/archive/master.zip",
 )
@@ -19,19 +19,13 @@ http_archive(
 )
 
 http_archive(
-    name = "org_tensorflow",
-    strip_prefix = "tensorflow-master",
-    url = "https://github.com/tensorflow/tensorflow/archive/master.zip",
-)
-
-http_archive(
     name = "com_google_glog",
     strip_prefix = "glog-master",
     url = "https://github.com/google/glog/archive/master.zip",
 )
 
 new_http_archive(
-    name = "com_github_google_benchmark",
+    name = "com_google_benchmark",
     build_file = "@com_github_grpc_grpc//third_party:benchmark.BUILD",
     strip_prefix = "benchmark-master",
     url = "https://github.com/google/benchmark/archive/master.zip",

@@ -1,0 +1,67 @@
+package(default_visibility = ["//visibility:public"])
+
+load("@org_pubref_rules_protobuf//cpp:rules.bzl", "GRPC_COMPILE_DEPS")
+
+############# Libraries ##############
+
+cc_library(
+    name = "engine",
+    srcs = [
+        "engine.cc",
+        "online_statistics.cc",
+    ],
+    hdrs = [
+        "engine.h",
+        "online_statistics.h",
+    ],
+    deps = [
+        "//proto:cc_lib",
+        "@com_google_absl//absl/strings",
+        "@com_google_glog//:glog",
+    ],
+)
+
+############# Binaries ##############
+
+# This is a standalone program that provides a `main` which takes a path to a
+# text protobuf object representing the simulation config to execute.
+cc_binary(
+    name = "standalone",
+    srcs = "standalone.cc",
+    deps = [
+        ":engine",
+        "//proto:cc_lib",
+        "@com_google_absl//absl/memory",
+        "@com_google_gflags//:gflags",
+        "@com_google_glog//:glog",
+    ],
+)
+
+# This is a simulation service that spins up a long-running engine + threadpool
+# and handles multiple, long-lived simulation requests.
+cc_binary(
+    name = "service",
+    srcs = "service.cc",
+    deps = [
+        ":engine",
+        "//proto:cc_lib",
+        "@com_google_glog//:glog",
+        "@com_google_gflags//:gflags",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/memory",
+    ] + GRPC_COMPILE_DEPS,
+)
+
+############# Tests ##############
+
+cc_test(
+    name = "online_statistics_test",
+    size = "small",
+    srcs = [
+        "online_statistics_test.cc",
+    ],
+    deps = [
+        ":engine",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

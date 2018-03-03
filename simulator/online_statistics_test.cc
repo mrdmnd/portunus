@@ -3,8 +3,8 @@
 
 #include "gtest/gtest.h"
 
-#include "simulate/engine/online_statistics.h"
-
+#include "simulator/online_statistics.h"
+namespace policygen {
 TEST(OnlineStatisticsTest, SingleThread_Empty) {
   OnlineStatistics os;
   EXPECT_EQ(os.Count(), 0);
@@ -67,3 +67,4 @@ TEST(OnlineStatisticsTest, ManyThreads_AddOnceEach) {
     EXPECT_FLOAT_EQ(os.Variance(), kNumThreads * (kNumThreads + 1) / 12.0);
   }
 }
+}  // namespace policygen

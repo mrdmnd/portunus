@@ -7,10 +7,11 @@
 #include <thread>
 
 #include "glog/logging.h"
-#include "simulate/engine/engine.h"
+#include "simulator/engine.h"
 
 #include "proto/simulation.pb.h"
 
+namespace policygen {
 Engine::Engine(const int num_threads) : num_threads_(num_threads) {
   LOG(INFO) << "Initialized Engine with " << num_threads << " threads.";
 }
@@ -30,3 +31,4 @@ simulatorproto::SimulationResult Engine::Simulate(
   r.set_metadata("Hello world from engine.cc!");
   return r;
 }
+}  // namespace policygen

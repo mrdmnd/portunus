@@ -1,10 +1,11 @@
 #include <limits>
 #include <mutex>
 
-#include "simulate/engine/online_statistics.h"
+#include "simulator/online_statistics.h"
 
 #define QUIET_NAN (std::numeric_limits<double>::quiet_NaN())
 
+namespace policygen {
 void OnlineStatistics::AddValue(double value) {
   std::lock_guard<std::mutex> guard(mutex_);
   n_++;
@@ -28,3 +29,4 @@ double OnlineStatistics::Variance() const {
   std::lock_guard<std::mutex> guard(mutex_);
   return (n_ > 1) ? moment2_ / (n_ - 1) : QUIET_NAN;
 }
+}  // namespace policygen

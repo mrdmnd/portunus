@@ -4,7 +4,7 @@
 #include <thread>
 
 #include "proto/simulation.pb.h"
-#include "simulate/engine/engine.h"
+#include "simulator/engine.h"
 
 #include "absl/memory/memory.h"
 
@@ -12,8 +12,7 @@
 #include "glog/logging.h"
 #include "google/protobuf/text_format.h"
 
-using namespace simulate;
-
+namespace policygen {
 // Read the file at config_path, parse the contents into a SimulationConfig.
 template <class T>
 T ParseConfig(const std::string& config_path) {
@@ -40,3 +39,4 @@ int main(int argc, char** argv) {
   LOG(INFO) << "Simulation result:\n" << result_string;
   return 0;
 }
+}  // namespace policygen

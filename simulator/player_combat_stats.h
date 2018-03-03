@@ -1,3 +1,4 @@
+namespace policygen {
 // This class is responsible for holding the *current* combat ratings for the
 // player. We may (at some point) want to implement a caching mechanism here, so
 // the field access is currently hidden behind const accessor methods.
@@ -6,11 +7,21 @@ class PlayerCombatStats {
  public:
   PlayerCombatStats() = delete;
   ~PlayerCombatStats() = default;
-  PlayerCombatStats(int strength, int agility, int intelligence, int stamina,
-                    int crit, int mastery, int versatility, int haste,
-                    int attack_power, int spell_power, double mainhand_speed,
-                    int mainhand_damage_min, int mainhand_damage_max,
-                    double offhand_speed, int offhand_damage_min,
+  PlayerCombatStats(int strength,
+                    int agility,
+                    int intelligence,
+                    int stamina,
+                    int crit,
+                    int mastery,
+                    int versatility,
+                    int haste,
+                    int attack_power,
+                    int spell_power,
+                    double mainhand_speed,
+                    int mainhand_damage_min,
+                    int mainhand_damage_max,
+                    double offhand_speed,
+                    int offhand_damage_min,
                     int offhand_damage_max)
       : strength_(strength);
 
@@ -39,10 +50,10 @@ class PlayerCombatStats {
   const;
 
   // Enable move + copy constructors and assignments.
-  Gearset(const Gearset &other) = default;
-  Gearset(const Gearset &&other) = default;
-  Gearset &operator=(const Gearset &other) = default;
-  Gearset &operator=(const Gearset &&other) = default;
+  Gearset(const Gearset& other) = default;
+  Gearset(const Gearset&& other) = default;
+  Gearset& operator=(const Gearset& other) = default;
+  Gearset& operator=(const Gearset&& other) = default;
 
  private:
   int strength_rating_;
@@ -64,3 +75,4 @@ class PlayerCombatStats {
   int offhand_damage_min_;
   int offhand_damage_max_;
 };
+}  // namespace policygen

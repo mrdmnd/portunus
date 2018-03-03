@@ -1,3 +1,4 @@
+namespace policygen {
 // Everything needed to keep track of *CURRENT* player state for the
 // instantiated player. That means variables in here probably should NOT be
 // `const`. Heuristic: if you want to reference a non-time-varying value, it
@@ -72,4 +73,5 @@ class Enemy : Actor {
  private:
   // Enemies inherit maximum_health, current_health, auras, and their
   // current_target from Actor.
-}
+};
+}  // namespace policygen

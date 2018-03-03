@@ -5,7 +5,7 @@
 #include <thread>
 
 #include "proto/service.grpc.pb.h"
-#include "simulate/engine/engine.h"
+#include "simulator/engine.h"
 
 #include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
@@ -26,8 +26,7 @@ using grpc::ServerCompletionQueue;
 using grpc::ServerContext;
 using grpc::Status;
 
-using namespace simulate;
-
+namespace policygen {
 void shutdown_handler(int signal) {
   LOG(INFO) << "Shutting down simulation service...";
   exit(signal);
@@ -71,3 +70,4 @@ int main(int argc, char** argv) {
   server->Wait();
   return 0;
 }
+}  // namespace policygen

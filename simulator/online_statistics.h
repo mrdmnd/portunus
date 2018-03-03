@@ -4,6 +4,7 @@
 
 #include <mutex>
 
+namespace policygen {
 class OnlineStatistics {
  public:
   OnlineStatistics() : n_(0.0), moment1_(0.0), moment2_(0.0){};
@@ -36,3 +37,4 @@ class OnlineStatistics {
   double moment1_;
   double moment2_;
 };
+}  // namespace policygen

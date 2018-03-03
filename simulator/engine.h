@@ -1,6 +1,7 @@
 #pragma once
 #include "proto/simulation.pb.h"
 
+namespace policygen {
 // Engine class is meant to be a "long-running" class that can execute many
 // simulations, one-after-the-other. It keeps a long-lived thread pool alive.
 // Each call to Simulate sets up a new work queue that the threads can pull
@@ -28,3 +29,4 @@ class Engine {
   // Class members.
   const int num_threads_;
 };
+}  // namespace policygen
