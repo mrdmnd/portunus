@@ -31,7 +31,10 @@ T ParseConfig(const std::string& config_path) {
 }  // namespace
 
 int main(int argc, char** argv) {
+  FLAGS_logtostderr = true;
   gflags::ParseCommandLineFlags(&argc, &argv, true);
+  google::InitGoogleLogging(argv[0]);
+
   CHECK_EQ(argc, 2) << "Required argument [config_path] missing.";
   const policygen::Engine e(FLAGS_threads);
   const simulatorproto::SimulationConfig conf =

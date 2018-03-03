@@ -1,6 +1,8 @@
 #pragma once
 #include "proto/simulation.pb.h"
 
+#include "simulator/threadpool.h"
+
 namespace policygen {
 // Engine class is meant to be a "long-running" class that can execute many
 // simulations, one-after-the-other. It keeps a long-lived thread pool alive.
@@ -13,9 +15,7 @@ class Engine {
  public:
   Engine(const int num_threads);
   Engine() = delete;
-
-  // TODO(mrdmnd) - once threadpool is built, need to free in dtor.
-  ~Engine() = default;
+  ~Engine();
 
   // Simulate the input simulation configuration on all threads.
   simulatorproto::SimulationResult Simulate(
@@ -29,6 +29,6 @@ class Engine {
 
  private:
   // Class members.
-  const int num_threads_;
+  std::unique_ptr<ThreadPool> pool_;
 };
 }  // namespace policygen

@@ -28,7 +28,7 @@ DEFINE_string(port, "50051", "");
 DEFINE_int32(threads, std::thread::hardware_concurrency(), "");
 
 void shutdown_handler(int signal) {
-  LOG(INFO) << "Shutting down simulation service...";
+  LOG(INFO) << "Simulation service received CTRL-C, going down...";
   exit(signal);
 }
 
@@ -56,7 +56,10 @@ class SimulationServiceImpl final
 };
 
 int main(int argc, char** argv) {
+  FLAGS_logtostderr = true;
   gflags::ParseCommandLineFlags(&argc, &argv, true);
+  google::InitGoogleLogging(argv[0]);
+
   signal(SIGINT, shutdown_handler);
   signal(SIGTERM, shutdown_handler);
 

@@ -6,15 +6,19 @@
 #include <string>
 #include <thread>
 
+#include "absl/memory/memory.h"
 #include "glog/logging.h"
 #include "simulator/engine.h"
 
 #include "proto/simulation.pb.h"
 
 namespace policygen {
-Engine::Engine(const int num_threads) : num_threads_(num_threads) {
+Engine::Engine(const int num_threads) {
   LOG(INFO) << "Initialized Engine with " << num_threads << " threads.";
+  pool_ = absl::make_unique<ThreadPool>(num_threads);
 }
+
+Engine::~Engine() { LOG(INFO) << "Destroying engine."; }
 
 simulatorproto::SimulationResult Engine::Simulate(
     const simulatorproto::SimulationConfig& config) const {

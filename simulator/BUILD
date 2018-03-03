@@ -9,6 +9,7 @@ cc_library(
     srcs = [
         "engine.cc",
         "online_statistics.cc",
+        "threadpool.h",
     ],
     hdrs = [
         "engine.h",
