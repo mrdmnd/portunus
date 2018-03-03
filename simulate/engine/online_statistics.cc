@@ -14,6 +14,11 @@ void OnlineStatistics::AddValue(double value) {
   moment2_ += delta1 * delta2;
 }
 
+long OnlineStatistics::Count() const {
+  std::lock_guard<std::mutex> guard(mutex_);
+  return n_;
+}
+
 double OnlineStatistics::Mean() const {
   std::lock_guard<std::mutex> guard(mutex_);
   return moment1_;

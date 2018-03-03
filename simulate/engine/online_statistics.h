@@ -15,8 +15,19 @@ class OnlineStatistics {
   OnlineStatistics& operator=(const OnlineStatistics& other) = delete;
   OnlineStatistics& operator=(const OnlineStatistics&& other) = delete;
 
+  // Add a value into this distribution.
   void AddValue(double value);
+
+  // Returns the number of values that have been added.
+  long Count() const;
+
+  // Returns the sample mean from all values that have been added. If no values
+  // have been added, returns 0.0
   double Mean() const;
+
+  // Returns the sample variance from all values that have been added (this is
+  // the "division by n-1" flavor). If fewer than two values have been added,
+  // returns NaN.
   double Variance() const;
 
  private:
