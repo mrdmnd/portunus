@@ -27,12 +27,12 @@ cc_library(
 # text protobuf object representing the simulation config to execute.
 cc_binary(
     name = "standalone",
-    srcs = "standalone.cc",
+    srcs = ["standalone.cc"],
     deps = [
         ":engine",
         "//proto:cc_lib",
+        "@com_github_gflags_gflags//:gflags",
         "@com_google_absl//absl/memory",
-        "@com_google_gflags//:gflags",
         "@com_google_glog//:glog",
     ],
 )
@@ -41,12 +41,12 @@ cc_binary(
 # and handles multiple, long-lived simulation requests.
 cc_binary(
     name = "service",
-    srcs = "service.cc",
+    srcs = ["service.cc"],
     deps = [
         ":engine",
         "//proto:cc_lib",
         "@com_google_glog//:glog",
-        "@com_google_gflags//:gflags",
+        "@com_github_gflags_gflags//:gflags",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/memory",
     ] + GRPC_COMPILE_DEPS,

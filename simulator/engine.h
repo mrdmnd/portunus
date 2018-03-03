@@ -12,8 +12,10 @@ namespace policygen {
 class Engine {
  public:
   Engine(const int num_threads);
-  Engine();
-  ~Engine();
+  Engine() = delete;
+
+  // TODO(mrdmnd) - once threadpool is built, need to free in dtor.
+  ~Engine() = default;
 
   // Simulate the input simulation configuration on all threads.
   simulatorproto::SimulationResult Simulate(

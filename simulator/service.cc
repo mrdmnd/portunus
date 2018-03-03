@@ -16,9 +16,6 @@
 #include "grpc++/grpc++.h"
 #include "grpc/support/log.h"
 
-DEFINE_string(host, "localhost", "Which address to serve from.");
-DEFINE_string(port, "50051", "Which port to serve requests from.");
-
 using grpc::Server;
 using grpc::ServerAsyncResponseWriter;
 using grpc::ServerBuilder;
@@ -26,21 +23,26 @@ using grpc::ServerCompletionQueue;
 using grpc::ServerContext;
 using grpc::Status;
 
-namespace policygen {
+DEFINE_string(host, "localhost", "");
+DEFINE_string(port, "50051", "");
+DEFINE_int32(threads, std::thread::hardware_concurrency(), "");
+
 void shutdown_handler(int signal) {
   LOG(INFO) << "Shutting down simulation service...";
   exit(signal);
 }
 
-class SimulationServiceImpl final : public SimulationService::Service {
+class SimulationServiceImpl final
+    : public simulatorproto::SimulationService::Service {
  public:
   explicit SimulationServiceImpl(const int num_threads) {
-    engine_ = absl::make_unique<Engine>(num_threads);
+    engine_ = absl::make_unique<policygen::Engine>(num_threads);
   }
 
-  Status ConductSimulation(ServerContext* context,
-                           const SimulationRequest* request,
-                           SimulationResponse* response) override {
+  Status ConductSimulation(
+      ServerContext* context,
+      const simulatorproto::SimulationRequest* request,
+      simulatorproto::SimulationResponse* response) override {
     LOG(INFO) << "Received simulation request.";
     std::string config;
     google::protobuf::TextFormat::PrintToString(request->config(), &config);
@@ -50,7 +52,7 @@ class SimulationServiceImpl final : public SimulationService::Service {
   }
 
  private:
-  std::unique_ptr<Engine> engine_;
+  std::unique_ptr<policygen::Engine> engine_;
 };
 
 int main(int argc, char** argv) {
@@ -70,4 +72,3 @@ int main(int argc, char** argv) {
   server->Wait();
   return 0;
 }
-}  // namespace policygen

@@ -1,7 +1,7 @@
 workspace(name = "com_mrdmnd_policygen")
 
 http_archive(
-    name = "com_google_gflags",
+    name = "com_github_gflags_gflags",
     strip_prefix = "gflags-master",
     url = "https://github.com/gflags/gflags/archive/master.zip",
 )

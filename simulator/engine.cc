@@ -16,10 +16,6 @@ Engine::Engine(const int num_threads) : num_threads_(num_threads) {
   LOG(INFO) << "Initialized Engine with " << num_threads << " threads.";
 }
 
-// Delegating constructor, use default (max) number of threads.
-Engine::Engine()
-    : Engine(std::max(1, (int) std::thread::hardware_concurrency())){};
-
 simulatorproto::SimulationResult Engine::Simulate(
     const simulatorproto::SimulationConfig& config) const {
   simulatorproto::Distribution dps_distribution;
