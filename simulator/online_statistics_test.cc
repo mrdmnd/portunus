@@ -1,4 +1,4 @@
-#include <math.h>  // cmath
+#include <cmath>
 #include <thread>
 
 #include "gtest/gtest.h"
@@ -9,15 +9,17 @@ TEST(OnlineStatisticsTest, SingleThread_Empty) {
   OnlineStatistics os;
   EXPECT_EQ(os.Count(), 0);
   EXPECT_EQ(os.Mean(), 0);
-  EXPECT_TRUE(isnan(os.Variance()));
+  EXPECT_TRUE(std::isnan(os.Variance()));
+  EXPECT_TRUE(std::isnan(os.StdError()));
 }
 
 TEST(OnlineStatisticsTest, SingleThread_AddOnce) {
   OnlineStatistics os;
   os.AddValue(1.0);
   EXPECT_EQ(os.Count(), 1);
-  EXPECT_EQ(os.Mean(), 1.0);
-  EXPECT_TRUE(isnan(os.Variance()));
+  EXPECT_FLOAT_EQ(os.Mean(), 1.0);
+  EXPECT_TRUE(std::isnan(os.Variance()));
+  EXPECT_TRUE(std::isnan(os.StdError()));
 }
 
 TEST(OnlineStatisticsTest, SingleThread_AddTwice) {
@@ -25,8 +27,9 @@ TEST(OnlineStatisticsTest, SingleThread_AddTwice) {
   os.AddValue(1.0);
   os.AddValue(2.0);
   EXPECT_EQ(os.Count(), 2);
-  EXPECT_EQ(os.Mean(), 1.5);
-  EXPECT_EQ(os.Variance(), 0.5);
+  EXPECT_FLOAT_EQ(os.Mean(), 1.5);
+  EXPECT_FLOAT_EQ(os.Variance(), 0.5);
+  EXPECT_FLOAT_EQ(os.StdError(), 0.5);
 }
 
 TEST(OnlineStatisticsTest, SingleThread_AddThrice) {
@@ -35,8 +38,9 @@ TEST(OnlineStatisticsTest, SingleThread_AddThrice) {
   os.AddValue(2.0);
   os.AddValue(3.0);
   EXPECT_EQ(os.Count(), 3);
-  EXPECT_EQ(os.Mean(), 2.0);
-  EXPECT_EQ(os.Variance(), 1.0);
+  EXPECT_FLOAT_EQ(os.Mean(), 2.0);
+  EXPECT_FLOAT_EQ(os.Variance(), 1.0);
+  EXPECT_FLOAT_EQ(os.StdError(), std::sqrt(1.0 / 3.0));
 }
 
 TEST(OnlineStatisticsTest, ManyThreads_AddOnceEach) {
@@ -65,6 +69,10 @@ TEST(OnlineStatisticsTest, ManyThreads_AddOnceEach) {
     // = K^4 / 4 + K^3 / 2 + K^2 / 4
     // Grind through the algebra, it ends up K*(K+1)/12
     EXPECT_FLOAT_EQ(os.Variance(), kNumThreads * (kNumThreads + 1) / 12.0);
+
+    // Standard error is sqrt(variance / n), in this case, that's
+    // sqrt((kNumThreads+1)/12)
+    EXPECT_FLOAT_EQ(os.StdError(), std::sqrt((kNumThreads + 1) / 12.0));
   }
 }
 }  // namespace policygen

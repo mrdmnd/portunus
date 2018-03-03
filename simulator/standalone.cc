@@ -39,6 +39,7 @@ int main(int argc, char** argv) {
   const policygen::Engine e(FLAGS_threads);
   const simulatorproto::SimulationConfig conf =
       ParseConfig<simulatorproto::SimulationConfig>(argv[1]);
+  LOG(INFO) << "Simulating in standalone program.";
   const simulatorproto::SimulationResult result = e.Simulate(conf);
 
   std::string result_string;

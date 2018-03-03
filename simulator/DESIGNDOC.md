@@ -13,7 +13,8 @@ The engine keeps track of a (threadsafe) DPS error, which the threads update as
 they finish a single iteration. The core of the engine loop essentially looks
 like:
 
-``` // While we're above target error and have no work pending, while(error >
+``` 
+// While we're above target error and have no work pending, while(error >
 target_error && current_iters < max_iters && queue.isEmpty()) {
 
   // Insert some new work into the queue, and let the threads race to grab it.

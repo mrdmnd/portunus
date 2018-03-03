@@ -1,3 +1,4 @@
+#include <cmath>
 #include <limits>
 #include <mutex>
 
@@ -29,4 +30,11 @@ double OnlineStatistics::Variance() const {
   std::lock_guard<std::mutex> guard(mutex_);
   return (n_ > 1) ? moment2_ / (n_ - 1) : QUIET_NAN;
 }
+
+// SQRT(variance / n)
+double OnlineStatistics::StdError() const {
+  std::lock_guard<std::mutex> guard(mutex_);
+  return (n_ > 1) ? std::sqrt(moment2_ / (n_ * (n_ - 1))) : QUIET_NAN;
+}
+
 }  // namespace policygen

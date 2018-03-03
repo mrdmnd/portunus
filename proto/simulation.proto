@@ -7,8 +7,9 @@ import "proto/player_config.proto";
 import "proto/policy.proto";
 
 message Distribution {
-  double mean = 1;
-  double variance = 2;
+  int32 n = 1;
+  double mean = 2;
+  double stddev = 3;
 }
 
 message SimulationConfig {

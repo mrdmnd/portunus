@@ -31,6 +31,9 @@ class OnlineStatistics {
   // returns NaN.
   double Variance() const;
 
+  // Returns the sampling standard error from all values that have been added.
+  double StdError() const;
+
  private:
   mutable std::mutex mutex_;  // Marked mutable so Mean/Variance can be const.
   long n_;
