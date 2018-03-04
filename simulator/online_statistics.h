@@ -34,6 +34,9 @@ class OnlineStatistics {
   // Returns the sampling standard error from all values that have been added.
   double StdError() const;
 
+  // Returns STDERR / MEAN
+  double CoefficientOfVariation() const;
+
  private:
   mutable std::mutex mutex_;  // Marked mutable so Mean/Variance can be const.
   long n_;

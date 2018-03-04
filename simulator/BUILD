@@ -3,6 +3,11 @@ package(default_visibility = ["//visibility:public"])
 load("@org_pubref_rules_protobuf//cpp:rules.bzl", "GRPC_COMPILE_DEPS")
 
 ############# Libraries ##############
+cc_library(
+    name = "fib",
+    srcs = ["fib.cc"],
+    deps = ["@tbb"],
+)
 
 cc_library(
     name = "engine",

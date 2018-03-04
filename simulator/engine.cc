@@ -1,6 +1,7 @@
 // This file contains the main entry point for conducting simulation.
 
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <mutex>
 #include <random>
@@ -24,39 +25,44 @@ Engine::Engine(const int num_threads) {
 
 Engine::~Engine() { LOG(INFO) << "Destroying engine."; }
 
-// Runs a single iteration of the simulation specified in the config file.
-// Adds the DPS value to the online statistics tracker.
-void SingleIterationSimulation(const simulatorproto::SimulationConfig& config,
-                               OnlineStatistics* os) {
+// Runs a small batch of iterations of the simulation.
+// Adds the DPS values to the online statistics tracker.
+// Iterations value should be chosen such that it is faster to run this in a
+// single thread than it is to parallelize.
+void MultipleIterationSimulation(const simulatorproto::SimulationConfig& config,
+                                 const int iterations,
+                                 OnlineStatistics* os) {
   std::random_device r;
   std::default_random_engine e(r());
   std::normal_distribution<double> normal_dist(20000.0, 1200.0);
-  const double sample = normal_dist(e);
-  os->AddValue(sample);
+  for (int i = 0; i < iterations; ++i) {
+    os->AddValue(normal_dist(e));
+  }
 }
 
 simulatorproto::SimulationResult Engine::Simulate(
     const simulatorproto::SimulationConfig& config) const {
-  // Create an online statistics tracker to keep track of our DPS distribution.
+  // Track our DPS distribution as it evolves with OnlineStatistics.
+  // Do *at least* kMinIterations, and *at most* mKaxIterations.
+  // If our CoefficientOfVariation (stderr / mean) is less than the target error
+  // at any point, halt simulation and report the distribution.
+
   OnlineStatistics os;
   constexpr int kMinIterations = 100;
   const int kMaxIterations = config.max_iterations();
   const double kTargetError = config.target_error();
-  while (os.Count() < kMinIterations) {
-    auto future = pool_->enqueue(SingleIterationSimulation, config, &os);
-    future.get();
-  }
 
-  // While we're above the target error and below the max iterations,
-  // insert a new iteration into the queue and let the threads handle it.
-  // while (os.Count() < max_iterations &&
-  //       os.StdError() / os.Mean() < target_error) {
-  // Might also want to check that the pool is empty. If the pool is not
-  // empty, but we submit a bunch more work *already satisfying* these
-  // conditions, then we're doing unnecessary work.
-  // auto future = pool_->enqueue(SingleIterationSimulation, config, &os);
-  // future.get();
-  //}
+  MultipleIterationSimulation(config, kMinIterations, &os);
+
+  // While we're above the target error and below the max iterations, insert a
+  // new iteration into the queue and let the threads handle it.
+  //
+  /*
+  while (os.Count() < kMaxIterations &&
+         os.CoefficientOfVariation() < kTargetError) {
+    auto future = pool_->Enqueue(SingleIterationSimulation, config, &os);
+    future.get();
+  }*/
 
   // Report the final result.
   simulatorproto::Distribution dps_distribution;

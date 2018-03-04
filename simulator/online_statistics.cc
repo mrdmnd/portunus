@@ -37,4 +37,10 @@ double OnlineStatistics::StdError() const {
   return (n_ > 1) ? std::sqrt(moment2_ / (n_ * (n_ - 1))) : QUIET_NAN;
 }
 
+// SQRT(variance) / MEAN
+double OnlineStatistics::CoefficientOfVariation() const {
+  std::lock_guard<std::mutex> guard(mutex_);
+  return (n_ > 1) ? std::sqrt(moment2_ / (n_ - 1)) / moment1_ : QUIET_NAN;
+}
+
 }  // namespace policygen
