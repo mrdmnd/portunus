@@ -12,7 +12,8 @@
 
 #include "glog/logging.h"
 
-// FROM https://github.com/progschj/ThreadPool/blob/master/ThreadPool.h
+// TAKEN FROM https://github.com/progschj/ThreadPool/blob/master/ThreadPool.h
+namespace policygen {
 class ThreadPool {
  public:
   ThreadPool(size_t n_threads);
@@ -22,7 +23,7 @@ class ThreadPool {
   auto Enqueue(F&& f, Args&&... args)
       -> std::future<typename std::result_of<F(Args...)>::type>;
 
-  // bool IsEmpty();
+  size_t NumThreads() { return workers.size(); }
 
  private:
   // need to keep track of threads so we can join them
@@ -79,12 +80,6 @@ auto ThreadPool::Enqueue(F&& f, Args&&... args)
   return res;
 }
 
-/*
-inline bool ThreadPool::IsEmpty() {
-  std::lock_guard<std::mutex> lock(queue_mutex);
-  return tasks.empty();
-}*/
-
 // the destructor joins all threads
 inline ThreadPool::~ThreadPool() {
   LOG(INFO) << "Destroying threadpool.";
@@ -95,3 +90,4 @@ inline ThreadPool::~ThreadPool() {
   condition.notify_all();
   for (std::thread& worker : workers) worker.join();
 }
+}  // namespace policygen

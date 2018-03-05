@@ -34,7 +34,7 @@ class OnlineStatistics {
   // Returns the sampling standard error from all values that have been added.
   double StdError() const;
 
-  // Returns STDERR / MEAN
+  // Returns STDDEV / MEAN
   double CoefficientOfVariation() const;
 
  private:

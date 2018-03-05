@@ -31,12 +31,12 @@ new_http_archive(
     url = "https://github.com/google/benchmark/archive/master.zip",
 )
 
-new http_archive(
-    name = "tbb",
-    build_file = "tbb.BUILD",
-    url = "https://www.threadingbuildingblocks.org/sites/default/files/software_releases/source/tbb2018_20171205oss_src.tgz",
-    strip_prefix = "tbb2018_20171205",
-)
+#new http_archive(
+#    name = "tbb",
+#    build_file = "tbb.BUILD",
+#    url = "https://www.threadingbuildingblocks.org/sites/default/files/software_releases/source/tbb2018_20171205oss_src.tgz",
+#    strip_prefix = "tbb2018_20171205",
+#)
 
 # Need these two because the bazel compiler doesn't have a cc_proto_library that
 # explicitly supports GRPC services yet.

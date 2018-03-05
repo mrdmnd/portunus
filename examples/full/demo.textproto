@@ -2,11 +2,11 @@ max_iterations: 10000
 target_error: 0.01
 world_lag {
   mean: 100
-  variance: 40
+  stddev: 10
 }
 brain_lag {
   mean: 15
-  variance: 3
+  stddev: 5
 }
 encounter_config {
   name: "PatchworkFight"

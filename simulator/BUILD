@@ -3,22 +3,20 @@ package(default_visibility = ["//visibility:public"])
 load("@org_pubref_rules_protobuf//cpp:rules.bzl", "GRPC_COMPILE_DEPS")
 
 ############# Libraries ##############
-cc_library(
-    name = "fib",
-    srcs = ["fib.cc"],
-    deps = ["@tbb"],
-)
 
 cc_library(
     name = "engine",
     srcs = [
         "engine.cc",
         "online_statistics.cc",
+        "simulate.cc",
         "threadpool.h",
     ],
     hdrs = [
+        "constants.h",
         "engine.h",
         "online_statistics.h",
+        "simulate.h",
     ],
     deps = [
         "//proto:cc_lib",
@@ -33,7 +31,7 @@ cc_library(
 # text protobuf object representing the simulation config to execute.
 cc_binary(
     name = "standalone",
-    srcs = ["standalone.cc"],
+    srcs = ["standalone_binary.cc"],
     deps = [
         ":engine",
         "//proto:cc_lib",
@@ -47,7 +45,7 @@ cc_binary(
 # and handles multiple, long-lived simulation requests.
 cc_binary(
     name = "service",
-    srcs = ["service.cc"],
+    srcs = ["service_binary.cc"],
     deps = [
         ":engine",
         "//proto:cc_lib",

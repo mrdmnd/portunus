@@ -4,7 +4,6 @@
 #include <chrono>
 #include <iostream>
 #include <mutex>
-#include <random>
 #include <string>
 #include <thread>
 
@@ -14,8 +13,24 @@
 
 #include "simulator/engine.h"
 #include "simulator/online_statistics.h"
+#include "simulator/simulate.h"
 
 #include "proto/simulation.pb.h"
+
+namespace {
+// Run up to `num_iterations` episodes of the simulation.
+// Adds the DPS values to the online statistics tracker `os` as we go.
+void BatchSimulation(const simulatorproto::SimulationConfig& config,
+                     const int num_iterations,
+                     const std::atomic_bool& cancelled,
+                     policygen::OnlineStatistics* os) {
+  int current_iteration = 0;
+  while (!cancelled && current_iteration < num_iterations) {
+    os->AddValue(policygen::SingleIteration(config));
+    ++current_iteration;
+  }
+}
+}  // namespace
 
 namespace policygen {
 Engine::Engine(const int num_threads) {
@@ -25,44 +40,69 @@ Engine::Engine(const int num_threads) {
 
 Engine::~Engine() { LOG(INFO) << "Destroying engine."; }
 
-// Runs a small batch of iterations of the simulation.
-// Adds the DPS values to the online statistics tracker.
-// Iterations value should be chosen such that it is faster to run this in a
-// single thread than it is to parallelize.
-void MultipleIterationSimulation(const simulatorproto::SimulationConfig& config,
-                                 const int iterations,
-                                 OnlineStatistics* os) {
-  std::random_device r;
-  std::default_random_engine e(r());
-  std::normal_distribution<double> normal_dist(20000.0, 1200.0);
-  for (int i = 0; i < iterations; ++i) {
-    os->AddValue(normal_dist(e));
-  }
-}
-
+// This main method spins until statistics tracker says we're done.
+// We're done if
+// a) we hit kMaxIterations, or
+// b) we're above the kMinIterations and StdErr / Mean < target_error.
 simulatorproto::SimulationResult Engine::Simulate(
     const simulatorproto::SimulationConfig& config) const {
-  // Track our DPS distribution as it evolves with OnlineStatistics.
-  // Do *at least* kMinIterations, and *at most* mKaxIterations.
-  // If our CoefficientOfVariation (stderr / mean) is less than the target error
-  // at any point, halt simulation and report the distribution.
-
-  OnlineStatistics os;
-  constexpr int kMinIterations = 100;
+  // Read in simulation bounds from config file.
+  constexpr int kMinIterations = 100;  // TODO(mrdmnd) - don't hardcode?
   const int kMaxIterations = config.max_iterations();
   const double kTargetError = config.target_error();
 
-  MultipleIterationSimulation(config, kMinIterations, &os);
+  // Setting cancellation_token = true forces BatchSimulation tasks to finish.
+  std::atomic_bool cancellation_token(false);
 
-  // While we're above the target error and below the max iterations, insert a
-  // new iteration into the queue and let the threads handle it.
-  //
-  /*
-  while (os.Count() < kMaxIterations &&
-         os.CoefficientOfVariation() < kTargetError) {
-    auto future = pool_->Enqueue(SingleIterationSimulation, config, &os);
+  // Keep track of simulation-wide running statistics here.
+  OnlineStatistics os;
+
+  // Compute iterations per thread. Ensure we actually do enough work to finish.
+  const int ipt = (kMaxIterations / pool_->NumThreads()) + 1;
+
+  // Store handles to our workers.
+  std::vector<std::future<void>> futures;
+
+  // Use our threadpool to enqueue the BatchSimulation function.
+  // It takes the config *by COPY* despite being the fn signature looking like a
+  // reference parameter; this is okay with us, this object is small, and we
+  // don't change it. This might be worth revisiting at some point.
+  for (int i = 0; i < pool_->NumThreads(); ++i) {
+    futures.emplace_back(pool_->Enqueue(
+        BatchSimulation, config, ipt, std::ref(cancellation_token), &os));
+  }
+
+  // Start timing our simulation.
+  auto start = std::chrono::high_resolution_clock::now();
+
+  // Computations are now running. Break when done.
+  while (os.Count() < kMaxIterations) {
+    if (os.Count() > kMinIterations &&
+        os.StdError() / os.Mean() < kTargetError) {
+      LOG(INFO) << "Breaking early: target error hit: "
+                << os.CoefficientOfVariation();
+      cancellation_token = true;
+      break;
+    }
+  }
+
+  // Finish timing.
+  auto stop = std::chrono::high_resolution_clock::now();
+
+  // Force the threads to rejoin us.
+  for (auto& future : futures) {
     future.get();
-  }*/
+  }
+
+  // Get some metadata.
+  auto t = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+  std::string metadata_string(
+      absl::StrCat("Throughput: ",
+                   static_cast<double>(os.Count()) / t.count(),
+                   "iters/us, ",
+                   "Simulation time: ",
+                   t.count(),
+                   "us"));
 
   // Report the final result.
   simulatorproto::Distribution dps_distribution;
@@ -72,7 +112,7 @@ simulatorproto::SimulationResult Engine::Simulate(
 
   simulatorproto::SimulationResult r;
   r.mutable_dps_distribution()->MergeFrom(dps_distribution);
-  r.set_metadata(absl::StrCat("Iterations: ", os.Count()));
+  r.set_metadata(metadata_string);
   return r;
-}
+}  // namespace policygen
 }  // namespace policygen
