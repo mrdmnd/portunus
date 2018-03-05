@@ -35,3 +35,4 @@ bazel-policygen
 bazel-testlogs
 compile_commands.json
 __pycache__
+tools/bazel-compilation-database/compile_commands.json

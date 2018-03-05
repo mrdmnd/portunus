@@ -2,6 +2,11 @@ package(default_visibility = ["//visibility:public"])
 
 load("@org_pubref_rules_protobuf//cpp:rules.bzl", "GRPC_COMPILE_DEPS")
 
+# Consider hooking the compile command script a la
+# https://gist.github.com/bsilver8192/0115ee5d040bb601e3b7
+# and
+# https://github.com/cybrown-zoox/bazel-clang-analyzer
+
 ############# Libraries ##############
 
 cc_library(
