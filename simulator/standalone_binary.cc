@@ -46,6 +46,5 @@ int main(int argc, char** argv) {
   std::string result_string;
   google::protobuf::TextFormat::PrintToString(result, &result_string);
   LOG(INFO) << "Simulation result:\n" << result_string;
-  LOG(INFO) << "Some random constant." << policygen::kNumSpecializations;
   return 0;
 }

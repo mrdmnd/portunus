@@ -55,6 +55,10 @@ enum Race {
   WORGEN = 11;
   GOBLIN = 12;
   PANDAREN = 13;
+  NIGHTBORNE = 14;
+  HIGHMOUNTAIN_TAUREN = 15;
+  VOID_ELF = 16;
+  LIGHTFORGED_DRAENEI = 17;
 }
 
 enum Slot {

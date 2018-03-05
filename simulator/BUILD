@@ -7,13 +7,13 @@ load("@org_pubref_rules_protobuf//cpp:rules.bzl", "GRPC_COMPILE_DEPS")
 cc_library(
     name = "engine",
     srcs = [
+        "constants.h",
         "engine.cc",
         "online_statistics.cc",
         "simulate.cc",
         "threadpool.h",
     ],
     hdrs = [
-        "constants.h",
         "engine.h",
         "online_statistics.h",
         "simulate.h",
