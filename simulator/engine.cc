@@ -51,6 +51,15 @@ simulatorproto::SimulationResult Engine::Simulate(
   const int kMaxIterations = config.max_iterations();
   const double kTargetError = config.target_error();
 
+  // Parse configuration file into post-processed bits.
+  // We'll pass copies of these into the BatchSimulation function,
+  // which in turn will pass copies in to each single iteration.
+  // The iterations will generate a random seed and use that for their
+  // target time.
+  // const Encounter encounter = ParseEncounterFromSimulationConfig(config);
+  // const Policy policy = ParsePolicyFromSimulationConfig(config);
+  // const Player player = ParsePlayerFromSimulationConfig(config);
+
   // Setting cancellation_token = true forces BatchSimulation tasks to finish.
   std::atomic_bool cancellation_token(false);
 
