@@ -13,8 +13,8 @@ namespace policygen {
 // Takes as input a configuration option, and returns a result.
 class Engine {
  public:
-  Engine(const int num_threads);
   Engine() = delete;
+  Engine(const int num_threads);
   ~Engine();
 
   // Simulate the input simulation configuration on all threads.

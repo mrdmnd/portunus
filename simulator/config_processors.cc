@@ -1,33 +1,26 @@
+#include "glog/logging.h"
+#include "proto/encounter_config.pb.h"
 #include "proto/player_config.pb.h"
 
+#include "simulator/config_processors.h"
+
 namespace policygen {
-namespace configparsers {
-class EquipmentSummary {
- public:
-  EquipmentSummary() = delete;
-  explicit EquipmentSummary(simulatorproto::Gearset gearset_proto)
-      : gearset_proto_(gearset_proto){};
+namespace configprocess {
 
-  // Disallow {move,copy} {construction,assignment}.
-  ParseEquipmentBuilder(const ParsedEquipmentBuilder& other) = delete;
-  ParsedEquipmentBuilder(const ParsedEquipmentBuilder&& other) = delete;
-  ParsedEquipmentBuilder& operator=(const ParsedEquipmentBuilder& other) =
-      delete;
-  ParsedEquipmentBuilder& operator=(const ParsedEquipmentBuilder&& other) =
-      delete;
-
- private:
-  const Gearset gearset_proto_;
-};
-
-// This class contains the "parsed form" of the specific item.
-// Data may come from local DB, blizzar API, wowhead, whatever.
-class ParsedItem {
- public:
-  ParsedItem(WearableItem item) : item_(item) {}
-
- private:
-  const WearableItem item_;
+EquipmentSummary::EquipmentSummary(
+    const simulatorproto::Gearset& gearset_proto) :
+  gearset_proto_(gearset_proto) {
+  LOG(INFO) << "Constructing equipment summary for gearset.";
 }
-}  // namespace configparsers
+
+EncounterSummary::EncounterSummary(
+    const simulatorproto::EncounterConfig& encounter_proto) :
+  encounter_proto_(encounter_proto) {
+  LOG(INFO) << "Constructing encounter summary.";
+}
+PolicyFunctor::PolicyFunctor(const simulatorproto::Policy& policy_proto) :
+  policy_proto_(policy_proto) {
+  LOG(INFO) << "Constructing policy functor.";
+}
+}  // namespace configprocess
 }  // namespace policygen

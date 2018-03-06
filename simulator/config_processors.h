@@ -1,10 +1,26 @@
+#pragma once
+
+#include "proto/encounter_config.pb.h"
 #include "proto/player_config.pb.h"
+#include "proto/simulation.pb.h"
 
 // These classes are responsible for taking protobuf descriptions of
 // configuration and turning them into "parsed" forms.
 
+namespace {
+// This class contains the "parsed form" of the specific item.
+// Data may come from local DB, blizzard API, wowhead, whatever.
+class ParsedItem {
+ public:
+  explicit ParsedItem(simulatorproto::WearableItem item) : item_(item) {}
+
+ private:
+  const simulatorproto::WearableItem item_;
+};
+}  // namespace
+
 namespace policygen {
-namespace configparsers {
+namespace configprocess {
 
 // This class is responsible for taking a Gearset proto (list of WearableItems)
 // and turning it into a collection of stats ratings, static effects, and on-use
@@ -17,26 +33,55 @@ class EquipmentSummary {
   EquipmentSummary() = delete;
 
   // We can construct an equipment summary from a gearset protobuf.
-  explicit EquipmentSummary(simulatorproto::Gearset gearset_proto);
+  explicit EquipmentSummary(const simulatorproto::Gearset& gearset_proto);
 
-  // Disallow {move,copy} {construction,assignment}.
-  EquipmentSummary(const EquipmentSummary& other) = delete;
-  EquipmentSummary(const EquipmentSummary&& other) = delete;
-  EquipmentSummary& operator=(const EquipmentSummary& other) = delete;
-  EquipmentSummary& operator=(const EquipmentSummary&& other) = delete;
+  // Default copy and move assignment and operator=
+  EquipmentSummary(const EquipmentSummary& other) = default;
+  EquipmentSummary(EquipmentSummary&& other) = default;
+  EquipmentSummary& operator=(const EquipmentSummary& other) = default;
+  EquipmentSummary& operator=(EquipmentSummary&& other) = default;
 
  private:
   const simulatorproto::Gearset gearset_proto_;
 };
 
-// This class contains the "parsed form" of the specific item.
-// Data may come from local DB, blizzar API, wowhead, whatever.
-class ParsedItem {
+// This class is responsible for taking an EncounterConfig proto (list of raid
+// events, etc) and turning it into an EncounterSummary, which is a sequence of
+// raid events that correspond to the encounter.
+
+class EncounterSummary {
  public:
-  ParsedItem(WearableItem item) : item_(item) {}
+  EncounterSummary() = delete;
+
+  // We can construct an encounter summary from an EncounterConfig proto.
+  explicit EncounterSummary(
+      const simulatorproto::EncounterConfig& encounter_proto);
+
+  // Default copy and move assignment and operator=
+  EncounterSummary(const EncounterSummary& other) = default;
+  EncounterSummary(EncounterSummary&& other) = default;
+  EncounterSummary& operator=(const EncounterSummary& other) = default;
+  EncounterSummary& operator=(EncounterSummary&& other) = default;
 
  private:
-  const WearableItem item_;
+  const simulatorproto::EncounterConfig encounter_proto_;
 };
-}  // namespace configparsers
+
+// This class wraps a policy proto into something with a Choose() method.
+class PolicyFunctor {
+ public:
+  PolicyFunctor() = delete;
+  explicit PolicyFunctor(const simulatorproto::Policy& policy_proto);
+
+  // Default copy and move assignment and operator=
+  PolicyFunctor(const PolicyFunctor& other) = default;
+  PolicyFunctor(PolicyFunctor&& other) = default;
+  PolicyFunctor& operator=(const PolicyFunctor& other) = default;
+  PolicyFunctor& operator=(PolicyFunctor&& other) = default;
+
+ private:
+  const simulatorproto::Policy policy_proto_;
+};
+
+}  // namespace configprocess
 }  // namespace policygen

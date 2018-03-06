@@ -8,6 +8,8 @@ PointerAlignment: Left
 AccessModifierOffset: -1
 BinPackArguments: false
 BinPackParameters: false
+BreakConstructorInitializers: AfterColon
+ConstructorInitializerIndentWidth: 2
 FixNamespaceComments: true
 ReflowComments: true
 SortIncludes: true

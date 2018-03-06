@@ -13,32 +13,30 @@ message Distribution {
 }
 
 message SimulationConfig {
-  // This represents the maximum number of iterations we're willing to perform.
+  // Hard minimum number of iterations to perform.
+  // Reasonable default: 100
+  int32 min_iterations = 1;
+
+  // Approximate maximum number of iterations to perform.
+  // Not a hard max, because threads are allowed to race a bit.
   // Reasonable default: 10,000
-  int32 max_iterations = 1;
+  int32 max_iterations = 2;
 
   // We'll halt a simulation early if the error drops below this threshold.
   // Reasonable default: 0.01
-  double target_error = 2;
-
-  // The latency distribution for world lag (units for mean are milliseconds,
-  // despite being of type double)
-  Distribution world_lag = 3;
-
-  // The latency distriution for how well we react to changes in state.
-  Distribution brain_lag = 4;
+  double target_error = 3;
 
   // `encounter_config` contains all parameters pertaining to the fight script.
   // This proto also holds duration information (how long the fight is).
-  EncounterConfig encounter_config = 5;
+  EncounterConfig encounter_config = 4;
 
   // `player_config` contains the gearset we're evaluating our policy on, as
   // well as our current talent setup.
-  PlayerConfig player_config = 6;
+  PlayerConfig player_config = 5;
 
   // `policy` represents the current policy we want our simulator to evaluate.
   // The policy might come in as a deterministic APL or a deep learning model.
-  Policy policy = 7;
+  Policy policy = 6;
 }
 
 message SimulationResult {

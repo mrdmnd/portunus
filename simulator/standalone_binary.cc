@@ -4,7 +4,6 @@
 #include <thread>
 
 #include "proto/simulation.pb.h"
-#include "simulator/constants.h"
 #include "simulator/engine.h"
 
 #include "absl/memory/memory.h"

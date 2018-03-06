@@ -1,3 +1,5 @@
+#pragma once
+
 // OnlineStatistics is a threadsafe aggregator of values that provides
 // constant-time Mean() and Variance() computation at the cost of doing a bit
 // more work during value aggregation. It also requires constant space.
@@ -34,11 +36,11 @@ class OnlineStatistics {
   // Returns the sampling standard error from all values that have been added.
   double StdError() const;
 
-  // Returns STDDEV / MEAN
-  double CoefficientOfVariation() const;
+  // Returns ratio StdError / Mean. Used to early terminate sim.
+  double NormalizedError() const;
 
  private:
-  mutable std::mutex mutex_;  // Marked mutable so Mean/Variance can be const.
+  mutable std::mutex mutex_;  // Mutable so member funcs can be const.
   long n_;
   double moment1_;
   double moment2_;

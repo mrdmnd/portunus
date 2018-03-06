@@ -33,7 +33,7 @@ void shutdown_handler(int signal) {
 }
 
 class SimulationServiceImpl final
-    : public simulatorproto::SimulationService::Service {
+  : public simulatorproto::SimulationService::Service {
  public:
   explicit SimulationServiceImpl(const int num_threads) {
     engine_ = absl::make_unique<policygen::Engine>(num_threads);

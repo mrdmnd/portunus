@@ -1,13 +1,5 @@
 max_iterations: 10000
 target_error: 0.01
-world_lag {
-  mean: 100
-  stddev: 10
-}
-brain_lag {
-  mean: 15
-  stddev: 5
-}
 encounter_config {
   name: "PatchworkFight"
   health_estimator: BURST_AND_EXECUTE

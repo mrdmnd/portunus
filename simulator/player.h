@@ -29,23 +29,23 @@ class CharacterStats {
                           int mainhand_damage_max,
                           double offhand_speed,
                           int offhand_damage_min,
-                          int offhand_damage_max)
-      : strength_rating_(strength),
-        agility_rating_(agility),
-        intelligence_rating_(intelligence),
-        stamina_rating_(stamina),
-        crit_rating_(crit),
-        mastery_rating_(mastery),
-        versatility_rating_(versatility),
-        haste_rating_(haste),
-        attack_power_(attack_power),
-        spell_power_(spell_power),
-        mainhand_speed_(mainhand_speed),
-        mainhand_damage_min_(mainhand_damage_min),
-        mainhand_damage_max_(mainhand_damage_max),
-        offhand_speed_(offhand_speed),
-        offhand_damage_min_(offhand_damage_min),
-        offhand_damage_max_(offhand_damage_max){};
+                          int offhand_damage_max) :
+    strength_rating_(strength),
+    agility_rating_(agility),
+    intelligence_rating_(intelligence),
+    stamina_rating_(stamina),
+    crit_rating_(crit),
+    mastery_rating_(mastery),
+    versatility_rating_(versatility),
+    haste_rating_(haste),
+    attack_power_(attack_power),
+    spell_power_(spell_power),
+    mainhand_speed_(mainhand_speed),
+    mainhand_damage_min_(mainhand_damage_min),
+    mainhand_damage_max_(mainhand_damage_max),
+    offhand_speed_(offhand_speed),
+    offhand_damage_min_(offhand_damage_min),
+    offhand_damage_max_(offhand_damage_max){};
 
   // Accessors
 
