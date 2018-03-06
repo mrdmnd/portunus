@@ -2,11 +2,6 @@ package(default_visibility = ["//visibility:public"])
 
 load("@org_pubref_rules_protobuf//cpp:rules.bzl", "GRPC_COMPILE_DEPS")
 
-# TODO(mrdmnd): Consider hooking the compile command script a la
-# https://gist.github.com/bsilver8192/0115ee5d040bb601e3b7
-# and
-# https://github.com/cybrown-zoox/bazel-clang-analyzer
-
 ############# Libraries ##############
 
 # Simulation engine related code (launching tasks, etc).
@@ -104,6 +99,19 @@ cc_test(
     ],
     deps = [
         ":util",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "config_processors_test",
+    size = "small",
+    srcs = [
+        "util/config_processors_test.cc",
+    ],
+    deps = [
+        ":util",
+        "//proto:cc_lib",
         "@com_google_googletest//:gtest_main",
     ],
 )
