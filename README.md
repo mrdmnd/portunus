@@ -137,8 +137,8 @@ Optional Dependencies for developers:
 - [Buildifier](https://github.com/bazelbuild/buildtools) - BUILD file is
   autoformatted to Google's style guide convensions.
 - [Bazel Compilation Database](https://github.com/grailbio/bazel-compilation-database)
-  to build a Compilation Database for CLANG tooling. After bazel build, invoke
-  `tools/bazel-compilation-database/generate.sh` to build compilation database.
+  to build a Compilation Database for CLANG tooling. At any point, invoke
+  `tools/generate_compilationdb.sh` to build compilation database.
   This seeds the rest of the useful clang completion tools.
 
 ## Building Policygen
