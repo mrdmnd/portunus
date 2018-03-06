@@ -1,3 +1,7 @@
+#include <vector>
+
+#include "simulator/core/aura.h"
+
 // Base class for both player characters, pets, and enemy targets.
 // This class holds current state. Variables here should generally not be const.
 namespace simulator {
@@ -8,12 +12,8 @@ class Actor {
   // When a derived class is constructed, the base class's constructor is called
   // as well. This allows for initialization of the base class's member
   // variables.
-  virtual Actor() = 0;
-  virtual ~Actor() = 0;
-  virtual Actor(const Actor& other) = delete;
-  virtual Actor(Actor&& other) = delete;
-  virtual operator=(const Actor& other) = delete;
-  virtual operator=(Actor&& other) = delete;
+  Actor() = delete;
+  ~Actor() = delete;
 
  private:
   // Actors have max health, and current health.

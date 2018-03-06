@@ -29,7 +29,7 @@ class Aura {
 
   inline std::chrono::milliseconds Remaining() const { return cur_duration_; }
 
-  inline int Stacks() const { return curent_stacks_; }
+  inline int Stacks() const { return cur_stacks_; }
 
  private:
   const int spell_id_;

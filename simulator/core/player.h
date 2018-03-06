@@ -1,9 +1,12 @@
-#include "simulator/actor.h"
-#include "simulator/constants.h"
+#include "simulator/core/actor.h"
+#include "simulator/core/constants.h"
 
 // A collection of classes for handling "current" values for actors.
 // Const or Static values (unchanging, known at simulation launch time) don't
 // belong here.
+
+using namespace simulator::core::constants;
+using namespace simulator::core::enums;
 
 namespace simulator {
 namespace core {
