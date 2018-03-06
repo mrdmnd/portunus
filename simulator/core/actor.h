@@ -1,5 +1,7 @@
 // Base class for both player characters, pets, and enemy targets.
 // This class holds current state. Variables here should generally not be const.
+namespace simulator {
+namespace core {
 class Actor {
  public:
   // Should not be able to actually create an actor.
@@ -35,3 +37,5 @@ class Actor {
   // this reference to get debuffs on the target.
   const Actor* current_target_;
 };
+}  // namespace core
+}  // namespace simulator

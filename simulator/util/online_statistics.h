@@ -1,12 +1,14 @@
 #pragma once
 
+#include <mutex>
+
+namespace simulator {
+namespace util {
+
 // OnlineStatistics is a threadsafe aggregator of values that provides
 // constant-time Mean() and Variance() computation at the cost of doing a bit
 // more work during value aggregation. It also requires constant space.
 
-#include <mutex>
-
-namespace policygen {
 class OnlineStatistics {
  public:
   OnlineStatistics() : n_(0.0), moment1_(0.0), moment2_(0.0){};
@@ -45,4 +47,5 @@ class OnlineStatistics {
   double moment1_;
   double moment2_;
 };
-}  // namespace policygen
+}  // namespace util
+}  // namespace simulator

@@ -3,14 +3,17 @@
 
 #include "gtest/gtest.h"
 
-#include "simulator/online_statistics.h"
-namespace policygen {
+#include "simulator/util/online_statistics.h"
+
+namespace simulator {
+namespace util {
 TEST(OnlineStatisticsTest, SingleThread_Empty) {
   OnlineStatistics os;
   EXPECT_EQ(os.Count(), 0);
   EXPECT_EQ(os.Mean(), 0);
   EXPECT_TRUE(std::isnan(os.Variance()));
   EXPECT_TRUE(std::isnan(os.StdError()));
+  EXPECT_TRUE(std::isnan(os.NormalizedError()));
 }
 
 TEST(OnlineStatisticsTest, SingleThread_AddOnce) {
@@ -20,6 +23,7 @@ TEST(OnlineStatisticsTest, SingleThread_AddOnce) {
   EXPECT_FLOAT_EQ(os.Mean(), 1.0);
   EXPECT_TRUE(std::isnan(os.Variance()));
   EXPECT_TRUE(std::isnan(os.StdError()));
+  EXPECT_TRUE(std::isnan(os.NormalizedError()));
 }
 
 TEST(OnlineStatisticsTest, SingleThread_AddTwice) {
@@ -30,6 +34,7 @@ TEST(OnlineStatisticsTest, SingleThread_AddTwice) {
   EXPECT_FLOAT_EQ(os.Mean(), 1.5);
   EXPECT_FLOAT_EQ(os.Variance(), 0.5);
   EXPECT_FLOAT_EQ(os.StdError(), 0.5);
+  EXPECT_FLOAT_EQ(os.NormalizedError(), 1.0 / 3.0);
 }
 
 TEST(OnlineStatisticsTest, SingleThread_AddThrice) {
@@ -41,11 +46,16 @@ TEST(OnlineStatisticsTest, SingleThread_AddThrice) {
   EXPECT_FLOAT_EQ(os.Mean(), 2.0);
   EXPECT_FLOAT_EQ(os.Variance(), 1.0);
   EXPECT_FLOAT_EQ(os.StdError(), std::sqrt(1.0 / 3.0));
+  EXPECT_FLOAT_EQ(os.NormalizedError(), std::sqrt(1.0 / 3.0) / 2.0);
 }
 
-TEST(OnlineStatisticsTest, ManyThreads_AddOnceEach) {
+TEST(OnlineStatisticsTest, ManyThreads_AddOnce) {
   constexpr int kNumThreads = 100;
   constexpr int kNumTrials = 50;
+
+  // Try to force a race condition by hammering for kNumTrials.
+  // You can prove to yourself that this works by removing the lock_guards on
+  // the OnlineStatistics impl and see that this test usually fails.
   for (int t = 0; t < kNumTrials; ++t) {
     OnlineStatistics os;
     std::vector<std::thread> threads;
@@ -73,6 +83,13 @@ TEST(OnlineStatisticsTest, ManyThreads_AddOnceEach) {
     // Standard error is sqrt(variance / n), in this case, that's
     // sqrt((kNumThreads+1)/12)
     EXPECT_FLOAT_EQ(os.StdError(), std::sqrt((kNumThreads + 1) / 12.0));
+
+    // Normalized error is StdError / Mean, in this case, that's
+    // 2 * std::sqrt((kNumThreads + 1) / 12.0) / (kNumThreads + 1)
+    EXPECT_FLOAT_EQ(
+        os.NormalizedError(),
+        2 * std::sqrt((kNumThreads + 1) / 12.0) / (kNumThreads + 1));
   }
 }
-}  // namespace policygen
+}  // namespace util
+}  // namespace simulator

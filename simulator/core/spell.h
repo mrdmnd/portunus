@@ -1,3 +1,5 @@
+namespace simulator {
+namespace core {
 // This classs provides a means for defining player spells.
 // A spell has a static component describing properties of "all such" spells,
 // and a non-static component describing properties pertinent to this
@@ -28,3 +30,5 @@ class SpellInstance {
   const Actor* source_;
   const Actor* target_;
 };
+}  // namespace core
+}  // namespace simulator

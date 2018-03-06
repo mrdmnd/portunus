@@ -3,19 +3,22 @@
 #include <string>
 #include <thread>
 
-#include "proto/simulation.pb.h"
-#include "simulator/engine.h"
-
 #include "absl/memory/memory.h"
-
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "google/protobuf/text_format.h"
 
+#include "simulator/engine.h"
+
+#include "proto/simulation.pb.h"
+
+using simulator::Engine;
+using simulatorproto::SimulationConfig;
+using simulatorproto::SimulationResult;
+
 DEFINE_int32(threads, std::thread::hardware_concurrency(), "");
 
 namespace {
-// Read the file at config_path, parse the contents into a SimulationConfig.
 template <class T>
 T ParseConfig(const std::string& config_path) {
   std::ifstream input(config_path, std::ios::in | std::ios::binary);
@@ -36,11 +39,10 @@ int main(int argc, char** argv) {
   google::InitGoogleLogging(argv[0]);
 
   CHECK_EQ(argc, 2) << "Required argument [config_path] missing.";
-  const policygen::Engine e(FLAGS_threads);
-  const simulatorproto::SimulationConfig conf =
-      ParseConfig<simulatorproto::SimulationConfig>(argv[1]);
+  const Engine e(FLAGS_threads);
+  const SimulationConfig conf = ParseConfig<SimulationConfig>(argv[1]);
   LOG(INFO) << "Simulating in standalone program.";
-  const simulatorproto::SimulationResult result = e.Simulate(conf);
+  const SimulationResult result = e.Simulate(conf);
 
   std::string result_string;
   google::protobuf::TextFormat::PrintToString(result, &result_string);

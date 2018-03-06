@@ -4,17 +4,17 @@
 #include <string>
 #include <thread>
 
-#include "proto/service.grpc.pb.h"
-#include "simulator/engine.h"
-
 #include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
-
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "google/protobuf/text_format.h"
 #include "grpc++/grpc++.h"
 #include "grpc/support/log.h"
+
+#include "simulator/engine.h"
+
+#include "proto/service.grpc.pb.h"
 
 using grpc::Server;
 using grpc::ServerAsyncResponseWriter;
@@ -23,26 +23,25 @@ using grpc::ServerCompletionQueue;
 using grpc::ServerContext;
 using grpc::Status;
 
+using simulator::Engine;
+using simulatorproto::SimulationRequest;
+using simulatorproto::SimulationResponse;
+
 DEFINE_string(host, "localhost", "");
 DEFINE_string(port, "50051", "");
 DEFINE_int32(threads, std::thread::hardware_concurrency(), "");
 
-void shutdown_handler(int signal) {
-  LOG(INFO) << "Simulation service received CTRL-C, going down...";
-  exit(signal);
-}
-
+namespace {
 class SimulationServiceImpl final
   : public simulatorproto::SimulationService::Service {
  public:
   explicit SimulationServiceImpl(const int num_threads) {
-    engine_ = absl::make_unique<policygen::Engine>(num_threads);
+    engine_ = absl::make_unique<Engine>(num_threads);
   }
 
-  Status ConductSimulation(
-      ServerContext* context,
-      const simulatorproto::SimulationRequest* request,
-      simulatorproto::SimulationResponse* response) override {
+  Status ConductSimulation(ServerContext* context,
+                           const SimulationRequest* request,
+                           SimulationResponse* response) override {
     LOG(INFO) << "Received simulation request.";
     std::string config;
     google::protobuf::TextFormat::PrintToString(request->config(), &config);
@@ -52,8 +51,14 @@ class SimulationServiceImpl final
   }
 
  private:
-  std::unique_ptr<policygen::Engine> engine_;
+  std::unique_ptr<Engine> engine_;
 };
+}  // namespace
+
+void shutdown_handler(int signal) {
+  LOG(INFO) << "Simulation service received CTRL-C, going down...";
+  exit(signal);
+}
 
 int main(int argc, char** argv) {
   FLAGS_logtostderr = true;

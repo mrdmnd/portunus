@@ -1,23 +1,22 @@
 #include <atomic>
 #include <random>
 
-#include "glog/logging.h"
-
-#include "proto/simulation.pb.h"
-
-#include "simulator/config_processors.h"
-#include "simulator/online_statistics.h"
-
 #include "simulator/simulate.h"
+#include "simulator/util/config_processors.h"
+#include "simulator/util/online_statistics.h"
 
-namespace policygen {
-using namespace configprocess;
+using simulator::util::EncounterSummary;
+using simulator::util::EquipmentSummary;
+using simulator::util::OnlineStatistics;
+using simulator::util::PolicyFunctor;
+
+namespace simulator {
 void RunBatch(const EncounterSummary& encounter,
               const EquipmentSummary& equipment,
               const PolicyFunctor& policy,
               const int num_iterations,
               const std::atomic_bool& cancellation_token,
-              policygen::OnlineStatistics* damage_tracker) {
+              OnlineStatistics* damage_tracker) {
   int current_iteration = 0;
   while (!cancellation_token && current_iteration < num_iterations) {
     damage_tracker->AddValue(RunSingleIteration(encounter, equipment, policy));
@@ -34,4 +33,4 @@ double RunSingleIteration(const EncounterSummary& encounter,
   return normal_dist(e);
 }
 
-}  // namespace policygen
+}  // namespace simulator

@@ -1,7 +1,6 @@
-// This file contains the main entry point for conducting simulation.
-
 #include <algorithm>
 #include <chrono>
+#include <functional>
 #include <iostream>
 #include <mutex>
 #include <string>
@@ -11,22 +10,26 @@
 #include "absl/strings/str_cat.h"
 #include "glog/logging.h"
 
-#include "simulator/config_processors.h"
 #include "simulator/engine.h"
-#include "simulator/online_statistics.h"
 #include "simulator/simulate.h"
+#include "simulator/util/config_processors.h"
+#include "simulator/util/online_statistics.h"
+#include "simulator/util/threadpool.h"
 
 #include "proto/simulation.pb.h"
 
-namespace policygen {
-using namespace configprocess;
+using simulator::util::EncounterSummary;
+using simulator::util::EquipmentSummary;
+using simulator::util::OnlineStatistics;
+using simulator::util::PolicyFunctor;
+using simulator::util::ThreadPool;
+
+namespace simulator {
 
 Engine::Engine(const int num_threads) {
   LOG(INFO) << "Initialized Engine with " << num_threads << " threads.";
   pool_ = absl::make_unique<ThreadPool>(num_threads);
 }
-
-Engine::~Engine() { LOG(INFO) << "Destroying engine."; }
 
 // This main method spins until statistics tracker says we're done.
 // We're done if
@@ -56,7 +59,7 @@ simulatorproto::SimulationResult Engine::Simulate(
   // Use our threadpool to enqueue the function RunBatch, from simulate.h.
   std::vector<std::future<void>> futures;
   for (size_t i = 0; i < pool_->NumThreads(); ++i) {
-    futures.emplace_back(pool_->Enqueue(policygen::RunBatch,
+    futures.emplace_back(pool_->Enqueue(simulator::RunBatch,
                                         encounter,
                                         equipment,
                                         policy,
@@ -102,4 +105,4 @@ simulatorproto::SimulationResult Engine::Simulate(
   r.set_metadata(metadata_string);
   return r;
 }
-}  // namespace policygen
+}  // namespace simulator

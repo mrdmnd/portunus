@@ -1,7 +1,7 @@
 #include <chrono>
 
-namespace policygen {
-
+namespace simulator {
+namespace core {
 // An Aura is a (usually) timed buff or debuff on an actor. It keeps track of
 // how long it has until expiry, in milliseconds. If constructed with
 // max_duration == std::chrono::milliseconds::zero(), this is an "infinite"
@@ -38,4 +38,5 @@ class Aura {
   int cur_stacks_;
   const int max_stacks_;
 };
-}  // namespace policygen
+}  // namespace core
+}  // namespace simulator

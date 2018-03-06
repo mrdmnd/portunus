@@ -2,11 +2,12 @@
 #include <limits>
 #include <mutex>
 
-#include "simulator/online_statistics.h"
+#include "simulator/util/online_statistics.h"
 
 #define QUIET_NAN (std::numeric_limits<double>::quiet_NaN())
 
-namespace policygen {
+namespace simulator {
+namespace util {
 void OnlineStatistics::AddValue(double value) {
   std::lock_guard<std::mutex> guard(mutex_);
   n_++;
@@ -43,5 +44,5 @@ double OnlineStatistics::NormalizedError() const {
   return (n_ > 1) ? std::sqrt(moment2_ / (n_ * (n_ - 1))) / moment1_
                   : QUIET_NAN;
 }
-
-}  // namespace policygen
+}  // namespace util
+}  // namespace simulator

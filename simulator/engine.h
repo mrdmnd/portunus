@@ -1,21 +1,19 @@
 #pragma once
+
+#include "simulator/util/threadpool.h"
+
 #include "proto/simulation.pb.h"
 
-#include "simulator/threadpool.h"
+using simulator::util::ThreadPool;
 
-namespace policygen {
-// Engine class is meant to be a "long-running" class that can execute many
-// simulations, one-after-the-other. It keeps a long-lived thread pool alive.
-// Each call to Simulate sets up a new work queue that the threads can pull
-// from, as well as a new statics-tracking object for reporting + early
-// termination.
-
-// Takes as input a configuration option, and returns a result.
+namespace simulator {
+// The `Engine` class is meant to be long-live, executing lots of simulations
+// one-after-the-other. It keeps a long-lived thread pool alive to mitigate the
+// overhead of launching new threads each time we want to do work.
 class Engine {
  public:
   Engine() = delete;
   Engine(const int num_threads);
-  ~Engine();
 
   // Simulate the input simulation configuration on all threads.
   simulatorproto::SimulationResult Simulate(
@@ -28,7 +26,6 @@ class Engine {
   Engine& operator=(const Engine&& other) = delete;
 
  private:
-  // Class members.
   std::unique_ptr<ThreadPool> pool_;
 };
-}  // namespace policygen
+}  // namespace simulator

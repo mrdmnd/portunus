@@ -2,13 +2,15 @@
 
 #include <atomic>
 
-#include "proto/simulation.pb.h"
+#include "simulator/util/config_processors.h"
+#include "simulator/util/online_statistics.h"
 
-#include "simulator/config_processors.h"
-#include "simulator/online_statistics.h"
+using simulator::util::EncounterSummary;
+using simulator::util::EquipmentSummary;
+using simulator::util::OnlineStatistics;
+using simulator::util::PolicyFunctor;
 
-namespace policygen {
-using namespace configprocess;
+namespace simulator {
 
 // The entry point and main logic for doing a small batch of simulations.
 // We assume that we have already processed a SimulationConfig object into an
@@ -22,11 +24,11 @@ void RunBatch(const EncounterSummary& encounter,
               const PolicyFunctor& policy,
               const int num_iterations,
               const std::atomic_bool& cancellation_token,
-              policygen::OnlineStatistics* damage_tracker);
+              OnlineStatistics* damage_tracker);
 
 // Performs a single, simple, synchronous simulation iteration.
 // Returns the DPS value from this iteration.
 double RunSingleIteration(const EncounterSummary& encounter,
                           const EquipmentSummary& equipment,
                           const PolicyFunctor& policy);
-}  // namespace policygen
+}  // namespace simulator

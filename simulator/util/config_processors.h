@@ -4,6 +4,11 @@
 #include "proto/player_config.pb.h"
 #include "proto/simulation.pb.h"
 
+using simulatorproto::EncounterConfig;
+using simulatorproto::Gearset;
+using simulatorproto::Policy;
+using simulatorproto::WearableItem;
+
 // These classes are responsible for taking protobuf descriptions of
 // configuration and turning them into "parsed" forms.
 
@@ -12,15 +17,16 @@ namespace {
 // Data may come from local DB, blizzard API, wowhead, whatever.
 class ParsedItem {
  public:
-  explicit ParsedItem(simulatorproto::WearableItem item) : item_(item) {}
+  explicit ParsedItem(const WearableItem& item_proto) :
+    item_proto_(item_proto) {}
 
  private:
-  const simulatorproto::WearableItem item_;
+  const WearableItem item_proto_;
 };
 }  // namespace
 
-namespace policygen {
-namespace configprocess {
+namespace simulator {
+namespace util {
 
 // This class is responsible for taking a Gearset proto (list of WearableItems)
 // and turning it into a collection of stats ratings, static effects, and on-use
@@ -33,7 +39,7 @@ class EquipmentSummary {
   EquipmentSummary() = delete;
 
   // We can construct an equipment summary from a gearset protobuf.
-  explicit EquipmentSummary(const simulatorproto::Gearset& gearset_proto);
+  explicit EquipmentSummary(const Gearset& gearset_proto);
 
   // Default copy and move assignment and operator=
   EquipmentSummary(const EquipmentSummary& other) = default;
@@ -42,7 +48,7 @@ class EquipmentSummary {
   EquipmentSummary& operator=(EquipmentSummary&& other) = default;
 
  private:
-  const simulatorproto::Gearset gearset_proto_;
+  const Gearset gearset_proto_;
 };
 
 // This class is responsible for taking an EncounterConfig proto (list of raid
@@ -54,8 +60,7 @@ class EncounterSummary {
   EncounterSummary() = delete;
 
   // We can construct an encounter summary from an EncounterConfig proto.
-  explicit EncounterSummary(
-      const simulatorproto::EncounterConfig& encounter_proto);
+  explicit EncounterSummary(const EncounterConfig& encounter_proto);
 
   // Default copy and move assignment and operator=
   EncounterSummary(const EncounterSummary& other) = default;
@@ -64,14 +69,14 @@ class EncounterSummary {
   EncounterSummary& operator=(EncounterSummary&& other) = default;
 
  private:
-  const simulatorproto::EncounterConfig encounter_proto_;
+  const EncounterConfig encounter_proto_;
 };
 
 // This class wraps a policy proto into something with a Choose() method.
 class PolicyFunctor {
  public:
   PolicyFunctor() = delete;
-  explicit PolicyFunctor(const simulatorproto::Policy& policy_proto);
+  explicit PolicyFunctor(const Policy& policy_proto);
 
   // Default copy and move assignment and operator=
   PolicyFunctor(const PolicyFunctor& other) = default;
@@ -80,8 +85,8 @@ class PolicyFunctor {
   PolicyFunctor& operator=(PolicyFunctor&& other) = default;
 
  private:
-  const simulatorproto::Policy policy_proto_;
+  const Policy policy_proto_;
 };
 
-}  // namespace configprocess
-}  // namespace policygen
+}  // namespace util
+}  // namespace simulator

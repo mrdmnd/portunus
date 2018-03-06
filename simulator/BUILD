@@ -2,32 +2,56 @@ package(default_visibility = ["//visibility:public"])
 
 load("@org_pubref_rules_protobuf//cpp:rules.bzl", "GRPC_COMPILE_DEPS")
 
-# Consider hooking the compile command script a la
+# TODO(mrdmnd): Consider hooking the compile command script a la
 # https://gist.github.com/bsilver8192/0115ee5d040bb601e3b7
 # and
 # https://github.com/cybrown-zoox/bazel-clang-analyzer
 
 ############# Libraries ##############
 
+# Simulation engine related code (launching tasks, etc).
 cc_library(
     name = "engine",
     srcs = [
-        "config_processors.cc",
-        "constants.h",
         "engine.cc",
-        "online_statistics.cc",
         "simulate.cc",
-        "threadpool.h",
     ],
     hdrs = [
-        "config_processors.h",
         "engine.h",
-        "online_statistics.h",
         "simulate.h",
     ],
     deps = [
+        ":core",
+        ":util",
         "//proto:cc_lib",
+        "@com_github_gflags_gflags//:gflags",
+        "@com_google_absl//absl/memory",
         "@com_google_absl//absl/strings",
+        "@com_google_glog//:glog",
+    ],
+)
+
+# Core simulation primitives like player, aura, constants, etc.
+# Ideally this doesn't depend on the proto lib. Might be unavoidable.
+cc_library(
+    name = "core",
+    srcs = glob(
+        ["core/*.h"],
+        exclude = ["core/*_test.cc"],
+    ),
+    hdrs = glob(["core/*.h"]),
+)
+
+# Useful bits and pieces.
+cc_library(
+    name = "util",
+    srcs = glob(
+        ["util/*.cc"],
+        exclude = ["util/*_test.cc"],
+    ),
+    hdrs = glob(["util/*.h"]),
+    deps = [
+        "//proto:cc_lib",
         "@com_google_glog//:glog",
     ],
 )
@@ -35,10 +59,11 @@ cc_library(
 ############# Binaries ##############
 
 # This is a standalone program that provides a `main` which takes a path to a
-# text protobuf object representing the simulation config to execute.
+# text protobuf object representing the simulation config to execute. Useful for
+# one-off simulation runs.
 cc_binary(
     name = "standalone",
-    srcs = ["standalone_binary.cc"],
+    srcs = ["launch_standalone.cc"],
     deps = [
         ":engine",
         "//proto:cc_lib",
@@ -48,16 +73,17 @@ cc_binary(
     ],
 )
 
-# This is a simulation service that spins up a long-running engine + threadpool
-# and handles multiple, long-lived simulation requests.
+# This is the core simulation service that spins up a long-running engine and
+# handles multiple simulation requests. Meant to be used with policygen learning
+# core for rapid training of a policy model, as the policy evaluation core.
 cc_binary(
     name = "service",
-    srcs = ["service_binary.cc"],
+    srcs = ["launch_service.cc"],
     deps = [
         ":engine",
         "//proto:cc_lib",
-        "@com_google_glog//:glog",
         "@com_github_gflags_gflags//:gflags",
+        "@com_google_glog//:glog",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/memory",
     ] + GRPC_COMPILE_DEPS,
@@ -65,14 +91,31 @@ cc_binary(
 
 ############# Tests ##############
 
+# Engine
+
+# Core
+
+# Util
+cc_test(
+    name = "threadpool_test",
+    size = "small",
+    srcs = [
+        "util/threadpool_test.cc",
+    ],
+    deps = [
+        ":util",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 cc_test(
     name = "online_statistics_test",
     size = "small",
     srcs = [
-        "online_statistics_test.cc",
+        "util/online_statistics_test.cc",
     ],
     deps = [
-        ":engine",
+        ":util",
         "@com_google_googletest//:gtest_main",
     ],
 )

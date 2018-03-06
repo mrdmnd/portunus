@@ -5,8 +5,8 @@
 // Const or Static values (unchanging, known at simulation launch time) don't
 // belong here.
 
-namespace policygen {
-
+namespace simulator {
+namespace core {
 // This class is responsible for holding the *current* combat ratings for the
 // player. We may (at some point) want to implement a caching mechanism here, so
 // the field access is hidden behind const accessor methods.
@@ -158,5 +158,5 @@ class Player : Actor {
   // Players can see all available targets to hit at all time.
   const std::vector<Enemy*> available_enemies_;
 };
-
-}  // namespace policygen
+}  // namespace core
+}  // namespace simulator
