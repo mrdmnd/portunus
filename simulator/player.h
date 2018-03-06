@@ -1,4 +1,117 @@
+#include "simulator/actor.h"
+#include "simulator/constants.h"
+
+// A collection of classes for handling "current" values for actors.
+// Const or Static values (unchanging, known at simulation launch time) don't
+// belong here.
+
 namespace policygen {
+
+// This class is responsible for holding the *current* combat ratings for the
+// player. We may (at some point) want to implement a caching mechanism here, so
+// the field access is hidden behind const accessor methods.
+class CharacterStats {
+ public:
+  CharacterStats() = delete;
+  ~CharacterStats() = default;
+  explicit CharacterStats(int strength,
+                          int agility,
+                          int intelligence,
+                          int stamina,
+                          int crit,
+                          int mastery,
+                          int versatility,
+                          int haste,
+                          int attack_power,
+                          int spell_power,
+                          double mainhand_speed,
+                          int mainhand_damage_min,
+                          int mainhand_damage_max,
+                          double offhand_speed,
+                          int offhand_damage_min,
+                          int offhand_damage_max)
+      : strength_rating_(strength),
+        agility_rating_(agility),
+        intelligence_rating_(intelligence),
+        stamina_rating_(stamina),
+        crit_rating_(crit),
+        mastery_rating_(mastery),
+        versatility_rating_(versatility),
+        haste_rating_(haste),
+        attack_power_(attack_power),
+        spell_power_(spell_power),
+        mainhand_speed_(mainhand_speed),
+        mainhand_damage_min_(mainhand_damage_min),
+        mainhand_damage_max_(mainhand_damage_max),
+        offhand_speed_(offhand_speed),
+        offhand_damage_min_(offhand_damage_min),
+        offhand_damage_max_(offhand_damage_max){};
+
+  // Accessors
+
+  inline int StrengthRating() const { return strength_rating_; }
+
+  inline int AgilityRating() const { return agility_rating_; }
+
+  inline int IntelligenceRating() const { return intelligence_rating_; }
+
+  inline int StaminaRating() const { return stamina_rating_; }
+
+  inline int CritRating() const { return crit_rating_; }
+
+  inline double CritPercent() const {
+    return crit_rating_ / kCritRatingPerPercent;
+  }
+
+  inline int MasteryRating() const { return mastery_rating_; }
+
+  inline double MasteryPercent() const {
+    return mastery_rating_ / kMasteryRatingPerPercent;
+  }
+
+  inline int VersatilityRating() const { return versatility_rating_; }
+
+  inline double VersatilityPercent() const {
+    return versatility_rating_ / kVersatilityRatingPerPercent;
+  }
+
+  inline int HasteRating() const { return haste_rating_; }
+
+  inline double HastePercent() const {
+    return haste_rating_ / kHasteRatingPerPercent;
+  }
+
+  // Modifiers
+
+  inline void ModifyStrengthRating(const int rating_modification_amount) {
+    strength_rating_ += rating_modification_amount;
+  }
+
+  // Enable move + copy constructors and assignments.
+  CharacterStats(const CharacterStats& other) = default;
+  CharacterStats(CharacterStats&& other) = default;
+  CharacterStats& operator=(const CharacterStats& other) = default;
+  CharacterStats& operator=(CharacterStats&& other) = default;
+
+ private:
+  int strength_rating_;
+  int agility_rating_;
+  int intelligence_rating_;
+  int stamina_rating_;
+  int crit_rating_;
+  int mastery_rating_;
+  int versatility_rating_;
+  int haste_rating_;
+  int attack_power_;
+  int spell_power_;
+  double mainhand_speed_;
+  int mainhand_damage_min_;
+  int mainhand_damage_max_;
+  double offhand_speed_;
+  int offhand_damage_min_;
+  int offhand_damage_max_;
+};
+
 // Everything needed to keep track of *CURRENT* player state for the
 // instantiated player. That means variables in here probably should NOT be
 // `const`. Heuristic: if you want to reference a non-time-varying value, it
@@ -16,32 +129,10 @@ namespace policygen {
 // 32 windows per second, for a timing window of 31.25 milliseconds per slice)
 // to improve accuracy, but this will slow down simulation.
 
-class Actor {
- public:
- private:
-  // Actors have max health, and current health.
-  int maximum_health_;
-  int current_health_;
-
-  // Actors have auras. Auras are buffs or debuffs. Auras have a duration that
-  // is either finite or infinite. Auras have stacks.
-  std::vector<Aura> active_auras_;
-
-  // Actors have a `target` for all actions, but they don't own it, and
-  // shouldn't be able to mutate it. It is nonsensical for an actor to have a
-  // null target, but we cannot rebind references, so we use a pointer and
-  // explicitly require that any events which change this piece of state do not
-  // set current_target_ to NULLPTR.  The lifetime of the target must exceed or
-  // equal that of the actor.  We assume that the player cannot modify their
-  // target directly, but we can use this reference to get debuffs on the
-  // target.
-  const Actor* current_target_;
-};
-
 class Player : Actor {
  public:
  private:
-  // Players have character stats:
+  // Players have character stats, but actors do not.
   CharacterStats character_stats_;
 
   // Players have cooldown status
@@ -68,10 +159,4 @@ class Player : Actor {
   const std::vector<Enemy*> available_enemies_;
 };
 
-class Enemy : Actor {
- public:
- private:
-  // Enemies inherit maximum_health, current_health, auras, and their
-  // current_target from Actor.
-};
 }  // namespace policygen

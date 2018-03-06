@@ -3,4 +3,4 @@ test --color=yes --show_timestamps --test_output=streamed
 build:asan --strip=never --copt="-fsanitize=address,leak" --copt="-O1" --copt="-fno-omit-frame-pointer" --linkopt="-fsanitize=address,leak"
 build:msan --strip=never --copt="-fsanitize=memory" --copt="-O1" --copt="-fno-omit-frame-pointer" --linkopt="-fsanitize=memory"
 build:ubsan --strip=never --copt="-fsanitize=undefined,nullability" --copt="-O1" --copt="-fno-omit-frame-pointer" --linkopt="-fsanitize=undefined,nullability"
-build:tsan --strip=never --copt="-fsanitizer=thread" --copt="-O1" --copt="-fno-omit-frame-pointer" --linkopt="-fsanitize=thread"
+build:tsan --strip=never --copt="-fsanitize=thread" --copt="-O1" --copt="-fno-omit-frame-pointer" --linkopt="-fsanitize=thread"

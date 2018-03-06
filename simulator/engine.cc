@@ -11,6 +11,7 @@
 #include "absl/strings/str_cat.h"
 #include "glog/logging.h"
 
+#include "simulator/config_processors.h"
 #include "simulator/engine.h"
 #include "simulator/online_statistics.h"
 #include "simulator/simulate.h"
@@ -54,11 +55,9 @@ simulatorproto::SimulationResult Engine::Simulate(
   // Parse configuration file into post-processed bits.
   // We'll pass copies of these into the BatchSimulation function,
   // which in turn will pass copies in to each single iteration.
-  // The iterations will generate a random seed and use that for their
-  // target time.
   // const Encounter encounter = ParseEncounterFromSimulationConfig(config);
+  const PlayerEquipment equipment = ParseGearsetFromSimulationConfig(config);
   // const Policy policy = ParsePolicyFromSimulationConfig(config);
-  // const Player player = ParsePlayerFromSimulationConfig(config);
 
   // Setting cancellation_token = true forces BatchSimulation tasks to finish.
   std::atomic_bool cancellation_token(false);
@@ -76,7 +75,7 @@ simulatorproto::SimulationResult Engine::Simulate(
   // It takes the config *by COPY* despite being the fn signature looking like a
   // reference parameter; this is okay with us, this object is small, and we
   // don't change it. This might be worth revisiting at some point.
-  for (int i = 0; i < pool_->NumThreads(); ++i) {
+  for (size_t i = 0; i < pool_->NumThreads(); ++i) {
     futures.emplace_back(pool_->Enqueue(
         BatchSimulation, config, ipt, std::ref(cancellation_token), &os));
   }
