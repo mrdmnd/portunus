@@ -150,6 +150,15 @@ Optional Dependencies for developers:
 - [Buildifier](https://github.com/bazelbuild/buildtools) - BUILD file is
   autoformatted to our style guide convensions.
 
+To build a compilation database (necessary for clang-format and clang-tidy),
+from the root of the repository run
+
+`./tools/generate_compilationdb.sh`
+
+To run static analysis, from the root of the repository run
+
+`./tools/static_analysis.sh`
+
 To run all unit tests, from the root of the repository run
 
 `bazel test //...`
