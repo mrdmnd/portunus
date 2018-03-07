@@ -150,6 +150,10 @@ Optional Dependencies for developers:
 - [Buildifier](https://github.com/bazelbuild/buildtools) - BUILD file is
   autoformatted to our style guide convensions.
 
+To run all unit tests, from the root of the repository run
+
+`bazel test //...`
+
 ## Building Policygen
 
 Policygen is built with `bazel`, which is Google's opensource version of our
