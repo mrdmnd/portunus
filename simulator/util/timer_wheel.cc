@@ -1,3 +1,7 @@
+#include <algorithm>
+
+#include "glog/logging.h"
+
 #include "simulator/util/timer_wheel.h"
 
 TimerEventInterface* TimerWheelSlot::PopEvent() {
@@ -74,7 +78,7 @@ bool TimerWheel::ProcessCurrentSlot(Tick now, size_t max_events, int level) {
   while (slot->Events()) {
     auto event = slot->PopEvent();
     if (level > 0) {
-      assert((now_[0] & MASK) == 0);
+      DCHECK((now_[0] & MASK) == 0) << "now_[0] & MASK != 0";
       if (now_[0] >= event->ScheduledAt()) {
         event->Execute();
         if (!--max_events) {
@@ -129,7 +133,7 @@ bool TimerWheel::Advance(Tick delta, size_t max_events, int level) {
   } else {
     // Zero deltas are only ok when in the middle of a partially
     // processed tick.
-    assert(delta > 0);
+    DCHECK(delta > 0) << "Delta <= 0";
   }
 
   while (delta--) {
@@ -143,7 +147,7 @@ bool TimerWheel::Advance(Tick delta, size_t max_events, int level) {
 }
 
 void TimerWheel::Schedule(TimerEventInterface* event, Tick delta) {
-  assert(delta > 0);
+  DCHECK(delta > 0) << "Delta <= 0";
   event->Reschedule(now_[0] + delta);
 
   int level = 0;

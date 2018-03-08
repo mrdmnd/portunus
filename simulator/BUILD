@@ -32,7 +32,10 @@ cc_library(
     name = "core",
     srcs = glob(
         ["core/*.h"],
-        exclude = ["core/*_test.cc"],
+        exclude = [
+            "core/*_test.cc",
+            "core/*_bench.cc",
+        ],
     ),
     hdrs = glob(["core/*.h"]),
 )
@@ -42,7 +45,10 @@ cc_library(
     name = "util",
     srcs = glob(
         ["util/*.cc"],
-        exclude = ["util/*_test.cc"],
+        exclude = [
+            "util/*_test.cc",
+            "util/*_bench.cc",
+        ],
     ),
     hdrs = glob(["util/*.h"]),
     deps = [
@@ -94,9 +100,7 @@ cc_binary(
 cc_test(
     name = "threadpool_test",
     size = "small",
-    srcs = [
-        "util/threadpool_test.cc",
-    ],
+    srcs = ["util/threadpool_test.cc"],
     deps = [
         ":util",
         "@com_google_googletest//:gtest_main",
@@ -106,9 +110,7 @@ cc_test(
 cc_test(
     name = "config_processors_test",
     size = "small",
-    srcs = [
-        "util/config_processors_test.cc",
-    ],
+    srcs = ["util/config_processors_test.cc"],
     deps = [
         ":util",
         "//proto:cc_lib",
@@ -119,9 +121,7 @@ cc_test(
 cc_test(
     name = "online_statistics_test",
     size = "small",
-    srcs = [
-        "util/online_statistics_test.cc",
-    ],
+    srcs = ["util/online_statistics_test.cc"],
     deps = [
         ":util",
         "@com_google_googletest//:gtest_main",
@@ -131,9 +131,7 @@ cc_test(
 cc_test(
     name = "timer_wheel_test",
     size = "small",
-    srcs = [
-        "util/timer_wheel_test.cc",
-    ],
+    srcs = ["util/timer_wheel_test.cc"],
     deps = [
         ":util",
         "@com_google_absl//absl/memory",
@@ -141,11 +139,10 @@ cc_test(
     ],
 )
 
+############# Benchmarks ##############
 cc_binary(
     name = "timer_wheel_bench",
-    srcs = [
-        "util/timer_wheel_bench.cc",
-    ],
+    srcs = ["util/timer_wheel_bench.cc"],
     deps = [
         ":util",
         "@com_google_benchmark//:benchmark",

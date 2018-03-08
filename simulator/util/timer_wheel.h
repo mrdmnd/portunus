@@ -1,18 +1,14 @@
 #pragma once
 
-#include <cassert>
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
 #include <limits>
-#include <memory>
 
 // https://blog.acolyer.org/2015/11/23/hashed-and-hierarchical-timing-wheels/
 // https://www.snellman.net/blog/archive/2016-07-27-ratas-hierarchical-timer-wheel/
 //
 // Code adapted from Ratas implementation, which is MIT Licensed.
 // https://github.com/jsnell/ratas/blob/master/src/timer-wheel.h
-// I've modified it to remove the MemberTimerEvent as well as schedule_in_range,
+//
+// It has been modified to remove the MemberTimerEvent and schedule_in_range,
 // neither of which we need.
 //
 // The exact implementation strategy is a hierarchical timer
@@ -23,7 +19,7 @@
 //
 // A hierarchical timer wheel layers multiple timer wheels running at
 // different resolutions on top of each other. When an event is
-// scheduled so far in the future than it does not fit the innermost
+// scheduled so far in the future that it does not fit the innermost
 // (core) wheel, it instead gets scheduled on one of the outer
 // wheels. On each rotation of the inner wheel, one slot's worth of
 // events are promoted from the second wheel to the core. On each
@@ -33,6 +29,9 @@
 // The basic usage is to create a single TimerWheel object and
 // multiple TimerEvents The events are scheduled for execution using
 // TimerWheel::Schedule() or unscheduled using the event's Cancel() method.
+//
+// It is important to note that the TimerWheel does *NOT* own its TimerEvents,
+// and should not be used to manage their lifetime.
 
 using Tick = uint64_t;
 
@@ -56,10 +55,10 @@ class TimerEventInterface {
   void Cancel();
 
   // Return true iff the event is currently scheduled for execution.
-  bool Active() const { return slot_ != NULL; }
+  inline bool Active() const { return slot_ != NULL; }
 
   // Return the absolute tick this event is scheduled to be executed on.
-  Tick ScheduledAt() const { return scheduled_at_; }
+  inline Tick ScheduledAt() const { return scheduled_at_; }
 
   // Reschedule event to tick `ts`.
   inline void Reschedule(Tick ts) { scheduled_at_ = ts; }
@@ -96,7 +95,7 @@ class TimerEvent : public TimerEventInterface {
   TimerEvent<CBType>& operator=(const TimerEvent<CBType>& other) = delete;
   TimerEvent<CBType>& operator=(const TimerEvent<CBType>&& other) = delete;
 
-  // Actually, you know, do the thing.
+  // Actually, you know, do the thing you're supposed to do.
   void Execute() override { callback_(); }
 
  private:
@@ -122,7 +121,7 @@ class TimerWheelSlot {
   // Return pointer to first event queued in this slot.
   inline const TimerEventInterface* Events() const { return events_; }
 
-  // Dequeue the first event from the slot, and return it.
+  // De-queue the first event from the slot, and return it.
   TimerEventInterface* PopEvent();
 };
 
@@ -131,7 +130,7 @@ class TimerWheelSlot {
 // enough with the Advance() method.
 class TimerWheel {
  public:
-  TimerWheel(Tick now);
+  explicit TimerWheel(Tick now);
   TimerWheel() : TimerWheel(0){};
   TimerWheel(const TimerWheel& other) = delete;
   TimerWheel(const TimerWheel&& other) = delete;
@@ -184,7 +183,6 @@ class TimerWheel {
   static const int NUM_LEVELS = (64 + WIDTH_BITS - 1) / WIDTH_BITS;
   static const int MAX_LEVEL = NUM_LEVELS - 1;
   static const int NUM_SLOTS = 1 << WIDTH_BITS;
-  // A bitmask for just the bits in the timestamp relevant to this wheel.
   static const int MASK = (NUM_SLOTS - 1);
 
   // The current timestamp for this wheel. This will be right-shifted
@@ -199,6 +197,6 @@ class TimerWheel {
   TimerWheelSlot slots_[NUM_LEVELS][NUM_SLOTS];  // by default, 8x256
 
   // This handles the actual work of executing event callbacks and
-  // recursing to the outer wheels.
+  // recursing to the outer wheels. This is a hot method!
   bool ProcessCurrentSlot(Tick now, size_t max_execute, int level);
 };
