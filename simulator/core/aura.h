@@ -8,9 +8,11 @@ namespace core {
 // duration aura. If constructed with max_stacks = 0, this is an "infinitely"
 // stackable aura.
 
+using SpellId = int;
+
 class Aura {
  public:
-  explicit Aura(int spell_id,
+  explicit Aura(SpellId spell_id,
                 std::chrono::milliseconds max_duration,
                 int max_stacks) :
     spell_id_(spell_id),
@@ -32,7 +34,7 @@ class Aura {
   inline int Stacks() const { return cur_stacks_; }
 
  private:
-  const int spell_id_;
+  const SpellId spell_id_;
   std::chrono::milliseconds cur_duration_;
   const std::chrono::milliseconds max_duration_;
   int cur_stacks_;

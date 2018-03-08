@@ -127,3 +127,16 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "timer_wheel_test",
+    size = "small",
+    srcs = [
+        "util/timer_wheel_test.cc",
+    ],
+    deps = [
+        ":util",
+        "@com_google_benchmark//:benchmark",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

@@ -15,6 +15,16 @@ class Actor {
   Actor() = delete;
   ~Actor() = delete;
 
+  inline std::vector<Aura> GetAuras() const { return active_auras_; }
+  inline void AddAura(const Aura& aura) { active_auras_.push_back(aura); }
+  inline bool HasAura(const SpellId) {
+    // Do a search on the Auras vector.
+    return false;
+  }
+
+  inline const Actor* GetTarget() const { return current_target_; }
+  inline void SetTarget(const Actor* actor) { current_target_ = actor; }
+
  private:
   // Actors have max health, and current health.
   // We don't actually estimate enemy health directly; rather, we use the health
@@ -27,14 +37,12 @@ class Actor {
   std::vector<Aura> active_auras_;
 
   // Actors have a `target` for all actions, but they don't own it, and
-  // shouldn't be able to mutate it. It is nonsensical for an actor to have a
-  // null target, but we cannot rebind references, so we use a pointer and
-  // explicitly require that any events which change this piece of state do not
-  // set current_target_ to NULLPTR.
+  // shouldn't be able to mutate it. Players can "de-target" in-game, this maps
+  // to setting current_target to NULLPTR.
   //
-  // The lifetime of the target must exceed or equal that of the actor. We
-  // assume that the player cannot modify their target directly, but we can use
-  // this reference to get debuffs on the target.
+  // The lifetime of the target must exceed or equal that of the actor.
+  // Players cannot modify their target directly, but this pointer is useful
+  // because it allows us to get information about our current target.
   const Actor* current_target_;
 };
 }  // namespace core
