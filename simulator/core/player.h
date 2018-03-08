@@ -42,13 +42,14 @@ class Player : Actor {
   // Players have resource (power) - energy, mana, focus, fury, rage, runes,
   // maelstrom, astral power, etc. The idea is to pick `power` as a type with
   // ~continuous behavior, hence why runes are here and runic power is below.
-  ResourceType power_;
+  // The actual *type* of the resource is static, defined in the class module.
+  int power_;
 
   // Some players may have "alternate power" (mana, chi, combo_points,
   // runic_power, insanity, holy_power, soul_shards etc). Mana might be listed
   // here because some classes have mana as a resource but don't spend it as
   // their primary (spriests, warlocks, non-arcane mages, balance druids)
-  ResourceType alternate_power_ = nullptr;
+  int alternate_power_;
 
   // Players also have talents, but because those are fixed throughout
   // simulation, we don't persist them here.

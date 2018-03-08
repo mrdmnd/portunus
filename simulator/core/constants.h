@@ -57,6 +57,30 @@ enum class Specialization {
   WARRIOR_ARMS,
   WARRIOR_FURY,
 };
+
+// Matches http://wowwiki.wikia.com/wiki/PowerType
+enum class Resource {
+  MANA,
+  RAGE,
+  FOCUS,
+  ENERGY,
+  COMBO_POINT,
+  RUNE,
+  RUNIC_POWER,
+  SOUL_SHARD,
+  LUNAR_POWER,
+  HOLY_POWER,
+  ALTERNATE_POWER,  // Unused, might be boss-only?
+  MAELSTROM,
+  CHI,
+  INSANITY,
+  OBSOLETE_1,  // removed from game
+  OBSOLETE_2,  // removed from game
+  ARCANE_CHARGE,
+  FURY,
+  PAIN,
+};
+
 }  // namespace enums
 
 namespace constants {

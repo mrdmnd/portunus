@@ -136,7 +136,18 @@ cc_test(
     ],
     deps = [
         ":util",
-        "@com_google_benchmark//:benchmark",
+        "@com_google_absl//absl/memory",
         "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_binary(
+    name = "timer_wheel_bench",
+    srcs = [
+        "util/timer_wheel_bench.cc",
+    ],
+    deps = [
+        ":util",
+        "@com_google_benchmark//:benchmark",
     ],
 )

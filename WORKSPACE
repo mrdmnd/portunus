@@ -24,19 +24,13 @@ http_archive(
     url = "https://github.com/google/glog/archive/master.zip",
 )
 
+# These libraries don't have a bazel build file, so we specifiy how to build it.
 new_http_archive(
     name = "com_google_benchmark",
-    build_file = "@com_github_grpc_grpc//third_party:benchmark.BUILD",
+    build_file = "third_party/benchmark.BUILD",
     strip_prefix = "benchmark-master",
     url = "https://github.com/google/benchmark/archive/master.zip",
 )
-
-#new http_archive(
-#    name = "tbb",
-#    build_file = "tbb.BUILD",
-#    url = "https://www.threadingbuildingblocks.org/sites/default/files/software_releases/source/tbb2018_20171205oss_src.tgz",
-#    strip_prefix = "tbb2018_20171205",
-#)
 
 # Need these two because the bazel compiler doesn't have a cc_proto_library that
 # explicitly supports GRPC services yet.
@@ -54,6 +48,7 @@ http_archive(
     url = "https://github.com/bazelbuild/rules_python/archive/master.zip",
 )
 
+##########################
 load("@io_bazel_rules_python//python:pip.bzl", "pip_repositories", "pip_import")
 
 # We load all python dependencies in a two-phase process:

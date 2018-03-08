@@ -28,6 +28,7 @@
 *.out
 *.app
 
+*.swp
 bazel-bin
 bazel-genfiles
 bazel-out
