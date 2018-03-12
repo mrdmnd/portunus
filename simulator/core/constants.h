@@ -4,13 +4,12 @@
 #include <map>
 #include <vector>
 
-// This file includes World-of-Warcraft specific constant values.
+// This file includes World-of-Warcraft specific constant values and enums.
 // At some point we'll pull this out of the DBC files.
 // Note that we're *NOT* using the protobuf enum values here, to avoid depending
 // on the protobuf compiled code here, which enables constexpr support.
 namespace simulator {
 namespace core {
-
 namespace enums {
 enum class Race {
   BLOOD_ELF,
@@ -31,6 +30,7 @@ enum class Race {
   VOID_ELF,
   LIGHTFORGED_DRAENEI,
 };
+
 enum class Specialization {
   DEATH_KNIGHT_FROST,
   DEATH_KNIGHT_UNHOLY,
@@ -58,8 +58,23 @@ enum class Specialization {
   WARRIOR_FURY,
 };
 
+enum class Attribute {
+  STRENGTH,
+  AGILITY,
+  STAMINA,
+  INTELLECT,
+  SPELL_POWER,
+  ATTACK_POWER,
+  CRIT_RATING,
+  HASTE_RATING,
+  VERSATILITY_RATING,
+  WEAPON_MH_DPS,
+  WEAPON_OH_DPS,
+};
+
 // Matches http://wowwiki.wikia.com/wiki/PowerType
 enum class Resource {
+  HEALTH,
   MANA,
   RAGE,
   FOCUS,
@@ -70,23 +85,109 @@ enum class Resource {
   SOUL_SHARD,
   LUNAR_POWER,
   HOLY_POWER,
-  ALTERNATE_POWER,  // Unused, might be boss-only?
   MAELSTROM,
   CHI,
   INSANITY,
-  OBSOLETE_1,  // removed from game
-  OBSOLETE_2,  // removed from game
   ARCANE_CHARGE,
   FURY,
   PAIN,
 };
 
+enum class ActionResult {
+  MISS,
+  DODGE,
+  PARRY,
+  GLANCE_CRIT_BLOCK,
+  GLANCE_NORM_BLOCK,
+  GLANCE,
+  CRIT_CRIT_BLOCK,
+  CRIT_NORM_BLOCK,
+  CRIT,
+  HIT_CRIT_BLOCK,
+  HIT_NORM_BLOCK,
+  HIT,
+};
+
+enum class SpellSchool {
+  ARCANE,
+  FIRE,
+  FROST,
+  HOLY,
+  NATURE,
+  SHADOW,
+  PHYSICAL,
+  MAX_PRIMARY,
+  FROSTFIRE,
+  HOLYSTRIKE,
+  FLAMESTRIKE,
+  HOLYFIRE,
+  STORMSTRIKE,
+  HOLYSTORM,
+  FIRESTORM,
+  FROSTSTRIKE,
+  HOLYFROST,
+  FROSTSTORM,
+  SHADOWSTRIKE,
+  SHADOWLIGHT,
+  SHADOWFLAME,
+  SHADOWSTORM,
+  SHADOWFROST,
+  SPELLSTRIKE,
+  DIVINE,
+  SPELLFIRE,
+  ASTRAL,
+  SPELLFROST,
+  SPELLSHADOW,
+  ELEMENTAL,
+  CHROMATIC,
+  MAGIC,
+  CHAOS,
+  DRAIN,
+};
+
+enum class WeaponType {
+  DAGGER_1H,
+  FIST_1H,
+  WARGLAIVE_1H,
+  AXE_1H,
+  SWORD_1H,
+  MACE_1H,
+
+  POLEARM_2H,
+  STAFF_2H,
+  AXE_2H,
+  SWORD_2H,
+  MACE_2H,
+
+  BOW_RANGED,
+  CROSSBOW_RANGED,
+  GUN_RANGED,
+};
+
+enum class GearSlot {
+  HEAD,
+  NECK,
+  SHOULDERS,
+  CHEST,
+  WAIST,
+  LEGS,
+  FEET,
+  WRISTS,
+  HANDS,
+  FINGER_1,
+  FINGER_2,
+  TRINKET_1,
+  TRINKET_2,
+  BACK,
+  MAIN_HAND,
+  OFF_HAND,
+  RANGED,
+};
+
 }  // namespace enums
 
 namespace constants {
-static constexpr int kNumSpecs = 24;
-/*
-{
+/*{
   "DeathKnightFrostDamage": "1.5",
   "DeathKnightUnholyShadow": "2.25",
   "DemonHunterHavocChaos": "1.5",
@@ -119,8 +220,7 @@ static constexpr int kNumSpecs = 24;
   "WarriorArmsColossusSmash": "1.6",
   "WarriorArmsDamage": "1.6",
   "WarriorFuryDamage": "1.4",
-}
-*/
+}*/
 static const std::map<enums::Specialization, std::vector<double>>
     kMasteryCoeffs = {
         {enums::Specialization::DEATH_KNIGHT_FROST, {1.5}},

@@ -3,7 +3,8 @@
 #include "glog/logging.h"
 
 #include "simulator/util/timer_wheel.h"
-
+namespace simulator {
+namespace util {
 TimerEventInterface* TimerWheelSlot::PopEvent() {
   auto event = events_;
   events_ = event->next_;
@@ -220,3 +221,5 @@ Tick TimerWheel::TicksUntilNextEvent(Tick max, int level) const {
   }
   return max;
 }
+}  // namespace util
+}  // namespace simulator

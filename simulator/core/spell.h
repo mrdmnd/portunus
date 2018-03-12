@@ -1,3 +1,5 @@
+#pragma once
+
 namespace simulator {
 namespace core {
 // This classs provides a means for defining player spells.
@@ -15,8 +17,7 @@ class SpellData {
 class SpellInstance {
  public:
   virtual bool Execute() const = 0;
-  explicit SpellInstance(const SpellData& data,
-                         const Actor* source,
+  explicit SpellInstance(const SpellData& data, const Actor* source,
                          const Actor* target) :
     data_(data),
     source_(source),

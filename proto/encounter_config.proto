@@ -2,6 +2,13 @@ syntax = "proto3";
 
 package simulatorproto;
 
+enum EnemyType {
+  UNUSED_ENEMYTYPE = 0;
+  BOSS = 1;
+  PRIORITY_ADD = 2;
+  ADD = 3;
+}
+
 // This is a bit nuanced. A lot of classes need to know when they hit execute
 // range. We can make a few assumptions about how the health of our target
 // declines over time, but the idea here is to provide a user-defined way to
@@ -18,23 +25,11 @@ enum HealthEstimator {
   BURST_AND_EXECUTE = 3;
 }
 
-// BOSS type enemies have all statistics turned on, and use the HealthEstimator
-// set in the EncounterConfig proto at the top level. PRIORITY_ADD type
-// enemies have fewer statistics collected, and use the BURST health estimator.
-// ADD type enemies have minimal statistics collected, and follow the UNIFORM
-// health estimator. We don't collect detailed statistics on ADD type enemies,
-// and they follow the UNIFORM health estimator.
-enum EnemyType {
-  UNUSED_ENEMYTYPE = 0;
-  BOSS = 1;
-  PRIORITY_ADD = 2;
-  ADD = 3;
-}
-
 message Enemy {
   int32 id = 1;
   string name = 2;
   EnemyType type = 3;
+  HealthEstimator health_estimator = 4;
 }
 
 // TODO(mrdmnd): make event timing probabilistic so we don't overfit?
@@ -87,17 +82,14 @@ message EncounterConfig {
   // Something descriptive and human readable, like "Patchwork"
   string name = 1;
 
-  // The health_estimator to use for all BOSS enemies.
-  HealthEstimator health_estimator = 2;
-
   // We attack for time_target +/- time_variance.
   // Reasonable default: 5 minutes, or 300s (300,000 ms)
-  int32 time_target = 3;
+  int32 time_target = 2;
 
   // We want combat to run about as long as the encounter says, but not exactly.
   // Reasonable default: 0.10, or 10%.
-  double time_variance = 4;
+  double time_variance = 3;
 
   // A sorted sequence of encounter events.
-  repeated EncounterEvent events = 5;
+  repeated EncounterEvent events = 4;
 }

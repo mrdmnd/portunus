@@ -64,11 +64,11 @@ planning components under the control of a player. These two components are
 
 The interesting twist in this problem is choices made during the planning phase
 tend to affect optimal choices in the action selection phase. For example, some
-policies favor gear-configurations with different stat balances (maybe you have
-a spell that gets better and better with more critical strike rating on your
-gear, so you would want to cast that spell more frequently when you have a lot
-of crit rating, but almost never if you don't) or talent choices, and some stat
-balances and talent choices favor different action policies.
+policies favor gear-configurations with different stat balances or talent
+choices (maybe you have a spell that gets better and better with more critical
+strike rating on your gear, so you would want to cast that spell more frequently
+when you have a lot of crit rating, but almost never if you don't), and some
+stat balances and talent choices favor different action policies.
 
 A very specific example of this conundrum (offline planning decisions influence
 online action selection) is the Assassination Rogue: there are largely
@@ -161,7 +161,10 @@ be ignored. This will help prune the search space a bit.
 
 ### Encounter Configuration
 
-An encounter is essentially a script 
+An encounter is essentially a script that specifies which targets are active at
+any given time, as well as when the player is moving or unable to attack said
+targets. We draw a lot of inspiration from the AskMrRobot fight encounter
+scripting system, which models the domain very cleanly.
 
 ### Action Policy
 

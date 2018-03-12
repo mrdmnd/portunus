@@ -38,6 +38,9 @@ cc_library(
         ],
     ),
     hdrs = glob(["core/*.h"]),
+    deps = [
+        "@com_google_glog//:glog",
+    ],
 )
 
 # Useful bits and pieces.
@@ -96,7 +99,19 @@ cc_binary(
 
 # Core
 
+cc_test(
+    name = "config_processor_test",
+    size = "small",
+    srcs = ["core/config_processor_test.cc"],
+    deps = [
+        ":core",
+        "//proto:cc_lib",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 # Util
+
 cc_test(
     name = "threadpool_test",
     size = "small",
@@ -108,12 +123,21 @@ cc_test(
 )
 
 cc_test(
-    name = "config_processors_test",
+    name = "rng_test",
     size = "small",
-    srcs = ["util/config_processors_test.cc"],
+    srcs = ["util/rng_test.cc"],
     deps = [
         ":util",
-        "//proto:cc_lib",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "map_interpolate_test",
+    size = "small",
+    srcs = ["util/map_interpolate_test.cc"],
+    deps = [
+        ":util",
         "@com_google_googletest//:gtest_main",
     ],
 )

@@ -1,3 +1,5 @@
+#pragma once
+
 namespace simulator {
 namespace core {
 

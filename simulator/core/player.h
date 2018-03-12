@@ -1,9 +1,9 @@
+#pragma once
+
 #include "simulator/core/actor.h"
 #include "simulator/core/constants.h"
-
-// A collection of classes for handling "current" values for actors.
-// Const or Static values (unchanging, known at simulation launch time) don't
-// belong here.
+#include "simulator/core/cooldown.h"
+#include "simulator/core/enemy.h"
 
 using namespace simulator::core::constants;
 using namespace simulator::core::enums;
@@ -31,31 +31,31 @@ class Player : Actor {
  public:
  private:
   // Players have character stats, but actors do not.
-  CharacterStats character_stats_;
+  // CharacterStats character_stats_;
 
   // Players have cooldown status
-  std::vector<SpellCooldown> cooldowns_;
+  // std::vector<Cooldown> cooldowns_;
 
   // Players have a special global cooldown.
-  SpellCooldown gcd_;
+  // Cooldown gcd_;
 
   // Players have resource (power) - energy, mana, focus, fury, rage, runes,
   // maelstrom, astral power, etc. The idea is to pick `power` as a type with
   // ~continuous behavior, hence why runes are here and runic power is below.
   // The actual *type* of the resource is static, defined in the class module.
-  int power_;
+  // int power_ = 0;
 
   // Some players may have "alternate power" (mana, chi, combo_points,
   // runic_power, insanity, holy_power, soul_shards etc). Mana might be listed
   // here because some classes have mana as a resource but don't spend it as
   // their primary (spriests, warlocks, non-arcane mages, balance druids)
-  int alternate_power_;
+  // int alternate_power_ = 0;
 
   // Players also have talents, but because those are fixed throughout
   // simulation, we don't persist them here.
 
   // Players can see all available targets to hit at all time.
-  const std::vector<Enemy*> available_enemies_;
+  // const std::vector<Enemy*> available_enemies_;
 };
 }  // namespace core
 }  // namespace simulator

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <limits>
 
 // https://blog.acolyer.org/2015/11/23/hashed-and-hierarchical-timing-wheels/
@@ -32,6 +34,8 @@
 //
 // It is important to note that the TimerWheel does *NOT* own its TimerEvents,
 // and should not be used to manage their lifetime.
+namespace simulator {
+namespace util {
 
 using Tick = uint64_t;
 
@@ -55,7 +59,7 @@ class TimerEventInterface {
   void Cancel();
 
   // Return true iff the event is currently scheduled for execution.
-  inline bool Active() const { return slot_ != NULL; }
+  inline bool Active() const { return slot_ != nullptr; }
 
   // Return the absolute tick this event is scheduled to be executed on.
   inline Tick ScheduledAt() const { return scheduled_at_; }
@@ -71,12 +75,12 @@ class TimerEventInterface {
   Tick scheduled_at_;
 
   // Parent slot this event is currently in (NULL if not currently scheduled).
-  TimerWheelSlot* slot_ = NULL;
+  TimerWheelSlot* slot_ = nullptr;
 
   // The events are linked together in the slot using an internal doubly-linked
   // list; this iterator does double duty as the linked list for this event.
-  TimerEventInterface* next_ = NULL;
-  TimerEventInterface* prev_ = NULL;
+  TimerEventInterface* next_ = nullptr;
+  TimerEventInterface* prev_ = nullptr;
 
   // Implemented in subclasses. Executes the event callback.
   virtual void Execute() = 0;
@@ -116,7 +120,7 @@ class TimerWheelSlot {
   friend TimerWheel;
 
   // Doubly linked (inferior) list of events.
-  TimerEventInterface* events_ = NULL;
+  TimerEventInterface* events_ = nullptr;
 
   // Return pointer to first event queued in this slot.
   inline const TimerEventInterface* Events() const { return events_; }
@@ -200,3 +204,5 @@ class TimerWheel {
   // recursing to the outer wheels. This is a hot method!
   bool ProcessCurrentSlot(Tick now, size_t max_execute, int level);
 };
+}  // namespace util
+}  // namespace simulator

@@ -27,6 +27,11 @@ some flavor of linux with a C++11 compiler, ideally with an NVIDIA GPU.  I am
 running on Arch Linux; you may need to translate these instructions to fit your
 distribution or package manager.
 
+## Explicit anti-goals
+
+In order to streamline the implementation of our simulation engine, we
+explicitly do not support characters below maximum level, and characters that
+are not using a DPS specialization. 
 
 ### Requirements
 
@@ -203,6 +208,7 @@ This is mostly useful as a debugging tool.
 To build and invoke the standalone engine binary, run this:
 
 `bazel build simulator:standalone`
+
 `./bazel-bin/simulator:standalone $FULL_CONFIG_PATH`
 
 ### Simulation Service

@@ -2,13 +2,14 @@
 
 #include <atomic>
 
-#include "simulator/util/config_processors.h"
+#include "simulator/core/config_processor.h"
 #include "simulator/util/online_statistics.h"
 
-using simulator::util::EncounterSummary;
-using simulator::util::EquipmentSummary;
+using simulator::core::EncounterSummary;
+using simulator::core::EquipmentSummary;
+using simulator::core::PolicyFunctor;
+
 using simulator::util::OnlineStatistics;
-using simulator::util::PolicyFunctor;
 
 namespace simulator {
 
@@ -20,8 +21,7 @@ namespace simulator {
 // cancellation token if our main thread detects an early stopping condition is
 // met (happens when target_error threshold is met).
 void RunBatch(const EncounterSummary& encounter,
-              const EquipmentSummary& equipment,
-              const PolicyFunctor& policy,
+              const EquipmentSummary& equipment, const PolicyFunctor& policy,
               const int num_iterations,
               const std::atomic_bool& cancellation_token,
               OnlineStatistics* damage_tracker);

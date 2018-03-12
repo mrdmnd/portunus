@@ -10,18 +10,18 @@
 #include "absl/strings/str_cat.h"
 #include "glog/logging.h"
 
+#include "simulator/core/config_processor.h"
 #include "simulator/engine.h"
 #include "simulator/simulate.h"
-#include "simulator/util/config_processors.h"
 #include "simulator/util/online_statistics.h"
 #include "simulator/util/threadpool.h"
 
 #include "proto/simulation.pb.h"
 
-using simulator::util::EncounterSummary;
-using simulator::util::EquipmentSummary;
+using simulator::core::EncounterSummary;
+using simulator::core::EquipmentSummary;
+using simulator::core::PolicyFunctor;
 using simulator::util::OnlineStatistics;
-using simulator::util::PolicyFunctor;
 using simulator::util::ThreadPool;
 
 namespace simulator {
@@ -59,13 +59,9 @@ simulatorproto::SimulationResult Engine::Simulate(
   // Use our threadpool to enqueue the function RunBatch, from simulate.h.
   std::vector<std::future<void>> futures;
   for (size_t i = 0; i < pool_->NumThreads(); ++i) {
-    futures.emplace_back(pool_->Enqueue(simulator::RunBatch,
-                                        encounter,
-                                        equipment,
-                                        policy,
-                                        iters_per_thread,
-                                        std::ref(cancellation_token),
-                                        &metric_tracker));
+    futures.emplace_back(pool_->Enqueue(
+        simulator::RunBatch, encounter, equipment, policy, iters_per_thread,
+        std::ref(cancellation_token), &metric_tracker));
   }
 
   // Start timing our simulation.

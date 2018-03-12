@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 
-#include "simulator/util/config_processors.h"
+#include "simulator/core/config_processor.h"
 
 #include "proto/encounter_config.pb.h"
 #include "proto/player_config.pb.h"
@@ -11,7 +11,7 @@ using simulatorproto::Gearset;
 using simulatorproto::Policy;
 
 namespace simulator {
-namespace util {
+namespace core {
 
 TEST(ConfigProcessorsTest, EncounterSummary) {
   // Load encounter_config proto from text file. Parse into encounter summary.
@@ -30,5 +30,5 @@ TEST(ConfigProcessorsTest, PolicyFunctor) {
   EXPECT_EQ(true, true);
 }
 
-}  // namespace util
+}  // namespace core
 }  // namespace simulator

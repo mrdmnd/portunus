@@ -2,7 +2,6 @@ max_iterations: 10000
 target_error: 0.01
 encounter_config {
   name: "PatchworkFight"
-  health_estimator: BURST_AND_EXECUTE
   time_target: 300000
   time_variance: 0.10
   events {
@@ -12,6 +11,7 @@ encounter_config {
         id: 1
         name: "Patchwork"
         type: BOSS
+        health_estimator: BURST_AND_EXECUTE
       }
     }
   }

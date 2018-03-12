@@ -1,3 +1,5 @@
+#pragma once
+
 #include <vector>
 
 #include "simulator/core/aura.h"
@@ -8,19 +10,10 @@ namespace simulator {
 namespace core {
 class Actor {
  public:
-  // Should not be able to actually create an actor.
-  // When a derived class is constructed, the base class's constructor is called
-  // as well. This allows for initialization of the base class's member
-  // variables.
-  Actor() = delete;
-  ~Actor() = delete;
-
-  inline std::vector<Aura> GetAuras() const { return active_auras_; }
-  inline void AddAura(const Aura& aura) { active_auras_.push_back(aura); }
-  inline bool HasAura(const SpellId) {
-    // Do a search on the Auras vector.
-    return false;
-  }
+  inline std::vector<Aura> Buffs() const { return buffs_; }
+  inline std::vector<Aura> Debuffs() const { return debuffs_; }
+  inline void AddBuff(const Aura& aura) { buffs_.push_back(aura); }
+  inline void AddDebuff(const Aura& aura) { debuffs_.push_back(aura); }
 
   inline const Actor* GetTarget() const { return current_target_; }
   inline void SetTarget(const Actor* actor) { current_target_ = actor; }
@@ -32,9 +25,11 @@ class Actor {
   int maximum_health_;
   int current_health_;
 
-  // Actors have auras. Auras are buffs or debuffs. Auras have a duration that
-  // is either finite or infinite. Auras have stacks.
-  std::vector<Aura> active_auras_;
+  // Actors have buffs and debuffs (lists of auras).
+  // Auras have a duration that is either finite or infinite.
+  // Auras have stacks.
+  std::vector<Aura> buffs_;
+  std::vector<Aura> debuffs_;
 
   // Actors have a `target` for all actions, but they don't own it, and
   // shouldn't be able to mutate it. Players can "de-target" in-game, this maps

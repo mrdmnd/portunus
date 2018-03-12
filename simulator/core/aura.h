@@ -1,3 +1,5 @@
+#pragma once
+
 #include <chrono>
 
 namespace simulator {
@@ -12,18 +14,11 @@ using SpellId = int;
 
 class Aura {
  public:
-  explicit Aura(SpellId spell_id,
-                std::chrono::milliseconds max_duration,
+  explicit Aura(SpellId spell_id, std::chrono::milliseconds max_duration,
                 int max_stacks) :
     spell_id_(spell_id),
     max_duration_(max_duration),
     max_stacks_(max_stacks) {}
-
-  // Explicitly disallow copy+move assign/construct.
-  Aura(const Aura& other) = delete;
-  Aura(const Aura&& other) = delete;
-  Aura& operator=(const Aura& other) = delete;
-  Aura& operator=(const Aura&& other) = delete;
 
   inline bool IsInfiniteDuration() const {
     return max_duration_ == std::chrono::milliseconds::zero();
