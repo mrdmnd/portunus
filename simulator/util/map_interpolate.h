@@ -22,5 +22,6 @@ double MapInterpolate(const double key, const std::map<double, double>& map) {
   const auto a = (key - lb->first) / (ub->first - lb->first);
   return (a) * (ub->second) + (1 - a) * (lb->second);
 }
+
 }  // namespace util
 }  // namespace simulator

@@ -15,8 +15,6 @@ using simulatorproto::Gearset;
 using simulatorproto::Policy;
 using std::chrono::milliseconds;
 
-using CBType = std::function<void(SimulationState&)>;
-
 namespace simulator {
 namespace core {
 

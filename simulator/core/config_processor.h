@@ -1,6 +1,6 @@
 #pragma once
 
-#include "simulator/core/raid_event.h"
+#include "simulator/core/event.h"
 
 #include "proto/encounter_config.pb.h"
 #include "proto/player_config.pb.h"
@@ -47,7 +47,7 @@ class EncounterSummary {
   // Public members
   const int time_target;
   const double time_variance;
-  std::vector<RaidEvent> raid_events;
+  std::vector<Event> raid_events;
 
   EncounterSummary() = delete;
 

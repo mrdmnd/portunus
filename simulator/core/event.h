@@ -4,31 +4,30 @@
 
 #include "simulator/core/simulation_state.h"
 
-#include "simulator/util/timer_wheel.h"
-
 using simulator::core::SimulationState;
-using simulator::util::TimerEvent;
 using std::chrono::milliseconds;
 
 namespace simulator {
 namespace core {
 
-// Our raid events modify SimulationState, and return nothing.
-using CBType = std::function<void(SimulationState*)>;
-
 // A RaidEvent contains a callback and a scheduled time to fire that callback.
-class RaidEvent {
+// Our callbacks get a pointer to simulation state, and can modify it however
+// they want.
+class Event {
  public:
-  RaidEvent(const milliseconds scheduled_time, const CBType callback) :
+  Event(const milliseconds scheduled_time,
+        const std::function<void(SimulationState*)> callback) :
     scheduled_time_(scheduled_time),
     callback_(callback){};
 
   inline milliseconds GetScheduledTime() const { return scheduled_time_; }
-  inline CBType GetCallback() const { return callback_; }
+  inline std::function<void(SimulationState*)> GetCallback() const {
+    return callback_;
+  }
 
  private:
   const milliseconds scheduled_time_;
-  const CBType callback_;
+  const std::function<void(SimulationState*)> callback_;
 };
 }  // namespace core
 }  // namespace simulator

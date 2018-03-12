@@ -31,7 +31,10 @@ cc_library(
 cc_library(
     name = "core",
     srcs = glob(
-        ["core/*.h"],
+        [
+            "core/*.cc",
+            "core/*.h",
+        ],
         exclude = [
             "core/*_test.cc",
             "core/*_bench.cc",
@@ -47,7 +50,7 @@ cc_library(
 cc_library(
     name = "util",
     srcs = glob(
-        ["util/*.cc"],
+        ["util/*.cc, util/*.h"],
         exclude = [
             "util/*_test.cc",
             "util/*_bench.cc",

@@ -19,6 +19,7 @@ using simulator::core::SimulationState;
 
 using simulator::util::OnlineStatistics;
 using simulator::util::RNG;
+using simulator::util::TimerEvent;
 using simulator::util::TimerWheel;
 
 using std::chrono::milliseconds;
@@ -53,7 +54,7 @@ double RunSingleIteration(const EncounterSummary& encounter,
 
   // Set up fixed, known-time encounter events (spawn, bloodlust, ...)
   for (const auto& raid_event : encounter.raid_events) {
-    TimerEvent e(raid_event.GetCallback());
+    TimerEvent e([&sim_state]() { sim_state.combat_potion_used = true; });
     event_manager.Schedule(&e, raid_event.GetScheduledTime().count());
   }
 
