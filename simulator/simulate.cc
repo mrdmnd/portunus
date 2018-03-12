@@ -51,7 +51,8 @@ double RunSingleIteration(const ConfigSummary& config) {
   // Load these into the event manager.
   for (const auto& raid_event : config.GetRaidEvents()) {
     const auto cb = raid_event.GetCallback();
-    TimerEvent<std::function<void(SimulationState*)>> e(cb);
+    TimerEvent<std::function<void(SimulationState*)>, SimulationState*> e(
+        {cb, &sim_state});
     event_manager.Schedule(&e, raid_event.GetScheduledTime().count());
   }
 

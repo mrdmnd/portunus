@@ -20,11 +20,10 @@ class ConfigSummary {
   ConfigSummary() = delete;
   ConfigSummary(const SimulationConfig& sim_proto);
 
-  // This object should not be movable or copyable.
-  ConfigSummary(const ConfigSummary& other) = delete;
-  ConfigSummary(ConfigSummary&& other) = delete;
-  ConfigSummary& operator=(const ConfigSummary& other) = delete;
-  ConfigSummary& operator=(ConfigSummary&& other) = delete;
+  ConfigSummary(const ConfigSummary& other) = default;
+  ConfigSummary(ConfigSummary&& other) = default;
+  ConfigSummary& operator=(const ConfigSummary& other) = default;
+  ConfigSummary& operator=(ConfigSummary&& other) = default;
 
   inline milliseconds GetTimeTarget() const { return time_target_; }
   inline int GetTimeVariance() const { return time_variance_; }
