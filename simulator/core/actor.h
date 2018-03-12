@@ -22,8 +22,10 @@ class Actor {
   // Actors have max health, and current health.
   // We don't actually estimate enemy health directly; rather, we use the health
   // estimator passed in from the simulation encounter config.
-  int maximum_health_;
-  int current_health_;
+  // I think the only relevant use of this is to determine if life_tap is ready
+  // for warlocks?
+  // int maximum_health_;
+  // int current_health_;
 
   // Actors have buffs and debuffs (lists of auras).
   // Auras have a duration that is either finite or infinite.

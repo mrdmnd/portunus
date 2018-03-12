@@ -1,9 +1,10 @@
-#include "simulator/util/map_interpolate.h"
 
 #include "gtest/gtest.h"
 
+#include "simulator/core/health_estimator.h"
+
 namespace simulator {
-namespace util {
+namespace core {
 
 TEST(MapInterpolator, UniformInterpolation) {
   const std::map<double, double> control_points = {
@@ -18,5 +19,5 @@ TEST(MapInterpolator, UniformInterpolation) {
   EXPECT_FLOAT_EQ(MapInterpolate(1.0, control_points), 0.0);
   EXPECT_FLOAT_EQ(MapInterpolate(1.1, control_points), 0.0);
 }
-}  // namespace util
+}  // namespace core
 }  // namespace simulator

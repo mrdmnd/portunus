@@ -2,9 +2,28 @@
 
 #include <map>
 
-#include "simulator/util/map_interpolate.h"
-
 #include "glog/logging.h"
+
+namespace {
+
+// Interpolates a key into a (key, val) map.
+// If key < min_val) then return min_val).
+// If key > max_val) then return max_val).
+// If key is in the map, return it directly.
+// If key is inbetween some map keys, interpolate between them.
+double MapInterpolate(const double key, const std::map<double, double>& map) {
+  const auto ub = map.upper_bound(key);
+  if (ub == map.end()) {
+    return std::prev(ub)->second;
+  }
+  if (ub == map.begin()) {
+    return ub->second;
+  }
+  const auto lb = std::prev(ub);
+  const auto a = (key - lb->first) / (ub->first - lb->first);
+  return (a) * (ub->second) + (1 - a) * (lb->second);
+}
+}  // namespace
 
 namespace simulator {
 namespace core {
@@ -24,7 +43,7 @@ class HealthEstimator {
   inline double InterpolateHealthPercentage(const double time_progress) {
     DCHECK(time_progress >= 0.0);
     DCHECK(time_progress <= 1.0);
-    return simulator::util::MapInterpolate(time_progress, control_points_);
+    return MapInterpolate(time_progress, control_points_);
   }
 
   // Convenience functions for some common preconfigured estimators.

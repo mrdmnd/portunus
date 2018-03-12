@@ -24,8 +24,7 @@ EquipmentSummary::EquipmentSummary(const Gearset& gearset_proto) {
 
 void SpawnCallback(SimulationState* s) {
   const auto health_estimator = HealthEstimator::UniformHealthEstimator();
-  const auto enemy = std::make_unique<Enemy>(health_estimator);
-  s->enemies.push_back(std::move(enemy));
+  s->enemies.push_back(std::make_unique<Enemy>(health_estimator));
 }
 
 EncounterSummary::EncounterSummary(const EncounterConfig& encounter_proto) :
@@ -36,7 +35,7 @@ EncounterSummary::EncounterSummary(const EncounterConfig& encounter_proto) :
     const auto& event = encounter_proto.events(i);
     switch (event.event_case()) {
       case simulatorproto::EncounterEvent::kSpawn: {
-        const RaidEvent e(milliseconds(event.timestamp()), &SpawnCallback);
+        Event e(milliseconds(event.timestamp()), &SpawnCallback);
         raid_events.push_back(e);
         break;
       }

@@ -33,7 +33,6 @@ cc_library(
     srcs = glob(
         [
             "core/*.cc",
-            "core/*.h",
         ],
         exclude = [
             "core/*_test.cc",
@@ -42,6 +41,7 @@ cc_library(
     ),
     hdrs = glob(["core/*.h"]),
     deps = [
+        "//proto:cc_lib",
         "@com_google_glog//:glog",
     ],
 )
@@ -50,7 +50,7 @@ cc_library(
 cc_library(
     name = "util",
     srcs = glob(
-        ["util/*.cc, util/*.h"],
+        ["util/*.cc"],
         exclude = [
             "util/*_test.cc",
             "util/*_bench.cc",
@@ -113,6 +113,16 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "health_estimator_test",
+    size = "small",
+    srcs = ["core/health_estimator_test.cc"],
+    deps = [
+        ":core",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 # Util
 
 cc_test(
@@ -129,16 +139,6 @@ cc_test(
     name = "rng_test",
     size = "small",
     srcs = ["util/rng_test.cc"],
-    deps = [
-        ":util",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_test(
-    name = "map_interpolate_test",
-    size = "small",
-    srcs = ["util/map_interpolate_test.cc"],
     deps = [
         ":util",
         "@com_google_googletest//:gtest_main",

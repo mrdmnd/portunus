@@ -15,6 +15,7 @@ class Enemy : Actor {
     health_estimator_(health_estimator) {
     LOG(INFO) << "Spawning enemy.";
   }
+  ~Enemy() { LOG(INFO) << "Destroying enemy."; };
 
  private:
   const HealthEstimator health_estimator_;
