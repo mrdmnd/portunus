@@ -35,8 +35,13 @@ class HealthEstimator {
   // the current health percentage of this enemy, given the time progression
   // through the overall encounter. We implement this as linear interpolation
   // between (construction-time) specified control points.
-  HealthEstimator(const std::map<double, double>& control_points) :
+  HealthEstimator() = default;
+  explicit HealthEstimator(const std::map<double, double>& control_points) :
     control_points_(control_points){};
+
+  ~HealthEstimator() = default;
+  HealthEstimator(const HealthEstimator& other) = default;
+  HealthEstimator& operator=(const HealthEstimator& other) = default;
 
   // Encounter progress is measured between 0.0 and 1.0, and can be computed as
   // current_time / total_combat_length in calling code.
@@ -49,6 +54,20 @@ class HealthEstimator {
   // Convenience functions for some common preconfigured estimators.
   static HealthEstimator UniformHealthEstimator() {
     return HealthEstimator({{0.0, 1.0}, {1.0, 0.0}});
+  }
+
+  static HealthEstimator BurstHealthEstimator() {
+    return HealthEstimator(
+        {{0.0, 1.0}, {0.05, 0.90}, {0.10, 0.85}, {1.0, 0.0}});
+  }
+
+  static HealthEstimator ExecuteHealthEstimator() {
+    return HealthEstimator({{0.0, 1.0}, {0.80, 0.30}, {1.0, 0.0}});
+  }
+
+  static HealthEstimator BurstExecuteHealthEstimator() {
+    return HealthEstimator(
+        {{0.0, 1.0}, {0.05, 0.90}, {0.10, 0.85}, {0.80, 0.30}, {1.0, 0.0}});
   }
 
  private:

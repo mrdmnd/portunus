@@ -34,7 +34,23 @@ Engine::Engine(const int num_threads) {
 // a) we hit kMaxIterations, or
 // b) we're above the kMinIterations and StdErr / Mean < target_error.
 simulatorproto::SimulationResult Engine::Simulate(
-    const simulatorproto::SimulationConfig& config_proto) const {
+    const simulatorproto::SimulationConfig& config_proto,
+    const bool debug) const {
+  // Handle debug single iteration case.
+  if (debug) {
+    LOG(INFO) << "Debug simulation requested. Single iteration, single thread.";
+    const ConfigSummary config(config_proto);
+    double dps = simulator::RunSingleIteration(config);
+    simulatorproto::Distribution dps_distribution;
+    dps_distribution.set_n(1);
+    dps_distribution.set_mean(dps);
+    dps_distribution.set_stddev(0);
+    simulatorproto::SimulationResult r;
+    r.mutable_dps_distribution()->MergeFrom(dps_distribution);
+    r.set_metadata("DEBUG RESULT, SINGLE ITERATION");
+    return r;
+  }
+
   // Read in simulation termination conditions from config.
   const int kMinIterations = config_proto.min_iterations();
   const int kMaxIterations = config_proto.max_iterations();

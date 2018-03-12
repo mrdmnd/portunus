@@ -3,12 +3,13 @@ health_estimator: BURST_AND_EXECUTE
 time_target: 300000
 time_variance: 0.10
 events {
-  timestamp: -1
+  timestamp: 0
   spawn {
     enemy {
       id: 1
       name: "Patchwork"
       type: BOSS
+      health_estimator: BURST_AND_EXECUTE
     }
   }
 }

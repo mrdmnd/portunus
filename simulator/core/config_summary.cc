@@ -1,27 +1,49 @@
 #include "simulator/core/config_summary.h"
+#include "simulator/core/constants.h"
 #include "simulator/core/event.h"
 
 #include "proto/encounter_config.pb.h"
 #include "proto/simulation.pb.h"
 
+using std::chrono::milliseconds;
+
+using simulator::core::enums::EventTag;
+
 using simulatorproto::EncounterConfig;
 using simulatorproto::SimulationConfig;
-using std::chrono::milliseconds;
 
 namespace simulator {
 namespace core {
 
 namespace {
-// Put new RaidEvent builder definitions here.
+// Put additional RaidEvent builder definitions here.
 Event BuildSpawnEvent(const simulatorproto::EncounterEvent& proto) {
   std::function<void(SimulationState*)> cb = [&proto](SimulationState* s) {
     const auto enemy_proto = proto.spawn().enemy();
     const auto name = enemy_proto.name();
-    // TODO(mrdmnd) - use enemy_proto.health_estimator() and instantiate.
-    const auto estimator = HealthEstimator::UniformHealthEstimator();
-    s->enemies.push_back(std::make_unique<Enemy>(name, estimator));
+    const auto est = enemy_proto.health_estimator();
+
+    if (est == simulatorproto::HealthEstimator::UNIFORM) {
+      s->enemies.push_back(std::make_unique<Enemy>(
+          name, HealthEstimator::UniformHealthEstimator()));
+    } else if (est == simulatorproto::HealthEstimator::BURST) {
+      s->enemies.push_back(std::make_unique<Enemy>(
+          name, HealthEstimator::BurstHealthEstimator()));
+    } else if (est == simulatorproto::HealthEstimator::EXECUTE) {
+      s->enemies.push_back(std::make_unique<Enemy>(
+          name, HealthEstimator::ExecuteHealthEstimator()));
+    } else if (est == simulatorproto::HealthEstimator::BURST_AND_EXECUTE) {
+      s->enemies.push_back(std::make_unique<Enemy>(
+          name, HealthEstimator::BurstExecuteHealthEstimator()));
+    } else {
+      LOG(INFO) << "Health estimator " << est << " not found.";
+      LOG(INFO) << "Proceeding with BurstAndExecute default.";
+      s->enemies.push_back(std::make_unique<Enemy>(
+          name, HealthEstimator::BurstExecuteHealthEstimator()));
+    }
+
   };
-  return Event(milliseconds(proto.timestamp()), cb);
+  return Event(milliseconds(proto.timestamp()), cb, EventTag::ENEMY_SPAWN);
 }
 
 // From an encounter proto, get a vector of raid events.

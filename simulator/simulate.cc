@@ -14,6 +14,7 @@
 using simulator::core::ConfigSummary;
 using simulator::core::Player;
 using simulator::core::SimulationState;
+using simulator::core::enums::EventTag;
 
 using simulator::util::OnlineStatistics;
 using simulator::util::RNG;
@@ -50,15 +51,23 @@ double RunSingleIteration(const ConfigSummary& config) {
   // Set up fixed, known-time encounter events (spawn, bloodlust, ...)
   // Load these into the event manager.
   for (const auto& raid_event : config.GetRaidEvents()) {
-    const auto cb = raid_event.GetCallback();
-    TimerEvent<std::function<void(SimulationState*)>, SimulationState*> e(
-        {cb, &sim_state});
-    event_manager.Schedule(&e, raid_event.GetScheduledTime().count());
+    // Immediately execute any spawn events, or events with scheduled_time == 0
+    // Don't bother scheduling them, just fire them off directly.
+    if (raid_event.GetTag() == EventTag::ENEMY_SPAWN ||
+        raid_event.GetScheduledTime() == std::chrono::milliseconds::zero()) {
+      raid_event.GetCallback()(&sim_state);
+    } else {
+      const auto cb = raid_event.GetCallback();
+      TimerEvent<std::function<void(SimulationState*)>, SimulationState*> e(
+          {cb, &sim_state});
+      event_manager.Schedule(&e, raid_event.GetScheduledTime().count());
+    }
   }
 
   sim_state.combat_time_elapsed = std::chrono::milliseconds::zero();
   sim_state.combat_potion_used = false;
 
+  /*
   while (sim_state.combat_time_elapsed < combat_time_maximum) {
     const auto ticks = event_manager.TicksUntilNextEvent();
     sim_state.combat_time_elapsed += milliseconds(ticks);
@@ -66,7 +75,7 @@ double RunSingleIteration(const ConfigSummary& config) {
 
     // Player makes an action choice somewhere in here.
     // Simulation automatically schedules new bits and pieces here
-  }
+  }*/
   return damage_sum;
 }
 }  // namespace simulator

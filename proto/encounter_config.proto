@@ -38,6 +38,10 @@ message EnemySpawnEvent {
   Enemy enemy = 1;
 }
 
+message EnemyDespawnEvent {
+  int32 enemy_id = 1;
+}
+
 message EnemyInvulnEvent {
   Enemy enemy = 1;
   int32 duration = 2;  // Number of timesteps that this actor is invulnerable.
@@ -66,7 +70,7 @@ message BloodlustEvent {
 }
 
 message EncounterEvent {
-  int32 timestamp = 1;  // -1 means event happens before fight starts.
+  int32 timestamp = 1;  //
   oneof event {
     EnemySpawnEvent spawn = 2;
     EnemyInvulnEvent invuln = 3;
@@ -74,6 +78,7 @@ message EncounterEvent {
     StunEvent stun = 5;
     TakeDamageEvent damage = 6;
     BloodlustEvent lust = 7;
+    EnemyDespawnEvent despawn = 8;
   }
 }
 

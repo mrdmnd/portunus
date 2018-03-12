@@ -17,6 +17,7 @@ using simulatorproto::SimulationConfig;
 using simulatorproto::SimulationResult;
 
 DEFINE_int32(threads, std::thread::hardware_concurrency(), "");
+DEFINE_bool(debug, false, "If true, runs a single thread for one iteration.");
 
 namespace {
 template <class T>
@@ -42,7 +43,7 @@ int main(int argc, char** argv) {
   const Engine e(FLAGS_threads);
   const SimulationConfig conf = ParseConfig<SimulationConfig>(argv[1]);
   LOG(INFO) << "Simulating in standalone program.";
-  const SimulationResult result = e.Simulate(conf);
+  const SimulationResult result = e.Simulate(conf, FLAGS_debug);
 
   std::string result_string;
   google::protobuf::TextFormat::PrintToString(result, &result_string);

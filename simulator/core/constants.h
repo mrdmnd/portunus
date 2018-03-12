@@ -184,6 +184,11 @@ enum class GearSlot {
   RANGED,
 };
 
+enum class EventTag {
+  PLAYER_SPAWN,
+  ENEMY_SPAWN,
+};
+
 }  // namespace enums
 
 namespace constants {
