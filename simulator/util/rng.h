@@ -5,10 +5,11 @@
 
 #include "glog/logging.h"
 
-using std::chrono::milliseconds;
-
 namespace simulator {
 namespace util {
+
+using std::chrono::milliseconds;
+
 class RNG {
  public:
   RNG() : uniform_dist_(std::uniform_real_distribution<double>(0.0, 1.0)){};
@@ -28,8 +29,8 @@ class RNG {
 
   // Returns a `milliseconds` duration in [min, max]
   inline milliseconds Uniform(milliseconds min, milliseconds max) {
-    std::uniform_int_distribution<std::chrono::milliseconds::rep> dist(
-        min.count(), max.count());
+    std::uniform_int_distribution<milliseconds::rep> dist(min.count(),
+                                                          max.count());
     return milliseconds(dist(engine_));
   }
 

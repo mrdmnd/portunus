@@ -4,9 +4,6 @@
 #include "simulator/core/constants.h"
 #include "simulator/core/health_estimator.h"
 
-using namespace simulator::core::constants;
-using namespace simulator::core::enums;
-
 namespace simulator {
 namespace core {
 class Enemy : Actor {

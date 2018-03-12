@@ -5,11 +5,9 @@
 #include "simulator/core/cooldown.h"
 #include "simulator/core/enemy.h"
 
-using namespace simulator::core::constants;
-using namespace simulator::core::enums;
-
 namespace simulator {
 namespace core {
+
 // Everything needed to keep track of *CURRENT* player state for the
 // instantiated player. That means variables in here probably should NOT be
 // `const`. Heuristic: if you want to reference a non-time-varying value, it

@@ -1,10 +1,10 @@
 #pragma once
 
+#include <chrono>
 #include <functional>
 
 #include "simulator/core/simulation_state.h"
 
-using simulator::core::SimulationState;
 using std::chrono::milliseconds;
 
 namespace simulator {

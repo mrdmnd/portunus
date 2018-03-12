@@ -22,8 +22,8 @@ class Cooldown {
   inline void RemoveTime(const milliseconds time) { cur_duration_ -= time; }
 
  private:
-  const std::chrono::milliseconds max_duration_;
-  std::chrono::milliseconds cur_duration_;
+  const milliseconds max_duration_;
+  milliseconds cur_duration_;
 };
 }  // namespace core
 }  // namespace simulator

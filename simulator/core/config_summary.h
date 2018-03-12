@@ -7,9 +7,6 @@
 #include "proto/policy.pb.h"
 #include "proto/simulation.pb.h"
 
-using simulatorproto::SimulationConfig;
-using std::chrono::milliseconds;
-
 namespace simulator {
 namespace core {
 
@@ -18,7 +15,7 @@ namespace core {
 class ConfigSummary {
  public:
   ConfigSummary() = delete;
-  ConfigSummary(const SimulationConfig& sim_proto);
+  ConfigSummary(const simulatorproto::SimulationConfig& sim_proto);
 
   ConfigSummary(const ConfigSummary& other) = default;
   ConfigSummary(ConfigSummary&& other) = default;

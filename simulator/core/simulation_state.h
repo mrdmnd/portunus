@@ -16,10 +16,13 @@
 // The SimulationState object *OWNS* all actors in the simulation.
 namespace simulator {
 namespace core {
+
+using std::chrono::milliseconds;
+
 class SimulationState {
  public:
   bool combat_potion_used;
-  std::chrono::milliseconds combat_time_elapsed;
+  milliseconds combat_time_elapsed;
   std::unique_ptr<Player> player;
   std::vector<std::unique_ptr<Enemy>> enemies;
 };
