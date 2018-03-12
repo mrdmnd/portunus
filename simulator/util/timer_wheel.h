@@ -90,7 +90,7 @@ class TimerEventInterface {
   void Relink(TimerWheelSlot* slot);
 };
 
-template <typename CBType>
+template <class CBType>
 class TimerEvent : public TimerEventInterface {
  public:
   explicit TimerEvent<CBType>(const CBType& callback) : callback_(callback) {}
@@ -119,7 +119,7 @@ class TimerWheelSlot {
   friend TimerEventInterface;
   friend TimerWheel;
 
-  // Doubly linked (inferior) list of events.
+  // Doubly linked list of events.
   TimerEventInterface* events_ = nullptr;
 
   // Return pointer to first event queued in this slot.
