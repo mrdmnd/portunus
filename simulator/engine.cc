@@ -10,7 +10,7 @@
 #include "absl/strings/str_cat.h"
 #include "glog/logging.h"
 
-#include "simulator/core/config_processor.h"
+#include "simulator/core/config_summary.h"
 #include "simulator/engine.h"
 #include "simulator/simulate.h"
 #include "simulator/util/online_statistics.h"
@@ -18,9 +18,7 @@
 
 #include "proto/simulation.pb.h"
 
-using simulator::core::EncounterSummary;
-using simulator::core::EquipmentSummary;
-using simulator::core::PolicyFunctor;
+using simulator::core::ConfigSummary;
 using simulator::util::OnlineStatistics;
 using simulator::util::ThreadPool;
 
@@ -36,16 +34,14 @@ Engine::Engine(const int num_threads) {
 // a) we hit kMaxIterations, or
 // b) we're above the kMinIterations and StdErr / Mean < target_error.
 simulatorproto::SimulationResult Engine::Simulate(
-    const simulatorproto::SimulationConfig& config) const {
+    const simulatorproto::SimulationConfig& config_proto) const {
   // Read in simulation termination conditions from config.
-  const int kMinIterations = config.min_iterations();
-  const int kMaxIterations = config.max_iterations();
-  const double kTargetError = config.target_error();
-  // Parse configuration file into post-processed bits. We'll pass these into
-  // the RunBatch function, which in turn will pass to every single iteration.
-  const EncounterSummary encounter(config.encounter_config());
-  const EquipmentSummary equipment(config.player_config().gearset());
-  const PolicyFunctor policy(config.policy());
+  const int kMinIterations = config_proto.min_iterations();
+  const int kMaxIterations = config_proto.max_iterations();
+  const double kTargetError = config_proto.target_error();
+  // Parse configuration file into a configuration summary.
+  // We pass this into the RunBatch function, which passes to single iterations.
+  const ConfigSummary config(config_proto);
 
   // Setting `cancellation_token = true` forces BatchSimulation tasks to finish.
   std::atomic_bool cancellation_token(false);
@@ -59,9 +55,9 @@ simulatorproto::SimulationResult Engine::Simulate(
   // Use our threadpool to enqueue the function RunBatch, from simulate.h.
   std::vector<std::future<void>> futures;
   for (size_t i = 0; i < pool_->NumThreads(); ++i) {
-    futures.emplace_back(pool_->Enqueue(
-        simulator::RunBatch, encounter, equipment, policy, iters_per_thread,
-        std::ref(cancellation_token), &metric_tracker));
+    futures.emplace_back(
+        pool_->Enqueue(simulator::RunBatch, config, iters_per_thread,
+                       std::ref(cancellation_token), &metric_tracker));
   }
 
   // Start timing our simulation.

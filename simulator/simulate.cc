@@ -1,20 +1,18 @@
 #include <atomic>
+#include <chrono>
 #include <random>
 
-#include "simulator/core/config_processor.h"
+#include "simulator/core/config_summary.h"
 #include "simulator/core/player.h"
 #include "simulator/core/simulation_state.h"
-
 #include "simulator/util/online_statistics.h"
 #include "simulator/util/rng.h"
 #include "simulator/util/timer_wheel.h"
 
 #include "simulator/simulate.h"
 
-using simulator::core::EncounterSummary;
-using simulator::core::EquipmentSummary;
+using simulator::core::ConfigSummary;
 using simulator::core::Player;
-using simulator::core::PolicyFunctor;
 using simulator::core::SimulationState;
 
 using simulator::util::OnlineStatistics;
@@ -26,35 +24,34 @@ using std::chrono::milliseconds;
 
 namespace simulator {
 
-void RunBatch(const EncounterSummary& encounter,
-              const EquipmentSummary& equipment, const PolicyFunctor& policy,
-              const int num_iterations,
+void RunBatch(const ConfigSummary& config, const int num_iterations,
               const std::atomic_bool& cancellation_token,
               OnlineStatistics* damage_tracker) {
   int current_iteration = 0;
   while (!cancellation_token && current_iteration < num_iterations) {
-    damage_tracker->AddValue(RunSingleIteration(encounter, equipment, policy));
+    damage_tracker->AddValue(RunSingleIteration(config));
     ++current_iteration;
   }
 }
 
-double RunSingleIteration(const EncounterSummary& encounter,
-                          const EquipmentSummary& equipment,
-                          const PolicyFunctor& policy) {
+double RunSingleIteration(const ConfigSummary& config) {
   RNG rng;
   SimulationState sim_state;
   TimerWheel event_manager;
   double damage_sum = 0;
 
   // Set up encounter time parameters.
-  const double time_lb = (1 - encounter.time_variance) * encounter.time_target;
-  const double time_ub = (1 + encounter.time_variance) * encounter.time_target;
-  const milliseconds combat_time_maximum =
-      milliseconds((int) rng.UniformDouble(time_lb, time_ub));
+  const milliseconds time_lb =
+      (1 - config.GetTimeVariance()) * config.GetTimeTarget();
+  const milliseconds time_ub =
+      (1 + config.GetTimeVariance()) * config.GetTimeTarget();
+  const milliseconds combat_time_maximum = rng.Uniform(time_lb, time_ub);
 
   // Set up fixed, known-time encounter events (spawn, bloodlust, ...)
-  for (const auto& raid_event : encounter.raid_events) {
-    TimerEvent e([&sim_state]() { sim_state.combat_potion_used = true; });
+  // Load these into the event manager.
+  for (const auto& raid_event : config.GetRaidEvents()) {
+    const auto cb = raid_event.GetCallback();
+    TimerEvent<std::function<void(SimulationState*)>> e(cb);
     event_manager.Schedule(&e, raid_event.GetScheduledTime().count());
   }
 
@@ -71,5 +68,4 @@ double RunSingleIteration(const EncounterSummary& encounter,
   }
   return damage_sum;
 }
-
 }  // namespace simulator

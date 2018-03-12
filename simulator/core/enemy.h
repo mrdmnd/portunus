@@ -11,13 +11,15 @@ namespace simulator {
 namespace core {
 class Enemy : Actor {
  public:
-  Enemy(const HealthEstimator& health_estimator) :
+  Enemy(const std::string& name, const HealthEstimator& health_estimator) :
+    name_(name),
     health_estimator_(health_estimator) {
-    LOG(INFO) << "Spawning enemy.";
+    LOG(INFO) << "Spawning enemy named " << name;
   }
   ~Enemy() { LOG(INFO) << "Destroying enemy."; };
 
  private:
+  const std::string name_;
   const HealthEstimator health_estimator_;
 };
 }  // namespace core

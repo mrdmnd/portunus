@@ -1,8 +1,11 @@
 #pragma once
 
+#include <chrono>
 #include <random>
 
 #include "glog/logging.h"
+
+using std::chrono::milliseconds;
 
 namespace simulator {
 namespace util {
@@ -18,13 +21,20 @@ class RNG {
   }
 
   // Returns an integer in [min, max].
-  inline int UniformInt(int min, int max) {
+  inline int Uniform(int min, int max) {
     std::uniform_int_distribution<int> dist(min, max);
     return dist(engine_);
   }
 
+  // Returns a `milliseconds` duration in [min, max]
+  inline milliseconds Uniform(milliseconds min, milliseconds max) {
+    std::uniform_int_distribution<std::chrono::milliseconds::rep> dist(
+        min.count(), max.count());
+    return milliseconds(dist(engine_));
+  }
+
   // Returns a double in [min, max)
-  inline double UniformDouble(double min, double max) {
+  inline double Uniform(double min, double max) {
     std::uniform_real_distribution<double> dist(min, max);
     return dist(engine_);
   }

@@ -17,7 +17,7 @@ class Engine {
 
   // Simulate the input simulation configuration on all threads.
   simulatorproto::SimulationResult Simulate(
-      const simulatorproto::SimulationConfig& conf) const;
+      const simulatorproto::SimulationConfig& conf_proto) const;
 
   // Disallow {move,copy} {construction,assignment}.
   Engine(const Engine& other) = delete;
