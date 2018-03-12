@@ -6,7 +6,8 @@
 #include "simulator/util/timer_wheel.h"
 namespace simulator {
 namespace util {
-using Callback = std::function<void()>;
+
+using Callback = std::function<void(int*)>;
 
 static void BM_InsertTimers(benchmark::State& state) {
   int count = 0;
@@ -15,9 +16,11 @@ static void BM_InsertTimers(benchmark::State& state) {
   std::default_random_engine gen;
   std::uniform_int_distribution<Tick> distribution(1, kMaxSchedulingOffset);
 
+  int increment = 1;
   for (auto _ : state) {
     for (int i = 0; i < state.range(0); ++i) {
-      TimerEvent<Callback> timer([&count]() { ++count; });
+      TimerEvent<Callback, int*> timer(
+          {[&count](int* inc) { count += *inc; }, &increment});
       wheel.Schedule(&timer, distribution(gen));
     }
   }
@@ -31,9 +34,11 @@ static void BM_InsertTimersAndAdvance(benchmark::State& state) {
   std::default_random_engine gen;
   std::uniform_int_distribution<Tick> distribution(1, kMaxSchedulingOffset);
 
+  int increment = 1;
   for (auto _ : state) {
     for (int i = 0; i < state.range(0); ++i) {
-      TimerEvent<Callback> timer([&count]() { ++count; });
+      TimerEvent<Callback, int*> timer(
+          {[&count](int* inc) { count += *inc; }, &increment});
       wheel.Schedule(&timer, distribution(gen));
       wheel.Advance(wheel.TicksUntilNextEvent());
     }

@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <limits>
 
 // https://blog.acolyer.org/2015/11/23/hashed-and-hierarchical-timing-wheels/
@@ -11,7 +12,8 @@
 // https://github.com/jsnell/ratas/blob/master/src/timer-wheel.h
 //
 // It has been modified to remove the MemberTimerEvent and schedule_in_range,
-// neither of which we need.
+// neither of which we need. Additionally, we support callbacks that aren't
+// just std::function<void()>.
 //
 // The exact implementation strategy is a hierarchical timer
 // wheel. A timer wheel is effectively a ring buffer of linked lists
@@ -41,6 +43,19 @@ using Tick = uint64_t;
 
 class TimerWheelSlot;
 class TimerWheel;
+
+// A timer task is a struct holding a std::function and its argument.
+// Essentially, we construct a
+template <typename CBType, typename ArgType>
+class TimerTask {
+ public:
+  TimerTask<CBType, ArgType>(CBType callback, ArgType arg) :
+    callback(callback),
+    arg(arg){};
+
+  CBType callback;
+  ArgType arg;
+};
 
 // An abstract class representing an event that can be scheduled to
 // happen at some later time.
@@ -90,20 +105,25 @@ class TimerEventInterface {
   void Relink(TimerWheelSlot* slot);
 };
 
-template <class CBType>
+template <class CBType, class ArgType>
 class TimerEvent : public TimerEventInterface {
  public:
-  explicit TimerEvent<CBType>(const CBType& callback) : callback_(callback) {}
-  TimerEvent<CBType>(const TimerEvent<CBType>& other) = delete;
-  TimerEvent<CBType>(const TimerEvent<CBType>&& other) = delete;
-  TimerEvent<CBType>& operator=(const TimerEvent<CBType>& other) = delete;
-  TimerEvent<CBType>& operator=(const TimerEvent<CBType>&& other) = delete;
+  explicit TimerEvent<CBType, ArgType>(const TimerTask<CBType, ArgType>& task) :
+    task_(task) {}
+  TimerEvent<CBType, ArgType>(const TimerEvent<CBType, ArgType>& other) =
+      delete;
+  TimerEvent<CBType, ArgType>(const TimerEvent<CBType, ArgType>&& other) =
+      delete;
+  TimerEvent<CBType, ArgType>& operator=(
+      const TimerEvent<CBType, ArgType>& other) = delete;
+  TimerEvent<CBType, ArgType>& operator=(
+      const TimerEvent<CBType, ArgType>&& other) = delete;
 
   // Actually, you know, do the thing you're supposed to do.
-  void Execute() override { callback_(); }
+  void Execute() override { std::invoke(task_.callback, task_.arg); }
 
  private:
-  CBType callback_;
+  TimerTask<CBType, ArgType> task_;
 };
 
 // Just an implementation detail of TimerWheel to hold the linked list.

@@ -1,6 +1,5 @@
 #include <functional>
 
-#include "absl/memory/memory.h"
 #include "gtest/gtest.h"
 
 #include "simulator/util/timer_wheel.h"
@@ -8,13 +7,15 @@
 namespace simulator {
 namespace util {
 
-using Callback = std::function<void()>;
+using Callback = std::function<void(int*)>;
 
 // Test that we can insert a timer into our wheel, advance the wheel, and see
 // that the timer has Execute()'d.
 TEST(TimerWheelTest, Timer_BasicFunctionality) {
   int count = 0;
-  TimerEvent<Callback> timer([&count]() { ++count; });
+  int increment = 1;
+  TimerEvent<Callback, int*> timer(
+      {[&count](int* inc) { count += *inc; }, &increment});
   TimerWheel wheel;
 
   wheel.Schedule(&timer, 5);
@@ -28,7 +29,9 @@ TEST(TimerWheelTest, Timer_BasicFunctionality) {
 // wheel, and then see that the timer has not Execute()'d.
 TEST(TimerWheelTest, Timer_Cancel) {
   int count = 0;
-  TimerEvent<Callback> timer([&count]() { ++count; });
+  int increment = 1;
+  TimerEvent<Callback, int*> timer(
+      {[&count](int* inc) { count += *inc; }, &increment});
   TimerWheel wheel;
 
   wheel.Schedule(&timer, 5);
@@ -43,7 +46,9 @@ TEST(TimerWheelTest, Timer_Cancel) {
 // non-null slot to live in.
 TEST(TimerWheelTest, Timer_Active) {
   int count = 0;
-  TimerEvent<Callback> timer([&count]() { ++count; });
+  int increment = 1;
+  TimerEvent<Callback, int*> timer(
+      {[&count](int* inc) { count += *inc; }, &increment});
   TimerWheel wheel;
 
   wheel.Schedule(&timer, 5);
@@ -54,7 +59,9 @@ TEST(TimerWheelTest, Timer_Active) {
 // that the event is scheduled to execute on.
 TEST(TimerWheelTest, Timer_ScheduledAt) {
   int count = 0;
-  TimerEvent<Callback> timer([&count]() { ++count; });
+  int increment = 1;
+  TimerEvent<Callback, int*> timer(
+      {[&count](int* inc) { count += *inc; }, &increment});
   TimerWheel wheel;
 
   wheel.Schedule(&timer, 5);
@@ -64,7 +71,9 @@ TEST(TimerWheelTest, Timer_ScheduledAt) {
 // Test that we can appropriate reschedule an event.
 TEST(TimerWheelTest, Timer_Reschedule) {
   int count = 0;
-  TimerEvent<Callback> timer([&count]() { ++count; });
+  int increment = 1;
+  TimerEvent<Callback, int*> timer(
+      {[&count](int* inc) { count += *inc; }, &increment});
   TimerWheel wheel;
 
   wheel.Schedule(&timer, 5);
@@ -85,13 +94,15 @@ TEST(TimerWheelTest, TimerWheel_AdvanceBounded) {
   constexpr int kNumTimers = 1000;
   constexpr int kMaxExecute = 10;
   int count = 0;
+  int increment = 1;
   TimerWheel wheel;
 
-  std::vector<std::unique_ptr<TimerEvent<Callback>>> timers;
-  Callback c([&count]() { ++count; });
+  std::vector<std::unique_ptr<TimerEvent<Callback, int*>>> timers;
+  Callback c([&count](int* inc) { count += *inc; });
 
   for (int i = 0; i < kNumTimers; ++i) {
-    timers.emplace_back(absl::make_unique<TimerEvent<Callback>>(c));
+    timers.emplace_back(
+        std::make_unique<TimerEvent<Callback, int*>>(TimerTask{c, &increment}));
   }
   for (int i = 0; i < kNumTimers; ++i) {
     wheel.Schedule(timers[i].get(), 5);
@@ -105,7 +116,9 @@ TEST(TimerWheelTest, TimerWheel_AdvanceBounded) {
 // scheduled event occurs.
 TEST(TimerWheelTest, TimerWheel_TicksUntilNextEventBasic) {
   int count = 0;
-  TimerEvent<Callback> timer([&count]() { ++count; });
+  int increment = 1;
+  TimerEvent<Callback, int*> timer(
+      {[&count](int* inc) { count += *inc; }, &increment});
   TimerWheel wheel;
 
   wheel.Schedule(&timer, 5);
@@ -123,7 +136,9 @@ TEST(TimerWheelTest, TimerWheel_TicksUntilNextEventBasic) {
 // Run the tests from the original github page.
 TEST(TimerWheelTest, TestNonHierarchicalFromOriginalGithub) {
   int count = 0;
-  TimerEvent<Callback> timer([&count]() { ++count; });
+  int increment = 1;
+  TimerEvent<Callback, int*> timer(
+      {[&count](int* inc) { count += *inc; }, &increment});
   TimerWheel wheel;
 
   // Unscheduled timer does nothing.
@@ -178,7 +193,8 @@ TEST(TimerWheelTest, TestNonHierarchicalFromOriginalGithub) {
   EXPECT_EQ(count, 4);
 
   {
-    TimerEvent<Callback> timer2([&count]() { ++count; });
+    TimerEvent<Callback, int*> timer2(
+        {[&count](int* inc) { count += *inc; }, &increment});
     wheel.Schedule(&timer2, 5);
   }
 
