@@ -22,14 +22,14 @@ class ConfigSummary {
   ConfigSummary& operator=(const ConfigSummary& other) = default;
   ConfigSummary& operator=(ConfigSummary&& other) = default;
 
-  inline milliseconds GetTimeTarget() const { return time_target_; }
-  inline int GetTimeVariance() const { return time_variance_; }
+  inline milliseconds GetTimeMin() const { return time_min_; }
+  inline milliseconds GetTimeMax() const { return time_max_; }
   inline std::vector<Event> GetRaidEvents() const { return raid_events_; };
 
  private:
   // Encounter members
-  const milliseconds time_target_;
-  const double time_variance_;
+  const milliseconds time_min_;
+  const milliseconds time_max_;
   const std::vector<Event> raid_events_;
 
   // Player members

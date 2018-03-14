@@ -87,13 +87,11 @@ message EncounterConfig {
   // Something descriptive and human readable, like "Patchwork"
   string name = 1;
 
-  // We attack for time_target +/- time_variance.
-  // Reasonable default: 5 minutes, or 300s (300,000 ms)
-  int32 time_target = 2;
+  // Each fight lasts between min_tim_millis and max_time_millis, selected
+  // uniformly at random.
+  int32 min_time_millis = 2;
 
-  // We want combat to run about as long as the encounter says, but not exactly.
-  // Reasonable default: 0.10, or 10%.
-  double time_variance = 3;
+  int32 max_time_millis = 3;
 
   // A sorted sequence of encounter events.
   repeated EncounterEvent events = 4;

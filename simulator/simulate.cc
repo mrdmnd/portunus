@@ -42,11 +42,9 @@ double RunSingleIteration(const ConfigSummary& config) {
   double damage_sum = 0;
 
   // Set up encounter time parameters.
-  const milliseconds time_lb =
-      (1 - config.GetTimeVariance()) * config.GetTimeTarget();
-  const milliseconds time_ub =
-      (1 + config.GetTimeVariance()) * config.GetTimeTarget();
-  const milliseconds combat_time_maximum = rng.Uniform(time_lb, time_ub);
+  const milliseconds time_lb = config.GetTimeMin();
+  const milliseconds time_ub = config.GetTimeMax();
+  const milliseconds combat_end_timestamp = rng.Uniform(time_lb, time_ub);
 
   // Set up fixed, known-time encounter events (spawn, bloodlust, ...)
   // Load these into the event manager.
@@ -68,7 +66,7 @@ double RunSingleIteration(const ConfigSummary& config) {
   sim_state.combat_potion_used = false;
 
   /*
-  while (sim_state.combat_time_elapsed < combat_time_maximum) {
+  while (sim_state.combat_time_elapsed < combat_end_timestamp) {
     const auto ticks = event_manager.TicksUntilNextEvent();
     sim_state.combat_time_elapsed += milliseconds(ticks);
     event_manager.Advance(ticks);

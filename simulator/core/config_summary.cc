@@ -83,8 +83,8 @@ std::vector<Event> BuildRaidEvents(const EncounterConfig& encounter_proto) {
 
 // Constructor - this does a lot of work!
 ConfigSummary::ConfigSummary(const SimulationConfig& sim_proto) :
-  time_target_(sim_proto.encounter_config().time_target()),
-  time_variance_(sim_proto.encounter_config().time_variance()),
+  time_min_(sim_proto.encounter_config().min_time_millis()),
+  time_max_(sim_proto.encounter_config().max_time_millis()),
   raid_events_(BuildRaidEvents(sim_proto.encounter_config())) {
   LOG(INFO) << "Constructing config summary.";
 }
