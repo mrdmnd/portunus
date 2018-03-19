@@ -1,6 +1,5 @@
 #pragma once
 
-#include <chrono>
 #include <memory>
 #include <vector>
 
@@ -17,12 +16,9 @@
 namespace simulator {
 namespace core {
 
-using std::chrono::milliseconds;
-
 class SimulationState {
  public:
   bool combat_potion_used;
-  milliseconds combat_time_elapsed;
   std::unique_ptr<Player> player;
   std::vector<std::unique_ptr<Enemy>> enemies;
 };

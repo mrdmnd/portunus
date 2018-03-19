@@ -1,4 +1,5 @@
 #pragma once
+#include <chrono>
 
 #include "simulator/core/constants.h"
 
@@ -10,85 +11,67 @@ namespace core {
 // percentages. The CharacterStats class represents the stats given
 
 struct StatRatings {
-  simulator::core::enums::Attribute::STRENGTH s;
-  AgilityRating agility;
-  IntelligenceRating intelligence;
-  StaminaRating stamina;
-  CritRating crit;
-  MasteryRating mastery;
-  VersatilityRating versatility;
-  HasteRating haste;
-  AttackPowerRating attack_power;
-  SpellPowerRating spell_power;
-}
+  int strength;
+  int agility;
+  int intelligence;
+  int stamina;
+  int crit;
+  int mastery;
+  int versatility;
+  int haste;
+  int attack_power;
+  int spell_power;
+};
 
 struct WeaponRatings {
-  WeaponSpeed speed;
-  WeaponDamageMin min_damage;
-  WeaponDamageMax max_damage;
-}
+  std::chrono::milliseconds speed;
+  int min_damage;
+  int max_damage;
+};
 
 // This class is responsible for holding *current* combat stats for a player.
-// We may (at some point) want to implement a caching mechanism here, so field
-// access is hidden behind const accessor methods.
-
-class Stats {
+class CombatStats {
  public:
-  CharacterStats() = delete;
-  explicit CharacterStats(CombatRatings ratings, WeaponRatings main_hand,
-                          Weapon off_hand)
+  CombatStats() = delete;
+  explicit CombatStats(StatRatings stats, WeaponRatings main_hand,
+                       WeaponRatings off_hand);
 
-      // Enable move + copy constructors and assignments.
-      CharacterStats(const CharacterStats& other) = default;
-  CharacterStats(CharacterStats&& other) = default;
-  CharacterStats& operator=(const CharacterStats& other) = default;
-  CharacterStats& operator=(CharacterStats&& other) = default;
+  // Enable move + copy constructors and assignments.
+  CombatStats(const CombatStats& other) = default;
+  CombatStats(CombatStats&& other) = default;
+  CombatStats& operator=(const CombatStats& other) = default;
+  CombatStats& operator=(CombatStats&& other) = default;
 
-  // Accessors
-  template <typename T>
-  inline int CombatStatRating<T>() const {
-    return 0;
-  }
+  inline int Strength() const { return stats_.strength; }
+  inline int Agility() const { return stats_.agility; }
+  inline int Intelligence() const { return stats_.intelligence; }
+  inline int Stamina() const { return stats_.stamina; }
+  inline int CritRating() const { return stats_.crit; }
+  inline int MasteryRating() const { return stats_.mastery; }
+  inline int VersatilityRating() const { return stats_.versatility; }
+  inline int HasteRating() const { return stats_.haste; }
+  inline int AttackPower() const { return stats_.attack_power; }
+  inline int SpellPower() const { return stats_.spell_power; }
 
-  inline int StrengthRating() const { return strength_rating_; }
-  inline int AgilityRating() const { return agility_rating_; }
-  inline int IntelligenceRating() const { return intelligence_rating_; }
-  inline int StaminaRating() const { return stamina_rating_; }
-  inline int CritRating() const { return crit_rating_; }
   inline double CritPercent() const {
-    return crit_rating_ / kCritRatingPerPercent;
+    return CritRating() / simulator::core::constants::kCritRatingPerPercent;
   }
-  inline int MasteryRating() const { return mastery_rating_; }
   inline double MasteryPercent() const {
-    return mastery_rating_ / kMasteryRatingPerPercent;
+    return MasteryRating() /
+           simulator::core::constants::kMasteryRatingPerPercent;
   }
-  inline int VersatilityRating() const { return versatility_rating_; }
   inline double VersatilityPercent() const {
-    return versatility_rating_ / kVersatilityRatingPerPercent;
+    return VersatilityRating() /
+           simulator::core::constants::kVersatilityRatingPerPercent;
   }
-  inline int HasteRating() const { return haste_rating_; }
   inline double HastePercent() const {
-    return haste_rating_ / kHasteRatingPerPercent;
+    return HasteRating() / simulator::core::constants::kHasteRatingPerPercent;
   }
 
  private:
-  int strength_rating_;
-  int agility_rating_;
-  int intelligence_rating_;
-  int stamina_rating_;
-  int crit_rating_;
-  int mastery_rating_;
-  int versatility_rating_;
-  int haste_rating_;
-  int attack_power_;
-  int spell_power_;
-  double mainhand_speed_;
-  int mainhand_damage_min_;
-  int mainhand_damage_max_;
-  double offhand_speed_;
-  int offhand_damage_min_;
-  int offhand_damage_max_;
-};  // namespace core
-
+  StatRatings stats_;
+  WeaponRatings main_hand_;
+  WeaponRatings off_hand_;
+};
 }  // namespace core
 }  // namespace simulator

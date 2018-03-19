@@ -1,6 +1,7 @@
 #pragma once
 
 #include "simulator/core/actor.h"
+#include "simulator/core/combat_stats.h"
 #include "simulator/core/constants.h"
 #include "simulator/core/cooldown.h"
 #include "simulator/core/enemy.h"
@@ -29,18 +30,19 @@ class Player : Actor {
  public:
  private:
   // Players have character stats, but actors do not.
-  // CharacterStats character_stats_;
+  CombatStats stats_;
 
   // Players have cooldown status
-  // std::vector<Cooldown> cooldowns_;
+  std::vector<Cooldown> cooldowns_;
 
   // Players have a special global cooldown.
-  // Cooldown gcd_;
+  Cooldown gcd_;
 
   // Players have resource (power) - energy, mana, focus, fury, rage, runes,
   // maelstrom, astral power, etc. The idea is to pick `power` as a type with
   // ~continuous behavior, hence why runes are here and runic power is below.
-  // The actual *type* of the resource is static, defined in the class module.
+  // The actual *type* of the resource is static, defined in the class module
+  // as an enum value.
   // int power_ = 0;
 
   // Some players may have "alternate power" (mana, chi, combo_points,
@@ -51,9 +53,6 @@ class Player : Actor {
 
   // Players also have talents, but because those are fixed throughout
   // simulation, we don't persist them here.
-
-  // Players can see all available targets to hit at all time.
-  // const std::vector<Enemy*> available_enemies_;
 };
 }  // namespace core
 }  // namespace simulator
