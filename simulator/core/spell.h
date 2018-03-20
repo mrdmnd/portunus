@@ -1,35 +1,48 @@
 #pragma once
 
-namespace simulator {
-namespace core {
-// This classs provides a means for defining player spells.
-// A spell has a static component describing properties of "all such" spells,
-// and a non-static component describing properties pertinent to this
-// instantiation of the spell.
+#include <chrono>
+#include "absl/types/optional.h"
 
-// This is the static data component of a spell.
-class SpellData {
-  // See fields in
-  // https://github.com/simulationcraft/simc/blob/f5f1a6d36bcf58c0a41bbd1e6405b473e77cb26b/engine/dbc/dbc.hpp#L807
-};
+#include "simulator/core/constants.h"
+#include "simulator/core/effects.h"
+#include "simulator/core/triggers.h"
 
-// This is the instantiation data.
-class SpellInstance {
+// An *SPELL* causes one or more *EFFECTS* (see effect.h).
+// Effects cause "pure mutations" on simulation state.
+// A single SPELL may have multiple effects.
+// SPELLs may have TRIGGERSs that automatically cause them to fire
+// (e.g. Second Shuriken, which fires 30% of the time Shuriken Storm goes off)
+//
+class Spell {
  public:
-  virtual bool Execute() const = 0;
-  explicit SpellInstance(const SpellData& data, const Actor* source,
-                         const Actor* target) :
-    data_(data),
-    source_(source),
-    target_(target){};
+  std::chrono::milliseconds cooldown;
+  simulator::core::enums::SpellSchool school;
 
- protected:
-  // The spell data.
-  const SpellData data_;
+  absl::optional<std::chrono::milliseconds> cast_time;
+  absl::optional<std::chrono::milliseconds> channel_time;
+  absl::optional<std::chrono::milliseconds> gcd_override;
 
-  // Instances of spells have source actors and target actors.
-  const Actor* source_;
-  const Actor* target_;
+  int power_cost;
+  int alternate_power_cost;
+
+  // Engine parameters
+  bool active;
+  bool usable_while_casting;   // Think "fire blast" - rare.
+  bool triggers_gcd;           // Fairly straight-forward for on-GCD.
+  bool castable_while_moving;  // Can you cast this on-the-move?
+
+  // Dependencies
+  absl::optional<Spell> talent_dependency;
+  absl::optional<Item> item_dependency;
+
+  // Behavior implementation
+  // If spell triggers are specified, all Effects registered to this spell that
+  // do not have their own triggers will execute when this spell executes. If
+  // this is an Active spell, things that proc on CastSuccess and CastComplete
+  // of this spell will also aexecte, as if this spell had been directly cast
+  // (it is basically "cast" by the trigger resolving).
+  std::vector<Trigger> triggers;
+
+  // List of effects to execute when the Spell resolves.
+  std::vector<Effect> effects;
 };
-}  // namespace core
-}  // namespace simulator

@@ -12,7 +12,7 @@ using std::chrono::milliseconds;
 namespace simulator {
 namespace core {
 
-// A RaidEvent contains a callback and a scheduled time to fire that callback.
+// An Event contains a callback and a scheduled time to fire that callback.
 // Our callbacks get a pointer to simulation state, and can modify it however
 // they want.
 class Event {

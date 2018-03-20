@@ -29,6 +29,10 @@ struct WeaponRatings {
   int max_damage;
 };
 
+struct Modifiers {
+  double damage_multiplier;
+};
+
 // This class is responsible for holding *current* combat stats for a player.
 class CombatStats {
  public:

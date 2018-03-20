@@ -42,6 +42,7 @@ cc_library(
     hdrs = glob(["core/*.h"]),
     deps = [
         "//proto:cc_lib",
+        "@com_google_absl//absl/types",
         "@com_google_glog//:glog",
     ],
 )
