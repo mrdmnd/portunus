@@ -37,8 +37,8 @@ struct Modifiers {
 class CombatStats {
  public:
   CombatStats() = delete;
-  explicit CombatStats(StatRatings stats, WeaponRatings main_hand,
-                       WeaponRatings off_hand);
+  explicit CombatStats(const StatRatings stats, const WeaponRatings main_hand,
+                       const WeaponRatings off_hand, const Modifiers modifiers);
 
   // Enable move + copy constructors and assignments.
   CombatStats(const CombatStats& other) = default;

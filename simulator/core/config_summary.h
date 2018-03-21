@@ -1,4 +1,5 @@
 #pragma once
+#include <chrono>
 
 #include "simulator/core/event.h"
 
@@ -11,7 +12,7 @@ namespace simulator {
 namespace core {
 
 // This class is intended to hold "single encounter" configuration details.
-// Specifically, we hold raid events, player config, and a policy summary.
+// Specifically, we hold raid events, a player config, and a policy.
 class ConfigSummary {
  public:
   ConfigSummary() = delete;
@@ -22,19 +23,29 @@ class ConfigSummary {
   ConfigSummary& operator=(const ConfigSummary& other) = default;
   ConfigSummary& operator=(ConfigSummary&& other) = default;
 
-  inline milliseconds GetTimeMin() const { return time_min_; }
-  inline milliseconds GetTimeMax() const { return time_max_; }
-  inline std::vector<Event> GetRaidEvents() const { return raid_events_; };
+  inline std::chrono::milliseconds GetTimeMin() const { return time_min_; }
+  inline std::chrono::milliseconds GetTimeMax() const { return time_max_; }
+  inline std::vector<Event> GetRaidEvents() const { return raid_events_; }
+
+  inline CombatStats GetGearStats() const { return gear_stats_; }
+  inline std::vector<Spell> GetGearEffects() const { return gear_effects_; }
+  inline std::vector<Talent> GetTalents() const { return talents_; }
+
+  inline PolicyInterface GetPolicy() const { return policy_; }
 
  private:
   // Encounter members
-  const milliseconds time_min_;
-  const milliseconds time_max_;
+  const std::chrono::milliseconds time_min_;
+  const std::chrono::milliseconds time_max_;
   const std::vector<Event> raid_events_;
 
   // Player members
+  const CombatStats gear_stats_;
+  const std::vector<Spell> gear_effects_;
+  const std::vector<Talent> talents_;
 
   // Policy members
+  const PolicyInterface policy_;
 };
 }  // namespace core
 }  // namespace simulator

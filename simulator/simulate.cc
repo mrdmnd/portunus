@@ -41,7 +41,8 @@ double RunSingleIteration(const ConfigSummary& config) {
   TimerWheel event_manager;
   double damage_sum = 0;
 
-  // Set up encounter time parameters.
+  // Set up encounter constant parameters
+  const PolicyInterface policy = config.GetPolicy();
   const milliseconds time_lb = config.GetTimeMin();
   const milliseconds time_ub = config.GetTimeMax();
   const milliseconds combat_end_timestamp = rng.Uniform(time_lb, time_ub);
@@ -65,15 +66,10 @@ double RunSingleIteration(const ConfigSummary& config) {
   sim_state.combat_time_elapsed = std::chrono::milliseconds::zero();
   sim_state.combat_potion_used = false;
 
-  /*
   while (sim_state.combat_time_elapsed < combat_end_timestamp) {
-    const auto ticks = event_manager.TicksUntilNextEvent();
-    sim_state.combat_time_elapsed += milliseconds(ticks);
-    event_manager.Advance(ticks);
-
-    // Player makes an action choice somewhere in here.
-    // Simulation automatically schedules new bits and pieces here
-  }*/
+    event_manager.Advance(event_manager.TicksUntilNextEvent());
+    const Action action = policy.Evaluate(sim_state);
+  }
   return damage_sum;
 }
 }  // namespace simulator
