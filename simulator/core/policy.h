@@ -1,5 +1,8 @@
 #pragma once
 
+#include "simulator/core/simulation_state.h"
+#include "simulator/core/spell.h"
+
 namespace simulator {
 namespace core {
 
@@ -11,19 +14,27 @@ namespace core {
 // actions. The policy selects the action with the highest probability that is
 // not illegal to perform in this simulation state.
 class PolicyInterface {
-  // I'm not sure exactly what type I need to initialize a policy yet. TBD.
+ public:
   PolicyInterface() = default;
-  explicit PolicyInterface(const int placeholder);
-
-  // Disable move + copy constructors and assignments.
-  PolicyInterface(const PolicyInterface& other) = delete;
-  PolicyInterface(PolicyInterface&& other) = delete;
-  PolicyInterface& operator=(const PolicyInterface& other) = delete;
-  PolicyInterface& operator=(PolicyInterface&& other) = delete;
+  virtual ~PolicyInterface() = default;
 
   // Policies have a way to evaluate a simulation state and generate an action.
-  virtual Action Evaluate(const SimulationState& state) const = 0;
+  virtual Spell Evaluate(const SimulationState& state) const = 0;
 };
 
+class DeterministicPolicy : public PolicyInterface {
+ public:
+  DeterministicPolicy(const int placeholder) : placeholder_(placeholder) {}
+  virtual ~DeterministicPolicy() = default;
+
+  Spell Evaluate(const SimulationState& state) const override {
+    Spell s;
+    s.cooldown = std::chrono::milliseconds(placeholder_);
+    return s;
+  }
+
+ private:
+  const int placeholder_;
+};
 }  // namespace core
 }  // namespace simulator

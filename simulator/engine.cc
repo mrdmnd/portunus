@@ -6,7 +6,6 @@
 #include <string>
 #include <thread>
 
-#include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
 #include "glog/logging.h"
 
@@ -14,7 +13,6 @@
 #include "simulator/engine.h"
 #include "simulator/simulate.h"
 #include "simulator/util/online_statistics.h"
-#include "simulator/util/threadpool.h"
 
 #include "proto/simulation.pb.h"
 
@@ -24,9 +22,8 @@ using simulator::util::ThreadPool;
 
 namespace simulator {
 
-Engine::Engine(const int num_threads) {
-  LOG(INFO) << "Initialized Engine with " << num_threads << " threads.";
-  pool_ = absl::make_unique<ThreadPool>(num_threads);
+Engine::Engine(const int num_threads) : num_threads_(num_threads) {
+  LOG(INFO) << "Initializing Engine with " << num_threads << " threads.";
 }
 
 // This main method spins until statistics tracker says we're done.
@@ -40,7 +37,8 @@ simulatorproto::SimulationResult Engine::Simulate(
   if (debug) {
     LOG(INFO) << "Debug simulation requested. Single iteration, single thread.";
     const ConfigSummary config(config_proto);
-    double dps = simulator::RunSingleIteration(config);
+    SimulationThread thread(config);
+    double dps = thread.RunSingleIteration();
     simulatorproto::Distribution dps_distribution;
     dps_distribution.set_n(1);
     dps_distribution.set_mean(dps);
@@ -55,37 +53,46 @@ simulatorproto::SimulationResult Engine::Simulate(
   const int kMinIterations = config_proto.min_iterations();
   const int kMaxIterations = config_proto.max_iterations();
   const double kTargetError = config_proto.target_error();
+
   // Parse configuration file into a configuration summary.
-  // We pass this into the RunBatch function, which passes to single iterations.
   const ConfigSummary config(config_proto);
 
-  // Setting `cancellation_token = true` forces BatchSimulation tasks to finish.
-  std::atomic_bool cancellation_token(false);
+  // Setting `cancel` to true forces tasks to finish; we use to early terminate.
+  std::atomic_bool cancel(false);
 
   // Keep track of simulation-wide damage statistics here.
-  OnlineStatistics metric_tracker;
+  OnlineStatistics metrics;
 
   // Compute iterations per thread. Ensure we actually do enough work to finish.
-  const int iters_per_thread = (kMaxIterations / pool_->NumThreads()) + 1;
+  const int iters = (kMaxIterations / num_threads_) + 1;
 
-  // Use our threadpool to enqueue the function RunBatch, from simulate.h.
+  // While the global cancel flag isn't set yet, run a `num_threads` async tasks
+  // worth of work, each attempting to do `iters` simulation episodes.
+  // clang-format off
   std::vector<std::future<void>> futures;
-  for (size_t i = 0; i < pool_->NumThreads(); ++i) {
+  for (size_t i = 0; i < num_threads_; ++i) {
     futures.emplace_back(
-        pool_->Enqueue(simulator::RunBatch, config, iters_per_thread,
-                       std::ref(cancellation_token), &metric_tracker));
+      std::async(std::launch::async, [iters, &config, &cancel, &metrics]() {
+        for (int i = 0; i < iters; ++i) {
+          if (cancel) break;
+          const double dps = SimulationThread(config).RunSingleIteration();
+          metrics.AddValue(dps);
+        }
+      })
+    );
   }
+  // clang-format on
 
   // Start timing our simulation.
   auto start = std::chrono::high_resolution_clock::now();
 
   // Computations are now running. Handle termination conditions here.
-  while (metric_tracker.Count() < kMaxIterations) {
-    if (metric_tracker.Count() > kMinIterations &&
-        metric_tracker.NormalizedError() < kTargetError) {
+  while (metrics.Count() < kMaxIterations) {
+    if (metrics.Count() > kMinIterations &&
+        metrics.NormalizedError() < kTargetError) {
       LOG(INFO) << "Breaking early: target error hit.";
-      LOG(INFO) << "Normalized error: " << metric_tracker.NormalizedError();
-      cancellation_token = true;
+      LOG(INFO) << "Normalized error: " << metrics.NormalizedError();
+      cancel = true;
       break;
     }
   }
@@ -100,14 +107,14 @@ simulatorproto::SimulationResult Engine::Simulate(
 
   // Get some metadata on throughput / timing / whatever.
   auto t = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-  auto tput = static_cast<double>(metric_tracker.Count()) / t.count();
+  auto tput = static_cast<double>(metrics.Count()) / t.count();
   std::string metadata_string(absl::StrCat("Throughput: ", tput, " iters/us"));
 
   // Report the final result.
   simulatorproto::Distribution dps_distribution;
-  dps_distribution.set_n(metric_tracker.Count());
-  dps_distribution.set_mean(metric_tracker.Mean());
-  dps_distribution.set_stddev(std::sqrt(metric_tracker.Variance()));
+  dps_distribution.set_n(metrics.Count());
+  dps_distribution.set_mean(metrics.Mean());
+  dps_distribution.set_stddev(std::sqrt(metrics.Variance()));
   simulatorproto::SimulationResult r;
   r.mutable_dps_distribution()->MergeFrom(dps_distribution);
   r.set_metadata(metadata_string);

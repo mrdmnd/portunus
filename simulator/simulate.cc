@@ -3,7 +3,9 @@
 #include <random>
 
 #include "simulator/core/config_summary.h"
+#include "simulator/core/event.h"
 #include "simulator/core/player.h"
+#include "simulator/core/policy.h"
 #include "simulator/core/simulation_state.h"
 #include "simulator/util/online_statistics.h"
 #include "simulator/util/rng.h"
@@ -17,59 +19,81 @@ using simulator::core::SimulationState;
 using simulator::core::enums::EventTag;
 
 using simulator::util::OnlineStatistics;
-using simulator::util::RNG;
+using simulator::util::RngEngine;
 using simulator::util::TimerEvent;
 using simulator::util::TimerWheel;
 
 using std::chrono::milliseconds;
 
 namespace simulator {
-
-void RunBatch(const ConfigSummary& config, const int num_iterations,
-              const std::atomic_bool& cancellation_token,
-              OnlineStatistics* damage_tracker) {
-  int current_iteration = 0;
-  while (!cancellation_token && current_iteration < num_iterations) {
-    damage_tracker->AddValue(RunSingleIteration(config));
-    ++current_iteration;
-  }
+void SimulationThread::InitPlayer(const core::CombatStats& gear_stats,
+                                  const std::vector<core::Spell>& gear_effects,
+                                  const std::vector<core::Talent>& talents) {
+  // Construct a player, and put them into the simulation state.
+  state_.player = std::make_unique<Player>(gear_stats, gear_effects, talents);
 }
 
-double RunSingleIteration(const ConfigSummary& config) {
-  RNG rng;
-  SimulationState sim_state;
-  TimerWheel event_manager;
-  double damage_sum = 0;
-
-  // Set up encounter constant parameters
-  const PolicyInterface policy = config.GetPolicy();
-  const milliseconds time_lb = config.GetTimeMin();
-  const milliseconds time_ub = config.GetTimeMax();
-  const milliseconds combat_end_timestamp = rng.Uniform(time_lb, time_ub);
-
-  // Set up fixed, known-time encounter events (spawn, bloodlust, ...)
-  // Load these into the event manager.
-  for (const auto& raid_event : config.GetRaidEvents()) {
+// Load fixed, known-time encounter events (spawn, bloodlust, ...) into manager.
+void SimulationThread::FillRaidEvents(
+    const std::vector<core::Event>& raid_events) {
+  for (const auto& raid_event : raid_events) {
     // Immediately execute any spawn events, or events with scheduled_time == 0
     // Don't bother scheduling them, just fire them off directly.
     if (raid_event.GetTag() == EventTag::ENEMY_SPAWN ||
         raid_event.GetScheduledTime() == std::chrono::milliseconds::zero()) {
-      raid_event.GetCallback()(&sim_state);
+      raid_event.GetCallback()(&state_);
     } else {
       const auto cb = raid_event.GetCallback();
       TimerEvent<std::function<void(SimulationState*)>, SimulationState*> e(
-          {cb, &sim_state});
-      event_manager.Schedule(&e, raid_event.GetScheduledTime().count());
+          {cb, &state_});
+      event_manager_.Schedule(&e, raid_event.GetScheduledTime().count());
     }
   }
+}
 
-  sim_state.combat_time_elapsed = std::chrono::milliseconds::zero();
-  sim_state.combat_potion_used = false;
+SimulationThread::SimulationThread(const ConfigSummary& config) :
+  policy_(config.GetPolicy()) {
+  // The policy_, combat_length_, rng_, state_, event_manager_, and damage_log_
+  // members be initialized in this constructor. We take care of policy_ through
+  // the initializer list. rng_, state_, event_manager_, and damage_log_ are all
+  // default-constructible, so we rely on that. To seed combat_length, we take
+  // a duration uniformly at random between configuration bounds.
+  //
+  // Next, we must set up the player object from the parsed configuration.
+  //
+  // Once the player is in place (and safely owned by the state_ member), we can
+  // take on the task of scheduling "absolute" raid events into the manager.
+  // These absolute events include things like the main target spawn.
+  // Finally, we
+  combat_length_ = rng_.Uniform(config.GetTimeMin(), config.GetTimeMax());
 
-  while (sim_state.combat_time_elapsed < combat_end_timestamp) {
-    event_manager.Advance(event_manager.TicksUntilNextEvent());
-    const Action action = policy.Evaluate(sim_state);
+  // Initialize player object, store in sim state.
+  InitPlayer(config.GetGearStats(), config.GetGearEffects(),
+             config.GetTalents());
+
+  // An "encounter" is actually a pre-combat phase followed by a combat phase.
+  // The very first event in the "precombat" phase should be a boss spawn event.
+  // Then we allow a single harmful pre-combat action. When that action impacts,
+  // we mark the beginning of the "combat" phase.
+
+  // Set up all raid events (enemy spawns, pre-combat phase, etc).
+  FillRaidEvents(config.GetRaidEvents());
+}
+
+// This is our core event loop.
+double SimulationThread::RunSingleIteration() {
+  while (event_manager_.Now() < combat_length_.count()) {
+    // While the simulation isn't done, advance until the next event is ready.
+    // We process all events on that tick. These events may themselves add more
+    // events to the manager (through the process of resolving triggers, etc).
+    event_manager_.Advance(event_manager_.TicksUntilNextEvent());
+
+    // Use our policy to identify the best legal action for this state.
+    const core::Spell action = policy_->Evaluate(state_);
+
+    // Schedule this action using the event manager.
+    // ProcessAction(action, state_);
   }
-  return damage_sum;
+  return damage_log_.DamagePerSecond();
 }
 }  // namespace simulator

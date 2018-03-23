@@ -2,6 +2,9 @@
 #include <chrono>
 
 #include "simulator/core/event.h"
+#include "simulator/core/policy.h"
+#include "simulator/core/spell.h"
+#include "simulator/core/talent.h"
 
 #include "proto/encounter_config.pb.h"
 #include "proto/player_config.pb.h"
@@ -31,7 +34,9 @@ class ConfigSummary {
   inline std::vector<Spell> GetGearEffects() const { return gear_effects_; }
   inline std::vector<Talent> GetTalents() const { return talents_; }
 
-  inline PolicyInterface GetPolicy() const { return policy_; }
+  // The ConfigSummary object owns the PolicyInterface uniqueptr.
+  // Callers get a view into the config's policy.
+  inline PolicyInterface* GetPolicy() const { return policy_.get(); }
 
  private:
   // Encounter members
@@ -45,7 +50,7 @@ class ConfigSummary {
   const std::vector<Talent> talents_;
 
   // Policy members
-  const PolicyInterface policy_;
+  std::unique_ptr<PolicyInterface> policy_;
 };
 }  // namespace core
 }  // namespace simulator

@@ -5,9 +5,6 @@
 #include "proto/simulation.pb.h"
 
 namespace simulator {
-// The `Engine` class is meant to be long-live, executing lots of simulations
-// one-after-the-other. It keeps a long-lived thread pool alive to mitigate the
-// overhead of launching new threads each time we want to do work.
 class Engine {
  public:
   Engine() = delete;
@@ -25,6 +22,6 @@ class Engine {
   Engine& operator=(const Engine&& other) = delete;
 
  private:
-  std::unique_ptr<simulator::util::ThreadPool> pool_;
+  const int num_threads_;
 };
 }  // namespace simulator

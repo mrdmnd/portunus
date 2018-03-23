@@ -5,6 +5,8 @@
 #include "simulator/core/constants.h"
 #include "simulator/core/cooldown.h"
 #include "simulator/core/enemy.h"
+#include "simulator/core/spell.h"
+#include "simulator/core/talent.h"
 
 namespace simulator {
 namespace core {
@@ -28,15 +30,33 @@ namespace core {
 
 class Player : Actor {
  public:
+  Player(const CombatStats& gear_stats, const std::vector<Spell>& gear_effects,
+         const std::vector<Talent>& talents) :
+    stats_(gear_stats),
+    gear_effects_(gear_effects),
+    talents_(talents),
+    gcd_(std::chrono::milliseconds(1500)),
+    combat_potion_usable_(true){};
+
  private:
   // Players have character stats, but actors do not.
   CombatStats stats_;
 
+  std::vector<Spell> gear_effects_;
+
   // Players have cooldown status
   std::vector<Cooldown> cooldowns_;
 
+  // Players have talents, which are actually just `const`.
+  const std::vector<Talent> talents_;
+
   // Players have a special global cooldown.
   Cooldown gcd_;
+
+  // Players have an in-combat potion lockout. Assuming a combat potion used at
+  // the beginning of simulation (precombat), there is a
+
+  bool combat_potion_usable_;
 
   // Players have resource (power) - energy, mana, focus, fury, rage, runes,
   // maelstrom, astral power, etc. The idea is to pick `power` as a type with
@@ -50,9 +70,6 @@ class Player : Actor {
   // here because some classes have mana as a resource but don't spend it as
   // their primary (spriests, warlocks, non-arcane mages, balance druids)
   // int alternate_power_ = 0;
-
-  // Players also have talents, but because those are fixed throughout
-  // simulation, we don't persist them here.
 };
 }  // namespace core
 }  // namespace simulator

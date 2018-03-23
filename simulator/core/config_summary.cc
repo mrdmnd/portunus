@@ -1,4 +1,5 @@
 #include "simulator/core/config_summary.h"
+#include "simulator/core/combat_stats.h"
 #include "simulator/core/constants.h"
 #include "simulator/core/event.h"
 
@@ -9,13 +10,9 @@ using std::chrono::milliseconds;
 
 using simulator::core::enums::EventTag;
 
-using simulatorproto::EncounterConfig;
-using simulatorproto::SimulationConfig;
-
 namespace simulator {
 namespace core {
 
-namespace {
 // Put additional RaidEvent builder definitions here.
 Event BuildSpawnEvent(const simulatorproto::EncounterEvent& proto) {
   std::function<void(SimulationState*)> cb = [&proto](SimulationState* s) {
@@ -41,13 +38,13 @@ Event BuildSpawnEvent(const simulatorproto::EncounterEvent& proto) {
       s->enemies.push_back(std::make_unique<Enemy>(
           name, HealthEstimator::BurstExecuteHealthEstimator()));
     }
-
   };
   return Event(milliseconds(proto.timestamp()), cb, EventTag::ENEMY_SPAWN);
 }
 
 // From an encounter proto, get a vector of raid events.
-std::vector<Event> BuildRaidEvents(const EncounterConfig& encounter_proto) {
+std::vector<Event> BuildRaidEvents(
+    const simulatorproto::EncounterConfig& encounter_proto) {
   size_t n_events = encounter_proto.events_size();
   std::vector<Event> events;
   events.reserve(n_events);
@@ -79,14 +76,37 @@ std::vector<Event> BuildRaidEvents(const EncounterConfig& encounter_proto) {
   }
   return events;
 }
-}  // namespace
 
-// Constructor - this does a lot of work!
-ConfigSummary::ConfigSummary(const SimulationConfig& sim_proto) :
+CombatStats ParseGearStats(const simulatorproto::PlayerConfig& player_proto) {
+  CombatStats s;
+  return s;
+}
+
+std::vector<Spell> ParseGearEffects(
+    const simulatorproto::PlayerConfig& player_proto) {
+  return {};
+}
+
+std::vector<Talent> ParseTalents(
+    const simulatorproto::PlayerConfig& player_proto) {
+  return {};
+}
+
+std::unique_ptr<PolicyInterface> ParsePolicy(
+    const simulatorproto::Policy& policy_proto) {
+  return std::make_unique<DeterministicPolicy>(10);
+}
+
+ConfigSummary::ConfigSummary(
+    const simulatorproto::SimulationConfig& sim_proto) :
   time_min_(sim_proto.encounter_config().min_time_millis()),
   time_max_(sim_proto.encounter_config().max_time_millis()),
-  raid_events_(BuildRaidEvents(sim_proto.encounter_config())) {
-  LOG(INFO) << "Constructing config summary.";
+  raid_events_(BuildRaidEvents(sim_proto.encounter_config())),
+  gear_stats_(ParseGearStats(sim_proto.player_config())),
+  gear_effects_(ParseGearEffects(sim_proto.player_config())),
+  talents_(ParseTalents(sim_proto.player_config())),
+  policy_(ParsePolicy(sim_proto.policy())) {
+  LOG(INFO) << "Constructing configuration.";
 }
 }  // namespace core
 }  // namespace simulator

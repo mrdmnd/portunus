@@ -7,6 +7,11 @@ This document describes (at a high level) the architecture and flow of the core
 simulation loop, all the way from start to end. Additionally, we discuss each of
 the important simulation primitives.
 
+See a few links for GPU Discrete Event Simulation:
+https://studentnet.cs.manchester.ac.uk/resources/library/thesis_abstracts/BkgdReportsMSc11/Kajabadi-Farhad-bkgd-rept.pdf
+https://smartech.gatech.edu/bitstream/handle/1853/53887/SWENSON-DISSERTATION-2015.pdf
+http://yuhaozhu.com/pubs/todaes11.pdf
+
 ## Initialization
 
 ### Parse Configuration Proto
@@ -54,3 +59,20 @@ player damage multiplier phases are done similarly: at the appropriate time, we
 modify `state->player->stats->damage_modifier`.
 
 
+## Core Loop
+
+We split the core simulation loop into three phases:
+1) Identify the time of the next tick with at least one event scheduled to run,
+and run the clock forward until that time is reached.
+
+2) Execute all events scheduled unconditionally on this tick. These events are
+allowed to modify simulation state. If they do modify simulation state on this
+tick, we may need to add some triggers to this tick's "trigger" list.
+
+3) Resolve triggers. State changes that depend on the triggers from step 2) are
+execute here. To resolve a trigger, we look through our registry of all things
+that can be triggered by that trigger, and check for its execution. Executing
+the callbacks for triggers may put new triggers on the stack, so while the
+trigger stack is non-empty, we loop through step 3).
+
+And that's it! We just loop through here until the simulation time is up.

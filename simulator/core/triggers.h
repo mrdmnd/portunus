@@ -1,12 +1,15 @@
 #pragma once
+
 #include <chrono>
+#include <vector>
 
 // A *TRIGGER* is a condition that can automatically cause a SPELL or an EFFECT
 // to fire.
 // Example types
 // SpellHit
-//
-//
+namespace simulator {
+namespace core {
+
 class Trigger {
  public:
   virtual void Predicate() = 0;
@@ -18,26 +21,27 @@ class CastComplete : Trigger {};
 
 class SpellHit : Trigger {
  public:
-  std::chrono::milliseconds icd;
-  double rppm;
-  double percent_chance;
-  bool exclude_items_and_enchants;
-  bool exclude_auto_attacks;
+  // const std::chrono::milliseconds icd;
+  // const double rppm;
+  // const double percent_chance;
+  // const bool exclude_items_and_enchants;
+  // const bool exclude_auto_attacks;
 
-  std::vector<Spell> whitelist;
-  std::vector<Spell> blacklist;
+  // const std::vector<Spell> whitelist;
+  // const std::vector<Spell> blacklist;
 };
 
 class SpellCrit : Trigger {
  public:
-  std::chrono::milliseconds icd;
-  double rppm;
-  double percent_chance;
-  bool exclude_items_and_enchants;
-  bool exclude_auto_attacks;
-
-  std::vector<Spell> whitelist;
-  std::vector<Spell> blacklist;
+  // const std::chrono::milliseconds icd;
+  // const double rppm;
+  // const double percent_chance;
+  // const bool exclude_items_and_enchants;
+  // const bool exclude_auto_attacks;
+  // const std::vector<Spell> whitelist;
+  // const std::vector<Spell> blacklist;
 };
 
 class PowerCapped : Trigger {};
+}  // namespace core
+}  // namespace simulator

@@ -18,7 +18,6 @@ namespace core {
 
 class SimulationState {
  public:
-  bool combat_potion_used;
   std::unique_ptr<Player> player;
   std::vector<std::unique_ptr<Enemy>> enemies;
 };

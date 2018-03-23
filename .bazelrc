@@ -1,5 +1,5 @@
-build --color=yes --show_timestamps --cxxopt="-std=c++1z"
-test --color=yes --show_timestamps --test_output=streamed --cxxopt="-std=c++1z"
+build --color=yes --show_timestamps --cxxopt="-std=c++17"
+test --color=yes --show_timestamps --test_output=streamed --cxxopt="-std=c++17"
 build:optg -c opt --strip=never --copt="-g" --copt="-march=native" --copt="-O3"
 build:asan --strip=never --copt="-fsanitize=address,leak" --copt="-O1" --copt="-fno-omit-frame-pointer" --linkopt="-fsanitize=address,leak"
 build:msan --strip=never --copt="-fsanitize=memory" --copt="-O1" --copt="-fno-omit-frame-pointer" --linkopt="-fsanitize=memory"

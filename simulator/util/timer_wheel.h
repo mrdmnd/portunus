@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -39,7 +40,7 @@
 namespace simulator {
 namespace util {
 
-using Tick = uint64_t;
+using Tick = std::chrono::milliseconds::rep;
 
 class TimerWheelSlot;
 class TimerWheel;

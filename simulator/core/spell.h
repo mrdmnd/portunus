@@ -1,7 +1,7 @@
 #pragma once
 
 #include <chrono>
-#include "absl/types/optional.h"
+#include <optional>
 
 #include "simulator/core/constants.h"
 #include "simulator/core/effects.h"
@@ -12,15 +12,18 @@
 // A single SPELL may have multiple effects.
 // SPELLs may have TRIGGERSs that automatically cause them to fire
 // (e.g. Second Shuriken, which fires 30% of the time Shuriken Storm goes off)
-//
+
+namespace simulator {
+namespace core {
+
 class Spell {
  public:
   std::chrono::milliseconds cooldown;
   simulator::core::enums::SpellSchool school;
 
-  absl::optional<std::chrono::milliseconds> cast_time;
-  absl::optional<std::chrono::milliseconds> channel_time;
-  absl::optional<std::chrono::milliseconds> gcd_override;
+  std::optional<std::chrono::milliseconds> cast_time;
+  std::optional<std::chrono::milliseconds> channel_time;
+  std::optional<std::chrono::milliseconds> gcd_override;
 
   int power_cost;
   int alternate_power_cost;
@@ -31,18 +34,16 @@ class Spell {
   bool triggers_gcd;           // Fairly straight-forward for on-GCD.
   bool castable_while_moving;  // Can you cast this on-the-move?
 
-  // Dependencies
-  absl::optional<Spell> talent_dependency;
-  absl::optional<Item> item_dependency;
-
   // Behavior implementation
   // If spell triggers are specified, all Effects registered to this spell that
   // do not have their own triggers will execute when this spell executes. If
   // this is an Active spell, things that proc on CastSuccess and CastComplete
   // of this spell will also aexecte, as if this spell had been directly cast
   // (it is basically "cast" by the trigger resolving).
-  std::vector<Trigger> triggers;
+  // std::vector<Trigger> triggers;
 
   // List of effects to execute when the Spell resolves.
-  std::vector<Effect> effects;
+  // std::vector<Effect> effects;
 };
+}  // namespace core
+}  // namespace simulator

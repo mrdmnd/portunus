@@ -10,9 +10,10 @@ namespace util {
 
 using std::chrono::milliseconds;
 
-class RNG {
+class RngEngine {
  public:
-  RNG() : uniform_dist_(std::uniform_real_distribution<double>(0.0, 1.0)){};
+  RngEngine() :
+    uniform_dist_(std::uniform_real_distribution<double>(0.0, 1.0)){};
 
   // A (very slightly) optimized call that re-uses a previous dist instance.
   inline bool Roll(double chance) {
