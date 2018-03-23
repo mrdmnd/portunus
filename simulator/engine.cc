@@ -1,10 +1,10 @@
 #include <algorithm>
 #include <chrono>
 #include <functional>
+#include <future>
 #include <iostream>
 #include <mutex>
 #include <string>
-#include <thread>
 
 #include "absl/strings/str_cat.h"
 #include "glog/logging.h"
@@ -15,10 +15,6 @@
 #include "simulator/util/online_statistics.h"
 
 #include "proto/simulation.pb.h"
-
-using simulator::core::ConfigSummary;
-using simulator::util::OnlineStatistics;
-using simulator::util::ThreadPool;
 
 namespace simulator {
 
@@ -36,7 +32,7 @@ simulatorproto::SimulationResult Engine::Simulate(
   // Handle debug single iteration case.
   if (debug) {
     LOG(INFO) << "Debug simulation requested. Single iteration, single thread.";
-    const ConfigSummary config(config_proto);
+    const simulator::core::ConfigSummary config(config_proto);
     SimulationThread thread(config);
     double dps = thread.RunSingleIteration();
     simulatorproto::Distribution dps_distribution;
@@ -55,13 +51,13 @@ simulatorproto::SimulationResult Engine::Simulate(
   const double kTargetError = config_proto.target_error();
 
   // Parse configuration file into a configuration summary.
-  const ConfigSummary config(config_proto);
+  const simulator::core::ConfigSummary config(config_proto);
 
   // Setting `cancel` to true forces tasks to finish; we use to early terminate.
   std::atomic_bool cancel(false);
 
   // Keep track of simulation-wide damage statistics here.
-  OnlineStatistics metrics;
+  simulator::util::OnlineStatistics metrics;
 
   // Compute iterations per thread. Ensure we actually do enough work to finish.
   const int iters = (kMaxIterations / num_threads_) + 1;

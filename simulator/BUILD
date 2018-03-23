@@ -20,14 +20,12 @@ cc_library(
         ":util",
         "//proto:cc_lib",
         "@com_github_gflags_gflags//:gflags",
-        "@com_google_absl//absl/memory",
         "@com_google_absl//absl/strings",
         "@com_google_glog//:glog",
     ],
 )
 
 # Core simulation primitives like player, aura, constants, etc.
-# Ideally this doesn't depend on the proto lib. Might be unavoidable.
 cc_library(
     name = "core",
     srcs = glob(
@@ -46,7 +44,7 @@ cc_library(
     ],
 )
 
-# Useful bits and pieces.
+# Useful bits and pieces, not directly sim-engine adjacent.
 cc_library(
     name = "util",
     srcs = glob(
@@ -124,16 +122,6 @@ cc_test(
 )
 
 # Util
-
-cc_test(
-    name = "threadpool_test",
-    size = "small",
-    srcs = ["util/threadpool_test.cc"],
-    deps = [
-        ":util",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
 
 cc_test(
     name = "rng_test",

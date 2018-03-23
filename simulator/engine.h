@@ -1,7 +1,5 @@
 #pragma once
 
-#include "simulator/util/threadpool.h"
-
 #include "proto/simulation.pb.h"
 
 namespace simulator {

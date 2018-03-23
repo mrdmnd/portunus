@@ -6,9 +6,16 @@
 namespace simulator {
 namespace core {
 
-// This class is responsible for holding combat stats for a player.
-class CombatStats {
- public:
+// This struct is responsible for holding combat stats for a player.
+struct CombatStats {
+  CombatStats() = default;
+
+  // Enable move + copy constructors and assignments.
+  CombatStats(const CombatStats& other) = default;
+  CombatStats(CombatStats&& other) = default;
+  CombatStats& operator=(const CombatStats& other) = default;
+  CombatStats& operator=(CombatStats&& other) = default;
+
   int strength;
   int agility;
   int intelligence;
@@ -29,14 +36,6 @@ class CombatStats {
   int oh_max_damage;
 
   double damage_multiplier;
-
-  CombatStats() = default;
-
-  // Enable move + copy constructors and assignments.
-  CombatStats(const CombatStats& other) = default;
-  CombatStats(CombatStats&& other) = default;
-  CombatStats& operator=(const CombatStats& other) = default;
-  CombatStats& operator=(CombatStats&& other) = default;
 
   inline double CritPercent() const {
     return crit_rating / simulator::core::constants::kCritRatingPerPercent;

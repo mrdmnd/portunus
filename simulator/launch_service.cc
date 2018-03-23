@@ -4,7 +4,6 @@
 #include <string>
 #include <thread>
 
-#include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
@@ -36,7 +35,7 @@ class SimulationServiceImpl final
   : public simulatorproto::SimulationService::Service {
  public:
   explicit SimulationServiceImpl(const int num_threads) {
-    engine_ = absl::make_unique<Engine>(num_threads);
+    engine_ = std::make_unique<Engine>(num_threads);
   }
 
   Status ConductSimulation(ServerContext* context,
@@ -46,7 +45,9 @@ class SimulationServiceImpl final
     std::string config;
     google::protobuf::TextFormat::PrintToString(request->config(), &config);
     LOG(INFO) << "Configuration: \n" << config;
-    response->mutable_result()->CopyFrom(engine_->Simulate(request->config()));
+    bool debug = false;
+    response->mutable_result()->CopyFrom(
+        engine_->Simulate(request->config(), debug));
     return Status::OK;
   }
 

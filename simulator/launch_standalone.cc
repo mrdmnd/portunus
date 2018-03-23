@@ -12,7 +12,6 @@
 
 #include "proto/simulation.pb.h"
 
-using simulator::Engine;
 using simulatorproto::SimulationConfig;
 using simulatorproto::SimulationResult;
 
@@ -40,7 +39,7 @@ int main(int argc, char** argv) {
   google::InitGoogleLogging(argv[0]);
 
   CHECK_EQ(argc, 2) << "Required argument [config_path] missing.";
-  const Engine e(FLAGS_threads);
+  const simulator::Engine e(FLAGS_threads);
   const SimulationConfig conf = ParseConfig<SimulationConfig>(argv[1]);
   LOG(INFO) << "Simulating in standalone program.";
   const SimulationResult result = e.Simulate(conf, FLAGS_debug);
