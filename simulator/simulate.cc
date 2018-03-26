@@ -89,7 +89,7 @@ double SimulationThread::RunSingleIteration() {
     event_manager_.Advance(event_manager_.TicksUntilNextEvent());
 
     // Use our policy to identify the best legal action for this state.
-    const core::Spell action = policy_->Evaluate(state_);
+    // const core::Spell action = policy_->Evaluate(state_);
 
     // Schedule this action using the event manager.
     // ProcessAction(action, state_);

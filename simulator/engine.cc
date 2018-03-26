@@ -66,10 +66,10 @@ simulatorproto::SimulationResult Engine::Simulate(
   // worth of work, each attempting to do `iters` simulation episodes.
   // clang-format off
   std::vector<std::future<void>> futures;
-  for (size_t i = 0; i < num_threads_; ++i) {
+  for (int i = 0; i < num_threads_; ++i) {
     futures.emplace_back(
       std::async(std::launch::async, [iters, &config, &cancel, &metrics]() {
-        for (int i = 0; i < iters; ++i) {
+        for (int j = 0; j < iters; ++j) {
           if (cancel) break;
           const double dps = SimulationThread(config).RunSingleIteration();
           metrics.AddValue(dps);

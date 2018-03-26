@@ -12,12 +12,14 @@ namespace core {
 
 class Trigger {
  public:
-  virtual void Predicate() = 0;
+  virtual bool Predicate() const = 0;
 };
 
 // This trigger fires when either a specific spell (whitelisted) or any spell
 // (not blacklisted) has a successful cast.
-class CastComplete : Trigger {};
+class CastComplete : Trigger {
+  bool Predicate() const override { return true; }
+};
 
 class SpellHit : Trigger {
  public:
@@ -29,6 +31,7 @@ class SpellHit : Trigger {
 
   // const std::vector<Spell> whitelist;
   // const std::vector<Spell> blacklist;
+  bool Predicate() const override { return true; }
 };
 
 class SpellCrit : Trigger {
@@ -40,8 +43,11 @@ class SpellCrit : Trigger {
   // const bool exclude_auto_attacks;
   // const std::vector<Spell> whitelist;
   // const std::vector<Spell> blacklist;
+  bool Predicate() const override { return true; }
 };
 
-class PowerCapped : Trigger {};
+class PowerCapped : Trigger {
+  bool Predicate() const override { return true; }
+};
 }  // namespace core
 }  // namespace simulator
