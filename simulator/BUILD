@@ -44,6 +44,7 @@ cc_library(
     ],
 )
 
+# Interface for getting item details. Might want to refactor to "API".
 cc_library(
     name = "items",
     srcs = glob(
@@ -55,6 +56,8 @@ cc_library(
     ),
     hdrs = glob(["items/*.h"]),
     deps = [
+        "@com_google_absl//absl/strings",
+        "@com_google_glog//:glog",
         "@whoshuu_cpr//:cpr",
     ],
 )
@@ -165,6 +168,18 @@ cc_test(
     deps = [
         ":util",
         "@com_google_absl//absl/memory",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+# Items
+
+cc_test(
+    name = "wowdb_test",
+    size = "small",
+    srcs = ["items/wowdb_test.cc"],
+    deps = [
+        ":items",
         "@com_google_googletest//:gtest_main",
     ],
 )

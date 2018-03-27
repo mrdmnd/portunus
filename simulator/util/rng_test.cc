@@ -19,14 +19,14 @@ TEST(RNGTest, TestRoll) {
 
 TEST(RNGTest, TestUniformInt) {
   RngEngine rng;
-  int result = rng.UniformInt(0, 10);
+  int result = rng.Uniform(0, 10);
   EXPECT_GE(result, 0);
   EXPECT_LE(result, 10);
 }
 
 TEST(RNGTest, TestUniformDouble) {
   RngEngine rng;
-  double result = rng.UniformDouble(0.0, 10.0);
+  double result = rng.Uniform(0.0, 10.0);
   EXPECT_GE(result, 0.0);
   EXPECT_LE(result, 10.0);
 }
