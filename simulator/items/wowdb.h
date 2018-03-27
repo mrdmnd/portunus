@@ -9,6 +9,7 @@ namespace simulator {
 namespace items {
 
 class WowDB {
+ public:
   static std::string BuildURL(int item_id, const std::vector<int> bonus_ids);
   static nlohmann::json GetJSON(int item_id, const std::vector<int> bonus_ids);
 };

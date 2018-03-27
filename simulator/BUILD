@@ -56,6 +56,7 @@ cc_library(
     ),
     hdrs = glob(["items/*.h"]),
     deps = [
+        ":util",  # For JSON code.
         "@com_google_absl//absl/strings",
         "@com_google_glog//:glog",
         "@whoshuu_cpr//:cpr",
@@ -180,6 +181,8 @@ cc_test(
     srcs = ["items/wowdb_test.cc"],
     deps = [
         ":items",
+        ":util",  # for json
+        "@com_google_glog//:glog",
         "@com_google_googletest//:gtest_main",
     ],
 )
