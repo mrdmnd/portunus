@@ -32,6 +32,13 @@ new_http_archive(
     url = "https://github.com/google/benchmark/archive/master.zip",
 )
 
+new_http_archive(
+    name = "whoshuu_cpr",
+    build_file = "third_party/cpr.BUILD",
+    strip_prefix = "cpr-master",
+    url = "https://github.com/whoshuu/cpr/archive/master.zip",
+)
+
 # Need these two because the bazel compiler doesn't have a cc_proto_library that
 # explicitly supports GRPC services yet.
 # See https://github.com/pubref/rules_protobuf

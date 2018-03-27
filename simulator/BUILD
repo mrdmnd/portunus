@@ -44,6 +44,21 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "items",
+    srcs = glob(
+        ["items/*.cc"],
+        exclude = [
+            "items/*_test.cc",
+            "items/*_bench.cc",
+        ],
+    ),
+    hdrs = glob(["items/*.h"]),
+    deps = [
+        "@whoshuu_cpr//:cpr",
+    ],
+)
+
 # Useful bits and pieces, not directly sim-engine adjacent.
 cc_library(
     name = "util",
