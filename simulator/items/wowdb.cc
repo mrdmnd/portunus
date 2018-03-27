@@ -10,8 +10,7 @@ namespace items {
 
 static constexpr const char* kWowDbEndpoint = "https://www.wowdb.com/api/item/";
 
-std::string WowDB::BuildURL(const int item_id,
-                            const std::vector<int> bonus_ids) {
+std::string BuildURL(const int item_id, const std::vector<int> bonus_ids) {
   std::string base = absl::StrCat(kWowDbEndpoint, item_id);
   if (!bonus_ids.empty()) {
     absl::StrAppend(&base, "?bonusIDs=");
@@ -23,7 +22,7 @@ std::string WowDB::BuildURL(const int item_id,
 }
 
 nlohmann::json GetJSON(const int item_id, const std::vector<int> bonus_ids) {
-  const auto url = WowDB::BuildURL(item_id, bonus_ids);
+  const auto url = BuildURL(item_id, bonus_ids);
   const auto response = cpr::Get(cpr::Url{url});
 
   if (response.status_code != 200) {
@@ -36,8 +35,10 @@ nlohmann::json GetJSON(const int item_id, const std::vector<int> bonus_ids) {
     return empty;
   }
 
-  LOG(INFO) << response.text;
-  return nlohmann::json::parse(response.text);
+  // WowDB returns a JSON with leading and trailing () parentheses, so we trim.
+  const auto& trimmed = response.text.substr(1, response.text.size() - 2);
+  LOG(INFO) << trimmed;
+  return nlohmann::json::parse(trimmed);
 }
 }  // namespace items
 }  // namespace simulator

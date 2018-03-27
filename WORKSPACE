@@ -39,6 +39,13 @@ new_http_archive(
     url = "https://github.com/whoshuu/cpr/archive/master.zip",
 )
 
+new_http_archive(
+    name = "tencent_rapidjson",
+    build_file = "third_party/rapidjson.BUILD",
+    strip_prefix = "rapidjson-master",
+    url = "https://github.com/Tencent/rapidjson/archive/master.zip",
+)
+
 # Need these two because the bazel compiler doesn't have a cc_proto_library that
 # explicitly supports GRPC services yet.
 # See https://github.com/pubref/rules_protobuf
