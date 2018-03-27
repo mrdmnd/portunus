@@ -26,15 +26,15 @@ using simulator::util::TimerWheel;
 using std::chrono::milliseconds;
 
 namespace simulator {
-void SimulationThread::InitPlayer(const core::CombatStats& gear_stats,
-                                  const std::vector<core::Spell>& gear_effects,
-                                  const std::vector<core::Talent>& talents) {
+void SimulationContext::InitPlayer(const core::CombatStats& gear_stats,
+                                   const std::vector<core::Spell>& gear_effects,
+                                   const std::vector<core::Talent>& talents) {
   // Construct a player, and put them into the simulation state.
   state_.player = std::make_unique<Player>(gear_stats, gear_effects, talents);
 }
 
 // Load fixed, known-time encounter events (spawn, bloodlust, ...) into manager.
-void SimulationThread::FillRaidEvents(
+void SimulationContext::InitRaidEvents(
     const std::vector<core::Event>& raid_events) {
   for (const auto& raid_event : raid_events) {
     // Immediately execute any spawn events, or events with scheduled_time == 0
@@ -51,7 +51,7 @@ void SimulationThread::FillRaidEvents(
   }
 }
 
-SimulationThread::SimulationThread(const ConfigSummary& config) :
+SimulationContext::SimulationContext(const ConfigSummary& config) :
   policy_(config.GetPolicy()) {
   // The policy_, combat_length_, rng_, state_, event_manager_, and damage_log_
   // members be initialized in this constructor. We take care of policy_ through
@@ -77,11 +77,11 @@ SimulationThread::SimulationThread(const ConfigSummary& config) :
   // we mark the beginning of the "combat" phase.
 
   // Set up all raid events (enemy spawns, pre-combat phase, etc).
-  FillRaidEvents(config.GetRaidEvents());
+  InitRaidEvents(config.GetRaidEvents());
 }
 
 // This is our core event loop.
-double SimulationThread::RunSingleIteration() {
+double SimulationContext::RunSingleIteration() {
   while (event_manager_.Now() < combat_length_.count()) {
     // While the simulation isn't done, advance until the next event is ready.
     // We process all events on that tick. These events may themselves add more

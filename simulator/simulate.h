@@ -20,21 +20,22 @@ namespace simulator {
 // Executes asynchronously in `engine.cc`, is signalled to halt early with the
 // cancellation token if our main thread detects an early stopping condition is
 // met (happens when target_error threshold is met).
-void RunBatch(const core::ConfigSummary& config, const int num_iterations,
+void RunBatch(const core::ConfigSummary& config,
+              const int num_iterations,
               const std::atomic_bool& cancellation_token,
               util::OnlineStatistics* damage_tracker);
 
 // This is the wrapper class that keeps track of a single episode of simulation.
-class SimulationThread {
+class SimulationContext {
  public:
-  SimulationThread() = delete;
-  explicit SimulationThread(const core::ConfigSummary& config);
+  SimulationContext() = delete;
+  explicit SimulationContext(const core::ConfigSummary& config);
 
   // Disallow {move,copy} {construction,assignment}.
-  SimulationThread(const SimulationThread& other) = delete;
-  SimulationThread(const SimulationThread&& other) = delete;
-  SimulationThread& operator=(const SimulationThread& other) = delete;
-  SimulationThread& operator=(const SimulationThread&& other) = delete;
+  SimulationContext(const SimulationContext& other) = delete;
+  SimulationContext(const SimulationContext&& other) = delete;
+  SimulationContext& operator=(const SimulationContext& other) = delete;
+  SimulationContext& operator=(const SimulationContext&& other) = delete;
 
   // Performs a single, simple, synchronous simulation iteration.
   // Returns the DPS value from this iteration.
@@ -44,7 +45,8 @@ class SimulationThread {
   void InitPlayer(const core::CombatStats& gear_stats,
                   const std::vector<core::Spell>& gear_effects,
                   const std::vector<core::Talent>& talents);
-  void FillRaidEvents(const std::vector<core::Event>& raid_events);
+  void InitRaidEvents(const std::vector<core::Event>& raid_events);
+
   core::PolicyInterface* policy_;
   std::chrono::milliseconds combat_length_;
   util::RngEngine rng_;

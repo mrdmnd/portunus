@@ -1,7 +1,7 @@
 #pragma once
 
 #include <chrono>
-#include <optional>
+#include <memory>
 
 #include "simulator/core/constants.h"
 #include "simulator/core/simulation_state.h"
@@ -35,7 +35,7 @@ class Effect {
   // If specified, this effect triggers from these game events *ONLY*.
   // Any effect with a non-NONE trigger list is ONLY caused by these triggers,
   // and not executed when the parent spell is cast or triggered.
-  const std::optional<std::vector<Trigger>> trigger_list;
+  std::unique_ptr<std::vector<Trigger>> trigger_list;
 };
 
 class ApplyDirectDamage : Effect {

@@ -7,7 +7,7 @@ DerivePointerAlignment: false
 PointerAlignment: Left
 AccessModifierOffset: -1
 BinPackArguments: true
-BinPackParameters: true
+BinPackParameters: false
 BreakConstructorInitializers: AfterColon
 ConstructorInitializerIndentWidth: 2
 FixNamespaceComments: true

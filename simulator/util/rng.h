@@ -44,7 +44,7 @@ class RngEngine {
   // Returns a double selected from a normal distribution.
   // If truncate_low = true, we return a double in [0, inf)
   inline double Normal(double mean, double stddev, bool truncate_low = false) {
-    std::normal_distribution dist(mean, stddev);
+    std::normal_distribution<double> dist(mean, stddev);
     const double value = dist(engine_);
     return (value < 0.0 && truncate_low) ? 0.0 : value;
   }

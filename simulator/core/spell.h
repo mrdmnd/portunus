@@ -1,7 +1,6 @@
 #pragma once
 
 #include <chrono>
-#include <optional>
 
 #include "simulator/core/constants.h"
 #include "simulator/core/effects.h"
@@ -21,9 +20,10 @@ class Spell {
   std::chrono::milliseconds cooldown;
   simulator::core::enums::SpellSchool school;
 
-  std::optional<std::chrono::milliseconds> cast_time;
-  std::optional<std::chrono::milliseconds> channel_time;
-  std::optional<std::chrono::milliseconds> gcd_override;
+  // Optional fields. Should figure out if we can use absl::optional.
+  std::chrono::milliseconds* cast_time;
+  std::chrono::milliseconds* channel_time;
+  std::chrono::milliseconds* gcd_override;
 
   int power_cost;
   int alternate_power_cost;

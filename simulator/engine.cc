@@ -33,8 +33,8 @@ simulatorproto::SimulationResult Engine::Simulate(
   if (debug) {
     LOG(INFO) << "Debug simulation requested. Single iteration, single thread.";
     const simulator::core::ConfigSummary config(config_proto);
-    SimulationThread thread(config);
-    double dps = thread.RunSingleIteration();
+    SimulationContext context(config);
+    double dps = context.RunSingleIteration();
     simulatorproto::Distribution dps_distribution;
     dps_distribution.set_n(1);
     dps_distribution.set_mean(dps);
@@ -71,7 +71,8 @@ simulatorproto::SimulationResult Engine::Simulate(
       std::async(std::launch::async, [iters, &config, &cancel, &metrics]() {
         for (int j = 0; j < iters; ++j) {
           if (cancel) break;
-          const double dps = SimulationThread(config).RunSingleIteration();
+          SimulationContext context(config);
+          const double dps = context.RunSingleIteration();
           metrics.AddValue(dps);
         }
       })
