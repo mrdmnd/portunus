@@ -2,7 +2,7 @@
 #include <chrono>
 #include <random>
 
-#include "simulator/core/config_summary.h"
+#include "simulator/core/config.h"
 #include "simulator/core/event.h"
 #include "simulator/core/player.h"
 #include "simulator/core/policy.h"
@@ -13,7 +13,7 @@
 
 #include "simulator/simulate.h"
 
-using simulator::core::ConfigSummary;
+using simulator::core::Config;
 using simulator::core::Player;
 using simulator::core::SimulationState;
 using simulator::core::enums::EventTag;
@@ -51,7 +51,7 @@ void SimulationContext::InitRaidEvents(
   }
 }
 
-SimulationContext::SimulationContext(const ConfigSummary& config) :
+SimulationContext::SimulationContext(const Config& config) :
   policy_(config.GetPolicy()) {
   // The policy_, combat_length_, rng_, state_, event_manager_, and damage_log_
   // members be initialized in this constructor. We take care of policy_ through

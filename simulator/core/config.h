@@ -16,15 +16,15 @@ namespace core {
 
 // This class is intended to hold "single encounter" configuration details.
 // Specifically, we hold raid events, a player config, and a policy.
-class ConfigSummary {
+class Config {
  public:
-  ConfigSummary() = delete;
-  ConfigSummary(const simulatorproto::SimulationConfig& sim_proto);
+  Config() = delete;
+  Config(const simulatorproto::SimulationConfig& sim_proto);
 
-  ConfigSummary(const ConfigSummary& other) = default;
-  ConfigSummary(ConfigSummary&& other) = default;
-  ConfigSummary& operator=(const ConfigSummary& other) = default;
-  ConfigSummary& operator=(ConfigSummary&& other) = default;
+  Config(const Config& other) = default;
+  Config(Config&& other) = default;
+  Config& operator=(const Config& other) = default;
+  Config& operator=(Config&& other) = default;
 
   inline std::chrono::milliseconds GetTimeMin() const { return time_min_; }
   inline std::chrono::milliseconds GetTimeMax() const { return time_max_; }
@@ -34,7 +34,7 @@ class ConfigSummary {
   inline std::vector<Spell> GetGearEffects() const { return gear_effects_; }
   inline std::vector<Talent> GetTalents() const { return talents_; }
 
-  // The ConfigSummary object owns the PolicyInterface uniqueptr.
+  // The Config object owns the PolicyInterface uniqueptr.
   // Callers get a view into the config's policy.
   inline PolicyInterface* GetPolicy() const { return policy_.get(); }
 

@@ -1,4 +1,4 @@
-#include "simulator/core/config_summary.h"
+#include "simulator/core/config.h"
 #include "simulator/core/combat_stats.h"
 #include "simulator/core/constants.h"
 #include "simulator/core/event.h"
@@ -43,7 +43,7 @@ Event BuildSpawnEvent(const simulatorproto::EncounterEvent& proto) {
 }
 
 // From an encounter proto, get a vector of raid events.
-std::vector<Event> BuildRaidEvents(
+std::vector<Event> ParseRaidEvents(
     const simulatorproto::EncounterConfig& encounter_proto) {
   size_t n_events = encounter_proto.events_size();
   std::vector<Event> events;
@@ -97,11 +97,10 @@ std::unique_ptr<PolicyInterface> ParsePolicy(
   return std::make_unique<DeterministicPolicy>(10);
 }
 
-ConfigSummary::ConfigSummary(
-    const simulatorproto::SimulationConfig& sim_proto) :
+Config::Config(const simulatorproto::SimulationConfig& sim_proto) :
   time_min_(sim_proto.encounter_config().min_time_millis()),
   time_max_(sim_proto.encounter_config().max_time_millis()),
-  raid_events_(BuildRaidEvents(sim_proto.encounter_config())),
+  raid_events_(ParseRaidEvents(sim_proto.encounter_config())),
   gear_stats_(ParseGearStats(sim_proto.player_config())),
   gear_effects_(ParseGearEffects(sim_proto.player_config())),
   talents_(ParseTalents(sim_proto.player_config())),

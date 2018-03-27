@@ -3,7 +3,7 @@
 #include <atomic>
 #include <chrono>
 
-#include "simulator/core/config_summary.h"
+#include "simulator/core/config.h"
 #include "simulator/core/damage_log.h"
 #include "simulator/core/policy.h"
 #include "simulator/core/simulation_state.h"
@@ -20,7 +20,7 @@ namespace simulator {
 // Executes asynchronously in `engine.cc`, is signalled to halt early with the
 // cancellation token if our main thread detects an early stopping condition is
 // met (happens when target_error threshold is met).
-void RunBatch(const core::ConfigSummary& config,
+void RunBatch(const core::Config& config,
               const int num_iterations,
               const std::atomic_bool& cancellation_token,
               util::OnlineStatistics* damage_tracker);
@@ -29,7 +29,7 @@ void RunBatch(const core::ConfigSummary& config,
 class SimulationContext {
  public:
   SimulationContext() = delete;
-  explicit SimulationContext(const core::ConfigSummary& config);
+  explicit SimulationContext(const core::Config& config);
 
   // Disallow {move,copy} {construction,assignment}.
   SimulationContext(const SimulationContext& other) = delete;
@@ -47,10 +47,10 @@ class SimulationContext {
                   const std::vector<core::Talent>& talents);
   void InitRaidEvents(const std::vector<core::Event>& raid_events);
 
-  core::PolicyInterface* policy_;
-  std::chrono::milliseconds combat_length_;
   util::RngEngine rng_;
   util::TimerWheel event_manager_;
+  std::chrono::milliseconds combat_length_;
+  core::PolicyInterface* policy_;
   core::SimulationState state_;
   core::DamageLog damage_log_;
 };

@@ -9,7 +9,7 @@
 #include "absl/strings/str_cat.h"
 #include "glog/logging.h"
 
-#include "simulator/core/config_summary.h"
+#include "simulator/core/config.h"
 #include "simulator/engine.h"
 #include "simulator/simulate.h"
 #include "simulator/util/online_statistics.h"
@@ -32,7 +32,7 @@ simulatorproto::SimulationResult Engine::Simulate(
   // Handle debug single iteration case.
   if (debug) {
     LOG(INFO) << "Debug simulation requested. Single iteration, single thread.";
-    const simulator::core::ConfigSummary config(config_proto);
+    const simulator::core::Config config(config_proto);
     SimulationContext context(config);
     double dps = context.RunSingleIteration();
     simulatorproto::Distribution dps_distribution;
@@ -51,7 +51,7 @@ simulatorproto::SimulationResult Engine::Simulate(
   const double kTargetError = config_proto.target_error();
 
   // Parse configuration file into a configuration summary.
-  const simulator::core::ConfigSummary config(config_proto);
+  const simulator::core::Config config(config_proto);
 
   // Setting `cancel` to true forces tasks to finish; we use to early terminate.
   std::atomic_bool cancel(false);
