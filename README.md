@@ -46,6 +46,11 @@ support Windows. Any Linux or OSX based machines should have no problems.
 
   On my system, this is installed with `sudo pacman -S bazel`.
 
+- [LibCURL](https://curl.haxx.se/libcurl/) - you need this to get item data from
+  the WowDB API.
+
+  On my system, this is installed with `sudo pacman -S curl`
+
 - (OPTIONAL) [CUDA](https://developer.nvidia.com/cuda-downloads) and [cuDNN](https://developer.nvidia.com/cuDNN)
   Install these if you want CUDA support. Which you do. Duh.
 

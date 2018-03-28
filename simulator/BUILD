@@ -44,7 +44,8 @@ cc_library(
     ],
 )
 
-# Interface for getting item details. Might want to refactor to "API".
+# Interface for getting item details.
+# Might want to refactor to an API module or something.
 cc_library(
     name = "items",
     srcs = glob(
@@ -55,11 +56,11 @@ cc_library(
         ],
     ),
     hdrs = glob(["items/*.h"]),
+    linkopts = ["-lcurl"],
     deps = [
         ":util",  # For JSON code.
         "@com_google_absl//absl/strings",
         "@com_google_glog//:glog",
-        "@whoshuu_cpr//:cpr",
     ],
 )
 
