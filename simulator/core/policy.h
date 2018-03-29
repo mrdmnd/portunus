@@ -1,7 +1,7 @@
 #pragma once
 
+#include "simulator/core/action.h"
 #include "simulator/core/simulation_state.h"
-#include "simulator/core/spell.h"
 
 namespace simulator {
 namespace core {
@@ -19,7 +19,7 @@ class PolicyInterface {
   virtual ~PolicyInterface() = default;
 
   // Policies have a way to evaluate a simulation state and generate an action.
-  virtual Spell Evaluate(const SimulationState& state) const = 0;
+  virtual Action Evaluate(const SimulationState& state) const = 0;
 };
 
 class DeterministicPolicy : public PolicyInterface {
@@ -27,10 +27,9 @@ class DeterministicPolicy : public PolicyInterface {
   DeterministicPolicy(const int placeholder) : placeholder_(placeholder) {}
   virtual ~DeterministicPolicy() = default;
 
-  Spell Evaluate(const SimulationState& state) const override {
-    Spell s;
-    s.cooldown = std::chrono::milliseconds(placeholder_);
-    return s;
+  Action Evaluate(const SimulationState& state) const override {
+    Wait a;
+    return a;
   }
 
  private:

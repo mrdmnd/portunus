@@ -47,6 +47,8 @@ class SimulationContext {
                   const std::vector<core::Talent>& talents);
   void InitRaidEvents(const std::vector<core::Event>& raid_events);
 
+  void ProcessAction(const core::Action a);
+
   util::RngEngine rng_;
   util::TimerWheel event_manager_;
   std::chrono::milliseconds combat_length_;

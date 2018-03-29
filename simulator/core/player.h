@@ -30,7 +30,8 @@ namespace core {
 
 class Player : Actor {
  public:
-  Player(const CombatStats& gear_stats, const std::vector<Spell>& gear_effects,
+  Player(const CombatStats& gear_stats,
+         const std::vector<Spell>& gear_effects,
          const std::vector<Talent>& talents) :
     stats_(gear_stats),
     gear_effects_(gear_effects),
@@ -56,7 +57,11 @@ class Player : Actor {
   // Players have an in-combat potion lockout. Assuming a combat potion used at
   // the beginning of simulation (precombat), there is a
 
-  bool combat_potion_usable_;
+  bool combat_potion_usable_ = true;
+
+  // Players have a window to queue a spell while they are currently casting a
+  // spell.
+  std::unique_ptr<Spell> queued_cast_ = nullptr;
 
   // Players have resource (power) - energy, mana, focus, fury, rage, runes,
   // maelstrom, astral power, etc. The idea is to pick `power` as a type with

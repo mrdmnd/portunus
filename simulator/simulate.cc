@@ -2,6 +2,7 @@
 #include <chrono>
 #include <random>
 
+#include "simulator/core/action.h"
 #include "simulator/core/config.h"
 #include "simulator/core/event.h"
 #include "simulator/core/player.h"
@@ -51,23 +52,26 @@ void SimulationContext::InitRaidEvents(
   }
 }
 
+void SimulationContext::ProcessAction(const core::Action a) {
+  // TODO(mrdmnd) - use visitor pattern somewhere here.
+  return;
+}
+
 SimulationContext::SimulationContext(const Config& config) :
   policy_(config.GetPolicy()) {
-  // The policy_, combat_length_, rng_, state_, event_manager_, and damage_log_
-  // members be initialized in this constructor. We take care of policy_ through
-  // the initializer list. rng_, state_, event_manager_, and damage_log_ are all
-  // default-constructible, so we rely on that. To seed combat_length, we take
-  // a duration uniformly at random between configuration bounds.
+  // First, we select a duration uniformly at random between configuration
+  // bounds to seed our combat length with.
   //
   // Next, we must set up the player object from the parsed configuration.
   //
   // Once the player is in place (and safely owned by the state_ member), we can
   // take on the task of scheduling "absolute" raid events into the manager.
   // These absolute events include things like the main target spawn.
-  // Finally, we
+  //
+  // Finally, we schedule the player's autoattack if they're a melee class.
   combat_length_ = rng_.Uniform(config.GetTimeMin(), config.GetTimeMax());
 
-  // Initialize player object, store in sim state.
+  // Initialize player object.
   InitPlayer(config.GetGearStats(), config.GetGearEffects(),
              config.GetTalents());
 
@@ -89,10 +93,12 @@ double SimulationContext::RunSingleIteration() {
     event_manager_.Advance(event_manager_.TicksUntilNextEvent());
 
     // Use our policy to identify the best legal action for this state.
-    // const core::Spell action = policy_->Evaluate(state_);
+    // It is quite possible that the only choice is "WAIT", though it may be
+    // worth optmizing more here.
+    const core::Action action_choice = policy_->Evaluate(state_);
 
-    // Schedule this action using the event manager.
-    // ProcessAction(action, state_);
+    // Handle this action. Might need to schedule events.
+    ProcessAction(action_choice);
   }
   return damage_log_.DamagePerSecond();
 }

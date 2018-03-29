@@ -25,7 +25,7 @@
 namespace simulator {
 namespace core {
 
-// Forward declaration to break circular dependency
+// Forward declaration to break circular dependency of the form
 // simulation_state->player->spell->effect->simulation_state
 class SimulationState;
 class Effect {

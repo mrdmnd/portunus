@@ -14,7 +14,8 @@ using SpellId = int;
 
 class Aura {
  public:
-  explicit Aura(SpellId spell_id, std::chrono::milliseconds max_duration,
+  explicit Aura(SpellId spell_id,
+                std::chrono::milliseconds max_duration,
                 int max_stacks) :
     spell_id_(spell_id),
     max_duration_(max_duration),
@@ -25,11 +26,12 @@ class Aura {
   }
 
   inline std::chrono::milliseconds Remaining() const { return cur_duration_; }
-
+  inline simulator::core::SpellId SpellId() const { return spell_id_; }
   inline int Stacks() const { return cur_stacks_; }
+  inline int MaxStacks() const { return max_stacks_; }
 
  private:
-  const SpellId spell_id_;
+  const simulator::core::SpellId spell_id_;
   std::chrono::milliseconds cur_duration_;
   const std::chrono::milliseconds max_duration_;
   int cur_stacks_;
