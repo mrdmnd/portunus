@@ -58,7 +58,8 @@ cc_library(
     hdrs = glob(["items/*.h"]),
     linkopts = ["-lcurl"],
     deps = [
-        ":util",  # For JSON code.
+        #"@com_github_curl_curl//:curl",
+        "@com_github_tencent_rapidjson//:rapidjson",
         "@com_google_absl//absl/strings",
         "@com_google_glog//:glog",
     ],
@@ -182,7 +183,7 @@ cc_test(
     srcs = ["items/wowdb_test.cc"],
     deps = [
         ":items",
-        ":util",  # for json
+        "@com_github_tencent_rapidjson//:rapidjson",
         "@com_google_glog//:glog",
         "@com_google_googletest//:gtest_main",
     ],

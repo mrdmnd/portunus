@@ -19,10 +19,10 @@ http_archive(
 )
 
 http_archive(
-    name "com_github_google_boringssl",
+    name = "com_github_google_boringssl",
     strip_prefix = "boringssl-master",
     url = "https://github.com/google/boringssl/archive/master.zip",
-    )
+)
 
 http_archive(
     name = "com_google_glog",
@@ -37,23 +37,8 @@ new_http_archive(
     url = "https://github.com/google/benchmark/archive/master.zip",
 )
 
-# CURL depends on ZLib and BoringSSL
 new_http_archive(
-    name = "com_github_curl_curl",
-    build_file = "third_party/curl.BUILD",
-    strip_prefix = "curl-master",
-    url = "https://github.com/google/benchmark/archive/master.zip",
-)
-
-new_http_archive(
-    name = "com_github_madler_zlib",
-    build_file = "third_party/curl.BUILD",
-    strip_prefix = "zlib-master",
-    url = "https://github.com/madler/zlib/archive/master.zip",
-)
-
-new_http_archive(
-    name = "tencent_rapidjson",
+    name = "com_github_tencent_rapidjson",
     build_file = "third_party/rapidjson.BUILD",
     strip_prefix = "rapidjson-master",
     url = "https://github.com/Tencent/rapidjson/archive/master.zip",
