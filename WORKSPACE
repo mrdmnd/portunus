@@ -19,12 +19,17 @@ http_archive(
 )
 
 http_archive(
+    name "com_github_google_boringssl",
+    strip_prefix = "boringssl-master",
+    url = "https://github.com/google/boringssl/archive/master.zip",
+    )
+
+http_archive(
     name = "com_google_glog",
     strip_prefix = "glog-master",
     url = "https://github.com/google/glog/archive/master.zip",
 )
 
-# These libraries don't have a bazel build file, so we specifiy how to build it.
 new_http_archive(
     name = "com_google_benchmark",
     build_file = "third_party/benchmark.BUILD",
@@ -32,13 +37,27 @@ new_http_archive(
     url = "https://github.com/google/benchmark/archive/master.zip",
 )
 
-# TODO(mrdmnd) - replace the nlohmann JSON library with this?
-#new_http_archive(
-#    name = "tencent_rapidjson",
-#    build_file = "third_party/rapidjson.BUILD",
-#    strip_prefix = "rapidjson-master",
-#    url = "https://github.com/Tencent/rapidjson/archive/master.zip",
-#)
+# CURL depends on ZLib and BoringSSL
+new_http_archive(
+    name = "com_github_curl_curl",
+    build_file = "third_party/curl.BUILD",
+    strip_prefix = "curl-master",
+    url = "https://github.com/google/benchmark/archive/master.zip",
+)
+
+new_http_archive(
+    name = "com_github_madler_zlib",
+    build_file = "third_party/curl.BUILD",
+    strip_prefix = "zlib-master",
+    url = "https://github.com/madler/zlib/archive/master.zip",
+)
+
+new_http_archive(
+    name = "tencent_rapidjson",
+    build_file = "third_party/rapidjson.BUILD",
+    strip_prefix = "rapidjson-master",
+    url = "https://github.com/Tencent/rapidjson/archive/master.zip",
+)
 
 # Need these two because the bazel compiler doesn't have a cc_proto_library that
 # explicitly supports GRPC services yet.

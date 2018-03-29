@@ -1,3 +1,5 @@
+#include <curl.curl.h>
+
 #include "absl/strings/str_cat.h"
 #include "glog/logging.h"
 
