@@ -9,11 +9,11 @@ cc_library(
     name = "engine",
     srcs = [
         "engine.cc",
-        "simulate.cc",
+        "simulation_context.cc",
     ],
     hdrs = [
         "engine.h",
-        "simulate.h",
+        "simulation_context.h",
     ],
     deps = [
         ":core",

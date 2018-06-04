@@ -12,7 +12,7 @@
 #include "simulator/util/rng.h"
 #include "simulator/util/timer_wheel.h"
 
-#include "simulator/simulate.h"
+#include "simulator/simulation_context.h"
 
 using simulator::core::Config;
 using simulator::core::Player;

@@ -11,10 +11,10 @@
 
 #include "simulator/core/config.h"
 #include "simulator/engine.h"
-#include "simulator/simulate.h"
+#include "simulator/simulation_context.h"
 #include "simulator/util/online_statistics.h"
 
-#include "proto/simulation.pb.h"
+#include "proto/service.pb.h"
 
 namespace simulator {
 
@@ -27,10 +27,9 @@ Engine::Engine(const int num_threads) : num_threads_(num_threads) {
 // a) we hit kMaxIterations, or
 // b) we're above the kMinIterations and StdErr / Mean < target_error.
 simulatorproto::SimulationResult Engine::Simulate(
-    const simulatorproto::SimulationConfig& config_proto,
-    const bool debug) const {
+    const simulatorproto::SimulationConfig& config_proto) const {
   // Handle debug single iteration case.
-  if (debug) {
+  if (config_proto.parameter_config()) {
     LOG(INFO) << "Debug simulation requested. Single iteration, single thread.";
     const simulator::core::Config config(config_proto);
     SimulationContext context(config);

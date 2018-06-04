@@ -25,6 +25,10 @@ message ParameterConfig {
   // We'll halt a simulation early if the error drops below this threshold.
   // Reasonable default: 0.01
   double target_error = 3;
+
+  // If debug_mode is set, we produce lots of output.
+  // We also run only one iteration.
+  bool debug = 4;
 }
 message SimulationConfig {
   // `parameter_config` controls constants for the simulation engine.

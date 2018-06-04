@@ -23,6 +23,12 @@ enum HealthEstimator {
   BURST = 1;
   EXECUTE = 2;
   BURST_AND_EXECUTE = 3;
+  CUSTOM = 4;
+}
+
+// If you don't plan on using a predefined estimator, you can specify one here.
+message CustomHealthEstimator {
+  string contents = 1;
 }
 
 message Enemy {
@@ -70,7 +76,7 @@ message BloodlustEvent {
 }
 
 message EncounterEvent {
-  int32 timestamp = 1;  //
+  int32 timestamp = 1;
   oneof event {
     EnemySpawnEvent spawn = 2;
     EnemyInvulnEvent invuln = 3;

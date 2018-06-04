@@ -1,6 +1,6 @@
 #pragma once
 
-#include "proto/simulation.pb.h"
+#include "proto/service.pb.h"
 
 namespace simulator {
 class Engine {
@@ -10,8 +10,7 @@ class Engine {
 
   // Simulate the input simulation configuration on all threads.
   simulatorproto::SimulationResult Simulate(
-      const simulatorproto::SimulationConfig& conf_proto,
-      const bool debug) const;
+      const simulatorproto::SimulationConfig& simulation_conf) const;
 
   // Disallow {move,copy} {construction,assignment}.
   Engine(const Engine& other) = delete;
