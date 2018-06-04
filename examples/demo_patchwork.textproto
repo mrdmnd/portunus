@@ -1,5 +1,7 @@
-max_iterations: 10000
-target_error: 0.01
+parameter_config {
+  max_iterations: 10000
+  target_error: 0.01
+}
 encounter_config {
   name: "PatchworkFight"
   time_target: 300000
@@ -26,15 +28,7 @@ player_config {
   name: "Synecdoche"
   race: BLOOD_ELF
   spec: ROGUE_ASSASSINATION
-  talents {
-    row_1: 1
-    row_2: 1
-    row_3: 3
-    row_4: 3
-    row_5: 1
-    row_6: 1
-    row_7: 1
-  }
+  talents: "1133111"
   gearset {
     items {
       slot: HEAD

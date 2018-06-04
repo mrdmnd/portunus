@@ -57,7 +57,7 @@ class SimulationServiceImpl final
 }  // namespace
 
 void shutdown_handler(int signal) {
-  LOG(INFO) << "Simulation service received CTRL-C, going down...";
+  LOG(INFO) << "Simulation service received SIGINT or SIGTERM, going down...";
   exit(signal);
 }
 

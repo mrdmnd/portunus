@@ -3,13 +3,8 @@ syntax = "proto3";
 package simulatorproto;
 
 message TalentConfig {
-  int32 row_1 = 1;
-  int32 row_2 = 2;
-  int32 row_3 = 3;
-  int32 row_4 = 4;
-  int32 row_5 = 5;
-  int32 row_6 = 6;
-  int32 row_7 = 7;
+  // Formatted string [0-3]{7}
+  string talent_string = 1;
 }
 
 enum Specialization {

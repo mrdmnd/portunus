@@ -1,5 +1,5 @@
-build --color=yes --show_timestamps --cxxopt="-std=c++17"
-test --color=yes --show_timestamps --test_output=streamed --cxxopt="-std=c++17"
+build --color=yes --show_timestamps --cxxopt="-std=c++11"
+test --color=yes --show_timestamps --test_output=streamed --cxxopt="-std=c++11"
 
 build:optg -c opt --strip=never --copt="-g" --copt="-march=native" --copt="-O3"
 build:asan --strip=never --copt="-fsanitize=address,leak" --copt="-O1" --copt="-fno-omit-frame-pointer" --linkopt="-fsanitize=address,leak"

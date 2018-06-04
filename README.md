@@ -14,24 +14,26 @@ Policygen contains two core components:
 
 1) A networked, distributed, CPU-powered RPC simulation service, for evaluating
 policy functions against a minimal simulation engine (sort of like SIMC-lite).
-This component scales horizontally, intended to be run behind a load balancer.
+This component scales horizontally, intended to be run behind a load balancer in
+a cloud computing environment.
 
-2) A local GPU-powered reinforcement learning module built on TensorFlow that
+2) A local GPU-powered reinforcement learning module (built on TensorFlow) that
 trains a deep neural network to evaluate a (state, action) Q-function, and
 performs policy gradient descent to iteratively improve our policy.
 
 Policygen depends heavily on [Bazel](https://bazel.build/) to build itself and
-its dependencies, most of the which are Google-backed open-source libraries.
+its dependencies, most of which are Google-backed open-source libraries.
 Let's install some of these now. We assume a modern 64-bit architecture running
-some flavor of linux with a C++11 compiler, ideally with an NVIDIA GPU.  I am
-running on Arch Linux; you may need to translate these instructions to fit your
+some flavor of linux with a C++11 compiler, ideally with an NVIDIA GPU. The code
+is tested on Arch Linux; you may need to modify these instructions to fit your
 distribution or package manager.
 
 ## Explicit anti-goals
 
 In order to streamline the implementation of our simulation engine, we
 explicitly do not support characters below maximum level, and characters that
-are not using a DPS specialization. 
+are not using a DPS specialization. Policygen does not plan to support items 
+implemented prior to the current expansion.
 
 ### Requirements
 
