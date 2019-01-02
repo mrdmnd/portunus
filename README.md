@@ -1,46 +1,60 @@
-[![Build Status](https://travis-ci.org/mrdmnd/policygen.svg?branch=master)](https://travis-ci.org/mrdmnd/policygen)
-# PolicyGen
+[![Build Status](https://travis-ci.org/mrdmnd/portunus.svg?branch=master)](https://travis-ci.org/mrdmnd/portunus)
+# Portunus
 
-PolicyGen is a tool for automatically finding optimal character control policies
-in World of Warcraft via simulation and deep reinforcement learning.
+Portunus is the Roman god of keys and gates - an appropriate name for a tool that
+automatically optimizes Mythic Keystone runs in World of Warcraft!
+
+Given a group of players and a dungeon route configuration, Portunus simulates
+running through the entire key and returns a "best possible time" for your group to
+shoot for.
+
+We allow the user to specify either a standard, deterministic control policy a la SIMC
+APL, or a pre-trained control policy in the form of a tensorflow model.
 
 ## Background
 
-See [Background](BACKGROUND.md) for the motivation behind PolicyGen.
+See [Background](BACKGROUND.md) for the motivation behind Portunus.
 
-## Installation
+## Components
 
-Policygen contains two core components:
+Portunus will be provided as a (free) service hosted on my home server. If you'd like
+to run your own, you can spin it up locally too.
 
-1) A networked, distributed, CPU-powered RPC simulation service, for evaluating
-policy functions against a minimal simulation engine (sort of like SIMC-lite).
+Portunus contains a few core components:
+
+(1) A networked, distributed, CPU-powered RPC simulation service, for evaluating
+encounter configurations against a simulation engine (sort of like SIMC-lite).
 This component scales horizontally, intended to be run behind a load balancer in
 a cloud computing environment.
 
-2) A local GPU-powered reinforcement learning module (built on TensorFlow) that
+(2) A web UI front end (much like MDT) to allow you to set up a configuration that gets run by component (1)
+(composition, pulls, CC, skips, bloodlust timing, CD assignments, etc). Ideally
+this configuration is exportable into MethodDungeonTools for on-the-fly visualization in-game.
+
+Later:
+(3) A local GPU-powered reinforcement learning module (built on TensorFlow) that
 trains a deep neural network to evaluate a (state, action) Q-function, and
 performs policy gradient descent to iteratively improve our policy.
 
-Policygen depends heavily on [Bazel](https://bazel.build/) to build itself and
-its dependencies, most of which are Google-backed open-source libraries.
+
+## Installation
+
+Portunus depends heavily on [Bazel](https://bazel.build/) to build itself and
+its dependencies, most of which are Google-backed open-source libraries. If
+you'd like to install and run a localhost version of Portunus, you'll need to
+install some of these dependencies now.
+
 Let's install some of these now. We assume a modern 64-bit architecture running
 some flavor of linux with a C++11 compiler, ideally with an NVIDIA GPU. The code
 is tested on Arch Linux; you may need to modify these instructions to fit your
 distribution or package manager.
 
-## Explicit anti-goals
-
-In order to streamline the implementation of our simulation engine, we
-explicitly do not support characters below maximum level, and characters that
-are not using a DPS specialization. Policygen does not plan to support items 
-implemented prior to the current expansion.
-
 ### Requirements
 
-Policygen requires a modern compiler toolchain that supports C++11. In addition,
-if you want to leverage the GPU acceleration of TensorFlow's NN training, you
-must have access to a CUDA enabled video card. Finally, we assume a Python3
-installation. At the time of writing, Policygen does not explicitly intend to
+Portunus requires a modern compiler toolchain that supports C++11. In addition,
+if you want to leverage the GPU acceleration of TensorFlow's NN training, you'll
+need access to a CUDA enabled video card. Finally, we assume a Python3
+installation. At the time of writing, Portunus does not explicitly intend to
 support Windows. Any Linux or OSX based machines should have no problems.
 
 - [Bazel](https://bazel.build/) - you'll need this to build both TensorFlow and
@@ -111,7 +125,7 @@ support Windows. Any Linux or OSX based machines should have no problems.
   7) Verify the installation:
 
 ```
-[mrdmnd@maximumkappa policygen]$ python
+[mrdmnd@maximumkappa portunus]$ python
 Python 3.6.4 (default, Jan  5 2018, 02:35:40) 
 [GCC 7.2.1 20171224] on linux
 Type "help", "copyright", "credits" or "license" for more information.
@@ -144,14 +158,14 @@ b'Hello!'
 
 ### Developers
 
-Policygen welcomes new contributors. There are opportunities to be found in any
+Portunus welcomes new contributors. There are opportunities to be found in any
 codebase for improvement! In order to trivially resolve style differences, this
 project provides a .clang-format and a .clang-tidy file that impose LINT checks
-which MUST be followed before code is checked in. If you'd like to contribute to
-the development of Policygen, please ensure that you are able to run
-clang-format and clang-tidy. We provide static analysis tooling at
-`tools/static_analysis.sh` which is run during continuous integration testing,
-please run it yourself and ensure your code builds cleanly before submitting a
+which must be followed before code is checked in. If you'd like to contribute to
+the development of Portunus, please ensure that you are able to run
+clang-format and clang-tidy before committing code. We provide static analysis tooling at
+`tools/static_analysis.sh` which is run during continuous integration testing;
+please run this script yourself and ensure your code builds cleanly before submitting a
 pull request.
 
 Optional Dependencies for developers:
@@ -175,9 +189,9 @@ To run all unit tests, from the root of the repository run
 
 `bazel test //...`
 
-## Building Policygen
+## Building Portunus
 
-Policygen is built with `bazel`, which is Google's opensource version of our
+Portunus is built with `bazel`, which is Google's opensource version of the
 internal build tool. Build artifacts are compiled into `./bazel-genfiles/` and
 binaries are placed into `./bazel-bin/`.
 
@@ -187,9 +201,9 @@ To compile the simulation service, run
 
 To compile the learning module, run
 
-`bazel build --config=opt learn:policygen`
+`bazel build --config=opt learn:portunus`
 
-## Running Policygen
+## Running Portunus
 
 To run the simulation service, invoke
 
@@ -199,12 +213,12 @@ This starts up a local RPC service on port 50051 by default (configurable).
 
 To run policy generation, invoke
 
-`./bazel-bin/learn/policygen $ENCOUNTER_CONFIG_PATH $CHARACTER_CONFIG_PATH`
+`./bazel-bin/learn/portunus $ENCOUNTER_CONFIG_PATH $CHARACTER_CONFIG_PATH`
 
 where `$ENCOUNTER_CONFIG_PATH` contains details on the raid encounter and
 `$CHARACTER_CONFIG_PATH` contains details on the player character (gear, etc).
 
-## Policygen Architecture Overview
+## Portunus Architecture Overview
 
 ### Standalone Simulation Engine Binary
 
@@ -227,9 +241,20 @@ This is an embarassingly parallel problem, with minimal data dependencies.
 Simulation is mostly a CPU-bound problem, although it might be an interesting
 problem to attempt a "discrete event simulation" on GPU.
 
+### Web Front End
+Portunus is designed to be used from a web front end. We provide a web UI that
+allows users to set up their configuration (classes/specs/talents/gear) as well
+as their intended pull plan. We'll provide information on "efficiency" in the UI
+like how much total mob HP is being pulled relative to mob count; what the absolute minimum
+required group DPS is to chest the key at the given level, and whether or not
+their route is theoretically possible assuming perfect play.
+
+The UI will allow users to specify pulls, skips, CC, death runs, when CDs such
+as lust are used, when to use potions, and other encounter-specific things.
+
 ### Deep Reinforcement Learning Client
 
-The learning client `policygen` takes in a configuration describing the
+The learning client `portunus` takes in a configuration describing the
 encounter to be simulated, as well as a configuration for the player character.
 
 This component feeds simulation configurations to the simulation service to

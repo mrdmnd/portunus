@@ -9,43 +9,11 @@ enum EnemyType {
   ADD = 3;
 }
 
-// This is a bit nuanced. A lot of classes need to know when they hit execute
-// range. We can make a few assumptions about how the health of our target
-// declines over time, but the idea here is to provide a user-defined way to
-// specify how health declines over time. You want this to model the actual
-// boss health loss function. We provide four: "UNIFORM", "BURST", "EXECUTE",
-// "BURST_AND_EXECUTE". UNIFORM sets these values equal to what you'd see from
-// uniform raid DPS. BURST assumes you're going to hit the boss extra hard at
-// the beginning. EXECUTE assumes you're going to hit the boss extra hard at
-// the end. BURST_AND_EXECUTE assumes both.
-enum HealthEstimator {
-  UNIFORM = 0;
-  BURST = 1;
-  EXECUTE = 2;
-  BURST_AND_EXECUTE = 3;
-  CUSTOM = 4;
-}
-
-// If you don't plan on using a predefined estimator, you can specify one here.
-message CustomHealthEstimator {
-  string contents = 1;
-}
-
 message Enemy {
   int32 id = 1;
   string name = 2;
   EnemyType type = 3;
-  HealthEstimator health_estimator = 4;
-}
-
-// TODO(mrdmnd): make event timing probabilistic so we don't overfit?
-// TODO(mrdmnd): make event occurrence probabilistic (maybe X doesn't happen?)
-message EnemySpawnEvent {
-  Enemy enemy = 1;
-}
-
-message EnemyDespawnEvent {
-  int32 enemy_id = 1;
+  int32 hp = 4;
 }
 
 message EnemyInvulnEvent {
@@ -54,25 +22,17 @@ message EnemyInvulnEvent {
 }
 
 // Logically, this is just a constraint meant to keep you casting only instants.
-message MovementEvent {
+message CombatMovementEvent {
   int32 duration = 1;  // Number of timesteps that we are forced to move for.
 }
 
 // Logically, this is just a constraint meant to keep you from casting anything.
-message StunEvent {
+message CombatStunEvent {
   int32 duration = 1;  // Number of timesteps that we are unable to act for.
 }
 
 message TakeDamageEvent {
   int32 damage_amount = 1;  // Amount of damage the boss deals to us.
-}
-
-// This is a "fixed" lust trigger, where you know when you're going to pop it.
-// There's also a "bloodlust_check" that happens every timeframe in the sim
-// which checks if a) bloodlust is available (not exhausted), and
-// b) bloodlust_percent is reached or time_to_die is less than lust duration.
-message BloodlustEvent {
-  double haste_percentage = 1;  // How much haste we get (drums give less).
 }
 
 message EncounterEvent {
@@ -88,16 +48,45 @@ message EncounterEvent {
   }
 }
 
+// We model a dungeon as a series of "pulls", where a "pull" is separated into a
+// "setup" phase of a fixed number of seconds, and a "combat" phase" where you
+// damage the active mobs in the pull until they are dead, at which point you
+// exit combat, and begin the setup phase of the next pull. We also assume that
+// you can re-CC the mobs you CC'd during the setup phase for "free" (we don't
+// model the GCD cost of re-CCing mobs during the pull).
+
+// Every pull has a setup phase - this might be very short (potentially zero
+// seconds for a chain pull, where you grab the next group before dropping
+// combat with the current group) - or very long, like when you do a shroud skip
+// or a death skip and have to mass res, or have a complicated pre-CC setup.
+
+// You can designate a pull to use a prepot; if you do, this event triggers in
+// the setup phase at one second before the combat phase starts.
+message SetupPhase {
+  int32 duration = 1;
+  repeated Action precombat_actions =
+      4;  // includes pre-pot, CDs you want to hit pre-combat, etc
+  repeated int32 precombat_action_timings =
+      5;  // for each index in above list, number of seconds before setup phase
+          // ends to hit the action
+}
+
+// Every pull also has a "combat" phase. A combat phase places all players in
+// the group in combat.
+message CombatPhase {
+  repeated Enemy enemies = 2;
+}
+
+// A pull is just a setup phase followed by a combat phase.
+message Pull {
+  SetupPhase setup = 1;
+  CombatPhase combat = 2;
+}
+
 // Top level fight configuration.
 message EncounterConfig {
-  // Something descriptive and human readable, like "Patchwork"
+  // Something descriptive and human readable, like "Freehold"
   string name = 1;
-
-  // Each fight lasts between min_tim_millis and max_time_millis, selected
-  // uniformly at random.
-  int32 min_time_millis = 2;
-
-  int32 max_time_millis = 3;
 
   // A sorted sequence of encounter events.
   repeated EncounterEvent events = 4;

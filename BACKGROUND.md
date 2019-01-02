@@ -10,7 +10,7 @@ combinations.
 The game has traditionally provided three roles for players to choose. The
 highly armored "tanks" actively keep the attacking enemies focused on them,
 where as "healers" ensure that the raid group remains alive until end of combat.
-The final role, and the one we concern ourselves with, is "direct damagers" -
+The final role, and the one we primarily concern ourselves with, is "direct damagers" -
 players whose job it is to deal as much damage as possible to the enemy
 non-player-characters. In this role, the traditional metric by which we
 distinguish good players from bad players is DPS, or "damage per second".

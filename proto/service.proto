@@ -30,8 +30,10 @@ message ParameterConfig {
   // We also run only one iteration.
   bool debug = 4;
 }
+
 message SimulationConfig {
-  // `parameter_config` controls constants for the simulation engine.
+  // `parameter_config` controls internal constants for the simulation engine
+  // like iteration control, noise, debug mode, etc.
   ParameterConfig parameter_config = 1;
 
   // `encounter_config` contains all parameters pertaining to the fight script.
@@ -60,6 +62,5 @@ message SimulationResponse {
 }
 
 service SimulationService {
-  rpc ConductSimulation(SimulationRequest) returns (SimulationResponse) {
-  }
+  rpc ConductSimulation(SimulationRequest) returns (SimulationResponse) {}
 }
