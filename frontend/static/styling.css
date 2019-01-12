@@ -1,0 +1,99 @@
+table { 
+  font: 80% Verdana, Arial, Helvetica, sans-serif;
+  color: rgba(220,220,220,1.0);
+  text-align: left;
+  border-collapse: collapse;
+  border: 1px solid #666666;
+}
+tr.odd {
+  background-color: rgba(140,140,140,0.85);
+}
+tr {
+  background-color: rgba(140,140,140,0.85);
+  vertical-align: center;
+}
+td {
+  font-family: 'Inconsolata', sans-serif;
+  font-style:normal;
+  font-weight:normal;
+  font-size:14px;
+  border-left: 0px solid #dadada;
+}
+
+.textfield {
+  width: 200px;
+  margin: auto;
+  color: #e68a2e;
+}
+
+.textfield_rideurl {
+  width: 300px;
+  margin: auto;
+  color: #e68a2e;
+}
+
+
+.textfield_power {
+  width: 50px;
+  margin: auto;
+  text-align: center;
+  color: #e68a2e;
+}
+input.largebtn {
+  color: #fff;
+  font-family: 'Inconsolata', sans-serif;
+  font-size: 85%;
+  font-weight: bold;
+  background-color: rgba(140,140,140,0.85);
+  border: 1px solid;
+}
+textarea {
+  height:50px; 
+  width:793px; 
+  background:#FFF; 
+  min-height:50px; 
+  min-width:200px; 
+  text-align:center
+}
+button {
+  color: #fff;
+  font-family: 'Inconsolata', sans-serif;
+  font-size: 85%;
+  font-weight: bold;
+  background-color: rgba(140,140,140,0.85);
+  border: 1px solid;
+}
+h2 {
+  font-family: 'Inconsolata', sans-serif;
+  color: #e68a2e;
+  margin: 0;
+  padding: 0;
+}
+h2 span {
+  background-color: rgba(140,140,140,0.85);
+}
+
+h1 {
+  font-family: 'Inconsolata', sans-serif;
+  color: rgba(255,255,255,1.0);
+}
+h1 span {
+  background-color: rgba(140,140,140,0.85);
+}
+
+
+.myQtipClass {
+  border-color: #e68a2e;
+}
+.myQtipClass .qtip-content {
+  font-size: 16px;
+  line-height: 110%;
+}
+
+html {
+  background: url(temple_of_portunus.jpg) no-repeat center center fixed;
+  -webkit-background-size: cover;
+  -moz-background-size: cover;
+  -o-background-size: cover;
+  background-size: cover;
+}
