@@ -1,4 +1,4 @@
-workspace(name = "com_mrdmnd_policygen")
+workspace(name = "com_mrdmnd_portunus")
 
 http_archive(
     name = "com_github_gflags_gflags",

@@ -1,5 +1,4 @@
 from flask import Flask, request, render_template
-import requests
 DEBUG = True
 
 app = Flask(__name__)

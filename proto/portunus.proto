@@ -1,0 +1,259 @@
+syntax = "proto3";
+
+// import "tensorflow/graph_def.proto" // TODO(mrdmnd) - get actual path here.
+
+package portunus
+
+    message Enemy {
+  int32 id = 1;
+  string name = 2;
+  int32 hp = 4;
+}
+
+message EnemyInvulnEvent {
+  Enemy enemy = 1;
+  int32 duration = 2;  // Number of seconds that this actor is invulnerable.
+}
+
+// Logically, this is just a constraint meant to keep you casting only instants.
+message CombatMovementEvent {
+  int32 duration = 1;  // Number of seconds that we are forced to move for.
+}
+
+// Logically, this is just a constraint meant to keep you from casting anything.
+message CombatStunEvent {
+  int32 duration = 1;  // Number of seconds that we are unable to act for.
+}
+
+message EncounterEvent {
+  int32 timestamp = 1;
+  oneof event {
+    EnemySpawnEvent spawn = 2;
+    EnemyInvulnEvent invuln = 3;
+    MovementEvent movement = 4;
+    StunEvent stun = 5;
+    TakeDamageEvent damage = 6;
+    EnemyDespawnEvent despawn = 8;
+  }
+}
+
+// We model a dungeon as a series of "pulls", where a "pull" is separated into a
+// "setup" phase (out of combat) lasting a fixed number of seconds, and a
+// "combat" phase" where you damage the active mobs in the pull until they are
+// dead, at which point you exit combat, and begin the setup phase of the next
+// pull. We also assume that you can re-CC the mobs you CC'd during the setup
+// phase for "free" (i.e. we don't model the GCD cost of re-CCing mobs during
+// the pull).
+
+// Every pull has a setup phase - this might be very short (potentially zero
+// seconds for a chain pull, where you grab the next group before dropping
+// combat with the current group) - or very long, like when you do a shroud skip
+// or a death skip and have to mass res, or have a complicated pre-CC setup.
+
+// You can designate a pull to use a prepot; if you do, this event triggers in
+// the setup phase at one second before the combat phase starts.
+message SetupPhase {
+  int32 duration = 1;  // Length in seconds of the pre-combat phase.
+  repeated Action precombat_actions =
+      4;  // includes pre-pot, CDs you want to hit pre-combat, etc
+  repeated int32 precombat_action_timings =
+      5;  // for each index in above list, number of seconds before setup phase
+          // ends to hit the action
+}
+
+// Every pull also has a "combat" phase. A combat phase places all players in
+// the group in combat.
+message CombatPhase {
+  repeated Enemy enemies = 2;
+}
+
+// A pull is just a setup phase followed by a combat phase.
+message Pull {
+  SetupPhase setup = 1;
+  CombatPhase combat = 2;
+}
+
+// Top level dungeon route configuration.
+message EncounterConfig {
+  // Something descriptive and human readable, like "Freehold Teeming Quaking"
+  string name = 1;
+  // A sorted sequence of encounter events.
+  repeated Pull pulls = 4;
+}
+
+// PLAYER CONFIG
+message TalentConfig {
+  // Formatted string [0-3]{7}
+  string talent_string = 1;
+}
+
+enum Specialization {
+  UNUSED_SPECIALIZATION = 0;
+  DEATH_KNIGHT_FROST = 1;
+  DEATH_KNIGHT_UNHOLY = 2;
+  DEMON_HUNTER_HAVOC = 3;
+  DRUID_BALANCE = 4;
+  DRUID_FERAL = 5;
+  HUNTER_BEAST_MASTERY = 6;
+  HUNTER_MARKSMANSHIP = 7;
+  HUNTER_SURVIVAL = 8;
+  MAGE_ARCANE = 9;
+  MAGE_FIRE = 10;
+  MAGE_FROST = 11;
+  MONK_WINDWALKER = 12;
+  PALADIN_RETRIBUTION = 13;
+  PRIEST_SHADOW = 14;
+  ROGUE_ASSASSINATION = 15;
+  ROGUE_OUTLAW = 16;
+  ROGUE_SUBTLETLY = 17;
+  SHAMAN_ELEMENTAL = 18;
+  SHAMAN_ENHANCEMENT = 19;
+  WARLOCK_AFFLICTION = 20;
+  WARLOCK_DEMONOLOGY = 21;
+  WARLOCK_DESTRUCTION = 22;
+  WARRIOR_ARMS = 23;
+  WARRIOR_FURY = 24;
+}
+
+enum Race {
+  UNUSED_RACE = 0;
+  HUMAN = 1;
+  DWARF = 2;
+  NIGHT_ELF = 3;
+  GNOME = 4;
+  ORC = 5;
+  TROLL = 6;
+  UNDEAD = 7;
+  TAUREN = 8;
+  DRAENEI = 9;
+  BLOOD_ELF = 10;
+  WORGEN = 11;
+  GOBLIN = 12;
+  PANDAREN = 13;
+  NIGHTBORNE = 14;
+  HIGHMOUNTAIN_TAUREN = 15;
+  VOID_ELF = 16;
+  LIGHTFORGED_DRAENEI = 17;
+}
+
+enum Slot {
+  UNUSED_SLOT = 0;
+  HEAD = 1;
+  NECK = 2;
+  SHOULDER = 3;
+  BACK = 4;
+  CHEST = 5;
+  WRIST = 6;
+  HANDS = 7;
+  WAIST = 8;
+  LEGS = 9;
+  FEET = 10;
+  FINGER1 = 11;
+  FINGER2 = 12;
+  TRINKET1 = 13;
+  TRINKET2 = 14;
+  MAIN_HAND = 15;
+  OFF_HAND = 16;
+}
+
+message WearableItem {
+  Slot slot = 1;
+  int32 item_id = 2;
+  int32 enchant_id = 3;
+  repeated int32 gem_ids = 4;
+  repeated int32 bonus_ids = 5;
+}
+
+message Gearset {
+  repeated WearableItem items = 1;
+}
+
+message PlayerConfig {
+  string name = 1;
+  Race race = 2;
+  Specialization spec = 3;
+  TalentConfig talents = 4;
+  Gearset gearset = 5;
+}
+
+// A protocol buffer to hold the (currently) trained model + weights from RL
+message LearnedPolicy {
+  string contents = 1;
+}
+
+message Action {
+  Enemy target = 1;
+}
+
+// Much like the SIMC APLs, we hard code a policy logic here.
+message HardcodedPolicy {
+  repeated Action actions = 1;
+}
+
+message PolicyConfig {
+  oneof policy {
+    LearnedPolicy learned_policy = 1;
+    HarcodedPolicy hardcoded_policy = 2;
+  }
+}
+
+message ParameterConfig {
+  // Hard minimum number of iterations to perform.
+  // Reasonable default: 100
+  int32 min_iterations = 1;
+
+  // Approximate maximum number of iterations to perform.
+  // Not a hard max, because threads are allowed to race a bit to finish.
+  // Reasonable default: 10,000
+  int32 max_iterations = 2;
+
+  // We'll halt a simulation early if the error drops below this threshold.
+  // Reasonable default: 0.01
+  double target_error = 3;
+
+  // If debug_mode is set, we produce lots of output.
+  // We also run only one iteration.
+  bool debug = 4;
+}
+
+// SERVICE DEFINITION
+
+message Distribution {
+  int32 n = 1;
+  double mean = 2;
+  double stddev = 3;
+}
+
+message SimulationConfig {
+  // `parameter_config` controls internal constants for the simulation engine
+  // like iteration control, noise, debug mode, etc.
+  ParameterConfig parameter_config = 1;
+
+  // `encounter_config` contains all parameters pertaining to the fight script.
+  EncounterConfig encounter_config = 2;
+
+  // `player_config` contains the gearset we're evaluating our policy on,
+  // as well as our current talent setup.
+  PlayerConfig player_config = 3;
+
+  // `policy` represents the current policy we want our simulator to evaluate.
+  // The policy might come in as a deterministic APL or a deep learning model.
+  PolicyConfig policy_config = 4;
+}
+
+message SimulationRequest {
+  SimulationConfig config = 1;
+}
+
+message SimulationResult {
+  Distribution dungeon_duration = 1;
+  string metadata = 2;
+}
+
+message SimulationResponse {
+  SimulationResult result = 1;
+}
+
+service SimulationService {
+  rpc ConductSimulation(SimulationRequest) returns (SimulationResponse) {}
+}
