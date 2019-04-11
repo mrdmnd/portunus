@@ -39,11 +39,11 @@ message EncounterEvent {
 
 // We model a dungeon as a series of "pulls", where a "pull" is separated into a
 // "setup" phase (out of combat) lasting a fixed number of seconds, and a
-// "combat" phase" where you damage the active mobs in the pull until they are
-// dead, at which point you exit combat, and begin the setup phase of the next
-// pull. We also assume that you can re-CC the mobs you CC'd during the setup
-// phase for "free" (i.e. we don't model the GCD cost of re-CCing mobs during
-// the pull).
+// "combat" phase" where your group damages the active mobs in the pull until
+// they are dead, at which point you exit combat, and begin the setup phase of
+// the next pull. We also assume that you can re-CC the mobs you CC'd during the
+// setup phase for "free" (i.e. we don't model the GCD cost of re-CCing mobs
+// during the pull).
 
 // Every pull has a setup phase - this might be very short (potentially zero
 // seconds for a chain pull, where you grab the next group before dropping
@@ -53,12 +53,12 @@ message EncounterEvent {
 // You can designate a pull to use a prepot; if you do, this event triggers in
 // the setup phase at one second before the combat phase starts.
 message SetupPhase {
-  int32 duration = 1;  // Length in seconds of the pre-combat phase.
-  repeated Action precombat_actions =
-      4;  // includes pre-pot, CDs you want to hit pre-combat, etc
-  repeated int32 precombat_action_timings =
-      5;  // for each index in above list, number of seconds before setup phase
-          // ends to hit the action
+  // Length in seconds of the pre-combat phase.
+  int32 duration = 1;
+  // includes pre-pot, CDs you want to hit pre-combat, etc
+  repeated Action precombat_actions = 4;
+  // number of seconds before setup phase ends to perform action
+  repeated int32 precombat_action_timings = 5;
 }
 
 // Every pull also has a "combat" phase. A combat phase places all players in
@@ -77,7 +77,6 @@ message Pull {
 message EncounterConfig {
   // Something descriptive and human readable, like "Freehold Teeming Quaking"
   string name = 1;
-  // A sorted sequence of encounter events.
   repeated Pull pulls = 4;
 }
 
