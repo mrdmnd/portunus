@@ -27,6 +27,10 @@
 *.exe
 *.out
 *.app
+*/target/
+
+Cargo.lock
+**/*.rs.bk
 
 *.swp
 __pycache__
