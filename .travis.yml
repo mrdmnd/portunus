@@ -1,18 +1,13 @@
-language: cpp
-sudo: true
-compiler: clang
-
+language: rust
+rust:
+  - stable
+  - beta
 branches:
   only:
     - master
 
-env:
-  - BAZEL_VERSION=0.10.1
-
-before_install:
-  - sudo apt-get install pkg-config zip g++ zlib1g-dev unzip python
-  - wget http://github.com/bazelbuild/bazel/releases/download/$BAZEL_VERSION/bazel_$BAZEL_VERSION-linux-x86_64.deb
-  - sudo dpkg -i bazel_$BAZEL_VERSION-linux-x86_64.deb
-
+before_script:
+  - rustup component add clippy
 script:
-  - bazel test //...
+  - cargo clippy --all-targets --all-features -- -D warnings
+  - cargo test --verbose
