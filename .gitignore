@@ -27,7 +27,8 @@
 *.exe
 *.out
 *.app
-*/target/
+target/*
+*/target/*
 
 Cargo.lock
 **/*.rs.bk
