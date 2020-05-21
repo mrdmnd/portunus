@@ -1,7 +1,8 @@
 syntax = "proto3";
 
-package portunus
+package portunus;
 
+/*
 message Enemy {
   string name = 1;
   int32 id = 2;
@@ -255,9 +256,7 @@ message SimulationConfig {
   PolicyConfig policy_config = 4;
 }
 
-message SimulationRequest {
-  SimulationConfig config = 1;
-}
+
 
 // TODO: single simulation should return an instance of a combat log for debug purposes.
 message CombatLogMessage {
@@ -269,11 +268,15 @@ message SimulationResult {
   // repeated CombatLogMessage messages = 2;
   string metadata = 3;
 }
+*/
 
+message SimulationRequest {
+  string config = 1;
+}
 message SimulationResponse {
-  SimulationResult result = 1;
+  string result = 1;
 }
 
 service SimulationService {
-  rpc ConductSimulation(SimulationRequest) returns (SimulationResponse) {}
+  rpc ConductSimulation(SimulationRequest) returns (SimulationResponse);
 }

@@ -12,8 +12,6 @@ path = "src/server.rs"
 name = "simulator-client"
 path = "src/client.rs"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 tonic = "0.2"
 prost = "0.6"
