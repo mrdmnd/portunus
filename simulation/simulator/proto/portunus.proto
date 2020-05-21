@@ -1,13 +1,11 @@
 syntax = "proto3";
 
-// import "tensorflow/graph_def.proto" // TODO(mrdmnd) - get actual path here.
-
 package portunus
 
-    message Enemy {
-  int32 id = 1;
-  string name = 2;
-  int32 hp = 4;
+message Enemy {
+  string name = 1;
+  int32 id = 2;
+  int32 hp = 3;
 }
 
 message EnemyInvulnEvent {
@@ -50,21 +48,11 @@ message EncounterEvent {
 // combat with the current group) - or very long, like when you do a shroud skip
 // or a death skip and have to mass res, or have a complicated pre-CC setup.
 
-// You can designate a pull to use a prepot; if you do, this event triggers in
-// the setup phase at one second before the combat phase starts.
-message SetupPhase {
-  // Length in seconds of the pre-combat phase.
-  int32 duration = 1;
-  // includes pre-pot, CDs you want to hit pre-combat, etc
-  repeated Action precombat_actions = 4;
-  // number of seconds before setup phase ends to perform action
-  repeated int32 precombat_action_timings = 5;
-}
-
-// Every pull also has a "combat" phase. A combat phase places all players in
-// the group in combat.
-message CombatPhase {
-  repeated Enemy enemies = 2;
+// Top level dungeon route configuration.
+message EncounterConfig {
+  // Something descriptive and human readable, like "Freehold Teeming Quaking"
+  string name = 1;
+  repeated Pull pulls = 2;
 }
 
 // A pull is just a setup phase followed by a combat phase.
@@ -73,45 +61,37 @@ message Pull {
   CombatPhase combat = 2;
 }
 
-// Top level dungeon route configuration.
-message EncounterConfig {
-  // Something descriptive and human readable, like "Freehold Teeming Quaking"
+// You can designate a pull to use a prepot; if you do, this event triggers in
+// the setup phase at one second before the combat phase starts.
+message SetupPhase {
+  // Length in seconds of the pre-combat phase.
+  int32 duration = 1;
+  // includes pre-pot, CDs you want to hit pre-combat, drinking water for mana, etc.
+  repeated Action precombat_actions = 2;
+  // number of seconds before setup phase ends to perform action
+  repeated int32 precombat_action_timings = 3;
+}
+
+// Every pull also has a "combat" phase. A combat phase places all players in
+// the group in combat with all of the enemies, until all players or all enemies are dead.
+message CombatPhase {
+  repeated Enemy enemies = 1;
+}
+
+
+// Team Config
+message TeamConfig {
+  string team_name = 1;
+  repeated PlayerConfig player_configs = 2;
+}
+
+// Player Config
+message PlayerConfig {
   string name = 1;
-  repeated Pull pulls = 4;
-}
-
-// PLAYER CONFIG
-message TalentConfig {
-  // Formatted string [0-3]{7}
-  string talent_string = 1;
-}
-
-enum Specialization {
-  UNUSED_SPECIALIZATION = 0;
-  DEATH_KNIGHT_FROST = 1;
-  DEATH_KNIGHT_UNHOLY = 2;
-  DEMON_HUNTER_HAVOC = 3;
-  DRUID_BALANCE = 4;
-  DRUID_FERAL = 5;
-  HUNTER_BEAST_MASTERY = 6;
-  HUNTER_MARKSMANSHIP = 7;
-  HUNTER_SURVIVAL = 8;
-  MAGE_ARCANE = 9;
-  MAGE_FIRE = 10;
-  MAGE_FROST = 11;
-  MONK_WINDWALKER = 12;
-  PALADIN_RETRIBUTION = 13;
-  PRIEST_SHADOW = 14;
-  ROGUE_ASSASSINATION = 15;
-  ROGUE_OUTLAW = 16;
-  ROGUE_SUBTLETLY = 17;
-  SHAMAN_ELEMENTAL = 18;
-  SHAMAN_ENHANCEMENT = 19;
-  WARLOCK_AFFLICTION = 20;
-  WARLOCK_DEMONOLOGY = 21;
-  WARLOCK_DESTRUCTION = 22;
-  WARRIOR_ARMS = 23;
-  WARRIOR_FURY = 24;
+  Race race = 2;
+  Specialization spec = 3;
+  string talents = 4; // Formatted string [0-3]{7}
+  Gearset gearset = 5;
 }
 
 enum Race {
@@ -135,6 +115,58 @@ enum Race {
   LIGHTFORGED_DRAENEI = 17;
 }
 
+enum Specialization {
+  UNUSED_SPECIALIZATION = 0;
+  DEATH_KNIGHT_FROST = 1;
+  DEATH_KNIGHT_UNHOLY = 2;
+  DEATH_KNIGHT_BLOOD = 3;
+  DEMON_HUNTER_HAVOC = 4;
+  DEMON_HUNTER_VENGEANCE = 5;
+  DRUID_BALANCE = 6;
+  DRUID_FERAL = 7;
+  DRUID_RESTORATION = 8;
+  DRUID_GUARDIAN = 9;
+  HUNTER_BEAST_MASTERY = 10;
+  HUNTER_MARKSMANSHIP = 11;
+  HUNTER_SURVIVAL = 12;
+  MAGE_ARCANE = 13;
+  MAGE_FIRE = 14;
+  MAGE_FROST = 15;
+  MONK_WINDWALKER = 16;
+  MONK_BREWMASTER = 17;
+  MONK_MISTWEAVER = 18;
+  PALADIN_RETRIBUTION = 19;
+  PALADIN_HOLY = 20;
+  PALADIN_PROTECTION = 21;
+  PRIEST_SHADOW = 22;
+  PRIEST_DISCIPLINE = 23;
+  PRIEST_HOLY = 24;
+  ROGUE_ASSASSINATION = 25;
+  ROGUE_OUTLAW = 26;
+  ROGUE_SUBTLETLY = 27;
+  SHAMAN_ELEMENTAL = 28;
+  SHAMAN_ENHANCEMENT = 29;
+  SHAMAN_RESTORATION = 30;
+  WARLOCK_AFFLICTION = 31;
+  WARLOCK_DEMONOLOGY = 32;
+  WARLOCK_DESTRUCTION = 33;
+  WARRIOR_ARMS = 34;
+  WARRIOR_FURY = 35;
+  WARRIOR_PROTECTION = 36;
+}
+
+message Gearset {
+  repeated WearableItem items = 1;
+}
+
+message WearableItem {
+  Slot slot = 1;
+  int32 item_id = 2;
+  int32 enchant_id = 3;
+  repeated int32 gem_ids = 4;
+  repeated int32 bonus_ids = 5;
+}
+
 enum Slot {
   UNUSED_SLOT = 0;
   HEAD = 1;
@@ -155,25 +187,8 @@ enum Slot {
   OFF_HAND = 16;
 }
 
-message WearableItem {
-  Slot slot = 1;
-  int32 item_id = 2;
-  int32 enchant_id = 3;
-  repeated int32 gem_ids = 4;
-  repeated int32 bonus_ids = 5;
-}
 
-message Gearset {
-  repeated WearableItem items = 1;
-}
 
-message PlayerConfig {
-  string name = 1;
-  Race race = 2;
-  Specialization spec = 3;
-  TalentConfig talents = 4;
-  Gearset gearset = 5;
-}
 
 // A protocol buffer to hold the (currently) trained model + weights from RL
 message LearnedPolicy {
@@ -244,9 +259,15 @@ message SimulationRequest {
   SimulationConfig config = 1;
 }
 
+// TODO: single simulation should return an instance of a combat log for debug purposes.
+message CombatLogMessage {
+  string log_line = 1;
+}
+
 message SimulationResult {
   Distribution dungeon_duration = 1;
-  string metadata = 2;
+  // repeated CombatLogMessage messages = 2;
+  string metadata = 3;
 }
 
 message SimulationResponse {
