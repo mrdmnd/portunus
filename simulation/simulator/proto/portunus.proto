@@ -3,98 +3,74 @@ syntax = "proto3";
 package portunus;
 
 /*
+ * Encounter Setup and Scripting
+ *
+ * We model a dungeon as a series of "pulls", where a "pull" is separated into a
+ * "setup" phase (out of combat) lasting a fixed number of seconds, and a
+ * "combat" phase" where your group damages the active mobs in the pull until
+ * they are dead, at which point you exit combat, and begin the setup phase of
+ * the next pull. We also assume that you can re-CC the mobs you CC'd during the
+ * setup phase for "free" (i.e. we don't model the GCD cost of re-CCing mobs
+ * during the pull).
+ *
+ * Every pull has a setup phase - this might be very short (potentially zero
+ * seconds for a chain pull, where you grab the next group before dropping
+ * combat with the current group) - or very long, like when you do a shroud skip
+ * or a death skip and have to mass res, or have a complicated pre-CC setup.
+ *
+ * TODO: Pulls should be able to be gated by CDs - imagine a hard mutex that
+ * BLOCKS until you have certain CDs ready (defensives, offensives, whatever) on
+ * specific players.
+ */
+
+// Enemies are simple for now. Eventually we will support enemy scripts
+// (patterns for spell queueing, etc).
 message Enemy {
   string name = 1;
   int32 id = 2;
   int32 hp = 3;
 }
 
-message EnemyInvulnEvent {
-  Enemy enemy = 1;
-  int32 duration = 2;  // Number of seconds that this actor is invulnerable.
+// Every pull has a "combat" phase. A combat phase places all players in
+// the group in combat with all of the enemies, until all players or all enemies
+// are dead.
+message CombatPhase { repeated Enemy enemies = 1; }
+
+// Every pull as a "setup phase" where you are assumed to be either travelling,
+// recovering CDs, drinking, etc. This is the "time between combat", more or
+// less.
+message SetupPhase {
+  // Length in seconds of the pre-combat phase.
+  int32 duration = 1;
+
+  // TODO: implement precombat actions
+  // includes pre-pot, CDs you want to hit pre-combat, drinking water for mana,
+  // etc. repeated Action precombat_actions = 2; number of seconds before setup
+  // phase ends to perform action repeated int32 precombat_action_timings = 3;
 }
 
-// Logically, this is just a constraint meant to keep you casting only instants.
-message CombatMovementEvent {
-  int32 duration = 1;  // Number of seconds that we are forced to move for.
+// A pull is therefore just a setup phase followed by a combat phase.
+// TODO: support chain pulls and variable setup phases (waiting on CDs to come
+// up)
+message Pull {
+  SetupPhase setup_phase = 1;
+  CombatPhase combat_phase = 2;
 }
 
-// Logically, this is just a constraint meant to keep you from casting anything.
-message CombatStunEvent {
-  int32 duration = 1;  // Number of seconds that we are unable to act for.
-}
-
-message EncounterEvent {
-  int32 timestamp = 1;
-  oneof event {
-    EnemySpawnEvent spawn = 2;
-    EnemyInvulnEvent invuln = 3;
-    MovementEvent movement = 4;
-    StunEvent stun = 5;
-    TakeDamageEvent damage = 6;
-    EnemyDespawnEvent despawn = 8;
-  }
-}
-
-// We model a dungeon as a series of "pulls", where a "pull" is separated into a
-// "setup" phase (out of combat) lasting a fixed number of seconds, and a
-// "combat" phase" where your group damages the active mobs in the pull until
-// they are dead, at which point you exit combat, and begin the setup phase of
-// the next pull. We also assume that you can re-CC the mobs you CC'd during the
-// setup phase for "free" (i.e. we don't model the GCD cost of re-CCing mobs
-// during the pull).
-
-// Every pull has a setup phase - this might be very short (potentially zero
-// seconds for a chain pull, where you grab the next group before dropping
-// combat with the current group) - or very long, like when you do a shroud skip
-// or a death skip and have to mass res, or have a complicated pre-CC setup.
-
-// Top level dungeon route configuration.
-message EncounterConfig {
-  // Something descriptive and human readable, like "Freehold Teeming Quaking"
+// A DungeonRouteConfig is a collection of Pulls with some metadata.
+message DungeonRouteConfig {
   string name = 1;
   repeated Pull pulls = 2;
 }
 
-// A pull is just a setup phase followed by a combat phase.
-message Pull {
-  SetupPhase setup = 1;
-  CombatPhase combat = 2;
-}
+/*
+ * Team Configuration
+ *
+ * Team configuration captures static information available at dungeon-start
+ * from all the players. This includes race/spec/gear/talents.
+ */
 
-// You can designate a pull to use a prepot; if you do, this event triggers in
-// the setup phase at one second before the combat phase starts.
-message SetupPhase {
-  // Length in seconds of the pre-combat phase.
-  int32 duration = 1;
-  // includes pre-pot, CDs you want to hit pre-combat, drinking water for mana, etc.
-  repeated Action precombat_actions = 2;
-  // number of seconds before setup phase ends to perform action
-  repeated int32 precombat_action_timings = 3;
-}
-
-// Every pull also has a "combat" phase. A combat phase places all players in
-// the group in combat with all of the enemies, until all players or all enemies are dead.
-message CombatPhase {
-  repeated Enemy enemies = 1;
-}
-
-
-// Team Config
-message TeamConfig {
-  string team_name = 1;
-  repeated PlayerConfig player_configs = 2;
-}
-
-// Player Config
-message PlayerConfig {
-  string name = 1;
-  Race race = 2;
-  Specialization spec = 3;
-  string talents = 4; // Formatted string [0-3]{7}
-  Gearset gearset = 5;
-}
-
+// Available player races.
 enum Race {
   UNUSED_RACE = 0;
   HUMAN = 1;
@@ -116,6 +92,7 @@ enum Race {
   LIGHTFORGED_DRAENEI = 17;
 }
 
+// Available player specializations.
 enum Specialization {
   UNUSED_SPECIALIZATION = 0;
   DEATH_KNIGHT_FROST = 1;
@@ -156,18 +133,10 @@ enum Specialization {
   WARRIOR_PROTECTION = 36;
 }
 
-message Gearset {
-  repeated WearableItem items = 1;
-}
+// Talents is a string of the form [1-3]{7}
+message Talents { string encoded_talents = 1; }
 
-message WearableItem {
-  Slot slot = 1;
-  int32 item_id = 2;
-  int32 enchant_id = 3;
-  repeated int32 gem_ids = 4;
-  repeated int32 bonus_ids = 5;
-}
-
+// Item configuration: items are worn in a specific "slot", listed here.
 enum Slot {
   UNUSED_SLOT = 0;
   HEAD = 1;
@@ -188,30 +157,68 @@ enum Slot {
   OFF_HAND = 16;
 }
 
-
-
-
-// A protocol buffer to hold the (currently) trained model + weights from RL
-message LearnedPolicy {
-  string contents = 1;
+// A wearable item has a slot, an item_id, as well as a few extra ids (enchant,
+// gems, bonus).
+message WearableItem {
+  Slot slot = 1;
+  int32 item_id = 2;
+  int32 enchant_id = 3;
+  repeated int32 gem_ids = 4;
+  repeated int32 bonus_ids = 5;
 }
 
-message Action {
-  Enemy target = 1;
+// A Gearset is just a collection of wearable items.
+message Gearset { repeated WearableItem items = 1; }
+
+// A PlayerConfig captures pre-dungeon setup for each player.
+// This is all of the "static" configuration information we have.
+message PlayerConfig {
+  string name = 1;
+  Race race = 2;
+  Specialization spec = 3;
+  Talents talents = 4;
+  Gearset gearset = 5;
 }
 
-// Much like the SIMC APLs, we hard code a policy logic here.
-message HardcodedPolicy {
-  repeated Action actions = 1;
+// Team Config:
+// A TeamConfig wraps the PlayerConfigs of the various players on the team.
+message TeamConfig {
+  string name = 1;
+  repeated PlayerConfig player_configs = 2;
 }
 
-message PolicyConfig {
-  oneof policy {
-    LearnedPolicy learned_policy = 1;
-    HarcodedPolicy hardcoded_policy = 2;
-  }
-}
+/*
+ * Policy Configuration
+ *
+ * A "policy" is a mapping from game-state to action taken.
+ * We require that each player on the team is configured with a policy that can
+ * be used to drive the simulator. Rather than using SIMC's model of an "APL"
+ * where we walk down a short-circuiting list of actions to take, our policies
+ * are implemented directly in native code (Rust code) rather than a pseudocode
+ * language.
+ *
+ * Policies can be either hard coded (explicitly programmed) to go from state to
+ * action, or rely on a machine learning model (like a trained reinforcement
+ * learning model) with weights and connections. They just have to implement the
+ * "Policy" interface, which is defined as a function that goes from the
+ * state-space of the game to the action-space of the actors.
+ *
+ * TODO(mrdmnd): define the interface here. Does this code get COMPILED to a
+ * function? Do we just point to a file on a path somewhere? Is this even the
+ * right place to include this?
+ */
 
+// Contains the code used to do policy->action application.
+message PolicyConfig { string code = 1; }
+
+/*
+ * General Simulator Configuration
+ *
+ * Our simulator is configuring using a number of parameters. This is the space
+ * for defining general catch-all control parameters.
+ */
+
+// Contains parameter configuration for general simulator statistical behavior.
 message ParameterConfig {
   // Hard minimum number of iterations to perform.
   // Reasonable default: 100
@@ -226,17 +233,9 @@ message ParameterConfig {
   // Reasonable default: 0.01
   double target_error = 3;
 
-  // If debug_mode is set, we produce lots of output.
+  // If debug is set, we produce lots of output.
   // We also run only one iteration.
   bool debug = 4;
-}
-
-// SERVICE DEFINITION
-
-message Distribution {
-  int32 n = 1;
-  double mean = 2;
-  double stddev = 3;
 }
 
 message SimulationConfig {
@@ -244,38 +243,43 @@ message SimulationConfig {
   // like iteration control, noise, debug mode, etc.
   ParameterConfig parameter_config = 1;
 
-  // `encounter_config` contains all parameters pertaining to the fight script.
-  EncounterConfig encounter_config = 2;
+  // `dungeon_route_config` contains all parameters pertaining to the fight
+  // script.
+  DungeonRouteConfig dungeon_route_config = 2;
 
-  // `player_config` contains the gearset we're evaluating our policy on,
-  // as well as our current talent setup.
-  PlayerConfig player_config = 3;
+  // `team_config` contains the team we intend to run through the dungeon.
+  TeamConfig team_config = 3;
 
   // `policy` represents the current policy we want our simulator to evaluate.
   // The policy might come in as a deterministic APL or a deep learning model.
   PolicyConfig policy_config = 4;
 }
 
+// Debug simulation should return an instance of a combat log for debug
+// purposes.
+message CombatLogMessage { string log_line = 1; }
+message CombatLog { repeated CombatLogMessage messages = 1; }
 
-
-// TODO: single simulation should return an instance of a combat log for debug purposes.
-message CombatLogMessage {
-  string log_line = 1;
+// Optimized simulation should return a distribution of dungeon duration.
+message DurationDistribution {
+  int32 n = 1;
+  double mean_duration = 2;
+  double stddev_duration = 3;
 }
 
+// A SimulationResult is either a full combat log from a single debug
+// run-through or a distribution over the length of the dungeon.
 message SimulationResult {
-  Distribution dungeon_duration = 1;
-  // repeated CombatLogMessage messages = 2;
+  oneof output {
+    CombatLog combat_log = 1;
+    DurationDistribution duration_distribution = 2;
+  }
   string metadata = 3;
 }
-*/
 
-message SimulationRequest {
-  string config = 1;
-}
-message SimulationResponse {
-  string result = 1;
-}
+// Final service interface
+message SimulationRequest { SimulationConfig config = 1; }
+message SimulationResponse { SimulationResult result = 1; }
 
 service SimulationService {
   rpc ConductSimulation(SimulationRequest) returns (SimulationResponse);
