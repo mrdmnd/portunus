@@ -3,15 +3,15 @@ The website for portunuspl.us
 # Develop:
 If you haven't produced a virtualenv yet, make one:
 
-    python3 -m venv venv
+    python3 -m venv env
 
-Ensure you are in the venv
+Ensure you are in the env
 
-    . venv/bin/activate
+    . env/bin/activate
 
 Ensure dependencies are up-to-date
 
-    pip3 install -t lib -r requirements.txt --upgrade
+    pip install -t lib -r requirements.txt --upgrade --no-cache-dir
 
 The -t lib flag copies the libraries into a lib folder, which is uploaded to App
 Engine during deployment. The -r requirements.txt flag tells pip to install
