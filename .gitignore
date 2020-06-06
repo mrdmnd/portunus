@@ -36,3 +36,4 @@ Cargo.lock
 *.swp
 __pycache__
 frontend/.vscode/settings.json
+frontend/site.db

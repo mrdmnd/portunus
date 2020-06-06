@@ -24,3 +24,27 @@ If you haven't installed google cloud SDK, install it:
 To deploy, run
 
     gcloud app deploy
+
+
+# Dev DB:
+Create stuff, explore.
+
+    $ python
+    from main import db
+    from main import User, DungeonRoute
+    db.create_all()
+    user_1 = User(username='syn', email='syn@demo.com', password='password')
+    db.session.add(user_1)
+    db.session.commit()
+    User.query.all()
+    User.query.first()
+    User.query.filter_by(username='syn')...
+    user = User.query.first() # fetch first user
+    dungeon_route_1 = DungeonRoute(title='lol', content='do the things!', user_id=user.id)
+    db.session.add(dungeon_route_1)
+    db.session.commit()
+
+    db.drop_all()
+
+
+should create site.db file (or whatever it's named in the code)
