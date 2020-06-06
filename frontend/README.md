@@ -30,15 +30,15 @@ To deploy, run
 Create stuff, explore.
 
     $ python
-    from main import db
-    from main import User, DungeonRoute
+    from portunus import db
+    from portunus.models import *
     db.create_all()
     user_1 = User(username='syn', email='syn@demo.com', password='password')
     db.session.add(user_1)
     db.session.commit()
-    User.query.all()
-    User.query.first()
-    User.query.filter_by(username='syn')...
+    # User.query.all()
+    # User.query.first()
+    # User.query.filter_by(username='syn')...
     user = User.query.first() # fetch first user
     dungeon_route_1 = DungeonRoute(title='lol', content='do the things!', user_id=user.id)
     db.session.add(dungeon_route_1)
