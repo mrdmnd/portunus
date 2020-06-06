@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, render_template, send_from_directory, url_for, flash, redirect
+from flask import Flask, render_template, send_from_directory, url_for, flash, redirect
 from forms import RegistrationForm, LoginForm
 
 app = Flask(__name__)
