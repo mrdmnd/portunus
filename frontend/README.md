@@ -9,9 +9,14 @@ Ensure you are in the env
 
     . env/bin/activate
 
+Run
+    flask run
+
+# Deploy
 Ensure dependencies are up-to-date
 
     pip install -t lib -r requirements.txt --upgrade --no-cache-dir
+
 
 The -t lib flag copies the libraries into a lib folder, which is uploaded to App
 Engine during deployment. The -r requirements.txt flag tells pip to install
@@ -23,7 +28,7 @@ If you haven't installed google cloud SDK, install it:
 
 To deploy, run
 
-    gcloud app deploy
+    gcloud app deploy --quiet
 
 
 # Dev DB:
@@ -33,7 +38,7 @@ Create stuff, explore.
     from portunus import db
     from portunus.models import *
     db.create_all()
-    user_1 = User(username='syn', email='syn@demo.com', password='password')
+    user = User(username='syn', email='syn@demo.com', password='123123')
     db.session.add(user_1)
     db.session.commit()
     # User.query.all()

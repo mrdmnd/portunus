@@ -30,7 +30,7 @@ def register():
     form = RegistrationForm()
     if form.validate_on_submit():
         hashed_password = bcrypt.generate_password_hash(form.password.data).decode('utf-8')
-        user = User(username=form.username.data, email=form.email.data, password=hashed_password)
+        user = User(username=form.username.data, email=form.email.data, password_hash=hashed_password)
         db.session.add(user)
         db.session.commit()
         flash(f'Your account has been created. You are now able to login!', 'success')
@@ -47,7 +47,7 @@ def login():
         # Check if any user exists with the submitted email. 
         # If such a user exists and the passwords match, log them in.
         user = User.query.filter_by(email=form.email.data).first()
-        if user and bcrypt.check_password_hash(user.password, form.password.data):
+        if user and bcrypt.check_password_hash(user.password_hash, form.password.data):
             login_user(user, remember=form.remember.data)
             next_page = request.args.get('next')
             return redirect(next_page if next_page else url_for('home'))
@@ -69,6 +69,9 @@ def save_picture(form_picture):
     form_picture.save(picture_path)
     return picture_filename
 
+
+# TODO(mrdmnd) - make this more like "edit_profile" and have a route for /user/<username> that anyone can click on to see details about each person
+# go to https://blog.miguelgrinberg.com/post/the-flask-mega-tutorial-part-vi-profile-page-and-avatars and scroll to Profile Editor
 @app.route('/account', methods=["GET", "POST"])
 @login_required
 def account():
