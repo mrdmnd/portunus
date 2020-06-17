@@ -1,6 +1,7 @@
 {% extends "layout.html" %}
 {% block content %}
 
+{% for dungeon_route in dungeon_routes %}
 <article class="media content-section">
   <div class="media-body">
     <div class="article-metadata">
@@ -12,5 +13,6 @@
   </div>
 </article>
 
+{% endfor %}
 {% endblock content %}
 

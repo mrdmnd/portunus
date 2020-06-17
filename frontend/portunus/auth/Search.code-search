@@ -1,0 +1,18 @@
+# Query: home
+
+7 results - 4 files
+
+portunus/auth/routes.py:
+  13:         return redirect(url_for('home'))
+  28:         return redirect(url_for('home'))
+  37:             return redirect(next_page if next_page else url_for('home'))
+  45:     return redirect(url_for('home'))
+
+portunus/templates/layout.html:
+  32:             <a class="nav-item nav-link" href="{{ url_for('index') }}">Home</a>
+
+portunus/templates/errors/404.html:
+  5:     <p><a href="{{ url_for('home') }}">Back</a></p>
+
+portunus/templates/errors/500.html:
+  6:     <p><a href="{{ url_for('home') }}">Back</a></p>
