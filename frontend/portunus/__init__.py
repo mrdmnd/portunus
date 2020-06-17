@@ -31,8 +31,3 @@ def create_app(config_class=Config):
     app.register_blueprint(main_bp)
 
     return app
-
-
-# Load goes here to avoid circular dependency when loading `app` variable.
-from portunus import models
-

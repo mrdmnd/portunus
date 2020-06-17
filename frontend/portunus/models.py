@@ -1,5 +1,5 @@
 from datetime import datetime
-from portunus import db, login_manager
+from portunus import db, login_manager, bcrypt
 from flask_login import UserMixin
 
 
@@ -14,7 +14,11 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(20), unique=True, index=True, nullable=False)
     email = db.Column(db.String(255), unique=True, index=True, nullable=False)
     image_file = db.Column(db.String(20), nullable=False, default="default.jpg")
+    date_created_utc = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     password_hash = db.Column(db.String(60), nullable=False)
+    biography = db.Column(
+        db.String(2000), default="No biography set for this user yet."
+    )
 
     # Relationships
     owned_routes = db.relationship("Route", backref="owner", lazy=True)
@@ -23,6 +27,12 @@ class User(db.Model, UserMixin):
 
     def __repr__(self):
         return f"User('{self.username}', '{self.email}')"
+
+    def set_password(self, password):
+        self.password_hash = bcrypt.generate_password_hash(password).decode("utf-8")
+
+    def check_password(self, password):
+        return bcrypt.check_password_hash(self.password_hash, password)
 
 
 class Route(db.Model):

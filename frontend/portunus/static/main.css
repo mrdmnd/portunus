@@ -51,3 +51,70 @@ footer {
   color: #cbd5db;
   opacity: 0.95 !important;
 }
+
+/* SIDEBAR STYLING */
+
+/* set the sidebar width */
+.w-sidebar {
+    width: 200px;
+    max-width: 200px;
+}
+
+.row.collapse {
+    margin-left: -200px;
+    left: 0;
+    transition: margin-left .15s linear;
+}
+
+.row.collapse.show {
+    margin-left: 0 !important;
+}
+
+.row.collapsing {
+    margin-left: -200px;
+    left: -0.05%;
+    transition: all .15s linear;
+}
+
+/* optional */
+.vh-100 {
+    min-height: 100vh;
+}
+
+/* optional for overlay sidebar on small screens */
+@media (max-width:768px) {
+
+    .row.collapse,
+    .row.collapsing {
+        margin-left: 0 !important;
+        left: 0 !important;
+        overflow: visible;
+    }
+    
+    .row > .sidebar.collapse {
+        display: flex !important;
+        margin-left: -100% !important;
+        transition: all .3s linear;
+        position: fixed;
+        z-index: 1050;
+        max-width: 0;
+        min-width: 0;
+        flex-basis: auto;
+    }
+    
+    .row > .sidebar.collapse.show {
+        margin-left: 0 !important;
+        width: 100%;
+        max-width: 100%;
+        min-width: initial;
+    }
+    
+    .row > .sidebar.collapsing {
+        display: flex !important;
+        margin-left: -10% !important;
+        transition: all .2s linear !important;
+        position: fixed;
+        z-index: 1050;
+        min-width: initial;
+    }
+}

@@ -24,28 +24,32 @@
   <header class="site-header">
     <nav class="navbar navbar-expand-md navbar-dark bg-steel fixed-top">
       <div class="container">
-        <a class="navbar-brand mr-4" href="/">Portunus</a>
+        <a class="navbar-brand mr-4" href="{{ url_for('main.index') }}">Portunus</a>
         <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarToggle"
           aria-controls="navbarToggle" aria-expanded="false" aria-label="Toggle navigation">
           <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarToggle">
           <div class="navbar-nav mr-auto">
-            <a class="nav-item nav-link" href="{{ url_for('main.index') }}">Home</a>
             <a class="nav-item nav-link"
               href="https://github.com/mrdmnd/portunus/blob/master/BACKGROUND.md">Background</a>
             <a class="nav-item nav-link" href="https://github.com/mrdmnd/portunus">Contribute</a>
+            <a class="nav-item nav-link" href="#">Addon</a>
           </div>
           <!-- Navbar Right Side -->
           <div class="navbar-nav">
             {% if current_user.is_authenticated %}
+            <a class="nav-item nav-link" href="#">Characters</a>
+            <a class="nav-item nav-link" href="#">Teams</a>
+            <a class="nav-item nav-link" href="#">Routes</a>
             <div class="dropdown">
-              <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton"
+              <button class="btn btn-primary dropdown-toggle" type="button" id="dropdownMenuButton"
                 data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                 {{ current_user.username }}
               </button>
+              <button class="btn btn-warning" type="button">Sim History</button>
               <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
-                <a class="dropdown-item" href="{{ url_for('main.account') }}">Account</a>
+                <a class="dropdown-item" href="{{ url_for('auth.update_account') }}">Settings</a>
                 <a class="dropdown-item" href="{{ url_for('auth.logout') }}">Logout</a>
               </div>
             </div>
@@ -71,26 +75,13 @@
         {% endwith %}
         {% block content %}{% endblock %}
       </div>
-      <div class="col-md-4">
-        <div class="content-section">
-          <h3>Our Sidebar</h3>
-          <p class='text-muted'>You can put any information here you'd like.
-          <ul class="list-group">
-            <li class="list-group-item list-group-item-light">Latest Posts</li>
-            <li class="list-group-item list-group-item-light">Announcements</li>
-            <li class="list-group-item list-group-item-light">Calendars</li>
-            <li class="list-group-item list-group-item-light">etc</li>
-          </ul>
-          </p>
-        </div>
-      </div>
     </div>
   </main>
 
   <footer class="page-footer font-small teal pt-4 fixed-bottom">
-    <div class="container-fluid text-center text-md-left">
-      <div class="row">
-        <div class="col-md-6 mt-md-0 mt-3">
+    <div class="container-fluid text-center">
+      <div class="row justify-content-center">
+        <div class="col-4">
           <h5 class="text-lowercase">/dev/urandom</h5>
           <ul class="list-unstyled">
             <li>
@@ -108,7 +99,7 @@
           </ul>
         </div>
         <hr class="clearfix w-100 d-md-none pb-3">
-        <div class="col-md-6 mb-md-0 mb-3">
+        <div class="col-4">
           <h5>Community</h5>
           <ul class="list-unstyled">
             <li>
@@ -121,7 +112,7 @@
               <a href="mailto:admin@portunuspl.us">Get Support</a>
             </li>
             <li>
-              Crafted with love by Synecdoche.
+              Crafted with love by <a href="https://raider.io/characters/us/tichondrius/Synecdoshout">Synecdoche</a>.
             </li>
           </ul>
         </div>
