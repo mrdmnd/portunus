@@ -1,6 +1,6 @@
 from flask_login import current_user
 from flask_wtf import FlaskForm
-from wtforms import BooleanField, PasswordField, StringField, SubmitField
+from wtforms import BooleanField, PasswordField, StringField, SubmitField, TextAreaField
 from wtforms.validators import DataRequired, Email, EqualTo, Length, ValidationError
 from wtforms.widgets import PasswordInput
 
@@ -47,6 +47,7 @@ class UpdateAccountForm(FlaskForm):
     )
     new_email = StringField("New Email", validators=[DataRequired(), Email()])
     new_password = StringField("New Password", widget=PasswordInput(hide_value=True))
+    new_biography = TextAreaField("New Biography", validators=[Length(min=0, max=140)])
     submit = SubmitField("Update")
 
     def validate_new_username(self, new_username):

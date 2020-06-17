@@ -61,6 +61,7 @@ def update_account():
         # Update current username + email
         current_user.username = form.new_username.data
         current_user.email = form.new_email.data
+        current_user.biography = form.new_biography.data
 
         # Set new password only if they fill the field in.
         if form.new_password.data:
@@ -71,5 +72,6 @@ def update_account():
     elif request.method == "GET":
         form.new_username.data = current_user.username
         form.new_email.data = current_user.email
+        form.new_biography.data = current_user.biography
 
     return render_template("update_account.html", title="Update Account", form=form)

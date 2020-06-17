@@ -47,11 +47,12 @@
                 data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                 {{ current_user.username }}
               </button>
-              <button class="btn btn-warning" type="button">Sim History</button>
               <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                <a class="dropdown-item" href="{{ url_for('main.user', username=current_user.username) }}">My Profile</a>
                 <a class="dropdown-item" href="{{ url_for('auth.update_account') }}">Settings</a>
                 <a class="dropdown-item" href="{{ url_for('auth.logout') }}">Logout</a>
               </div>
+              <button class="btn btn-warning" type="button">Sim History</button>
             </div>
             {% else %}
             <a class="nav-item nav-link" href="{{ url_for('auth.login') }}">Login</a>

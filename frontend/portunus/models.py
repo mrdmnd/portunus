@@ -13,11 +13,10 @@ class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), unique=True, index=True, nullable=False)
     email = db.Column(db.String(255), unique=True, index=True, nullable=False)
-    image_file = db.Column(db.String(20), nullable=False, default="default.jpg")
     date_created_utc = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     password_hash = db.Column(db.String(60), nullable=False)
     biography = db.Column(
-        db.String(2000), default="No biography set for this user yet."
+        db.String(140), default="No biography set for this user yet."
     )
 
     # Relationships
@@ -44,6 +43,7 @@ class Route(db.Model):
     content = db.Column(db.Text, nullable=False)
 
     # Relationships
+    # (none)
 
     def __repr__(self):
         return f"Route('{self.title}')"
@@ -70,7 +70,7 @@ class Team(db.Model):
         "Character",
         secondary=team_members,
         lazy="subquery",
-        backref=db.backref("teams", lazy=True),
+        backref=db.backref("teams", lazy=True)
     )
 
     def __repr__(self):
@@ -83,6 +83,20 @@ class Character(db.Model):
     server = db.Column(db.String(50), index=True, nullable=False)
     name = db.Column(db.String(20), index=True, nullable=False)
     spec = db.Column(db.Integer, index=True, nullable=False)
+
+    # Relationships
+    # (backhalf is already defined above in Team model)
+
+    def join_team(self, team):
+        if not self.is_member_of(team):
+            self.team_members.append(team)
+
+    def leave_team(self, team):
+        if self.is_member_of(team):
+            self.team_members.remove(team)
+    
+    def is_member_of(self, team):
+        return self.team_members.filter(team.id == self.id).count() > 0
 
     def __repr__(self):
         return f"Character({self.server}-{self.name} (spec: {self.spec}) owned by user_id {self.owner_user_id})"
