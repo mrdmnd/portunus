@@ -6,7 +6,8 @@
 
 Portunus is the Roman god of keys and gates - an appropriate name for a tool that attempts to automatically optimize high-end Mythic Keystone runs in World of Warcraft!
 
-Given a group of players, a set of "control policies" for those players, and a dungeon route configuration, Portunus simulates running through the entire key and returns a "final time" for your group to shoot for.
+Given a group of players, a collection of "control policies" for those players, and a dungeon route configuration, Portunus simulates running through an entire Mythic Plus key and returns a "final time" for your group.
+
 We allow the user to specify either a standard, deterministic control policy a la a traditional SIMC APL, or a pre-trained control policy in the form of a tensorflow model.
 
 ## Background
