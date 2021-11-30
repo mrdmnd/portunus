@@ -1,0 +1,210 @@
+Best successor state from state State(cp=0, energy=100.0, opportunity=0.0, hp_remaining=500, elapsed_time=0.0) is State(cp=2, energy=69.0, opportunity=9, hp_remaining=410, elapsed_time=1.0)
+Best successor state from state State(cp=2, energy=69.0, opportunity=9, hp_remaining=410, elapsed_time=1.0) is State(cp=3, energy=63.0, opportunity=0, hp_remaining=375, elapsed_time=2.0)
+Best successor state from state State(cp=3, energy=63.0, opportunity=0, hp_remaining=375, elapsed_time=2.0) is State(cp=5, energy=32.0, opportunity=9, hp_remaining=285, elapsed_time=3.0)
+Best successor state from state State(cp=5, energy=32.0, opportunity=9, hp_remaining=285, elapsed_time=3.0) is State(cp=5, energy=33.4, opportunity=8.9, hp_remaining=285, elapsed_time=3.1)
+Best successor state from state State(cp=5, energy=33.4, opportunity=8.9, hp_remaining=285, elapsed_time=3.1) is State(cp=5, energy=34.8, opportunity=8.8, hp_remaining=285, elapsed_time=3.2)
+Best successor state from state State(cp=5, energy=34.8, opportunity=8.8, hp_remaining=285, elapsed_time=3.2) is State(cp=5, energy=36.2, opportunity=8.7, hp_remaining=285, elapsed_time=3.3)
+Best successor state from state State(cp=5, energy=36.2, opportunity=8.7, hp_remaining=285, elapsed_time=3.3) is State(cp=0, energy=15.2, opportunity=7.7, hp_remaining=110, elapsed_time=4.3)
+Best successor state from state State(cp=0, energy=15.2, opportunity=7.7, hp_remaining=110, elapsed_time=4.3) is State(cp=0, energy=16.6, opportunity=7.6, hp_remaining=110, elapsed_time=4.4)
+Best successor state from state State(cp=0, energy=16.6, opportunity=7.6, hp_remaining=110, elapsed_time=4.4) is State(cp=0, energy=18.0, opportunity=7.5, hp_remaining=110, elapsed_time=4.5)
+Best successor state from state State(cp=0, energy=18.0, opportunity=7.5, hp_remaining=110, elapsed_time=4.5) is State(cp=0, energy=19.4, opportunity=7.4, hp_remaining=110, elapsed_time=4.6)
+Best successor state from state State(cp=0, energy=19.4, opportunity=7.4, hp_remaining=110, elapsed_time=4.6) is State(cp=0, energy=20.8, opportunity=7.3, hp_remaining=110, elapsed_time=4.7)
+Best successor state from state State(cp=0, energy=20.8, opportunity=7.3, hp_remaining=110, elapsed_time=4.7) is State(cp=1, energy=14.8, opportunity=0, hp_remaining=75, elapsed_time=5.7)
+Best successor state from state State(cp=1, energy=14.8, opportunity=0, hp_remaining=75, elapsed_time=5.7) is State(cp=1, energy=16.2, opportunity=0, hp_remaining=75, elapsed_time=5.8)
+Best successor state from state State(cp=1, energy=16.2, opportunity=0, hp_remaining=75, elapsed_time=5.8) is State(cp=1, energy=17.6, opportunity=0, hp_remaining=75, elapsed_time=5.9)
+Best successor state from state State(cp=1, energy=17.6, opportunity=0, hp_remaining=75, elapsed_time=5.9) is State(cp=1, energy=19.0, opportunity=0, hp_remaining=75, elapsed_time=6.0)
+Best successor state from state State(cp=1, energy=19.0, opportunity=0, hp_remaining=75, elapsed_time=6.0) is State(cp=1, energy=20.4, opportunity=0, hp_remaining=75, elapsed_time=6.1)
+Best successor state from state State(cp=1, energy=20.4, opportunity=0, hp_remaining=75, elapsed_time=6.1) is State(cp=1, energy=21.8, opportunity=0, hp_remaining=75, elapsed_time=6.2)
+Best successor state from state State(cp=1, energy=21.8, opportunity=0, hp_remaining=75, elapsed_time=6.2) is State(cp=1, energy=23.2, opportunity=0, hp_remaining=75, elapsed_time=6.3)
+Best successor state from state State(cp=1, energy=23.2, opportunity=0, hp_remaining=75, elapsed_time=6.3) is State(cp=1, energy=24.6, opportunity=0, hp_remaining=75, elapsed_time=6.4)
+Best successor state from state State(cp=1, energy=24.6, opportunity=0, hp_remaining=75, elapsed_time=6.4) is State(cp=1, energy=26.0, opportunity=0, hp_remaining=75, elapsed_time=6.5)
+Best successor state from state State(cp=1, energy=26.0, opportunity=0, hp_remaining=75, elapsed_time=6.5) is State(cp=1, energy=27.4, opportunity=0, hp_remaining=75, elapsed_time=6.6)
+Best successor state from state State(cp=1, energy=27.4, opportunity=0, hp_remaining=75, elapsed_time=6.6) is State(cp=1, energy=28.8, opportunity=0, hp_remaining=75, elapsed_time=6.7)
+Best successor state from state State(cp=1, energy=28.8, opportunity=0, hp_remaining=75, elapsed_time=6.7) is State(cp=1, energy=30.2, opportunity=0, hp_remaining=75, elapsed_time=6.8)
+Best successor state from state State(cp=1, energy=30.2, opportunity=0, hp_remaining=75, elapsed_time=6.8) is State(cp=1, energy=31.6, opportunity=0, hp_remaining=75, elapsed_time=6.9)
+Best successor state from state State(cp=1, energy=31.6, opportunity=0, hp_remaining=75, elapsed_time=6.9) is State(cp=1, energy=33.0, opportunity=0, hp_remaining=75, elapsed_time=7.0)
+Best successor state from state State(cp=1, energy=33.0, opportunity=0, hp_remaining=75, elapsed_time=7.0) is State(cp=1, energy=34.4, opportunity=0, hp_remaining=75, elapsed_time=7.1)
+Best successor state from state State(cp=1, energy=34.4, opportunity=0, hp_remaining=75, elapsed_time=7.1) is State(cp=1, energy=35.8, opportunity=0, hp_remaining=75, elapsed_time=7.2)
+Best successor state from state State(cp=1, energy=35.8, opportunity=0, hp_remaining=75, elapsed_time=7.2) is State(cp=1, energy=37.2, opportunity=0, hp_remaining=75, elapsed_time=7.3)
+Best successor state from state State(cp=1, energy=37.2, opportunity=0, hp_remaining=75, elapsed_time=7.3) is State(cp=1, energy=38.6, opportunity=0, hp_remaining=75, elapsed_time=7.4)
+Best successor state from state State(cp=1, energy=38.6, opportunity=0, hp_remaining=75, elapsed_time=7.4) is State(cp=1, energy=40.0, opportunity=0, hp_remaining=75, elapsed_time=7.5)
+Best successor state from state State(cp=1, energy=40.0, opportunity=0, hp_remaining=75, elapsed_time=7.5) is State(cp=1, energy=41.4, opportunity=0, hp_remaining=75, elapsed_time=7.6)
+Best successor state from state State(cp=1, energy=41.4, opportunity=0, hp_remaining=75, elapsed_time=7.6) is State(cp=2, energy=15.4, opportunity=0, hp_remaining=40, elapsed_time=8.6)
+Best successor state from state State(cp=2, energy=15.4, opportunity=0, hp_remaining=40, elapsed_time=8.6) is State(cp=2, energy=16.8, opportunity=0, hp_remaining=40, elapsed_time=8.7)
+Best successor state from state State(cp=2, energy=16.8, opportunity=0, hp_remaining=40, elapsed_time=8.7) is State(cp=2, energy=18.2, opportunity=0, hp_remaining=40, elapsed_time=8.8)
+Best successor state from state State(cp=2, energy=18.2, opportunity=0, hp_remaining=40, elapsed_time=8.8) is State(cp=2, energy=19.6, opportunity=0, hp_remaining=40, elapsed_time=8.9)
+Best successor state from state State(cp=2, energy=19.6, opportunity=0, hp_remaining=40, elapsed_time=8.9) is State(cp=2, energy=21.0, opportunity=0, hp_remaining=40, elapsed_time=9.0)
+Best successor state from state State(cp=2, energy=21.0, opportunity=0, hp_remaining=40, elapsed_time=9.0) is State(cp=2, energy=22.4, opportunity=0, hp_remaining=40, elapsed_time=9.1)
+Best successor state from state State(cp=2, energy=22.4, opportunity=0, hp_remaining=40, elapsed_time=9.1) is State(cp=2, energy=23.8, opportunity=0, hp_remaining=40, elapsed_time=9.2)
+Best successor state from state State(cp=2, energy=23.8, opportunity=0, hp_remaining=40, elapsed_time=9.2) is State(cp=2, energy=25.2, opportunity=0, hp_remaining=40, elapsed_time=9.3)
+Best successor state from state State(cp=2, energy=25.2, opportunity=0, hp_remaining=40, elapsed_time=9.3) is State(cp=2, energy=26.6, opportunity=0, hp_remaining=40, elapsed_time=9.4)
+Best successor state from state State(cp=2, energy=26.6, opportunity=0, hp_remaining=40, elapsed_time=9.4) is State(cp=2, energy=28.0, opportunity=0, hp_remaining=40, elapsed_time=9.5)
+Best successor state from state State(cp=2, energy=28.0, opportunity=0, hp_remaining=40, elapsed_time=9.5) is State(cp=2, energy=29.4, opportunity=0, hp_remaining=40, elapsed_time=9.6)
+Best successor state from state State(cp=2, energy=29.4, opportunity=0, hp_remaining=40, elapsed_time=9.6) is State(cp=2, energy=30.8, opportunity=0, hp_remaining=40, elapsed_time=9.7)
+Best successor state from state State(cp=2, energy=30.8, opportunity=0, hp_remaining=40, elapsed_time=9.7) is State(cp=2, energy=32.2, opportunity=0, hp_remaining=40, elapsed_time=9.8)
+Best successor state from state State(cp=2, energy=32.2, opportunity=0, hp_remaining=40, elapsed_time=9.8) is State(cp=2, energy=33.6, opportunity=0, hp_remaining=40, elapsed_time=9.9)
+Best successor state from state State(cp=2, energy=33.6, opportunity=0, hp_remaining=40, elapsed_time=9.9) is State(cp=2, energy=35.0, opportunity=0, hp_remaining=40, elapsed_time=10.0)
+Best successor state from state State(cp=2, energy=35.0, opportunity=0, hp_remaining=40, elapsed_time=10.0) is State(cp=2, energy=36.4, opportunity=0, hp_remaining=40, elapsed_time=10.1)
+Best successor state from state State(cp=2, energy=36.4, opportunity=0, hp_remaining=40, elapsed_time=10.1) is State(cp=0, energy=15.4, opportunity=0, hp_remaining=-30, elapsed_time=11.1)
+         114206250 function calls (114206126 primitive calls) in 24.388 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      4/1    0.000    0.000   24.388   24.388 {built-in method builtins.exec}
+        1    0.000    0.000   24.388   24.388 demo.py:1(<module>)
+        1    0.006    0.006   24.387   24.387 demo.py:158(Solve)
+     9600    0.018    0.000   24.378    0.003 mcts.py:37(DoRollout)
+     9600    3.407    0.000   23.254    0.002 mcts.py:45(_select)
+ 22270362   12.807    0.000   19.161    0.000 demo.py:144(__hash__)
+ 89081448    6.355    0.000    6.355    0.000 {built-in method builtins.hash}
+   233059    0.328    0.000    3.164    0.000 mcts.py:79(_uct_select)
+   237630    0.218    0.000    1.896    0.000 {built-in method builtins.max}
+   290093    0.512    0.000    1.678    0.000 mcts.py:85(uct)
+     9600    0.229    0.000    1.054    0.000 mcts.py:73(_backpropagate)
+   233059    0.106    0.000    0.516    0.000 {built-in method builtins.all}
+   523152    0.138    0.000    0.410    0.000 mcts.py:83(<genexpr>)
+   290095    0.070    0.000    0.070    0.000 {built-in method math.log}
+   145642    0.054    0.000    0.054    0.000 demo.py:147(__eq__)
+   290095    0.038    0.000    0.038    0.000 {built-in method math.sqrt}
+     9600    0.010    0.000    0.037    0.000 mcts.py:66(_simulate)
+   242737    0.031    0.000    0.031    0.000 {method 'append' of 'list' objects}
+   233137    0.027    0.000    0.027    0.000 {method 'keys' of 'dict' objects}
+     3817    0.002    0.000    0.016    0.000 demo.py:133(FindChildren)
+     9600    0.004    0.000    0.014    0.000 mcts.py:60(_expand)
+     3814    0.004    0.000    0.014    0.000 demo.py:136(<listcomp>)
+     3814    0.003    0.000    0.006    0.000 demo.py:30(Execute)
+     3738    0.002    0.000    0.005    0.000 random.py:285(choice)
+    17300    0.004    0.000    0.004    0.000 demo.py:138(IsTerminal)
+     9600    0.003    0.000    0.003    0.000 demo.py:141(Reward)
+     3738    0.002    0.000    0.003    0.000 random.py:250(_randbelow_with_getrandbits)
+   144/48    0.001    0.000    0.001    0.000 {method 'format' of 'str' objects}
+     4476    0.001    0.000    0.001    0.000 demo.py:126(__init__)
+       96    0.000    0.000    0.001    0.000 demo.py:153(__repr__)
+       96    0.000    0.000    0.001    0.000 mcts.py:24(Choose)
+      7/2    0.000    0.000    0.001    0.000 <frozen importlib._bootstrap>:986(_find_and_load)
+      7/2    0.000    0.000    0.001    0.000 <frozen importlib._bootstrap>:956(_find_and_load_unlocked)
+     4777    0.001    0.000    0.001    0.000 {built-in method builtins.min}
+      7/2    0.000    0.000    0.001    0.000 <frozen importlib._bootstrap>:650(_load_unlocked)
+     3814    0.001    0.000    0.001    0.000 demo.py:72(Usable)
+      3/2    0.000    0.000    0.001    0.000 <frozen importlib._bootstrap_external>:777(exec_module)
+      272    0.000    0.000    0.001    0.000 demo.py:77(Execute)
+      359    0.000    0.000    0.001    0.000 demo.py:106(Execute)
+     7453    0.001    0.000    0.001    0.000 {method 'getrandbits' of '_random.Random' objects}
+     3814    0.001    0.000    0.001    0.000 demo.py:102(Usable)
+     3814    0.001    0.000    0.001    0.000 demo.py:40(Usable)
+      138    0.000    0.000    0.001    0.000 mcts.py:32(score)
+     11/2    0.000    0.000    0.001    0.000 <frozen importlib._bootstrap>:211(_call_with_frames_removed)
+        1    0.000    0.000    0.000    0.000 random.py:1(<module>)
+      288    0.000    0.000    0.000    0.000 {built-in method builtins.round}
+     3814    0.000    0.000    0.000    0.000 demo.py:26(Usable)
+     3756    0.000    0.000    0.000    0.000 {built-in method builtins.len}
+     3738    0.000    0.000    0.000    0.000 {method 'bit_length' of 'int' objects}
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:849(get_code)
+        7    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:890(_find_spec)
+       48    0.000    0.000    0.000    0.000 {built-in method builtins.print}
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:1334(find_spec)
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:1302(_get_spec)
+        7    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:549(module_from_spec)
+        7    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:1431(find_spec)
+        9    0.000    0.000    0.000    0.000 {built-in method builtins.__build_class__}
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:578(_compile_bytecode)
+        3    0.000    0.000    0.000    0.000 {built-in method marshal.loads}
+        7    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:477(_init_module_attrs)
+       30    0.000    0.000    0.000    0.000 demo.py:45(Execute)
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:969(get_data)
+       38    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:62(_path_join)
+        7    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:147(__enter__)
+        1    0.000    0.000    0.000    0.000 mcts.py:1(<module>)
+        1    0.000    0.000    0.000    0.000 bisect.py:1(<module>)
+        4    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:746(create_module)
+        6    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:294(cache_from_source)
+        4    0.000    0.000    0.000    0.000 {built-in method _imp.create_builtin}
+       13    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:80(_path_stat)
+        2    0.000    0.000    0.000    0.000 abc.py:84(__new__)
+       13    0.000    0.000    0.000    0.000 {built-in method posix.stat}
+        7    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:157(_get_module_lock)
+        6    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:376(cached)
+        3    0.000    0.000    0.000    0.000 {built-in method io.open_code}
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:424(_get_cached)
+        7    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:725(find_spec)
+       38    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:64(<listcomp>)
+        1    0.000    0.000    0.000    0.000 random.py:94(__init__)
+        2    0.000    0.000    0.000    0.000 {built-in method __new__ of type object at 0x8ff5e0}
+        1    0.000    0.000    0.000    0.000 random.py:123(seed)
+        1    0.000    0.000    0.000    0.000 random.py:78(Random)
+        3    0.000    0.000    0.000    0.000 {method 'read' of '_io.BufferedReader' objects}
+        4    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:406(spec_from_loader)
+        7    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:151(__exit__)
+        1    0.000    0.000    0.000    0.000 {function Random.seed at 0x7fba90c51310}
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:1426(_get_spec)
+       34    0.000    0.000    0.000    0.000 {built-in method builtins.getattr}
+        7    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:103(release)
+        7    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:78(acquire)
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:1010(path_stats)
+        9    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:1265(_path_importer_cache)
+       78    0.000    0.000    0.000    0.000 {method 'pop' of 'set' objects}
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:99(_path_isfile)
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:493(_classify_pyc)
+       45    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:222(_verbose_message)
+        7    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:58(__init__)
+        7    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:176(cb)
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:629(spec_from_file_location)
+        2    0.000    0.000    0.000    0.000 {built-in method _abc._abc_init}
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:90(_path_is_mode_type)
+       31    0.000    0.000    0.000    0.000 {built-in method builtins.hasattr}
+        6    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:68(_path_split)
+        9    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:51(_unpack_uint32)
+       82    0.000    0.000    0.000    0.000 {method 'rstrip' of 'str' objects}
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:526(_validate_timestamp_pyc)
+       44    0.000    0.000    0.000    0.000 {method 'join' of 'str' objects}
+        3    0.000    0.000    0.000    0.000 {built-in method posix.getcwd}
+       33    0.000    0.000    0.000    0.000 {method 'rpartition' of 'str' objects}
+        4    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:754(exec_module)
+       30    0.000    0.000    0.000    0.000 {method 'random' of '_random.Random' objects}
+        1    0.000    0.000    0.000    0.000 {built-in method math.exp}
+       13    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:867(__exit__)
+        7    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:389(parent)
+       13    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:863(__enter__)
+        7    0.000    0.000    0.000    0.000 {built-in method _imp.is_builtin}
+        4    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:232(_requires_builtin_wrapper)
+        7    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:342(__init__)
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:456(_check_name_wrapper)
+       27    0.000    0.000    0.000    0.000 {built-in method _imp.release_lock}
+        1    0.000    0.000    0.000    0.000 mcts.py:92(Node)
+       27    0.000    0.000    0.000    0.000 {built-in method _imp.acquire_lock}
+       17    0.000    0.000    0.000    0.000 {built-in method builtins.isinstance}
+        1    0.000    0.000    0.000    0.000 mcts.py:15(MCTS)
+        1    0.000    0.000    0.000    0.000 mcts.py:18(__init__)
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:800(find_spec)
+       14    0.000    0.000    0.000    0.000 {method 'get' of 'dict' objects}
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:35(_new_module)
+        7    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:143(__init__)
+       14    0.000    0.000    0.000    0.000 {built-in method _thread.get_ident}
+        1    0.000    0.000    0.000    0.000 random.py:103(__init_subclass__)
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:939(__init__)
+       14    0.000    0.000    0.000    0.000 {built-in method _thread.allocate_lock}
+        1    0.000    0.000    0.000    0.000 {built-in method posix.register_at_fork}
+        1    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:1017(_handle_fromlist)
+        3    0.000    0.000    0.000    0.000 {method 'endswith' of 'str' objects}
+        7    0.000    0.000    0.000    0.000 {method 'pop' of 'dict' objects}
+        9    0.000    0.000    0.000    0.000 {built-in method from_bytes}
+        9    0.000    0.000    0.000    0.000 {built-in method posix.fspath}
+        1    0.000    0.000    0.000    0.000 random.py:709(SystemRandom)
+        7    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:397(has_location)
+        4    0.000    0.000    0.000    0.000 {built-in method _imp.exec_builtin}
+        5    0.000    0.000    0.000    0.000 abc.py:7(abstractmethod)
+        3    0.000    0.000    0.000    0.000 {built-in method _imp._fix_co_filename}
+        1    0.000    0.000    0.000    0.000 demo.py:125(State)
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+        7    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:40(_relax_case)
+        3    0.000    0.000    0.000    0.000 {built-in method _imp.is_frozen}
+        1    0.000    0.000    0.000    0.000 demo.py:22(Wait100MS)
+        1    0.000    0.000    0.000    0.000 demo.py:36(SinisterStrike)
+        1    0.000    0.000    0.000    0.000 demo.py:68(PistolShot)
+        1    0.000    0.000    0.000    0.000 demo.py:98(Dispatch)
+        4    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:771(is_package)
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:964(get_filename)
+        3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:774(create_module)
+
+
