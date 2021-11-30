@@ -1,0 +1,136 @@
+parameter_config {
+  max_iterations: 10000
+  target_error: 0.01
+}
+encounter_config {
+  name: "PatchworkFight"
+  time_target: 300000
+  time_variance: 0.10
+  events {
+    timestamp: 0
+    spawn {
+      enemy {
+        id: 1
+        name: "Patchwork"
+        type: BOSS
+        health_estimator: BURST_AND_EXECUTE
+      }
+    }
+  }
+  events {
+    timestamp: 500
+    lust {
+      haste_percentage: 0.30
+    }
+  }
+}
+player_config {
+  name: "Synecdoche"
+  race: BLOOD_ELF
+  spec: ROGUE_ASSASSINATION
+  talents: "1133111"
+  gearset {
+    items {
+      slot: HEAD
+      item_id: 152163
+      bonus_ids: 3611
+      bonus_ids: 1487
+      bonus_ids: 3528
+    }
+    items {
+      slot: NECK
+      item_id: 151973
+      enchant_id: 5890
+      bonus_ids: 3612
+      bonus_ids: 1502
+      bonus_ids: 3528
+    }
+    items {
+      slot: SHOULDER
+      item_id: 144236
+      enchant_id: 5929
+      bonus_ids: 3529
+      bonus_ids: 1811
+      bonus_ids: 3630
+    }
+    items {
+      slot: BACK
+      item_id: 152161
+      enchant_id: 5435
+      bonus_ids: 3612
+      bonus_ids: 1507
+      bonus_ids: 3336
+    }
+    items {
+      slot: CHEST
+      item_id: 152160
+      bonus_ids: 3611
+      bonus_ids: 1497
+      bonus_ids: 3336
+    }
+    items {
+      slot: WRIST
+      item_id: 137098
+      bonus_ids: 1811
+      bonus_ids: 3630
+    }
+    items {
+      slot: LEGS
+      item_id: 134194
+      bonus_ids: 3536
+      bonus_ids: 1642
+      bonus_ids: 3337
+    }
+    items {
+      slot: FEET
+      item_id: 134429
+      bonus_ids: 3536
+      bonus_ids: 1622
+      bonus_ids: 3337
+    }
+    items {
+      slot: FINGER1
+      item_id: 151972
+      enchant_id: 5429
+      bonus_ids: 3611
+      bonus_ids: 1497
+      bonus_ids: 3336
+    }
+    items {
+      slot: FINGER2
+      item_id: 152064
+      enchant_id: 5429
+      bonus_ids: 3612
+      bonus_ids: 1502
+      bonus_ids: 3528
+    }
+    items {
+      slot: TRINKET1
+      item_id: 151968
+      bonus_ids: 3612
+      bonus_ids: 1502
+      bonus_ids: 3528
+    }
+    items {
+      slot: TRINKET2
+      item_id: 154174
+      bonus_ids: 3984
+      bonus_ids: 3995
+    }
+    items {
+      slot: MAIN_HAND
+      item_id: 128870
+      gem_ids: 137549
+      gem_ids: 152049
+      gem_ids: 136718
+      bonus_ids: 741
+    }
+    items {
+      slot: OFF_HAND
+      item_id: 128869
+    }
+  }
+}
+policy {
+  contents: "THIS IS MY POLICY"
+}

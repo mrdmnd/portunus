@@ -1,0 +1,117 @@
+# Synecdosneak - Outlaw - 2020-11-24 11:57 - US/Tichondrius
+# SimC Addon 9.0.2-05
+# Requires SimulationCraft 901-01 or newer
+
+rogue="Synecdosneak"
+level=60
+race=blood_elf
+region=us
+server=tichondrius
+role=attack
+professions=herbalism=38/engineering=1
+talents=2122122
+spec=outlaw
+
+# azerite_essences=23:3/300573/22:3/300575/300576/27:3/300577/312927/12:4/312928
+# azerite_essences_available=4:4/5:4/6:3/12:4/14:3/15:3/22:3/23:3/27:3/28:4/32:3/35:3/36:1
+
+covenant=kyrian
+# conduits_available=
+# renown=1
+
+head=,id=175429,bonus_id=6707,drop_level=59
+neck=,id=158075,bonus_id=6316/4932/4933/1552,azerite_level=84
+shoulder=,id=175434,bonus_id=6706/7173,drop_level=58
+back=,id=175766,bonus_id=6707/6901,drop_level=60
+chest=,id=175483,bonus_id=6706,drop_level=60
+shirt=,id=169878
+tabard=,id=168619
+wrist=,id=173348,bonus_id=6707/6902,drop_level=60
+hands=,id=175423,bonus_id=6707,drop_level=59
+waist=,id=178699,bonus_id=6805/6652/7194/1472/4785
+legs=,id=175498,bonus_id=6707,drop_level=58
+feet=,id=181578,bonus_id=6652/1472/5852/6616
+finger1=,id=175710,bonus_id=6706,drop_level=58
+finger2=,id=158362,enchant_id=6111,bonus_id=6534/42/6516/6515/1533/4786
+trinket1=,id=184839,bonus_id=6652/1472/6616
+trinket2=,id=175730,bonus_id=6707/6902,drop_level=58
+main_hand=,id=181632,bonus_id=6652/1472/5852/6616
+off_hand=,id=177643,bonus_id=6706,drop_level=59
+
+### Gear from Bags
+#
+# Starshroud Helm (140)
+# head=,id=175662,bonus_id=6706,drop_level=58
+#
+# Gormgris Gorget (120)
+# neck=,id=175741,bonus_id=6707,drop_level=56
+#
+# Cloak of Coordination (29)
+# back=,id=65274
+#
+# Dredwing Shroud (138)
+# back=,id=175765,bonus_id=6707,drop_level=59
+#
+# Air Bootuses (146)
+# feet=,id=177655,bonus_id=6706,drop_level=60
+#
+# Commander's Signet of Battle (70)
+# finger1=,id=166559
+#
+# Brimming Ember Shard (146)
+# trinket1=,id=175733,bonus_id=6706,drop_level=59
+#
+# Withergrove Shardling (120)
+# trinket1=,id=183851,bonus_id=6707,drop_level=56
+#
+# Reverent Dagger of the Peerless (95)
+# main_hand=,id=176799,bonus_id=6908/41/1684,drop_level=53
+#
+# Bonefused Warblade (116)
+# main_hand=,id=180821,bonus_id=6707/6901,drop_level=54
+#
+# Bonebender's Warblade (122)
+# main_hand=,id=180666,bonus_id=6706,drop_level=55
+#
+# Soulrender's Fang (120)
+# main_hand=,id=158323,bonus_id=6536/6516/6515/1533/4786
+#
+# Cavalier's Morningstar (140)
+# main_hand=,id=178058,bonus_id=6706,drop_level=58
+#
+# Diver's Folly (100)
+# main_hand=,id=168900,enchant_id=6148,bonus_id=4800/1500/4786
+#
+# Diver's Folly (105)
+# main_hand=,id=168900,enchant_id=5962,bonus_id=4800/1500/5850/4783
+#
+# Salvaged Incendiary Tool (120)
+# main_hand=,id=169058,bonus_id=6536/6516/6515/1514/4786
+#
+# Vellum-Bound Tome of the Harmonious (95)
+# off_hand=,id=178951,bonus_id=6908/6652/1716,drop_level=54
+#
+# Reverent Dagger of the Peerless (95)
+# off_hand=,id=176799,bonus_id=6908/41/1684,drop_level=53
+#
+# Bonefused Warblade (116)
+# off_hand=,id=180821,bonus_id=6707/6901,drop_level=54
+#
+# Bonebender's Warblade (122)
+# off_hand=,id=180666,bonus_id=6706,drop_level=55
+#
+# Soulrender's Fang (120)
+# off_hand=,id=158323,bonus_id=6536/6516/6515/1533/4786
+#
+# Cavalier's Morningstar (140)
+# off_hand=,id=178058,bonus_id=6706,drop_level=58
+#
+# Diver's Folly (100)
+# off_hand=,id=168900,enchant_id=6148,bonus_id=4800/1500/4786
+#
+# Diver's Folly (105)
+# off_hand=,id=168900,enchant_id=5962,bonus_id=4800/1500/5850/4783
+#
+# Salvaged Incendiary Tool (120)
+# off_hand=,id=169058,bonus_id=6536/6516/6515/1514/4786
+
