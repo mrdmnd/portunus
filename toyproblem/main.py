@@ -36,6 +36,9 @@ def UniformRandomPolicy(state):
 def SmarterPolicy(state):
     if sim.Dispatch.UsableFromState(state) and state.combo_points >= 5:
         return sim.Dispatch
+    # We are combo point capped, so wait for energy to dispatch.
+    elif not sim.Dispatch.UsableFromState(state) and state.combo_points >= 5:
+        return sim.Wait
     elif sim.PistolShot.UsableFromState(state) and state.opportunity_remains > 0:
         return sim.PistolShot
     elif sim.SinisterStrike.UsableFromState(state) and state.combo_points < 5:
@@ -46,18 +49,20 @@ def SmarterPolicy(state):
 
 def iterate(start_state, policy):
     state = start_state
-    #print("Starting iteration with state:")
-    #print(state)
+    print("Starting iteration with state:")
+    print(state)
     while not state.IsTerminal():
         chosen_action = policy(state)
-        #print(chosen_action)
+        if chosen_action is not sim.Wait:
+            print(chosen_action)
         outcome_distribution = state.PerformAction(chosen_action)
         state = weighted_sample(outcome_distribution)
-        #print(state)
+        if chosen_action is not sim.Wait:
+            print(state)
     return state.sim_time
 
 def main():
-    n_iters = 100
+    n_iters = 1
     starting_state = sim.State(target_health=1000)
 
     uniform_random_average_fight_length = 0.0
