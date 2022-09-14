@@ -20,7 +20,7 @@ The rogue has three abilities (and four actions, when we count the "wait/pool" a
 - Pistol Shot: Costs 40 energy, generates 1 combo point, does 35 damage.
   - If opportunity buff is up, costs 20 energy and does 70 damage.
 - Dispatch: Costs 35 energy. Consumes all CP, though you must have at least one. Does CP * 35 damage.
-- "Wait": The rogue does nothing; energy pools up during this time. We default this to 100ms.
+- "Wait": The agent does nothing; energy pools up during this time. We default this to 100ms.
 
 - The goal here is to learn a policy that performs an optimal rotation: use sinister strike to build combo points, and use opportunity procs when they are up.
 """

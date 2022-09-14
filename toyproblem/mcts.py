@@ -91,15 +91,14 @@ class MCTS:
 
 class Node(ABC):
     """
-    A representation of a single board state.
+    A representation of a single state.
     MCTS works by constructing a tree of these Nodes.
-    Could be e.g. a chess or checkers board state.
     """
 
     @abstractmethod
     def FindChildren(self):
-        "All possible successors of this board state"
-        return set()
+        "All possible successors of this board state, weighted by their probabilistic outcomes"
+        return dict()
 
     @abstractmethod
     def IsTerminal(self):
