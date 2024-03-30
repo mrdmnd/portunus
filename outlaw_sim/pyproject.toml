@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "outlaw-rl"
+version = "0.1.0"
+description = ""
+authors = ["Matt Redmond <mttrdmnd@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.12"
+gymnasium = "^0.29.1"
+numpy = "^1.26.3"
+stable-baselines3 = {extras = ["extra"], version = "^2.2.1"}
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
