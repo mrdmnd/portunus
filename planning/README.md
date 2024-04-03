@@ -1,5 +1,5 @@
 # Planning
-This module implements a thread-safe Monte Carlo Tree Search library in Rust (/search) as well as a game simulation library in Rust.
+This module implements a thread-safe Monte Carlo Tree Search library (/search) as well as a game simulation library.
 
 For simulation:
 - Primitive: given a game state, be able to fast forward "one action":

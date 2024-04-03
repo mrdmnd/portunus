@@ -2,7 +2,7 @@
 Portunus is the Roman god of keys and gates - an appropriate name for a suite of tools that attempts to automatically optimize a character control policy for performing keystone speedruns in World of Warcraft. We provide an end-to-end implementation of DeepMind's AlphaZero Deep Reinforcement Learning algorithm to automatically reveal the correct actions to take in any given situation.
 
 ## Historical Context and Problem Motivation
-See (this document)[HISTORY.md] for historical context on the problem space.
+See [this document](HISTORY.md) for historical context on the problem space.
 
 ## Project Goals
 Core goal: build a framework for bringing AlphaZero style MCTS and policy improvement to World of Warcraft PVE.
@@ -41,6 +41,8 @@ NOTE: this is probably against the TOS but we're only exporting data that would 
 This is NOT a bot and does not automate any of the decision making to a script - you still have to press the suggested button and move your character! There's no memory writing happening here.
 
 I believe this is a slightly thorny position to take - this is a research project, not intended to gain an unfair advantage over other players. Ideally I could write everything that the overlay does IN GAME in LUA, but we'd either have to (a) get access to GPU resources for the NN evaluations or (b) rewrite the whole thing to use CPU only, as well as a pytorch-style library directly in LUA. This is not impossible, but as a proof of concept I'm going with the "slightly sketchier" approach at first.
+
+It's very possible that the better way to do this is just with direct memory reads from the client process, but that probably requires more reverse engineering work than I want to do.
 
 ### Planning Module (Rust)
 The overlay (main program) will pass information from the in-game addon to an MCTS-style AlphaZero planner module. This is two components: simulation, and search.
