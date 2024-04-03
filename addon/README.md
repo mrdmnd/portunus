@@ -1,0 +1,2 @@
+# Addon
+This is a placeholder for a lua addon for World of Warcraft that is ... slightly monkaDanger. Its entire purpose is to export visible game state (MUST HAVE NAMEPLATES ON!) as pixel information, rendered to the client. We then use the overlay program to read that pixel information as our data flow.
