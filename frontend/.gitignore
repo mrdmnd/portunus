@@ -1,5 +1,0 @@
-env/*
-lib/*
-portunus/static/profile_pics/*
-portunus/site.db
-*.pyc

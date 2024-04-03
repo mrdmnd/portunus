@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "outlaw-rl"
+name = "portunus"
 version = "0.1.0"
-description = ""
+description = "A suite of tools for finding optimal World of Warcraft control policies"
 authors = ["Matt Redmond <mttrdmnd@gmail.com>"]
 readme = "README.md"
 
