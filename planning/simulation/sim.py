@@ -16,8 +16,6 @@ High level architecture overview:
 - The sim has a few "advance" methods, which work through the event queue and update resources/cooldowns/auras as necessary.
 - Some of these are internal-use-only.
     - AdvanceThroughNextEvent()
-    - AdvanceFixedTimstep(timestep)
-    - AdvanceToEnergy(energy_target)
     - AdvanceToDecisionPoint()
 
 - Architecturally, we assume the simulation is "atomically split" by the events in the queue; that is, 
@@ -70,30 +68,12 @@ class Sim():
     def AdvanceToEnergy(self, energy_threshold):
         pass
 
-    # Advances the sim through events until the player is ready to take an action: either the GCD is zero, or the GCD is non-zero but there are available off-gcd actions.
+    # Advances the sim through events until the player is ready to take their next action: either the GCD is zero, or the GCD is non-zero but there are available off-gcd actions.
     # Additionally, if the player does not have enough energy available?
     # What happens if the previous action was "wait until next decision point" - does that wait until the next spell comes off cooldown? Does it wait until the resource being pooled caps out?
+    # At a certain point we need to force the player to act - you cannot wait around forever.
     def Advance():
         pass
-
-def AdvanceAura(self, aura_id, advance_interval):
-    if aura_id not in self.auras:
-        raise KeyError("AuraId not present in aura manager for this unit.")
-    (old_duration, old_stacks) = self.auras[aura_id]
-    new_duration = old_duration - advance_interval
-    # TODO: check if it's faster to NOT delete the aura when it expires?
-    if new_duration > 0:
-        self.auras[aura_id] = (new_duration, old_stacks) 
-    else:
-        del self.auras[aura_id]
-
-def AdvanceCooldown(self, spell_id, advance_interval):
-    if spell_id not in self.cooldowns:
-        raise KeyError("SpellId not present in cooldown manager for this unit.")
-    old_duration = self.cooldowns[spell_id]
-    new_duration = old_duration - advance_interval
-    self.cooldowns[spell_id] = max(0.0, new_duration)
-
 
 # Scheduled time is the time that this event is slated to fire.
 # Callback is a function that takes a Sim() object and is allowed to mutate said object (even adding new events in the event queue.)
