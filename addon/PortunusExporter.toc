@@ -9,6 +9,13 @@
 
 # Could also optionally have dependenices, optional deps, saved variables, saved variables per character, etc.
 
-# Main
+LibStub.lua
+
+# https://github.com/SafeteeWoW/LibDeflate
+LibDeflate.lua
+
+# https://github.com/markstinson/lua-MessagePack, modified slightly to account for string.dump() not working.
+MessagePack.lua
+
+# Main addon
 PortunusExporter.lua
-FlatBuffers.lua
