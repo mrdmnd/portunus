@@ -37,3 +37,4 @@ Cargo.lock
 __pycache__
 frontend/.vscode/settings.json
 frontend/site.db
+.vscode/settings.json
