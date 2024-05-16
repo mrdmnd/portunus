@@ -47,6 +47,10 @@ Portunus.MainFrame:SetPoint("TOPLEFT", 0, 0)
 Portunus.MainFrame:RegisterEvent("ADDON_LOADED")
 
 local function TimerCallback()
+    -- Ideally, this looks like this:
+    -- local gameStateMegaObject = GetGameState()
+    -- local bytes = flatbuffer.serialize(gameStateMegaObject).into_bytes
+
     -- This is demo data.
     local bytes = {255,   0,   0,
                      0, 255,   0,
@@ -58,6 +62,15 @@ Portunus.MainFrame:SetScript("OnEvent", function (self, Event, Arg1)
     if Event == "ADDON_LOADED" and Arg1 == "PortunusExporter" then
 		Portunus.MainFrame:Show()
         InitializePixels()
+
+        local ok = pcall(require, "jit")
+        if not ok then print ("not ok") else print("ok") end
+        -- prints not ok
+
+        local ok, bit = pcall(require, "bit32")
+        if not ok then print ("no bit32") else print("you got it") end
+        assert(ok, "The Bit32 library must be installed")
+
         Portunus.Timer = C_Timer.NewTicker(Portunus.UpdatePeriod, TimerCallback)
         C_Timer.After(2, function() Portunus.MainFrame:UnregisterEvent("ADDON_LOADED") end)
     end

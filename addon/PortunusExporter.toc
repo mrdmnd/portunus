@@ -9,18 +9,6 @@
 
 # Could also optionally have dependenices, optional deps, saved variables, saved variables per character, etc.
 
-# GUI
-# Panels.lua
-
-# API
-# Settings.lua
-# Core.lua
-# Events.lua
-
-
-# UI
-# UI.xml
-# UI.lua
-
 # Main
 PortunusExporter.lua
+FlatBuffers.lua

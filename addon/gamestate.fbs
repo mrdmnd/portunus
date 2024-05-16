@@ -1,0 +1,31 @@
+// IDL file for our game client state.
+
+namespace Portunus;
+
+table Cooldown {
+    spell_id:uint;
+    remains:float;
+    charges:float;
+}
+
+table Aura {
+    spell_id:uint;
+    remains:float;
+    stacks:short;
+}
+
+table Unit {
+    guid:uint;
+    buffs:[Aura];
+    debuffs:[Aura];
+}
+
+table Player {
+    buffs:[Aura];
+    debuffs:[Aura];
+    cooldowns:[Cooldown];
+    current_target:Unit;
+    visible_targets:[Unit];
+}
+
+root_type Player;
