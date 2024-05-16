@@ -1,0 +1,26 @@
+## Interface: 100207
+
+## Title: PortunusExporter
+## Author: Synecd0che
+## Version: 10.2.7.01
+## Notes: Export gamestate data for use by Portunus.
+## DefaultState: Enabled
+## LoadOnDemand: 0
+
+# Could also optionally have dependenices, optional deps, saved variables, saved variables per character, etc.
+
+# GUI
+# Panels.lua
+
+# API
+# Settings.lua
+# Core.lua
+# Events.lua
+
+
+# UI
+# UI.xml
+# UI.lua
+
+# Main
+PortunusExporter.lua

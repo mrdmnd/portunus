@@ -1,2 +1,5 @@
 # Addon
-This is a placeholder for a lua addon for World of Warcraft that is ... slightly monkaDanger. Its entire purpose is to export visible game state (MUST HAVE NAMEPLATES ON!) as pixel information, rendered to the client. We then use the overlay program to read that pixel information as our data flow.
+
+This addon exports gamestate by writing it to a sequence of pixels. Our overlay client then reads the pixels, decodes the game state, and performs the appropriate operations.
+
+For development, you can fix up the constants set in symlink.bat to match your installation, then run symlink.bat directly to link the dev files to your game client.
