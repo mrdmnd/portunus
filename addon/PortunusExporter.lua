@@ -103,12 +103,12 @@ local function TimerCallback()
             HP = 100, Mana = 25
         },
     }
-    --local bytes = MessagepackEncodeTable(test_table)
     local bytes = MessagepackEncodeTable(test_table)
 
-    local t = debugprofilestop()
+    local t_start = debugprofilestop()
     UpdatePixels(bytes)
-    print("overall update pixels time ", debugprofilestop()-t)
+    local t_finish = debugprofilestop()
+    print("overall update pixels time " .. tostring(1000 * (t_finish - t_start) .. "ns"))
     print("-------------")
 end
 
