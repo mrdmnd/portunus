@@ -17,7 +17,7 @@ use serde_json::Value;
 use zune_inflate::DeflateDecoder;
 
 struct Capture {
-    start: Instant,
+    _start: Instant,
 }
 
 impl GraphicsCaptureApiHandler for Capture {
@@ -26,7 +26,7 @@ impl GraphicsCaptureApiHandler for Capture {
 
     fn new(_message: Self::Flags) -> Result<Self, Self::Error> {
         Ok(Self {
-            start: Instant::now(),
+            _start: Instant::now(),
         })
     }
 
@@ -34,7 +34,7 @@ impl GraphicsCaptureApiHandler for Capture {
     fn on_frame_arrived(
         &mut self,
         frame: &mut Frame,
-        capture_control: InternalCaptureControl,
+        _capture_control: InternalCaptureControl,
     ) -> Result<(), Self::Error> {
         const DATA_FRAME_WIDTH: u32 = 33;
         const DATA_FRAME_HEIGHT: u32 = 331;
@@ -52,22 +52,19 @@ impl GraphicsCaptureApiHandler for Capture {
         // println!("Compression on: {}", compression);
         // println!("Number of bytes transmitted by addon: {}", num_bytes);
 
-        // Read the buffer body data
-        // For we actually need to look at ()
-        let payload_bytes = &frame_data_buffer[4..];
-        let alpha_filtered_bytes = payload_bytes
+        let alpha_filtered_bytes: Vec<u8> = frame_data_buffer[4..]
             .chunks_exact(4)
+            .take(num_bytes / 3)
             .flat_map(|chunk| chunk.iter().take(3))
             .cloned()
-            .collect::<Vec<u8>>();
+            .collect();
         // println!("Byte stream sent by addon: {:?}", alpha_filtered_bytes);
 
-        let decompressed_byte_stream = if compression > 0 {
-            DeflateDecoder::new(alpha_filtered_bytes.as_slice())
+        let decompressed_byte_stream = match compression {
+            0 => alpha_filtered_bytes,
+            _ => DeflateDecoder::new(&alpha_filtered_bytes.as_slice())
                 .decode_zlib()
-                .map_err(|e| format!("Failed to decompress: {}", e))?
-        } else {
-            alpha_filtered_bytes.clone()
+                .map_err(|e| format!("Failed to decompress: {}", e))?,
         };
         // println!("Decompressed bytes: {:?}", decompressed_byte_stream);
 
@@ -76,11 +73,7 @@ impl GraphicsCaptureApiHandler for Capture {
             .map_err(|e| format!("Failed to deserialized data: {}", e))?;
         println!("Deserialized data: {}", deserialized_data);
 
-        if self.start.elapsed().as_secs() >= 6 {
-            capture_control.stop();
-            println!();
-        }
-        std::thread::sleep(time::Duration::from_millis(1000));
+        std::thread::sleep(time::Duration::from_millis(500));
         Ok(())
     }
 
