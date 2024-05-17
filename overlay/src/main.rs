@@ -1,6 +1,5 @@
 use std::{
-    io::{self, Cursor, Write},
-    process::exit,
+    io::Cursor,
     time::{self, Instant},
 };
 
@@ -22,13 +21,9 @@ struct Capture {
 }
 
 impl GraphicsCaptureApiHandler for Capture {
-    // The type of flags used to get the values from the settings.
     type Flags = String;
-
-    // The type of error that can occur during capture, the error will be returned from `CaptureControl` and `start` functions.
     type Error = Box<dyn std::error::Error + Send + Sync>;
 
-    // Function that will be called to create the struct. The flags can be passed from settings.
     fn new(_message: Self::Flags) -> Result<Self, Self::Error> {
         Ok(Self {
             start: Instant::now(),
@@ -41,44 +36,44 @@ impl GraphicsCaptureApiHandler for Capture {
         frame: &mut Frame,
         capture_control: InternalCaptureControl,
     ) -> Result<(), Self::Error> {
-        let data_frame_width = 33;
-        let data_frame_height = 331;
+        const DATA_FRAME_WIDTH: u32 = 33;
+        const DATA_FRAME_HEIGHT: u32 = 331;
 
         let mut cropped = frame
-            .buffer_crop(0, 0, data_frame_width, data_frame_height)
-            .unwrap();
-        let frame_data_buffer = cropped.as_raw_nopadding_buffer().unwrap();
-        //println!("FDB: {:?}", frame_data_buffer);
-        //capture_control.stop();
+            .buffer_crop(0, 0, DATA_FRAME_WIDTH, DATA_FRAME_HEIGHT)
+            .map_err(|e| format!("Failed to crop frame: {}", e))?;
+        let frame_data_buffer = cropped
+            .as_raw_nopadding_buffer()
+            .map_err(|e| format!("Failed to get raw buffer: {}", e))?;
 
         // Read the transmission metadata from the first pixel.
-        let compression = &frame_data_buffer[0] / 255;
-        let num_bytes: usize = (&frame_data_buffer[1] + 255 * &frame_data_buffer[2]).into();
-        println!("Compression on: {}", compression);
-        println!("Real bytes sent by addon: {}", num_bytes);
+        let compression = frame_data_buffer[0] / 255;
+        let num_bytes = frame_data_buffer[1] as usize + 255 * frame_data_buffer[2] as usize;
+        // println!("Compression on: {}", compression);
+        // println!("Number of bytes transmitted by addon: {}", num_bytes);
 
         // Read the buffer body data
         // For we actually need to look at ()
-        let real_data = &frame_data_buffer[4..];
-        let mut new_data: Vec<u8> = Vec::new();
-        for i in 0..num_bytes / 3 {
-            new_data.push(real_data[4 * i + 0]);
-            new_data.push(real_data[4 * i + 1]);
-            new_data.push(real_data[4 * i + 2]);
-        }
-        println!("Byte stream sent by addon: {:?}", new_data);
+        let payload_bytes = &frame_data_buffer[4..];
+        let alpha_filtered_bytes = payload_bytes
+            .chunks_exact(4)
+            .flat_map(|chunk| chunk.iter().take(3))
+            .cloned()
+            .collect::<Vec<u8>>();
+        // println!("Byte stream sent by addon: {:?}", alpha_filtered_bytes);
 
         let decompressed_byte_stream = if compression > 0 {
-            DeflateDecoder::new(new_data.as_mut_slice())
+            DeflateDecoder::new(alpha_filtered_bytes.as_slice())
                 .decode_zlib()
-                .unwrap()
+                .map_err(|e| format!("Failed to decompress: {}", e))?
         } else {
-            new_data.clone()
+            alpha_filtered_bytes.clone()
         };
-        println!("Decompressed bytes: {:?}", decompressed_byte_stream);
+        // println!("Decompressed bytes: {:?}", decompressed_byte_stream);
 
         let mut deserializer = Deserializer::new(Cursor::new(decompressed_byte_stream));
-        let deserialized_data: Value = serde_json::Value::deserialize(&mut deserializer).unwrap();
+        let deserialized_data: Value = serde_json::Value::deserialize(&mut deserializer)
+            .map_err(|e| format!("Failed to deserialized data: {}", e))?;
         println!("Deserialized data: {}", deserialized_data);
 
         if self.start.elapsed().as_secs() >= 6 {
@@ -105,7 +100,5 @@ fn main() {
         ColorFormat::Rgba8,
         "".to_string(),
     );
-
-    // Starts the capture and takes control of the current thread
     Capture::start(settings).expect("Screen capture failed.");
 }

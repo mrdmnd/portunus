@@ -37,29 +37,23 @@ end
 -- instead try something like 33x331 for now, which gives us exactly 32kib + 1 (metadata, num_bytes) of transfer.
 -- works out kind of nicely.
 -- if we need more storage we can ramp up towards probably a max of 16160 pixel textures.
-local frameWidth = 33
-local frameHeight = 331
---local frameWidth = 100
---local frameHeight = 100
-
-Portunus.Timer = nil
-Portunus.UpdatePeriod = 0.20
-Portunus.CompressionEnabled = true
-local max_storable_bytes = frameWidth * frameHeight * 3
-
-local portunusPixelFrames = {}
-
+local frame_width = 33
+local frame_height = 331
+local max_storable_bytes = frame_width * frame_height * 3
+local update_period = 0.20
+local compression_enabled = true
+local portunus_pixel_frames = {}
 local stringbyte = string.byte
 local mathfloor = math.floor
 
 local function InitializePixels()
-    for y = 0, frameHeight - 1 do
-        for x = 0, frameWidth - 1 do
+    for y = 0, frame_height - 1 do
+        for x = 0, frame_width - 1 do
             local pixel = Portunus.MainFrame:CreateTexture(nil, "BACKGROUND")
             pixel:SetSize(1, 1)
             pixel:SetPoint("TOPLEFT", x, -y)
             pixel:SetColorTexture(0, 0, 0, 1)
-            portunusPixelFrames[#portunusPixelFrames+1] = pixel
+            portunus_pixel_frames[#portunus_pixel_frames+1] = pixel
         end
     end
 end
@@ -69,25 +63,22 @@ end
 -- First pixel stores the number of bytes to decode in our screenshot reader: num_bytes -> g + 256*b
 local function UpdatePixels(bytes)
     local num_bytes = #bytes
-    print("Rendering " .. tostring(num_bytes) .. " bytes of data.")
-    tprint(bytes)
     if num_bytes > max_storable_bytes then print("ERROR: attempted to serialize " .. tostring(num_bytes) .. " bytes but max capacity is " .. tostring(max_storable_bytes)) return end
     local pixel_index_max = num_bytes / 3
-    local r = Portunus.CompressionEnabled and 1.0 or 0.0
+    local r = compression_enabled and 1.0 or 0.0
     local g = (num_bytes % 256) / 255.0
     local b = (mathfloor(num_bytes / 256) % 256) / 255.0
-    portunusPixelFrames[1]:SetColorTexture(r, g, b, 1)
+    portunus_pixel_frames[1]:SetColorTexture(r, g, b, 1)
     for pixel_index = 0, pixel_index_max-1 do
         r = bytes[3*pixel_index+1] / 255.0
         g = bytes[3*pixel_index+2] / 255.0
         b = bytes[3*pixel_index+3] / 255.0
-        portunusPixelFrames[pixel_index+2]:SetColorTexture(r, g, b, 1) -- the plus two here is because we're offset by one for lua starting at one and then offset by one again because of the first pixel metadata
+        portunus_pixel_frames[pixel_index+2]:SetColorTexture(r, g, b, 1) -- the plus two here is because we're offset by one for lua starting at one and then offset by one again because of the first pixel metadata
     end
 end
 
-
 Portunus.MainFrame = CreateFrame("Frame", "PortunusExporter_MainFrame", UIParent)
-Portunus.MainFrame:SetSize(frameWidth, frameHeight)
+Portunus.MainFrame:SetSize(frame_width, frame_height)
 Portunus.MainFrame:SetFrameStrata("TOOLTIP")
 Portunus.MainFrame:SetPoint("TOPLEFT", 0, 0)
 Portunus.MainFrame:RegisterEvent("ADDON_LOADED")
@@ -95,8 +86,8 @@ Portunus.MainFrame:RegisterEvent("ADDON_LOADED")
 -- Uses MessagePack to encode a table as an aligned sequence of bytes with length a multiple of three.
 local function MessagepackEncodeTable(table)
     local raw_message = Portunus.MessagePack.pack(table)
-    -- The majority of the time spent is spent in this compression function call; do we really need compression here?
-    local serialized_message = Portunus.CompressionEnabled and LibDeflate:CompressZlib(raw_message) or raw_message
+    ---@diagnostic disable-next-line: undefined-field
+    local serialized_message = compression_enabled and LibDeflate:CompressZlib(raw_message) or raw_message
     --local ratio = (#raw_message) / (#serialized_message)
     --print("Compression ratio: ", ratio)
     local bytes = {stringbyte(serialized_message, 1, #serialized_message)}
@@ -118,8 +109,8 @@ local function TimerCallback()
         Player3 = {
             HP = 99, Mana = 13
         },
-        --AttackMode = "do it",
-        --CurrentTime = GetTime()
+        AttackMode = "do it",
+        CurrentTime = GetTime()
     }
     local bytes = MessagepackEncodeTable(test_table)
     UpdatePixels(bytes)
@@ -129,7 +120,7 @@ Portunus.MainFrame:SetScript("OnEvent", function (self, Event, Arg1)
     if Event == "ADDON_LOADED" and Arg1 == "PortunusExporter" then
 		Portunus.MainFrame:Show()
         InitializePixels()
-        Portunus.Timer = C_Timer.NewTicker(Portunus.UpdatePeriod, TimerCallback)
+        C_Timer.NewTicker(update_period, TimerCallback)
         C_Timer.After(2, function() Portunus.MainFrame:UnregisterEvent("ADDON_LOADED") end)
     end
 end)
