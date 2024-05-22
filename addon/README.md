@@ -12,3 +12,4 @@ Go download this addon: https://www.curseforge.com/wow/addons/uiscale
 Set the scale appropriately.
 
 TODO: take a look at this protobuf impl: https://www.wowace.com/projects/protobuf
+https://github.com/tg123/lua-pb

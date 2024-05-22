@@ -1,0 +1,7 @@
+# Use the rust LLD linker instead of the system linker.
+# Ensure you update to lld:
+# cargo install -f cargo-binutils
+# rustup component add llvm-tools-preview
+
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld.exe"

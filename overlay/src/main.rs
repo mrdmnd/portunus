@@ -1,97 +1,60 @@
-use std::{
-    io::Cursor,
-    time::{self, Instant},
-};
+mod capturer;
 
-use serde::Deserialize;
-use windows_capture::{
-    capture::GraphicsCaptureApiHandler,
-    frame::Frame,
-    graphics_capture_api::InternalCaptureControl,
-    monitor::Monitor,
-    settings::{ColorFormat, CursorCaptureSettings, DrawBorderSettings, Settings},
-};
-
-use rmp_serde::Deserializer;
-use serde_json::Value;
-use zune_inflate::DeflateDecoder;
-
-struct Capture {
-    _start: Instant,
-}
-
-impl GraphicsCaptureApiHandler for Capture {
-    type Flags = String;
-    type Error = Box<dyn std::error::Error + Send + Sync>;
-
-    fn new(_message: Self::Flags) -> Result<Self, Self::Error> {
-        Ok(Self {
-            _start: Instant::now(),
-        })
-    }
-
-    // Called every time a new frame is available.
-    fn on_frame_arrived(
-        &mut self,
-        frame: &mut Frame,
-        _capture_control: InternalCaptureControl,
-    ) -> Result<(), Self::Error> {
-        const DATA_FRAME_WIDTH: u32 = 33;
-        const DATA_FRAME_HEIGHT: u32 = 331;
-
-        let mut cropped = frame
-            .buffer_crop(0, 0, DATA_FRAME_WIDTH, DATA_FRAME_HEIGHT)
-            .map_err(|e| format!("Failed to crop frame: {}", e))?;
-        let frame_data_buffer = cropped
-            .as_raw_nopadding_buffer()
-            .map_err(|e| format!("Failed to get raw buffer: {}", e))?;
-
-        // Read the transmission metadata from the first pixel.
-        let compression = frame_data_buffer[0] / 255;
-        let num_bytes = frame_data_buffer[1] as usize + 255 * frame_data_buffer[2] as usize;
-        // println!("Compression on: {}", compression);
-        // println!("Number of bytes transmitted by addon: {}", num_bytes);
-
-        let alpha_filtered_bytes: Vec<u8> = frame_data_buffer[4..]
-            .chunks_exact(4)
-            .take(num_bytes / 3)
-            .flat_map(|chunk| chunk.iter().take(3))
-            .cloned()
-            .collect();
-        // println!("Byte stream sent by addon: {:?}", alpha_filtered_bytes);
-
-        let decompressed_byte_stream = match compression {
-            0 => alpha_filtered_bytes,
-            _ => DeflateDecoder::new(&alpha_filtered_bytes.as_slice())
-                .decode_zlib()
-                .map_err(|e| format!("Failed to decompress: {}", e))?,
-        };
-        // println!("Decompressed bytes: {:?}", decompressed_byte_stream);
-
-        let mut deserializer = Deserializer::new(Cursor::new(decompressed_byte_stream));
-        let deserialized_data: Value = serde_json::Value::deserialize(&mut deserializer)
-            .map_err(|e| format!("Failed to deserialized data: {}", e))?;
-        println!("Deserialized data: {}", deserialized_data);
-
-        std::thread::sleep(time::Duration::from_millis(500));
-        Ok(())
-    }
-
-    // Optional handler called when the capture item (usually a window) closes.
-    fn on_closed(&mut self) -> Result<(), Self::Error> {
-        println!("Capture Session Closed");
-        Ok(())
-    }
-}
+use bevy::prelude::*;
+use bevy::sprite::{MaterialMesh2dBundle, Mesh2dHandle};
+use bevy::window::{Cursor, WindowLevel, WindowTheme};
 
 fn main() {
-    let primary_monitor = Monitor::primary().expect("There is no primary monitor?");
-    let settings = Settings::new(
-        primary_monitor,
-        CursorCaptureSettings::WithoutCursor,
-        DrawBorderSettings::WithoutBorder,
-        ColorFormat::Rgba8,
-        "".to_string(),
-    );
-    Capture::start(settings).expect("Screen capture failed.");
+    capturer::start_capture();
+
+    let window = Window {
+        transparent: true,
+        title: "Portunus".into(),
+        name: Some("portunus.app".into()),
+        mode: bevy::window::WindowMode::BorderlessFullscreen,
+        resolution: (3440., 1440.).into(),
+        decorations: false,
+        window_level: WindowLevel::AlwaysOnTop,
+        cursor: Cursor {
+            hit_test: false,
+            ..default()
+        },
+        focused: true,
+        window_theme: Some(WindowTheme::Dark),
+        composite_alpha_mode: bevy::window::CompositeAlphaMode::Auto,
+        ..default()
+    };
+
+    App::new()
+        .insert_resource(ClearColor(Color::NONE))
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(window),
+            ..default()
+        }))
+        .insert_resource(Msaa::Sample4)
+        .add_systems(Startup, startup)
+        .add_systems(PostStartup, spawn_red_circle)
+        .run()
+}
+
+fn startup(mut commands: Commands) {
+    commands.spawn(Camera2dBundle::default());
+}
+
+fn spawn_red_circle(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let circle = Mesh2dHandle(meshes.add(Circle { radius: 50.0 }));
+    let color = Color::rgba(1.0, 0.0, 0.0, 0.5);
+    commands.spawn(MaterialMesh2dBundle {
+        mesh: circle,
+        material: materials.add(color),
+        transform: Transform {
+            translation: Vec3::new(0.0, -100.0, 0.0),
+            ..Default::default()
+        },
+        ..default()
+    });
 }

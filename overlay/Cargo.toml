@@ -10,3 +10,12 @@ serde_json = "1.0"
 serde = "1.0.202"
 windows-capture = "1.2.0"
 zune-inflate = "0.2.54"
+
+# Remeber to remove the dynamic linking for release or we have to ship libbevy_dylib or something.
+bevy = {version = "0.13.2", features = ["dynamic_linking"]}
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3

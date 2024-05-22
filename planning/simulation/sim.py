@@ -32,6 +32,20 @@ This makes some sense to me because it captures the notion of the shortest atom 
 
 When IS a decision point? In SIMC, this corresponds to something like the notion of when an actor becomes ready().
 On a rogue, a decision point is forced whenever a) the GCD comes off CD
+
+
+
+
+
+Advancing to the next event/decisionpoint/gcd seems like it'd be tricky actually because it can be non-deterministic with procs.
+We have to decide if the correct thing to do is sample, or produce an explicit distribution over outcomes.
+I THINK the function "AdvanceToNextDecision" should probably just sample directly, and we can call it 1000 times or something to get a sense of where we might stand at the next GCD. We can then speculatively run planning for each of these options (probably pretty small cardinality)
+and then when we actually *arrive* at the GCD we do some tree-reuse that minimizes the amount of work we waste.
+
+
+SO: from the render thread.
+As fast as we can, take our current state and sample forward in time to the next decision point. If a proc happens that might invalidate the future state, we need some way to remove those from the support distribution.
+For each of the potential future states that we may arrive at when the decision point arrives, start a MCTS search
 """
 
 class Sim():
