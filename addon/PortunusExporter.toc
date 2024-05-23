@@ -18,4 +18,5 @@ LibDeflate.lua
 MessagePack.lua
 
 # Main addon
+GameState.lua
 PortunusExporter.lua
