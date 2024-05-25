@@ -2,7 +2,7 @@ local _, Portunus = ...
 
 Portunus.GameState = {}
 
-function dump(o)
+local function dump(o)
    if type(o) == 'table' then
       local s = '{ '
       for k,v in pairs(o) do
@@ -85,11 +85,13 @@ local function NameplateInfoFromGUID(UnitGUID)
     return value
 end
 
+---@diagnostic disable-next-line: inject-field
 function game_state_frame:NAME_PLATE_UNIT_ADDED(UnitID)
     local key = UnitGUID(UnitID)
     if not key then return end
     enemy_nameplate_info[key] = NameplateInfoFromGUID(key)
 end
+---@diagnostic disable-next-line: inject-field
 function game_state_frame:NAME_PLATE_UNIT_REMOVED(UnitID)
     local key = UnitGUID(UnitID)
     if not key then return end
@@ -120,31 +122,27 @@ local function ReadFullGameState()
     local snapshot_time = GetTime()
     local gs = {}
 
-    local helpful_player_auras = {}
-    local harmful_player_auras = {}
-    AuraUtil.ForEachAura("player", "HELPFUL", nil, function(aura) HandleAura(aura, helpful_player_auras) end, true)
-    AuraUtil.ForEachAura("player", "HARMFUL", nil, function(aura) HandleAura(aura, harmful_player_auras) end, true)
-
+    gs.SnapshotTime = snapshot_time
 
     gs.Player = {}
-    gs.Player.HelpfulAuras = helpful_player_auras
-    gs.Player.HarmfulAuras = harmful_player_auras
+    gs.Player.HelpfulAuras = {}
+    gs.Player.HarmfulAuras = {}
+    AuraUtil.ForEachAura("player", "HELPFUL", nil, function(aura) HandleAura(aura, gs.Player.HelpfulAuras) end, true)
+    AuraUtil.ForEachAura("player", "HARMFUL", nil, function(aura) HandleAura(aura, gs.Player.HarmfulAuras) end, true)
 
-    gs.Player.Cooldowns = {}
+    -- gs.Player.Cooldowns = {}
 
     -- Health, mana, insanity, combo points, etc.
-    gs.Player.Resources = {}
+    -- gs.Player.Resources = {}
 
     -- These may update with procs, etc.
-    gs.Player.Stats = {}
+    -- gs.Player.Stats = {}
 
     -- Probably also want a static player config section for talents, etc. That can go here.
-    gs.Player.Persistent = {}
+    -- gs.Player.Persistent = {}
 
-    -- SpellInFlight, CurrentTarget, stuff like that?
-    --gs.CombatStarted = 0 -- time that most recent combat started. if greater than gs.CombatEnded then we're in combat. if less than gs.CombatEnded then we are not
-    --gs.CombatEnded = 0 -- time that most recent combat ended
-    gs.Player.Misc = {}
+    -- SpellInFlight, CurrentTarget, stuff like that?, CombatStarted, CombatEnded, etc
+    -- gs.Player.Misc = {}
 
     -- TODO: snapshot pmultiplier info for things like "empowered garrotes on a target" or whatever
     -- TODO: determine if the nameplate is "in front" of the character for spells that care about that
@@ -157,15 +155,15 @@ local function ReadFullGameState()
     gs.EnemyUnits = enemy_nameplate_info
 
     -- For healing / other stuff where you want to check on the state of your group members.
-    gs.FriendlyUnits = {}
+    -- gs.FriendlyUnits = {}
 
 
-    local gcd_start, gcd_duration = GCDInfo()
-    if gcd_start > 0 then
-        gs.GCDInfo = {start = gcd_start, duration = gcd_duration, remains = gcd_start + gcd_duration - snapshot_time}
-    else
-        gs.GCDInfo = {start = 0, duration = 0, remains = 0}
-    end
+    -- local gcd_start, gcd_duration = GCDInfo()
+    -- if gcd_start > 0 then
+    --     gs.GCDInfo = {start = gcd_start, duration = gcd_duration, remains = gcd_start + gcd_duration - snapshot_time}
+    -- else
+    --     gs.GCDInfo = {start = 0, duration = 0, remains = 0}
+    -- end
 
     return gs
 end

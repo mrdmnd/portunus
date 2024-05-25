@@ -48,7 +48,7 @@ impl GraphicsCaptureApiHandler for Capture {
 
         // Read the transmission metadata from the first pixel.
         let compression = frame_data_buffer[0] / 255;
-        let num_bytes = frame_data_buffer[1] as usize + 255 * frame_data_buffer[2] as usize;
+        let num_bytes = frame_data_buffer[1] as usize + 256 * frame_data_buffer[2] as usize;
         println!("Compression on: {}", compression);
         println!("Number of bytes transmitted by addon: {}", num_bytes);
 
@@ -58,7 +58,7 @@ impl GraphicsCaptureApiHandler for Capture {
             .flat_map(|chunk| chunk.iter().take(3))
             .cloned()
             .collect();
-        println!("Byte stream sent by addon: {:?}", alpha_filtered_bytes);
+        // println!("Byte stream sent by addon: {:?}", alpha_filtered_bytes);
 
         let decompressed_byte_stream = match compression {
             0 => alpha_filtered_bytes,
@@ -66,11 +66,11 @@ impl GraphicsCaptureApiHandler for Capture {
                 .decode_zlib()
                 .map_err(|e| format!("Failed to decompress: {}", e))?,
         };
-        println!("Decompressed bytes: {:?}", decompressed_byte_stream);
+        //println!("Decompressed bytes: {:?}", decompressed_byte_stream);
 
         let mut deserializer = Deserializer::new(Cursor::new(decompressed_byte_stream));
         let deserialized_data: Value = serde_json::Value::deserialize(&mut deserializer)
-            .map_err(|e| format!("Failed to deserialized data: {}", e))?;
+            .map_err(|e| format!("Failed to deserialize data: {}", e))?;
 
         println!("Deserialized data: {}", deserialized_data);
 
