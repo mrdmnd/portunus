@@ -55,7 +55,17 @@ local game_state_frame = CreateFrame("Frame", "game_state_frame")
 local enemy_nameplate_info = {}
 
 -- TODO: the packed aura actually has lots of shit we don't care about; we should prune this down to minimize memory usage in our state table.
-local function HandleAura(aura, output_table) output_table[#output_table+1] = aura end
+local function HandleAura(aura, output_table)
+    output_table[#output_table+1] = {
+        name = aura.name,
+        spell_id = aura.spellId,
+        source = aura.sourceUnit, -- Token of the unit that applied the aura.
+        expires = aura.expirationTime, -- AuraRemains is just expirationTime - GetTime()
+        stacks = aura.applications,
+        --aura_instance_id = aura.auraInstanceID,
+        --points = aura.points,
+    }
+end
 
 -- Returns nil if the token (like "nameplateX") corresponding to the UnitGUID cannot be found any more.
 local function NameplateInfoFromGUID(UnitGUID)
@@ -149,8 +159,8 @@ local function ReadFullGameState()
     -- https://github.com/herotc/hero-lib/blob/cf5f826ae1600a8bac75f82f9818e629a9a9213e/HeroLib/Events/Player.lua#L239
 
     -- Update the table of enemy units.
-    for UnitGUID, _ in pairs(enemy_nameplate_info) do
-        enemy_nameplate_info[UnitGUID] = NameplateInfoFromGUID(UnitGUID)
+    for unit_guid, _ in pairs(enemy_nameplate_info) do
+        enemy_nameplate_info[unit_guid] = NameplateInfoFromGUID(unit_guid)
     end
     gs.EnemyUnits = enemy_nameplate_info
 

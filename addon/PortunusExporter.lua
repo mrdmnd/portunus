@@ -2,6 +2,20 @@ local _, Portunus = ...
 local LibDeflate = LibStub:GetLibrary("LibDeflate")
 print("You've loaded the portunus exporter addon.")
 
+local function dump(o)
+   if type(o) == 'table' then
+      local s = '{ '
+      for k,v in pairs(o) do
+         if type(k) ~= 'number' then k = '"'..k..'"' end
+         s = s .. '['..k..'] = ' .. dump(v) .. ','
+      end
+      return s .. '} '
+   else
+      return tostring(o)
+   end
+end
+
+
 -- Potential future idea: 
 -- Only send Deltas (incremental updates) over our bandwidth limited channel. We maintain a copy of the last updated full game state
 -- and only send table key/values that have changed since last game update?
@@ -16,7 +30,7 @@ print("You've loaded the portunus exporter addon.")
 local frame_width = 33
 local frame_height = 331
 local max_storable_bytes = frame_width * frame_height * 3
-local update_period = 0.050
+local update_period = 1.00
 local compression_enabled = false
 local portunus_pixel_frames = {}
 local stringbyte = string.byte
@@ -36,6 +50,68 @@ local function InitializePixels()
             portunus_pixel_frames[#portunus_pixel_frames + 1] = pixel
         end
     end
+end
+
+-- Load whitelists on a per-spec / per-class basis.
+Portunus.PlayerAuraWhitelist = {}
+Portunus.TargetAuraWhitelist = {}
+Portunus.PlayerCooldownWhitelist = {}
+local function InitializeClassSpecificWhitelists()
+    local EnabledRotation = {
+    -- Death Knight
+      --[250]   = "HeroRotation_DeathKnight",   -- Blood
+      --[251]   = "HeroRotation_DeathKnight",   -- Frost
+      --[252]   = "HeroRotation_DeathKnight",   -- Unholy
+    -- Demon Hunter
+      --[577]   = "HeroRotation_DemonHunter",   -- Havoc
+      --[581]   = "HeroRotation_DemonHunter",   -- Vengeance
+    -- Druid
+      --[102]   = "HeroRotation_Druid",         -- Balance
+      --[103]   = "HeroRotation_Druid",         -- Feral
+      --[104]   = "HeroRotation_Druid",         -- Guardian
+      --[105]   = "HeroRotation_Druid",         -- Restoration
+    -- Evoker
+        [1467]  = "classes_evoker_Devastation", -- Devastation
+      --[1468] = "HeroRotation_Evoker",         -- Preservation
+      --[1473]  = "HeroRotation_Evoker",        -- Augmentation
+    -- Hunter
+      --[253]   = "HeroRotation_Hunter",        -- Beast Mastery
+      --[254]   = "HeroRotation_Hunter",        -- Marksmanship
+      --[255]   = "HeroRotation_Hunter",        -- Survival
+    -- Mage
+      --[62]    = "HeroRotation_Mage",          -- Arcane
+      --[63]    = "HeroRotation_Mage",          -- Fire
+      --[64]    = "HeroRotation_Mage",          -- Frost
+    -- Monk
+      --[268]   = "HeroRotation_Monk",          -- Brewmaster
+      --[269]   = "HeroRotation_Monk",          -- Windwalker
+      --[270]   = "HeroRotation_Monk",          -- Mistweaver
+    -- Paladin
+      --[65]    = "HeroRotation_Paladin",       -- Holy
+      --[66]    = "HeroRotation_Paladin",       -- Protection
+      --[70]    = "HeroRotation_Paladin",       -- Retribution
+    -- Priest
+      --[256]   = "HeroRotation_Priest",        -- Discipline
+      --[257]   = "HeroRotation_Priest",        -- Holy
+        [258]   = "classes_priest_Shadow",      -- Shadow
+    -- Rogue
+      --[259]   = "HeroRotation_Rogue",         -- Assassination
+      --[260]   = "HeroRotation_Rogue",         -- Outlaw
+      --[261]   = "HeroRotation_Rogue",         -- Subtlety
+    -- Shaman
+      --[262]   = "HeroRotation_Shaman",        -- Elemental
+      --[263]   = "HeroRotation_Shaman",        -- Enhancement
+      --[264]   = "HeroRotation_Shaman",        -- Restoration
+    -- Warlock
+      --[265]   = "HeroRotation_Warlock",       -- Affliction
+      --[266]   = "HeroRotation_Warlock",       -- Demonology
+      --[267]   = "HeroRotation_Warlock",       -- Destruction
+    -- Warrior
+      --[71]    = "HeroRotation_Warrior",       -- Arms
+      --[72]    = "HeroRotation_Warrior",       -- Fury
+      --[73]    = "HeroRotation_Warrior"        -- Protection
+  };
+    -- TODO: implement me.
 end
 
 -- Length of bytes must be a multiple of three here.
@@ -86,7 +162,24 @@ local function MessagepackEncodeTable(table)
     -- Turns out it's better to do less CPU work in the compressor I think.
     ---@diagnostic disable-next-line: undefined-field
     local serialized_message = compression_enabled and LibDeflate:CompressZlib(raw_message) or raw_message
-    local bytes = {stringbyte(serialized_message, 1, #serialized_message)}
+    local length = #serialized_message
+    local bytes = {}
+    -- ISSUE: this causes a stack overflow if length is too big; so just call the function if we're sure it'll be okay.
+    -- Chose the current threshold somewhat experimentally on my client.
+    if length < 2048 then
+        bytes = {stringbyte(serialized_message, 1, length)}
+    else
+        local chunk_size = 2048
+        local byte_count = 0
+        for i = 1, length, chunk_size do
+            local end_idx = math.min(i + chunk_size - 1, length)
+            local chunk = {stringbyte(serialized_message, i, end_idx)}
+            for _, byte in ipairs(chunk) do
+                byte_count = byte_count + 1
+                bytes[byte_count] = byte
+            end
+        end
+    end
     local padding = (3 - (#bytes % 3)) % 3
     for i = 1, padding do
         bytes[#bytes + 1] = 0
@@ -97,17 +190,18 @@ end
 local function TimerCallback()
     --local profile_start_time = GetTimePreciseSec()
     local game_state = Portunus.GameState.GetGameState()
-    --local game_state = {hello = "world", guy = 100, embarassed = "asdfoiasdfhasdflkhasdflkhadsflkhasdflhsflkflkjasdflkjadsfoiasdfoiuasdfoiausdofiuasdofiuasdoijqengoknvoiasoiuaoiuasdoui qoiewroiu aoiuasdofiu qoiu ewroiuasoiu alihadovihclknaweorihadfvoiyuadsfoiuadfgoiusbpoiyaudfogiuaerklhnasdfklnadvbcoiuadfboiaudsogiuadfoiausoiuasdgoianrekmtnaklnusdfoiaudofiaudfs"}
     --print("getting state took ", 1000000*(GetTimePreciseSec() - profile_start_time) .. "us")
+
     --print(dump(game_state))
+
     --profile_start_time = GetTimePreciseSec()
     local bytes = MessagepackEncodeTable(game_state)
-    --print("bytes has " .. tostring(#bytes) .. " elements in it")
     --print("encoding table took ", 1000000*(GetTimePreciseSec() - profile_start_time) .. "us")
 
     --profile_start_time = GetTimePreciseSec()
     UpdatePixels(bytes)
     --print("rendering pixels took ", 1000000*(GetTimePreciseSec() - profile_start_time) .. "us")
+
     --print("------------------------")
 end
 
@@ -115,6 +209,7 @@ Portunus.MainFrame:SetScript("OnEvent", function (self, Event, Arg1)
     if Event == "ADDON_LOADED" and Arg1 == "PortunusExporter" then
 		Portunus.MainFrame:Show()
         InitializePixels()
+        InitializeClassSpecificWhitelists()
         --TimerCallback()
         C_Timer.NewTicker(update_period, TimerCallback)
         C_Timer.After(2, function() Portunus.MainFrame:UnregisterEvent("ADDON_LOADED") end)
