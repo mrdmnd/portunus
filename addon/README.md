@@ -11,5 +11,7 @@ In my case, I play on ultrawide 3440 x 1440p. The default y-resolution for the g
 Go download this addon: https://www.curseforge.com/wow/addons/uiscale
 Set the scale appropriately.
 
-TODO: take a look at this protobuf impl: https://www.wowace.com/projects/protobuf
-https://github.com/tg123/lua-pb
+
+If you make changes to the schema, you need to recompile it; and the act of recompiling it will need to have the contents modified in the TOC includes. There's a helper script here to do all this for you:
+
+`python update_flatbuffers.py`

@@ -1,4 +1,5 @@
 local _, Portunus = ...
+local flatbuffers = Portunus.Modules["flatbuffers"]
 
 Portunus.GameState = {}
 
@@ -15,18 +16,9 @@ local function dump(o)
    end
 end
 
-
--- Unit ID vs Unit GUID vs NPC ID thoughts?
--- https://github.com/herotc/hero-lib/blob/cf5f826ae1600a8bac75f82f9818e629a9a9213e/HeroLib/Class/Unit/Main.lua#L39
-
+-- TODO / thoughts
 -- Handle training dummies appropriately.
 -- https://github.com/herotc/hero-lib/blob/cf5f826ae1600a8bac75f82f9818e629a9a9213e/HeroLib/Class/Unit/Main.lua#L160
-
--- Determine if we are tanking the unit
--- https://github.com/herotc/hero-lib/blob/cf5f826ae1600a8bac75f82f9818e629a9a9213e/HeroLib/Class/Unit/Main.lua#L312
-
--- Determine if the unit is moving
--- https://github.com/herotc/hero-lib/blob/cf5f826ae1600a8bac75f82f9818e629a9a9213e/HeroLib/Class/Unit/Main.lua#L330
 
 -- Determine our point-in-time power regeneration:
 -- https://github.com/herotc/hero-lib/blob/cf5f826ae1600a8bac75f82f9818e629a9a9213e/HeroLib/Class/Unit/Power.lua#L46
@@ -50,6 +42,7 @@ local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 local UnitName = UnitName
 local UnitThreatSituation = UnitThreatSituation
 
+local mathfloor = math.floor
 
 local game_state_frame = CreateFrame("Frame", "game_state_frame")
 local enemy_nameplate_info = {}
@@ -57,10 +50,10 @@ local enemy_nameplate_info = {}
 -- TODO: the packed aura actually has lots of shit we don't care about; we should prune this down to minimize memory usage in our state table.
 local function HandleAura(aura, output_table)
     output_table[#output_table+1] = {
-        name = aura.name,
+        --name = aura.name,
+        source_guid = UnitGUID(aura.sourceUnit), -- Token of the unit that applied the aura.
         spell_id = aura.spellId,
-        source = aura.sourceUnit, -- Token of the unit that applied the aura.
-        expires = aura.expirationTime, -- AuraRemains is just expirationTime - GetTime()
+        expires = mathfloor(1000*aura.expirationTime), -- AuraRemains is just expirationTime - GetTime()
         stacks = aura.applications,
         --aura_instance_id = aura.auraInstanceID,
         --points = aura.points,
@@ -115,30 +108,22 @@ game_state_frame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
 game_state_frame:SetScript("OnEvent", function(self, event, ...) self[event](self, ...) end)
 
 
-
--- Returns start time, duration
-local function GCDInfo()
-    return GetSpellCooldown(61304)
-end
-
--- At a high level, we should put things that do "logic" into the rust UI code. For example, no unit blacklisting here, etc.
-
 -- Implement a "player inspector" that fires once when we zone in or change static stuff, etc.
 -- Don't put this call in the ReadFullGameState() function.
 -- https://github.com/herotc/hero-lib/blob/cf5f826ae1600a8bac75f82f9818e629a9a9213e/HeroLib/Events/Player.lua#L133
 
 -- The "main" method for this module.
 local function ReadFullGameState()
-    local snapshot_time = GetTime()
+    local snapshot_time = mathfloor(1000*GetTime())
     local gs = {}
 
     gs.SnapshotTime = snapshot_time
 
     gs.Player = {}
-    gs.Player.HelpfulAuras = {}
-    gs.Player.HarmfulAuras = {}
-    AuraUtil.ForEachAura("player", "HELPFUL", nil, function(aura) HandleAura(aura, gs.Player.HelpfulAuras) end, true)
-    AuraUtil.ForEachAura("player", "HARMFUL", nil, function(aura) HandleAura(aura, gs.Player.HarmfulAuras) end, true)
+    gs.Player.Buffs = {}
+    gs.Player.Debuffs = {}
+    AuraUtil.ForEachAura("player", "HELPFUL", nil, function(aura) HandleAura(aura, gs.Player.Buffs) end, true)
+    AuraUtil.ForEachAura("player", "HARMFUL", nil, function(aura) HandleAura(aura, gs.Player.Debuffs) end, true)
 
     -- gs.Player.Cooldowns = {}
 

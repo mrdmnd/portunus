@@ -1,0 +1,87 @@
+// IDL file for our game client state.
+
+namespace game_state_schema;
+
+table Cooldown {
+    spell_id:uint32;
+    ready:uint32; 
+    charges:uint8;
+}
+
+table Aura {
+    source_guid:string;
+    spell_id:uint32;
+    expires:uint32;
+    stacks:uint8;
+}
+
+// From here: https://wowpedia.fandom.com/wiki/Enum.PowerType
+enum ResourceType : byte {
+    Mana = 0,
+    Rage,
+    Focus,
+    Energy,
+    ComboPoints,
+    Runes,
+    RunicPower,
+    SoulShards,
+    LunarPower,
+    HolyPower,
+    Alternate,
+    Maelstrom,
+    Chi,
+    Insanity,
+    Obsolete,
+    Obsolete2,
+    ArcaneCharges,
+    Fury,
+    Pain
+}
+table Resource {
+    resource_type:ResourceType;
+    current:uint8;
+    maximum:uint8;
+}
+
+// GUID lore here: https://www.wowinterface.com/forums/showthread.php?t=49503
+// https://gist.github.com/Meorawr/a12caab75d49c8352dcfed78fe3bcd25
+// https://wowpedia.fandom.com/wiki/API_UnitGUID
+table UnitBaseInfo {
+    uint_guid:string;
+    health_current:uint32;
+    health_maximum:uint32;
+    speed:float;
+    //cast_info:CastInfo;
+    //channel_info:ChannelInfo;
+    buffs:[Aura];
+    debuffs:[Aura];
+}
+
+table PlayerUnit {
+    base_info:UnitBaseInfo;
+}
+
+table EnemyUnit {
+    base_info:UnitBaseInfo;
+    name:string;
+    in_combat:bool;
+    attackable:bool;
+    threat_situation:uint8;
+    // range:float;
+}
+
+
+table GameState {
+    // Time (units in milliseconds) of when this snapshot was taken.
+    // Notably, we do GetTIme() * 1000 and round down.
+    snapshot_time:uint32;
+
+    player:PlayerUnit;
+    cooldowns:[Cooldown];
+    resources:[Resource];
+
+    current_target_guid:string;
+    visible_targets:[EnemyUnit];
+}
+
+root_type GameState;

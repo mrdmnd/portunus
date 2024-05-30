@@ -1,3 +1,0 @@
-message GameState {
-    optional double snapshot_time = 1;
-}

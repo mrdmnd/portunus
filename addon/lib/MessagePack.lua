@@ -1097,8 +1097,6 @@ m._VERSION = "0.3.0"
 m._DESCRIPTION = "lua-MessagePack : a pure Lua implementation"
 m._COPYRIGHT = "Copyright (c) 2012-2013 Francois Perrad"
 
---
 -- This library is licensed under the terms of the MIT/X11 license,
 -- like Lua itself.
---
 Portunus.MessagePack = m

@@ -1,8 +1,10 @@
 local _, Portunus = ...
-local LibDeflate = LibStub:GetLibrary("LibDeflate")
 
-local LuaPB = Portunus.luapb
-local GameStateProto = LuaPB.load_proto_ast(Portunus.GameStateProto).GameStateProto
+-- We can't use "require" so we've gotta do it manually.
+Portunus.Modules = {}
+
+
+local LibDeflate = LibStub:GetLibrary("LibDeflate")
 
 local function dump(o)
    if type(o) == 'table' then
@@ -16,8 +18,6 @@ local function dump(o)
       return tostring(o)
    end
 end
-
-print(dump(LuaPB))
 
 -- Potential future idea: 
 -- Only send Deltas (incremental updates) over our bandwidth limited channel. We maintain a copy of the last updated full game state
@@ -213,7 +213,7 @@ Portunus.MainFrame:SetScript("OnEvent", function (self, Event, Arg1)
 		Portunus.MainFrame:Show()
         InitializePixels()
         --InitializeClassSpecificWhitelists()
-        --TimerCallback()
+        TimerCallback()
         --C_Timer.NewTicker(update_period, TimerCallback)
         C_Timer.After(2, function() Portunus.MainFrame:UnregisterEvent("ADDON_LOADED") end)
     end
