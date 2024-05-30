@@ -1,6 +1,8 @@
 local _, Portunus = ...
 local LibDeflate = LibStub:GetLibrary("LibDeflate")
-print("You've loaded the portunus exporter addon.")
+
+local LuaPB = Portunus.luapb
+local GameStateProto = LuaPB.load_proto_ast(Portunus.GameStateProto).GameStateProto
 
 local function dump(o)
    if type(o) == 'table' then
@@ -15,6 +17,7 @@ local function dump(o)
    end
 end
 
+print(dump(LuaPB))
 
 -- Potential future idea: 
 -- Only send Deltas (incremental updates) over our bandwidth limited channel. We maintain a copy of the last updated full game state
@@ -209,9 +212,9 @@ Portunus.MainFrame:SetScript("OnEvent", function (self, Event, Arg1)
     if Event == "ADDON_LOADED" and Arg1 == "PortunusExporter" then
 		Portunus.MainFrame:Show()
         InitializePixels()
-        InitializeClassSpecificWhitelists()
+        --InitializeClassSpecificWhitelists()
         --TimerCallback()
-        C_Timer.NewTicker(update_period, TimerCallback)
+        --C_Timer.NewTicker(update_period, TimerCallback)
         C_Timer.After(2, function() Portunus.MainFrame:UnregisterEvent("ADDON_LOADED") end)
     end
 end)

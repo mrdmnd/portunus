@@ -1,0 +1,11 @@
+# Do this once
+
+Install LUA interpreter (I have 5.4 locally)
+Install MinGW Compiler if you didn't already have it.
+  https://github.com/niXman/mingw-builds-binaries?tab=readme-ov-file
+  
+Install luarocks package manager.
+Install lpeg with the package manager: `luarocks install lpeg`
+
+
+# Do this each time you change the proto
