@@ -1,4 +1,6 @@
 -- This sub code was programmatically added by update_flatbuffers.py
+-- It is intended to replace the `require` functionality missing from the WOW lua environment.
+-- We wrap the entire module in an function called "export_fn()" and then load that fn into Portunus.Modules at the bottom of this file.
 local _, Portunus = ...
 local function require(m) local e=Portunus.Modules[m] if e==nil then error("Failed to load module " .. m) end return e end
 local function export_fn()
@@ -31,49 +33,26 @@ function mt:Init(buf, pos)
 end
 
 function mt:ResourceType()
-  local o = self.view:Offset(4)
-  if o ~= 0 then
-    return self.view:Get(flatbuffers.N.Int8, self.view.pos + o)
-  end
-  return 0
+  return self.view:Get(flatbuffers.N.Int8, self.view.pos + 0)
 end
 
 function mt:Current()
-  local o = self.view:Offset(6)
-  if o ~= 0 then
-    return self.view:Get(flatbuffers.N.Uint8, self.view.pos + o)
-  end
-  return 0
+  return self.view:Get(flatbuffers.N.Uint8, self.view.pos + 1)
 end
 
 function mt:Maximum()
-  local o = self.view:Offset(8)
-  if o ~= 0 then
-    return self.view:Get(flatbuffers.N.Uint8, self.view.pos + o)
-  end
-  return 0
+  return self.view:Get(flatbuffers.N.Uint8, self.view.pos + 2)
 end
 
-function Resource.Start(builder)
-  builder:StartObject(3)
-end
-
-function Resource.AddResourceType(builder, resourceType)
-  builder:PrependInt8Slot(0, resourceType, 0)
-end
-
-function Resource.AddCurrent(builder, current)
-  builder:PrependUint8Slot(1, current, 0)
-end
-
-function Resource.AddMaximum(builder, maximum)
-  builder:PrependUint8Slot(2, maximum, 0)
-end
-
-function Resource.End(builder)
-  return builder:EndObject()
+function Resource.CreateResource(builder, resourceType, current, maximum)
+  builder:Prep(1, 3)
+  builder:PrependUint8(maximum)
+  builder:PrependUint8(current)
+  builder:PrependInt8(resourceType)
+  return builder:Offset()
 end
 
 return Resource
 end
+-- The above `end` keyword and the following line are designed to replace the `require` functionality missing from the WOW lua environment.
 Portunus.Modules["game_state_schema.Resource"]=export_fn()

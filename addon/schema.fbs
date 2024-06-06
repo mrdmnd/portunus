@@ -2,14 +2,14 @@
 
 namespace game_state_schema;
 
-table Cooldown {
+struct Cooldown {
     spell_id:uint32;
     ready:uint32; 
     charges:uint8;
 }
 
-table Aura {
-    source_guid:string;
+struct Aura {
+    //source_guid:string; cannot put strings into structs.
     spell_id:uint32;
     expires:uint32;
     stacks:uint8;
@@ -37,36 +37,51 @@ enum ResourceType : byte {
     Fury,
     Pain
 }
-table Resource {
+struct Resource {
     resource_type:ResourceType;
     current:uint8;
-    maximum:uint8;
+    maximum:uint8; // Myabe this should just be in the static configuration?
+}
+
+// This unifies the API from UnitCastingInfo and UnitChannelInfo
+// The API is the same except UnitChannelInfo does not provide a CastID.
+// I don't think we actually need that here? I'm omitting it for now.
+// Most of the stuff is look-up-able in a table from spell_id
+struct SpellCastInfo {
+    spell_id:uint32;
+    start_time_ms:uint32;
+    end_time_ms:uint32;
+    interruptible:bool;
+    channeling:bool;
 }
 
 // GUID lore here: https://www.wowinterface.com/forums/showthread.php?t=49503
 // https://gist.github.com/Meorawr/a12caab75d49c8352dcfed78fe3bcd25
 // https://wowpedia.fandom.com/wiki/API_UnitGUID
-table UnitBaseInfo {
-    uint_guid:string;
+table UnitBase {
     health_current:uint32;
     health_maximum:uint32;
     speed:float;
-    //cast_info:CastInfo;
-    //channel_info:ChannelInfo;
+    spell_cast_info:SpellCastInfo;
     buffs:[Aura];
     debuffs:[Aura];
 }
 
 table PlayerUnit {
-    base_info:UnitBaseInfo;
+    base:UnitBase;
+    cooldowns:[Cooldown];
+    resources:[Resource];
 }
 
+// TODO: consider cooldowns? consider raid events on bosses?
 table EnemyUnit {
-    base_info:UnitBaseInfo;
+    base:UnitBase;
+    unit_guid:string;
     name:string;
-    in_combat:bool;
+    nameplate_visible:bool; // Sometimes units go off-screen but they still "exist" in our temporal cache.
     attackable:bool;
-    threat_situation:uint8;
+    in_combat:bool; // in combat with *anything*
+    threat_situation:uint8; // who in our party is in combat with it
     // range:float;
 }
 
@@ -74,14 +89,15 @@ table EnemyUnit {
 table GameState {
     // Time (units in milliseconds) of when this snapshot was taken.
     // Notably, we do GetTIme() * 1000 and round down.
-    snapshot_time:uint32;
-
+    snapshot_time_ms:uint32;
+    target_guid:string;
     player:PlayerUnit;
-    cooldowns:[Cooldown];
-    resources:[Resource];
-
-    current_target_guid:string;
     visible_targets:[EnemyUnit];
+
+
+    // Thinking through an "event" system.
+    // One event we want to handle is forced (or predicted-forced) movement.
+    // The movement event will take the form event_start, event_stop
 }
 
 root_type GameState;

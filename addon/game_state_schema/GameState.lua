@@ -1,4 +1,6 @@
 -- This sub code was programmatically added by update_flatbuffers.py
+-- It is intended to replace the `require` functionality missing from the WOW lua environment.
+-- We wrap the entire module in an function called "export_fn()" and then load that fn into Portunus.Modules at the bottom of this file.
 local _, Portunus = ...
 local function require(m) local e=Portunus.Modules[m] if e==nil then error("Failed to load module " .. m) end return e end
 local function export_fn()
@@ -15,10 +17,8 @@ local function export_fn()
 
 --]]
 
-local __game_state_schema_Cooldown = require('game_state_schema.Cooldown')
 local __game_state_schema_EnemyUnit = require('game_state_schema.EnemyUnit')
 local __game_state_schema_PlayerUnit = require('game_state_schema.PlayerUnit')
-local __game_state_schema_Resource = require('game_state_schema.Resource')
 local flatbuffers = require('flatbuffers')
 
 local GameState = {}
@@ -45,7 +45,7 @@ function mt:Init(buf, pos)
   self.view = flatbuffers.view.New(buf, pos)
 end
 
-function mt:SnapshotTime()
+function mt:SnapshotTimeMs()
   local o = self.view:Offset(4)
   if o ~= 0 then
     return self.view:Get(flatbuffers.N.Uint32, self.view.pos + o)
@@ -53,8 +53,15 @@ function mt:SnapshotTime()
   return 0
 end
 
-function mt:Player()
+function mt:TargetGuid()
   local o = self.view:Offset(6)
+  if o ~= 0 then
+    return self.view:String(self.view.pos + o)
+  end
+end
+
+function mt:Player()
+  local o = self.view:Offset(8)
   if o ~= 0 then
     local x = self.view:Indirect(self.view.pos + o)
     local obj = __game_state_schema_PlayerUnit.New()
@@ -63,55 +70,8 @@ function mt:Player()
   end
 end
 
-function mt:Cooldowns(j)
-  local o = self.view:Offset(8)
-  if o ~= 0 then
-    local x = self.view:Vector(o)
-    x = x + ((j-1) * 4)
-    x = self.view:Indirect(x)
-    local obj = __game_state_schema_Cooldown.New()
-    obj:Init(self.view.bytes, x)
-    return obj
-  end
-end
-
-function mt:CooldownsLength()
-  local o = self.view:Offset(8)
-  if o ~= 0 then
-    return self.view:VectorLen(o)
-  end
-  return 0
-end
-
-function mt:Resources(j)
-  local o = self.view:Offset(10)
-  if o ~= 0 then
-    local x = self.view:Vector(o)
-    x = x + ((j-1) * 4)
-    x = self.view:Indirect(x)
-    local obj = __game_state_schema_Resource.New()
-    obj:Init(self.view.bytes, x)
-    return obj
-  end
-end
-
-function mt:ResourcesLength()
-  local o = self.view:Offset(10)
-  if o ~= 0 then
-    return self.view:VectorLen(o)
-  end
-  return 0
-end
-
-function mt:CurrentTargetGuid()
-  local o = self.view:Offset(12)
-  if o ~= 0 then
-    return self.view:String(self.view.pos + o)
-  end
-end
-
 function mt:VisibleTargets(j)
-  local o = self.view:Offset(14)
+  local o = self.view:Offset(10)
   if o ~= 0 then
     local x = self.view:Vector(o)
     x = x + ((j-1) * 4)
@@ -123,7 +83,7 @@ function mt:VisibleTargets(j)
 end
 
 function mt:VisibleTargetsLength()
-  local o = self.view:Offset(14)
+  local o = self.view:Offset(10)
   if o ~= 0 then
     return self.view:VectorLen(o)
   end
@@ -131,39 +91,23 @@ function mt:VisibleTargetsLength()
 end
 
 function GameState.Start(builder)
-  builder:StartObject(6)
+  builder:StartObject(4)
 end
 
-function GameState.AddSnapshotTime(builder, snapshotTime)
-  builder:PrependUint32Slot(0, snapshotTime, 0)
+function GameState.AddSnapshotTimeMs(builder, snapshotTimeMs)
+  builder:PrependUint32Slot(0, snapshotTimeMs, 0)
+end
+
+function GameState.AddTargetGuid(builder, targetGuid)
+  builder:PrependUOffsetTRelativeSlot(1, targetGuid, 0)
 end
 
 function GameState.AddPlayer(builder, player)
-  builder:PrependStructSlot(1, player, 0)
-end
-
-function GameState.AddCooldowns(builder, cooldowns)
-  builder:PrependUOffsetTRelativeSlot(2, cooldowns, 0)
-end
-
-function GameState.StartCooldownsVector(builder, numElems)
-  return builder:StartVector(4, numElems, 4)
-end
-
-function GameState.AddResources(builder, resources)
-  builder:PrependUOffsetTRelativeSlot(3, resources, 0)
-end
-
-function GameState.StartResourcesVector(builder, numElems)
-  return builder:StartVector(4, numElems, 4)
-end
-
-function GameState.AddCurrentTargetGuid(builder, currentTargetGuid)
-  builder:PrependUOffsetTRelativeSlot(4, currentTargetGuid, 0)
+  builder:PrependStructSlot(2, player, 0)
 end
 
 function GameState.AddVisibleTargets(builder, visibleTargets)
-  builder:PrependUOffsetTRelativeSlot(5, visibleTargets, 0)
+  builder:PrependUOffsetTRelativeSlot(3, visibleTargets, 0)
 end
 
 function GameState.StartVisibleTargetsVector(builder, numElems)
@@ -176,4 +120,5 @@ end
 
 return GameState
 end
+-- The above `end` keyword and the following line are designed to replace the `require` functionality missing from the WOW lua environment.
 Portunus.Modules["game_state_schema.GameState"]=export_fn()

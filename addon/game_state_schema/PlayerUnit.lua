@@ -1,4 +1,6 @@
 -- This sub code was programmatically added by update_flatbuffers.py
+-- It is intended to replace the `require` functionality missing from the WOW lua environment.
+-- We wrap the entire module in an function called "export_fn()" and then load that fn into Portunus.Modules at the bottom of this file.
 local _, Portunus = ...
 local function require(m) local e=Portunus.Modules[m] if e==nil then error("Failed to load module " .. m) end return e end
 local function export_fn()
@@ -15,7 +17,9 @@ local function export_fn()
 
 --]]
 
-local __game_state_schema_UnitBaseInfo = require('game_state_schema.UnitBaseInfo')
+local __game_state_schema_Cooldown = require('game_state_schema.Cooldown')
+local __game_state_schema_Resource = require('game_state_schema.Resource')
+local __game_state_schema_UnitBase = require('game_state_schema.UnitBase')
 local flatbuffers = require('flatbuffers')
 
 local PlayerUnit = {}
@@ -31,22 +35,76 @@ function mt:Init(buf, pos)
   self.view = flatbuffers.view.New(buf, pos)
 end
 
-function mt:BaseInfo()
+function mt:Base()
   local o = self.view:Offset(4)
   if o ~= 0 then
     local x = self.view:Indirect(self.view.pos + o)
-    local obj = __game_state_schema_UnitBaseInfo.New()
+    local obj = __game_state_schema_UnitBase.New()
     obj:Init(self.view.bytes, x)
     return obj
   end
 end
 
-function PlayerUnit.Start(builder)
-  builder:StartObject(1)
+function mt:Cooldowns(j)
+  local o = self.view:Offset(6)
+  if o ~= 0 then
+    local x = self.view:Vector(o)
+    x = x + ((j-1) * 12)
+    local obj = __game_state_schema_Cooldown.New()
+    obj:Init(self.view.bytes, x)
+    return obj
+  end
 end
 
-function PlayerUnit.AddBaseInfo(builder, baseInfo)
-  builder:PrependStructSlot(0, baseInfo, 0)
+function mt:CooldownsLength()
+  local o = self.view:Offset(6)
+  if o ~= 0 then
+    return self.view:VectorLen(o)
+  end
+  return 0
+end
+
+function mt:Resources(j)
+  local o = self.view:Offset(8)
+  if o ~= 0 then
+    local x = self.view:Vector(o)
+    x = x + ((j-1) * 3)
+    local obj = __game_state_schema_Resource.New()
+    obj:Init(self.view.bytes, x)
+    return obj
+  end
+end
+
+function mt:ResourcesLength()
+  local o = self.view:Offset(8)
+  if o ~= 0 then
+    return self.view:VectorLen(o)
+  end
+  return 0
+end
+
+function PlayerUnit.Start(builder)
+  builder:StartObject(3)
+end
+
+function PlayerUnit.AddBase(builder, base)
+  builder:PrependStructSlot(0, base, 0)
+end
+
+function PlayerUnit.AddCooldowns(builder, cooldowns)
+  builder:PrependUOffsetTRelativeSlot(1, cooldowns, 0)
+end
+
+function PlayerUnit.StartCooldownsVector(builder, numElems)
+  return builder:StartVector(12, numElems, 4)
+end
+
+function PlayerUnit.AddResources(builder, resources)
+  builder:PrependUOffsetTRelativeSlot(2, resources, 0)
+end
+
+function PlayerUnit.StartResourcesVector(builder, numElems)
+  return builder:StartVector(3, numElems, 1)
 end
 
 function PlayerUnit.End(builder)
@@ -55,4 +113,5 @@ end
 
 return PlayerUnit
 end
+-- The above `end` keyword and the following line are designed to replace the `require` functionality missing from the WOW lua environment.
 Portunus.Modules["game_state_schema.PlayerUnit"]=export_fn()

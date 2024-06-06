@@ -192,7 +192,7 @@ end
 
 local function TimerCallback()
     --local profile_start_time = GetTimePreciseSec()
-    local game_state = Portunus.GameState.GetGameState()
+    local game_state = Portunus.ExportGameState()
     --print("getting state took ", 1000000*(GetTimePreciseSec() - profile_start_time) .. "us")
 
     --print(dump(game_state))

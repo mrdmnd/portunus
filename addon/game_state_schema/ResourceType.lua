@@ -1,4 +1,6 @@
 -- This sub code was programmatically added by update_flatbuffers.py
+-- It is intended to replace the `require` functionality missing from the WOW lua environment.
+-- We wrap the entire module in an function called "export_fn()" and then load that fn into Portunus.Modules at the bottom of this file.
 local _, Portunus = ...
 local function require(m) local e=Portunus.Modules[m] if e==nil then error("Failed to load module " .. m) end return e end
 local function export_fn()
@@ -39,4 +41,5 @@ local ResourceType = {
 
 return ResourceType
 end
+-- The above `end` keyword and the following line are designed to replace the `require` functionality missing from the WOW lua environment.
 Portunus.Modules["game_state_schema.ResourceType"]=export_fn()

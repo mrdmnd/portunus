@@ -1,4 +1,6 @@
 -- This sub code was programmatically added by update_flatbuffers.py
+-- It is intended to replace the `require` functionality missing from the WOW lua environment.
+-- We wrap the entire module in an function called "export_fn()" and then load that fn into Portunus.Modules at the bottom of this file.
 local _, Portunus = ...
 local function require(m) local e=Portunus.Modules[m] if e==nil then error("Failed to load module " .. m) end return e end
 local function export_fn()
@@ -31,49 +33,27 @@ function mt:Init(buf, pos)
 end
 
 function mt:SpellId()
-  local o = self.view:Offset(4)
-  if o ~= 0 then
-    return self.view:Get(flatbuffers.N.Uint32, self.view.pos + o)
-  end
-  return 0
+  return self.view:Get(flatbuffers.N.Uint32, self.view.pos + 0)
 end
 
 function mt:Ready()
-  local o = self.view:Offset(6)
-  if o ~= 0 then
-    return self.view:Get(flatbuffers.N.Uint32, self.view.pos + o)
-  end
-  return 0
+  return self.view:Get(flatbuffers.N.Uint32, self.view.pos + 4)
 end
 
 function mt:Charges()
-  local o = self.view:Offset(8)
-  if o ~= 0 then
-    return self.view:Get(flatbuffers.N.Uint8, self.view.pos + o)
-  end
-  return 0
+  return self.view:Get(flatbuffers.N.Uint8, self.view.pos + 8)
 end
 
-function Cooldown.Start(builder)
-  builder:StartObject(3)
-end
-
-function Cooldown.AddSpellId(builder, spellId)
-  builder:PrependUint32Slot(0, spellId, 0)
-end
-
-function Cooldown.AddReady(builder, ready)
-  builder:PrependUint32Slot(1, ready, 0)
-end
-
-function Cooldown.AddCharges(builder, charges)
-  builder:PrependUint8Slot(2, charges, 0)
-end
-
-function Cooldown.End(builder)
-  return builder:EndObject()
+function Cooldown.CreateCooldown(builder, spellId, ready, charges)
+  builder:Prep(4, 12)
+  builder:Pad(3)
+  builder:PrependUint8(charges)
+  builder:PrependUint32(ready)
+  builder:PrependUint32(spellId)
+  return builder:Offset()
 end
 
 return Cooldown
 end
+-- The above `end` keyword and the following line are designed to replace the `require` functionality missing from the WOW lua environment.
 Portunus.Modules["game_state_schema.Cooldown"]=export_fn()

@@ -1,4 +1,6 @@
 -- This sub code was programmatically added by update_flatbuffers.py
+-- It is intended to replace the `require` functionality missing from the WOW lua environment.
+-- We wrap the entire module in an function called "export_fn()" and then load that fn into Portunus.Modules at the bottom of this file.
 local _, Portunus = ...
 local function require(m) local e=Portunus.Modules[m] if e==nil then error("Failed to load module " .. m) end return e end
 local function export_fn()
@@ -15,7 +17,7 @@ local function export_fn()
 
 --]]
 
-local __game_state_schema_UnitBaseInfo = require('game_state_schema.UnitBaseInfo')
+local __game_state_schema_UnitBase = require('game_state_schema.UnitBase')
 local flatbuffers = require('flatbuffers')
 
 local EnemyUnit = {}
@@ -31,32 +33,31 @@ function mt:Init(buf, pos)
   self.view = flatbuffers.view.New(buf, pos)
 end
 
-function mt:BaseInfo()
+function mt:Base()
   local o = self.view:Offset(4)
   if o ~= 0 then
     local x = self.view:Indirect(self.view.pos + o)
-    local obj = __game_state_schema_UnitBaseInfo.New()
+    local obj = __game_state_schema_UnitBase.New()
     obj:Init(self.view.bytes, x)
     return obj
   end
 end
 
-function mt:Name()
+function mt:UnitGuid()
   local o = self.view:Offset(6)
   if o ~= 0 then
     return self.view:String(self.view.pos + o)
   end
 end
 
-function mt:InCombat()
+function mt:Name()
   local o = self.view:Offset(8)
   if o ~= 0 then
-    return (self.view:Get(flatbuffers.N.Bool, self.view.pos + o) ~=0)
+    return self.view:String(self.view.pos + o)
   end
-  return false
 end
 
-function mt:Attackable()
+function mt:NameplateVisible()
   local o = self.view:Offset(10)
   if o ~= 0 then
     return (self.view:Get(flatbuffers.N.Bool, self.view.pos + o) ~=0)
@@ -64,8 +65,24 @@ function mt:Attackable()
   return false
 end
 
-function mt:ThreatSituation()
+function mt:Attackable()
   local o = self.view:Offset(12)
+  if o ~= 0 then
+    return (self.view:Get(flatbuffers.N.Bool, self.view.pos + o) ~=0)
+  end
+  return false
+end
+
+function mt:InCombat()
+  local o = self.view:Offset(14)
+  if o ~= 0 then
+    return (self.view:Get(flatbuffers.N.Bool, self.view.pos + o) ~=0)
+  end
+  return false
+end
+
+function mt:ThreatSituation()
+  local o = self.view:Offset(16)
   if o ~= 0 then
     return self.view:Get(flatbuffers.N.Uint8, self.view.pos + o)
   end
@@ -73,27 +90,35 @@ function mt:ThreatSituation()
 end
 
 function EnemyUnit.Start(builder)
-  builder:StartObject(5)
+  builder:StartObject(7)
 end
 
-function EnemyUnit.AddBaseInfo(builder, baseInfo)
-  builder:PrependStructSlot(0, baseInfo, 0)
+function EnemyUnit.AddBase(builder, base)
+  builder:PrependStructSlot(0, base, 0)
+end
+
+function EnemyUnit.AddUnitGuid(builder, unitGuid)
+  builder:PrependUOffsetTRelativeSlot(1, unitGuid, 0)
 end
 
 function EnemyUnit.AddName(builder, name)
-  builder:PrependUOffsetTRelativeSlot(1, name, 0)
+  builder:PrependUOffsetTRelativeSlot(2, name, 0)
 end
 
-function EnemyUnit.AddInCombat(builder, inCombat)
-  builder:PrependBoolSlot(2, inCombat, false)
+function EnemyUnit.AddNameplateVisible(builder, nameplateVisible)
+  builder:PrependBoolSlot(3, nameplateVisible, false)
 end
 
 function EnemyUnit.AddAttackable(builder, attackable)
-  builder:PrependBoolSlot(3, attackable, false)
+  builder:PrependBoolSlot(4, attackable, false)
+end
+
+function EnemyUnit.AddInCombat(builder, inCombat)
+  builder:PrependBoolSlot(5, inCombat, false)
 end
 
 function EnemyUnit.AddThreatSituation(builder, threatSituation)
-  builder:PrependUint8Slot(4, threatSituation, 0)
+  builder:PrependUint8Slot(6, threatSituation, 0)
 end
 
 function EnemyUnit.End(builder)
@@ -102,4 +127,5 @@ end
 
 return EnemyUnit
 end
+-- The above `end` keyword and the following line are designed to replace the `require` functionality missing from the WOW lua environment.
 Portunus.Modules["game_state_schema.EnemyUnit"]=export_fn()
