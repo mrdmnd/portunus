@@ -1,6 +1,6 @@
-local _, Portunus = ...
+local GameStateSnapshotter = {}
 
-local Flatbuffers = Portunus.Modules["flatbuffers"]
+
 local Aura = Portunus.Modules["game_state_schema.Aura"]
 local Cooldown = Portunus.Modules["game_state_schema.Cooldown"]
 local EnemyUnit = Portunus.Modules["game_state_schema.EnemyUnit"]
@@ -44,7 +44,9 @@ local UnitBase = Portunus.Modules["game_state_schema.UnitBase"]
 
 -- TODO: determine if the nameplate is "in front" of the character for spells that care about that
 -- https://github.com/herotc/hero-lib/blob/cf5f826ae1600a8bac75f82f9818e629a9a9213e/HeroLib/Events/Player.lua#L239
+-- would have to do something weird like "keep track of the thing we indeded to hit with damage then see if we.. did"
 
+-- TODO: track DR status by listening to CC events
 
 
 local UnitCastingInfo = UnitCastingInfo
@@ -125,138 +127,110 @@ local function NameplateInfoFromGUID(unit_guid)
     return value
 end
 
+
+-- Some state information that gets updated when EVENTS fire:
 local enemy_nameplate_info = {}
----@diagnostic disable-next-line: inject-field
+local combat_entry_timestamp_ms = nil
+local combat_exit_timestamp_ms = nil
+
 function game_state_frame:NAME_PLATE_UNIT_ADDED(unit_id)
     local key = UnitGUID(unit_id)
     if not key then return end
     enemy_nameplate_info[key] = NameplateInfoFromGUID(key)
 end
----@diagnostic disable-next-line: inject-field
 function game_state_frame:NAME_PLATE_UNIT_REMOVED(unit_id)
     local key = UnitGUID(unit_id)
     if not key then return end
     enemy_nameplate_info[key] = nil
 end
+function game_state_frame:PLAYER_REGEN_DISABLED()
+    combat_entry_timestamp_ms = mathfloor(1000*GetTime())
+end
+function game_state_frame:PLAYER_REGEN_ENABLED()
+    combat_exit_timestamp_ms = mathfloor(1000*GetTime())
+end
+
+function game_state_frame:UI_ERROR_MESSAGE(message_type, message)
+    -- Use this to check `facing` requirements.
+    -- https://github.com/herotc/hero-lib/blob/cf5f826ae1600a8bac75f82f9818e629a9a9213e/HeroLib/Events/Player.lua#L240C1-L241C1
+end
+
 game_state_frame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 game_state_frame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
+game_state_frame:RegisterEvent("PLAYER_REGEN_DISABLED")
+game_state_frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+game_state_frame:RegisterEvent("UI_ERROR_MESSAGE")
 game_state_frame:SetScript("OnEvent", function(self, event, ...) self[event](self, ...) end)
 
 
--- The "main" method for this module.
 
-local function GetGameStateAsFlatbuffer()
-    local builder = Flatbuffers.Builder(1024)
+-- ############# BUILD GAME SNAPSHOT FUNCS ##################
 
-    GameState.Start(builder)
-    GameState.AddSnapshotTimeMs(builder, mathfloor(1000*GetTime()))
-    GameState.AddTargetGuid(builder, builder:CreateString(UnitGUID("target")))
-
-    -- Get resource information
-    -- This section should be class specific but we can test on spriest
-    local resource_type = ResourceType.Insanity
-    local current_resource = UnitPower("player", resource_type)
-    local max_resource = UnitPowerMax("player", resource_type)
-    Resource.Start(builder)
-    Resource.AddResourceType(builder, resource_type)
-    Resource.AddCurrent(builder, current_resource)
-    Resource.AddMaximum(builder, max_resource)
-    local resource = Resource.End(builder)
-
-    -- Get cooldown information
-    Cooldown.Start(builder)
-    Cooldown.AddSpellId(builder, 12345) -- Example Spell id
-    Cooldown.AddReady(builder, 1000*GetTime() + 12345) -- Example ready time
-    Cooldown.AddCharges(builder, 3) -- Example charges
-    local cooldown = Cooldown.End(builder)
-
-    -- Get spell cast information
-    SpellCastInfo.Start(builder)
-    SpellCastInfo.AddSpellId(builder, 67890) -- example spell id
-    SpellCastInfo.AddStartTimeMs(builder, 1000)
-    SpellCastInfo.AddEndTimeMs(builder, 3000)
-    SpellCastInfo.AddInterruptible(builder, true)
-    SpellCastInfo.AddChanneling(builder, false)
-    local spell_cast_info = SpellCastInfo.End(builder)
-
-    -- Get aura information
-    Aura.Start(builder)
-    Aura.AddSpellId(builder, 12345)  -- example spell ID
-    Aura.AddExpires(builder, 2000)  -- example expiration time
-    Aura.AddStacks(builder, 2)  -- example stacks
-    local buff = Aura.End(builder)
-
-    Aura.Start(builder)
-    Aura.AddSpellId(builder, 67890)  -- example spell ID
-    Aura.AddExpires(builder, 3000)  -- example expiration time
-    Aura.AddStacks(builder, 1)  -- example stacks
-    local debuff = Aura.End(builder)
-
-
-    -- Create UnitBase for player
-    UnitBase.Start(builder)
-    UnitBase.AddHealthCurrent(builder, 5000)  -- example current health
-    UnitBase.AddHealthMaximum(builder, 10000)  -- example max health
-    UnitBase.AddSpeed(builder, 1.0)  -- example speed
-    UnitBase.AddSpellCastInfo(builder, spell_cast_info)
-    UnitBase.StartBuffsVector(builder, 1)
-    builder:PrependUOffsetTRelative(buff)
-    local buffs = builder:EndVector(1)
-    UnitBase.AddBuffs(builder, buffs)
-    UnitBase.StartDebuffsVector(builder, 1)
-    builder:PrependUOffsetTRelative(debuff)
-    local debuffs = builder:EndVector(1)
-    UnitBase.AddDebuffs(builder, debuffs)
-    local unit_base = UnitBase.End(builder)
-
-    -- Create PlayerUnit from UnitBase, cooldowns, and resources
-    PlayerUnit.Start(builder)
-    PlayerUnit.AddBase(builder, unit_base)
-    PlayerUnit.StartCooldownsVector(builder, 1)
-    builder:PrependUOffsetTRelative(cooldown)
-    local cooldowns = builder:EndVector(1)
-    PlayerUnit.AddCooldowns(builder, cooldowns)
-    PlayerUnit.StartResourcesVector(builder, 1)
-    builder:PrependUOffsetTRelative(resource)
-    local resources = builder:EndVector(1)
-    PlayerUnit.AddResources(builder, resources)
-    local player_unit = PlayerUnit.End(builder)
-
-    -- Add PlayerUnit to GameState
-    GameState.AddPlayerUnit(builder, player_unit)
-
-
-    -- Fill in enemy units
-    GameState.StartVisibleTargetsVector(builder, #enemy_nameplate_info)
-    for unit_guid, enemy_info in ipairs(enemy_nameplate_info) do
-        -- Create enemy_unit_base core info. Could add more info as needed.
-        UnitBase.Start(builder)
-        --UnitBase.AddHealthCurrent(builder, enemy_info.health_current)
-        UnitBase.AddHealthCurrent(builder, 100)
-        --UnitBase.AddHealthMaximum(builder, enemy_info.health_maximum)
-        UnitBase.AddHealthMaximum(builder, 200)
-        --UnitBase.AddSpeed(builder, enemy_info.speed)
-        UnitBase.AddSpeed(builder, 1.15)
-        local enemy_unit_base = UnitBase.End(builder)
-
-        -- Create enemy unit
-        EnemyUnit.Start(builder)
-        EnemyUnit.AddBase(builder, enemy_unit_base)
-        EnemyUnit.AddUnitGuid(builder, builder:CreateString("guid goes here"))
-        EnemyUnit.AddName(builder, builder:CreateString("samwise gamgee"))
-        -- ...
-        --EnemyUnit.AddNameplateVisible()
-
-        local enemy_unit = EnemyUnit.End(builder)
-        builder:PrependUOffsetTRelative(enemy_unit)
-    end
-    local visible_targets = builder:EndVector(#enemy_nameplate_info)
-    GameState.AddVisibleTargets(visible_targets)
-
-    -- Finalize gamestate and return the buffer.
-    local game_state = GameState.End(builder)
-    builder:Finish(game_state)
-    return builder:Output()
+local function BuildResourcesTable()
 end
 
-Portunus.ExportGameState = GetGameStateAsFlatbuffer
+local function BuildCooldownsTable()
+end
+
+local function BuildUnitBaseTable(unit_id)
+end
+
+local function GetEnemyFlags(unit_id)
+    local v = 0
+    local facing = false
+end
+
+local function BuildPlayerUnitTable()
+    local player_table = {
+        resources = BuildResourcesTable(),
+        cooldowns = BuildCooldownsTable(),
+        base = BuildUnitBaseTable("player"),
+    }
+    return player_table
+end
+
+local function BuildEnemyUnitTable(unit_id)
+    local enemy_table = {
+        guid_hash = 696969,
+        range = 30,
+        flags = GetEnemyFlags(unit_id),
+        base = BuildUnitBaseTable(unit_id),
+    }
+    return enemy_table
+end
+
+local function BuildEnemyUnitsTable()
+    local enemies_table = {}
+    for unit_guid, info in ipairs(enemy_nameplate_info) do
+        local enemy_unit = {
+            guid_hash = 696969,
+            range = 30,
+            flags = 123,
+            base = BuildUnitBaseTable(UnitTokenFromGUID(unit_guid)),
+        }
+
+        enemies_table.insert(BuildEnemyUnitTable(enemy_nameplate))
+    end
+end
+
+local function BuildSnapshotTable()
+    local snapshot_time_ms = mathfloor(1000 * GetTime()) -- this field is generally valuable and we only want to do one call to GetTime to compute it per update.
+
+    local snapshot_table = {
+        snapshot_time_ms = snapshot_time_ms,
+        combat_time_ms = (combat_entry_timestamp_ms ~= nil) and snapshot_time_ms - combat_entry_timestamp_ms or 0,
+        target_guid_hash = 1234567, -- faked/stubbed here until we have a hash function implemented on string GUIDs
+        player = BuildPlayerUnitTable(),
+        enemies = BuildEnemiesTable(),
+    }
+    return snapshot_table
+end
+
+function GameStateSnapshotter:GetSnapshot()
+end
+
+function GameStateSnapshotter:DoThing()
+end
+
+
+Portunus.Modules.GameStateSnapshotter = GameStateSnapshotter
