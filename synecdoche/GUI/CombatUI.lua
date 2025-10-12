@@ -247,6 +247,958 @@ function SYN.MainIconFrame:GetIconID()
     return nil
 end
 
+--- ================ FRAME INITIALIZATION ================
+
+-- B - Prediction1Frame (right of main icon)
+function SYN.Prediction1Frame:Init()
+    self:SetFrameStrata(SYN.MainFrame:GetFrameStrata())
+    self:SetFrameLevel(SYN.MainFrame:GetFrameLevel() - 1)
+    self:SetWidth(64)
+    self:SetHeight(64)
+    self:SetPoint("LEFT", SYN.MainIconFrame, "RIGHT", 5, 0)
+    
+    -- Texture
+    self.Texture = self:CreateTexture(nil, "ARTWORK")
+    self.Texture:SetTexture("Interface\\Icons\\Spell_Holy_WordFortitude")
+    self.Texture:SetAllPoints(self)
+    
+    -- Cooldown
+    self.CooldownFrame = CreateFrame("Cooldown", nil, self, "AR_CooldownFrameTemplate")
+    self.CooldownFrame:SetAllPoints(self)
+    
+    -- Keybind
+    local KeybindFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.Keybind = KeybindFrame
+    KeybindFrame:SetFont(SYN.FontSelect(KeybindFrame), 14, "OUTLINE")
+    KeybindFrame:SetAllPoints(true)
+    KeybindFrame:SetJustifyH("RIGHT")
+    KeybindFrame:SetJustifyV("TOP")
+    KeybindFrame:SetPoint("TOPRIGHT")
+    KeybindFrame:SetTextColor(0.8, 0.8, 0.8, 1)
+    KeybindFrame:SetText("")
+    
+    -- Annotation Text
+    local AnnotationFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.Annotation = AnnotationFrame
+    AnnotationFrame:SetAllPoints(true)
+    AnnotationFrame:SetJustifyH("CENTER")
+    AnnotationFrame:SetJustifyV("MIDDLE")
+    AnnotationFrame:SetPoint("CENTER")
+    AnnotationFrame:SetTextColor(1, 1, 1, 1)
+    AnnotationFrame:SetFont(SYN.FontSelect(AnnotationFrame), 8, "OUTLINE")
+    AnnotationFrame:SetText("")
+    
+    -- Set black border
+    self.Texture:SetTexCoord(0.01, 0.92, 0.08, 0.92)
+    SYN.CreateBackdrop(self)
+    
+    self:Hide()
+end
+
+-- C - Prediction2Frame (right of prediction1)
+function SYN.Prediction2Frame:Init()
+    self:SetFrameStrata(SYN.MainFrame:GetFrameStrata())
+    self:SetFrameLevel(SYN.MainFrame:GetFrameLevel() - 1)
+    self:SetWidth(64)
+    self:SetHeight(64)
+    self:SetPoint("LEFT", SYN.Prediction1Frame, "RIGHT", 5, 0)
+    
+    -- Texture
+    self.Texture = self:CreateTexture(nil, "ARTWORK")
+    self.Texture:SetTexture("Interface\\Icons\\Spell_Holy_WordFortitude")
+    self.Texture:SetAllPoints(self)
+    
+    -- Cooldown
+    self.CooldownFrame = CreateFrame("Cooldown", nil, self, "AR_CooldownFrameTemplate")
+    self.CooldownFrame:SetAllPoints(self)
+    
+    -- Keybind
+    local KeybindFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.Keybind = KeybindFrame
+    KeybindFrame:SetFont(SYN.FontSelect(KeybindFrame), 14, "OUTLINE")
+    KeybindFrame:SetAllPoints(true)
+    KeybindFrame:SetJustifyH("RIGHT")
+    KeybindFrame:SetJustifyV("TOP")
+    KeybindFrame:SetPoint("TOPRIGHT")
+    KeybindFrame:SetTextColor(0.8, 0.8, 0.8, 1)
+    KeybindFrame:SetText("")
+    
+    -- Annotation Text
+    local AnnotationFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.Annotation = AnnotationFrame
+    AnnotationFrame:SetAllPoints(true)
+    AnnotationFrame:SetJustifyH("CENTER")
+    AnnotationFrame:SetJustifyV("MIDDLE")
+    AnnotationFrame:SetPoint("CENTER")
+    AnnotationFrame:SetTextColor(1, 1, 1, 1)
+    AnnotationFrame:SetFont(SYN.FontSelect(AnnotationFrame), 8, "OUTLINE")
+    AnnotationFrame:SetText("")
+    
+    -- Set black border
+    self.Texture:SetTexCoord(0.01, 0.92, 0.08, 0.92)
+    SYN.CreateBackdrop(self)
+    
+    self:Hide()
+end
+
+-- D - LeftIconFrame (left of main icon)
+function SYN.LeftIconFrame:Init()
+    self:SetFrameStrata(SYN.MainFrame:GetFrameStrata())
+    self:SetFrameLevel(SYN.MainFrame:GetFrameLevel() - 1)
+    self:SetWidth(64)
+    self:SetHeight(64)
+    self:SetPoint("RIGHT", SYN.MainIconFrame, "LEFT", -5, 0)
+    
+    -- Texture
+    self.Texture = self:CreateTexture(nil, "ARTWORK")
+    self.Texture:SetTexture("Interface\\Icons\\Spell_Holy_WordFortitude")
+    self.Texture:SetAllPoints(self)
+    
+    -- Cooldown
+    self.CooldownFrame = CreateFrame("Cooldown", nil, self, "AR_CooldownFrameTemplate")
+    self.CooldownFrame:SetAllPoints(self)
+    
+    -- Keybind
+    local KeybindFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.Keybind = KeybindFrame
+    KeybindFrame:SetFont(SYN.FontSelect(KeybindFrame), 14, "OUTLINE")
+    KeybindFrame:SetAllPoints(true)
+    KeybindFrame:SetJustifyH("RIGHT")
+    KeybindFrame:SetJustifyV("TOP")
+    KeybindFrame:SetPoint("TOPRIGHT")
+    KeybindFrame:SetTextColor(0.8, 0.8, 0.8, 1)
+    KeybindFrame:SetText("")
+    
+    -- Annotation Text
+    local AnnotationFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.Annotation = AnnotationFrame
+    AnnotationFrame:SetAllPoints(true)
+    AnnotationFrame:SetJustifyH("CENTER")
+    AnnotationFrame:SetJustifyV("MIDDLE")
+    AnnotationFrame:SetPoint("CENTER")
+    AnnotationFrame:SetTextColor(1, 1, 1, 1)
+    AnnotationFrame:SetFont(SYN.FontSelect(AnnotationFrame), 8, "OUTLINE")
+    AnnotationFrame:SetText("")
+    
+    -- Set black border
+    self.Texture:SetTexCoord(0.01, 0.92, 0.08, 0.92)
+    SYN.CreateBackdrop(self)
+    
+    self:Hide()
+end
+
+-- E - TopIconFrame (above main icon)
+function SYN.TopIconFrame:Init()
+    self:SetFrameStrata(SYN.MainFrame:GetFrameStrata())
+    self:SetFrameLevel(SYN.MainFrame:GetFrameLevel() - 1)
+    self:SetWidth(64)
+    self:SetHeight(64)
+    self:SetPoint("BOTTOM", SYN.MainIconFrame, "TOP", 0, 5)
+    
+    -- Texture
+    self.Texture = self:CreateTexture(nil, "ARTWORK")
+    self.Texture:SetTexture("Interface\\Icons\\Spell_Holy_WordFortitude")
+    self.Texture:SetAllPoints(self)
+    
+    -- Cooldown
+    self.CooldownFrame = CreateFrame("Cooldown", nil, self, "AR_CooldownFrameTemplate")
+    self.CooldownFrame:SetAllPoints(self)
+    
+    -- Keybind
+    local KeybindFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.Keybind = KeybindFrame
+    KeybindFrame:SetFont(SYN.FontSelect(KeybindFrame), 14, "OUTLINE")
+    KeybindFrame:SetAllPoints(true)
+    KeybindFrame:SetJustifyH("RIGHT")
+    KeybindFrame:SetJustifyV("TOP")
+    KeybindFrame:SetPoint("TOPRIGHT")
+    KeybindFrame:SetTextColor(0.8, 0.8, 0.8, 1)
+    KeybindFrame:SetText("")
+    
+    -- Annotation Text
+    local AnnotationFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.Annotation = AnnotationFrame
+    AnnotationFrame:SetAllPoints(true)
+    AnnotationFrame:SetJustifyH("CENTER")
+    AnnotationFrame:SetJustifyV("MIDDLE")
+    AnnotationFrame:SetPoint("CENTER")
+    AnnotationFrame:SetTextColor(1, 1, 1, 1)
+    AnnotationFrame:SetFont(SYN.FontSelect(AnnotationFrame), 8, "OUTLINE")
+    AnnotationFrame:SetText("")
+    
+    -- Set black border
+    self.Texture:SetTexCoord(0.01, 0.92, 0.08, 0.92)
+    SYN.CreateBackdrop(self)
+    
+    self:Hide()
+end
+
+-- F - SmallTopLeftFrame (top-left corner of main icon)
+function SYN.SmallTopLeftFrame:Init()
+    self:SetFrameStrata(SYN.MainFrame:GetFrameStrata())
+    self:SetFrameLevel(SYN.MainFrame:GetFrameLevel() - 1)
+    self:SetWidth(32)
+    self:SetHeight(32)
+    self:SetPoint("BOTTOMRIGHT", SYN.MainIconFrame, "TOPLEFT", 0, 0)
+    
+    -- Texture
+    self.Texture = self:CreateTexture(nil, "ARTWORK")
+    self.Texture:SetTexture("Interface\\Icons\\Spell_Holy_WordFortitude")
+    self.Texture:SetAllPoints(self)
+    
+    -- Cooldown
+    self.CooldownFrame = CreateFrame("Cooldown", nil, self, "AR_CooldownFrameTemplate")
+    self.CooldownFrame:SetAllPoints(self)
+    
+    -- Keybind
+    local KeybindFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.Keybind = KeybindFrame
+    KeybindFrame:SetFont(SYN.FontSelect(KeybindFrame), 10, "OUTLINE")
+    KeybindFrame:SetAllPoints(true)
+    KeybindFrame:SetJustifyH("RIGHT")
+    KeybindFrame:SetJustifyV("TOP")
+    KeybindFrame:SetPoint("TOPRIGHT")
+    KeybindFrame:SetTextColor(0.8, 0.8, 0.8, 1)
+    KeybindFrame:SetText("")
+    
+    -- Annotation Text
+    local AnnotationFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.Annotation = AnnotationFrame
+    AnnotationFrame:SetAllPoints(true)
+    AnnotationFrame:SetJustifyH("CENTER")
+    AnnotationFrame:SetJustifyV("MIDDLE")
+    AnnotationFrame:SetPoint("CENTER")
+    AnnotationFrame:SetTextColor(1, 1, 1, 1)
+    AnnotationFrame:SetFont(SYN.FontSelect(AnnotationFrame), 6, "OUTLINE")
+    AnnotationFrame:SetText("")
+    
+    -- Set black border
+    self.Texture:SetTexCoord(0.01, 0.92, 0.08, 0.92)
+    SYN.CreateBackdrop(self)
+    
+    self:Hide()
+end
+
+-- G - SmallTopRightFrame (top-right corner of main icon)
+function SYN.SmallTopRightFrame:Init()
+    self:SetFrameStrata(SYN.MainFrame:GetFrameStrata())
+    self:SetFrameLevel(SYN.MainFrame:GetFrameLevel() - 1)
+    self:SetWidth(32)
+    self:SetHeight(32)
+    self:SetPoint("BOTTOMLEFT", SYN.MainIconFrame, "TOPRIGHT", 0, 0)
+    
+    -- Texture
+    self.Texture = self:CreateTexture(nil, "ARTWORK")
+    self.Texture:SetTexture("Interface\\Icons\\Spell_Holy_WordFortitude")
+    self.Texture:SetAllPoints(self)
+    
+    -- Cooldown
+    self.CooldownFrame = CreateFrame("Cooldown", nil, self, "AR_CooldownFrameTemplate")
+    self.CooldownFrame:SetAllPoints(self)
+    
+    -- Keybind
+    local KeybindFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.Keybind = KeybindFrame
+    KeybindFrame:SetFont(SYN.FontSelect(KeybindFrame), 10, "OUTLINE")
+    KeybindFrame:SetAllPoints(true)
+    KeybindFrame:SetJustifyH("RIGHT")
+    KeybindFrame:SetJustifyV("TOP")
+    KeybindFrame:SetPoint("TOPRIGHT")
+    KeybindFrame:SetTextColor(0.8, 0.8, 0.8, 1)
+    KeybindFrame:SetText("")
+    
+    -- Annotation Text
+    local AnnotationFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.Annotation = AnnotationFrame
+    AnnotationFrame:SetAllPoints(true)
+    AnnotationFrame:SetJustifyH("CENTER")
+    AnnotationFrame:SetJustifyV("MIDDLE")
+    AnnotationFrame:SetPoint("CENTER")
+    AnnotationFrame:SetTextColor(1, 1, 1, 1)
+    AnnotationFrame:SetFont(SYN.FontSelect(AnnotationFrame), 6, "OUTLINE")
+    AnnotationFrame:SetText("")
+    
+    -- Set black border
+    self.Texture:SetTexCoord(0.01, 0.92, 0.08, 0.92)
+    SYN.CreateBackdrop(self)
+    
+    self:Hide()
+end
+
+-- H - SmallBottomLeftFrame (bottom-left corner of main icon)
+function SYN.SmallBottomLeftFrame:Init()
+    self:SetFrameStrata(SYN.MainFrame:GetFrameStrata())
+    self:SetFrameLevel(SYN.MainFrame:GetFrameLevel() - 1)
+    self:SetWidth(32)
+    self:SetHeight(32)
+    self:SetPoint("TOPRIGHT", SYN.MainIconFrame, "BOTTOMLEFT", 0, 0)
+    
+    -- Texture
+    self.Texture = self:CreateTexture(nil, "ARTWORK")
+    self.Texture:SetTexture("Interface\\Icons\\Spell_Holy_WordFortitude")
+    self.Texture:SetAllPoints(self)
+    
+    -- Cooldown
+    self.CooldownFrame = CreateFrame("Cooldown", nil, self, "AR_CooldownFrameTemplate")
+    self.CooldownFrame:SetAllPoints(self)
+    
+    -- Keybind
+    local KeybindFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.Keybind = KeybindFrame
+    KeybindFrame:SetFont(SYN.FontSelect(KeybindFrame), 10, "OUTLINE")
+    KeybindFrame:SetAllPoints(true)
+    KeybindFrame:SetJustifyH("RIGHT")
+    KeybindFrame:SetJustifyV("TOP")
+    KeybindFrame:SetPoint("TOPRIGHT")
+    KeybindFrame:SetTextColor(0.8, 0.8, 0.8, 1)
+    KeybindFrame:SetText("")
+    
+    -- Annotation Text
+    local AnnotationFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.Annotation = AnnotationFrame
+    AnnotationFrame:SetAllPoints(true)
+    AnnotationFrame:SetJustifyH("CENTER")
+    AnnotationFrame:SetJustifyV("MIDDLE")
+    AnnotationFrame:SetPoint("CENTER")
+    AnnotationFrame:SetTextColor(1, 1, 1, 1)
+    AnnotationFrame:SetFont(SYN.FontSelect(AnnotationFrame), 6, "OUTLINE")
+    AnnotationFrame:SetText("")
+    
+    -- Set black border
+    self.Texture:SetTexCoord(0.01, 0.92, 0.08, 0.92)
+    SYN.CreateBackdrop(self)
+    
+    self:Hide()
+end
+
+-- I - SmallBottomRightFrame (bottom-right corner of main icon)
+function SYN.SmallBottomRightFrame:Init()
+    self:SetFrameStrata(SYN.MainFrame:GetFrameStrata())
+    self:SetFrameLevel(SYN.MainFrame:GetFrameLevel() - 1)
+    self:SetWidth(32)
+    self:SetHeight(32)
+    self:SetPoint("TOPLEFT", SYN.MainIconFrame, "BOTTOMRIGHT", 0, 0)
+    
+    -- Texture
+    self.Texture = self:CreateTexture(nil, "ARTWORK")
+    self.Texture:SetTexture("Interface\\Icons\\Spell_Holy_WordFortitude")
+    self.Texture:SetAllPoints(self)
+    
+    -- Cooldown
+    self.CooldownFrame = CreateFrame("Cooldown", nil, self, "AR_CooldownFrameTemplate")
+    self.CooldownFrame:SetAllPoints(self)
+    
+    -- Keybind
+    local KeybindFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.Keybind = KeybindFrame
+    KeybindFrame:SetFont(SYN.FontSelect(KeybindFrame), 10, "OUTLINE")
+    KeybindFrame:SetAllPoints(true)
+    KeybindFrame:SetJustifyH("RIGHT")
+    KeybindFrame:SetJustifyV("TOP")
+    KeybindFrame:SetPoint("TOPRIGHT")
+    KeybindFrame:SetTextColor(0.8, 0.8, 0.8, 1)
+    KeybindFrame:SetText("")
+    
+    -- Annotation Text
+    local AnnotationFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.Annotation = AnnotationFrame
+    AnnotationFrame:SetAllPoints(true)
+    AnnotationFrame:SetJustifyH("CENTER")
+    AnnotationFrame:SetJustifyV("MIDDLE")
+    AnnotationFrame:SetPoint("CENTER")
+    AnnotationFrame:SetTextColor(1, 1, 1, 1)
+    AnnotationFrame:SetFont(SYN.FontSelect(AnnotationFrame), 6, "OUTLINE")
+    AnnotationFrame:SetText("")
+    
+    -- Set black border
+    self.Texture:SetTexCoord(0.01, 0.92, 0.08, 0.92)
+    SYN.CreateBackdrop(self)
+    
+    self:Hide()
+end
+
+--- ================ CHANGE ICON METHODS ================
+
+-- B - Prediction1Frame ChangeIcon
+function SYN.Prediction1Frame:ChangeIcon(ID, Texture, Unusable, OutOfRange, Keybind, Annotation, Glow)
+    self.ID = ID
+    self.Texture:SetTexture(Texture)
+    if Unusable then
+        self.Texture:SetVertexColor(0.5, 0.5, 1.0)
+    elseif OutOfRange then
+        self.Texture:SetVertexColor(1.0, 0.5, 0.5)
+    else
+        self.Texture:SetVertexColor(1.0, 1.0, 1.0)
+    end
+    self.Texture:SetAllPoints(self)
+    
+    -- Handle glow effect using WoW's built-in system
+    if Glow then
+        ActionButton_ShowOverlayGlow(self)
+    else
+        ActionButton_HideOverlayGlow(self)
+    end
+    
+    local SelectedFont = SYN.FontSelect(self.Keybind)
+
+    self.Keybind:SetFont(SelectedFont, 14, "OUTLINE")
+    self.Annotation:SetFont(SelectedFont, 8, "OUTLINE")
+
+    if Keybind then
+        self.Keybind:SetText(Keybind)
+    else
+        self.Keybind:SetText("")
+    end
+
+    if Annotation then
+        self.Annotation:SetText(Annotation)
+    else
+        self.Annotation:SetText("")
+    end
+
+    if not self.Backdrop:IsVisible() then
+        self.Backdrop:Show()
+    end
+
+    self:SetAlpha(1.0)
+    if not self:IsVisible() then
+        self:Show()
+    end
+end
+
+-- C - Prediction2Frame ChangeIcon
+function SYN.Prediction2Frame:ChangeIcon(ID, Texture, Unusable, OutOfRange, Keybind, Annotation, Glow)
+    self.ID = ID
+    self.Texture:SetTexture(Texture)
+    if Unusable then
+        self.Texture:SetVertexColor(0.5, 0.5, 1.0)
+    elseif OutOfRange then
+        self.Texture:SetVertexColor(1.0, 0.5, 0.5)
+    else
+        self.Texture:SetVertexColor(1.0, 1.0, 1.0)
+    end
+    self.Texture:SetAllPoints(self)
+    
+    -- Handle glow effect using WoW's built-in system
+    if Glow then
+        ActionButton_ShowOverlayGlow(self)
+    else
+        ActionButton_HideOverlayGlow(self)
+    end
+    
+    local SelectedFont = SYN.FontSelect(self.Keybind)
+
+    self.Keybind:SetFont(SelectedFont, 14, "OUTLINE")
+    self.Annotation:SetFont(SelectedFont, 8, "OUTLINE")
+
+    if Keybind then
+        self.Keybind:SetText(Keybind)
+    else
+        self.Keybind:SetText("")
+    end
+
+    if Annotation then
+        self.Annotation:SetText(Annotation)
+    else
+        self.Annotation:SetText("")
+    end
+
+    if not self.Backdrop:IsVisible() then
+        self.Backdrop:Show()
+    end
+
+    self:SetAlpha(1.0)
+    if not self:IsVisible() then
+        self:Show()
+    end
+end
+
+-- D - LeftIconFrame ChangeIcon
+function SYN.LeftIconFrame:ChangeIcon(ID, Texture, Unusable, OutOfRange, Keybind, Annotation, Glow)
+    self.ID = ID
+    self.Texture:SetTexture(Texture)
+    if Unusable then
+        self.Texture:SetVertexColor(0.5, 0.5, 1.0)
+    elseif OutOfRange then
+        self.Texture:SetVertexColor(1.0, 0.5, 0.5)
+    else
+        self.Texture:SetVertexColor(1.0, 1.0, 1.0)
+    end
+    self.Texture:SetAllPoints(self)
+    
+    -- Handle glow effect using WoW's built-in system
+    if Glow then
+        ActionButton_ShowOverlayGlow(self)
+    else
+        ActionButton_HideOverlayGlow(self)
+    end
+    
+    local SelectedFont = SYN.FontSelect(self.Keybind)
+
+    self.Keybind:SetFont(SelectedFont, 14, "OUTLINE")
+    self.Annotation:SetFont(SelectedFont, 8, "OUTLINE")
+
+    if Keybind then
+        self.Keybind:SetText(Keybind)
+    else
+        self.Keybind:SetText("")
+    end
+
+    if Annotation then
+        self.Annotation:SetText(Annotation)
+    else
+        self.Annotation:SetText("")
+    end
+
+    if not self.Backdrop:IsVisible() then
+        self.Backdrop:Show()
+    end
+
+    self:SetAlpha(1.0)
+    if not self:IsVisible() then
+        self:Show()
+    end
+end
+
+-- E - TopIconFrame ChangeIcon
+function SYN.TopIconFrame:ChangeIcon(ID, Texture, Unusable, OutOfRange, Keybind, Annotation, Glow)
+    self.ID = ID
+    self.Texture:SetTexture(Texture)
+    if Unusable then
+        self.Texture:SetVertexColor(0.5, 0.5, 1.0)
+    elseif OutOfRange then
+        self.Texture:SetVertexColor(1.0, 0.5, 0.5)
+    else
+        self.Texture:SetVertexColor(1.0, 1.0, 1.0)
+    end
+    self.Texture:SetAllPoints(self)
+    
+    -- Handle glow effect using WoW's built-in system
+    if Glow then
+        ActionButton_ShowOverlayGlow(self)
+    else
+        ActionButton_HideOverlayGlow(self)
+    end
+    
+    local SelectedFont = SYN.FontSelect(self.Keybind)
+
+    self.Keybind:SetFont(SelectedFont, 14, "OUTLINE")
+    self.Annotation:SetFont(SelectedFont, 8, "OUTLINE")
+
+    if Keybind then
+        self.Keybind:SetText(Keybind)
+    else
+        self.Keybind:SetText("")
+    end
+
+    if Annotation then
+        self.Annotation:SetText(Annotation)
+    else
+        self.Annotation:SetText("")
+    end
+
+    if not self.Backdrop:IsVisible() then
+        self.Backdrop:Show()
+    end
+
+    self:SetAlpha(1.0)
+    if not self:IsVisible() then
+        self:Show()
+    end
+end
+
+-- F - SmallTopLeftFrame ChangeIcon
+function SYN.SmallTopLeftFrame:ChangeIcon(ID, Texture, Unusable, OutOfRange, Keybind, Annotation, Glow)
+    self.ID = ID
+    self.Texture:SetTexture(Texture)
+    if Unusable then
+        self.Texture:SetVertexColor(0.5, 0.5, 1.0)
+    elseif OutOfRange then
+        self.Texture:SetVertexColor(1.0, 0.5, 0.5)
+    else
+        self.Texture:SetVertexColor(1.0, 1.0, 1.0)
+    end
+    self.Texture:SetAllPoints(self)
+    
+    -- Handle glow effect using WoW's built-in system
+    if Glow then
+        ActionButton_ShowOverlayGlow(self)
+    else
+        ActionButton_HideOverlayGlow(self)
+    end
+    
+    local SelectedFont = SYN.FontSelect(self.Keybind)
+
+    self.Keybind:SetFont(SelectedFont, 10, "OUTLINE")
+    self.Annotation:SetFont(SelectedFont, 6, "OUTLINE")
+
+    if Keybind then
+        self.Keybind:SetText(Keybind)
+    else
+        self.Keybind:SetText("")
+    end
+
+    if Annotation then
+        self.Annotation:SetText(Annotation)
+    else
+        self.Annotation:SetText("")
+    end
+
+    if not self.Backdrop:IsVisible() then
+        self.Backdrop:Show()
+    end
+
+    self:SetAlpha(1.0)
+    if not self:IsVisible() then
+        self:Show()
+    end
+end
+
+-- G - SmallTopRightFrame ChangeIcon
+function SYN.SmallTopRightFrame:ChangeIcon(ID, Texture, Unusable, OutOfRange, Keybind, Annotation, Glow)
+    self.ID = ID
+    self.Texture:SetTexture(Texture)
+    if Unusable then
+        self.Texture:SetVertexColor(0.5, 0.5, 1.0)
+    elseif OutOfRange then
+        self.Texture:SetVertexColor(1.0, 0.5, 0.5)
+    else
+        self.Texture:SetVertexColor(1.0, 1.0, 1.0)
+    end
+    self.Texture:SetAllPoints(self)
+    
+    -- Handle glow effect using WoW's built-in system
+    if Glow then
+        ActionButton_ShowOverlayGlow(self)
+    else
+        ActionButton_HideOverlayGlow(self)
+    end
+    
+    local SelectedFont = SYN.FontSelect(self.Keybind)
+
+    self.Keybind:SetFont(SelectedFont, 10, "OUTLINE")
+    self.Annotation:SetFont(SelectedFont, 6, "OUTLINE")
+
+    if Keybind then
+        self.Keybind:SetText(Keybind)
+    else
+        self.Keybind:SetText("")
+    end
+
+    if Annotation then
+        self.Annotation:SetText(Annotation)
+    else
+        self.Annotation:SetText("")
+    end
+
+    if not self.Backdrop:IsVisible() then
+        self.Backdrop:Show()
+    end
+
+    self:SetAlpha(1.0)
+    if not self:IsVisible() then
+        self:Show()
+    end
+end
+
+-- H - SmallBottomLeftFrame ChangeIcon
+function SYN.SmallBottomLeftFrame:ChangeIcon(ID, Texture, Unusable, OutOfRange, Keybind, Annotation, Glow)
+    self.ID = ID
+    self.Texture:SetTexture(Texture)
+    if Unusable then
+        self.Texture:SetVertexColor(0.5, 0.5, 1.0)
+    elseif OutOfRange then
+        self.Texture:SetVertexColor(1.0, 0.5, 0.5)
+    else
+        self.Texture:SetVertexColor(1.0, 1.0, 1.0)
+    end
+    self.Texture:SetAllPoints(self)
+    
+    -- Handle glow effect using WoW's built-in system
+    if Glow then
+        ActionButton_ShowOverlayGlow(self)
+    else
+        ActionButton_HideOverlayGlow(self)
+    end
+    
+    local SelectedFont = SYN.FontSelect(self.Keybind)
+
+    self.Keybind:SetFont(SelectedFont, 10, "OUTLINE")
+    self.Annotation:SetFont(SelectedFont, 6, "OUTLINE")
+
+    if Keybind then
+        self.Keybind:SetText(Keybind)
+    else
+        self.Keybind:SetText("")
+    end
+
+    if Annotation then
+        self.Annotation:SetText(Annotation)
+    else
+        self.Annotation:SetText("")
+    end
+
+    if not self.Backdrop:IsVisible() then
+        self.Backdrop:Show()
+    end
+
+    self:SetAlpha(1.0)
+    if not self:IsVisible() then
+        self:Show()
+    end
+end
+
+-- I - SmallBottomRightFrame ChangeIcon
+function SYN.SmallBottomRightFrame:ChangeIcon(ID, Texture, Unusable, OutOfRange, Keybind, Annotation, Glow)
+    self.ID = ID
+    self.Texture:SetTexture(Texture)
+    if Unusable then
+        self.Texture:SetVertexColor(0.5, 0.5, 1.0)
+    elseif OutOfRange then
+        self.Texture:SetVertexColor(1.0, 0.5, 0.5)
+    else
+        self.Texture:SetVertexColor(1.0, 1.0, 1.0)
+    end
+    self.Texture:SetAllPoints(self)
+    
+    -- Handle glow effect using WoW's built-in system
+    if Glow then
+        ActionButton_ShowOverlayGlow(self)
+    else
+        ActionButton_HideOverlayGlow(self)
+    end
+    
+    local SelectedFont = SYN.FontSelect(self.Keybind)
+
+    self.Keybind:SetFont(SelectedFont, 10, "OUTLINE")
+    self.Annotation:SetFont(SelectedFont, 6, "OUTLINE")
+
+    if Keybind then
+        self.Keybind:SetText(Keybind)
+    else
+        self.Keybind:SetText("")
+    end
+
+    if Annotation then
+        self.Annotation:SetText(Annotation)
+    else
+        self.Annotation:SetText("")
+    end
+
+    if not self.Backdrop:IsVisible() then
+        self.Backdrop:Show()
+    end
+
+    self:SetAlpha(1.0)
+    if not self:IsVisible() then
+        self:Show()
+    end
+end
+
+--- ================ COOLDOWN AND ID METHODS ================
+
+-- B - Prediction1Frame SetCooldown
+function SYN.Prediction1Frame:SetCooldown(CooldownStart, CooldownDuration)
+    if CooldownStart == 0 or CooldownDuration == 0 then
+        self.CooldownFrame:SetCooldown(0, 0)
+        self.CooldownFrame:Hide()
+        return
+    end
+    self.CooldownFrame:SetCooldown(CooldownStart, CooldownDuration)
+end
+
+-- B - Prediction1Frame GetIconID
+function SYN.Prediction1Frame:GetIconID()
+    if self.ID then
+        return self.ID
+    end
+    return nil
+end
+
+-- C - Prediction2Frame SetCooldown
+function SYN.Prediction2Frame:SetCooldown(CooldownStart, CooldownDuration)
+    if CooldownStart == 0 or CooldownDuration == 0 then
+        self.CooldownFrame:SetCooldown(0, 0)
+        self.CooldownFrame:Hide()
+        return
+    end
+    self.CooldownFrame:SetCooldown(CooldownStart, CooldownDuration)
+end
+
+-- C - Prediction2Frame GetIconID
+function SYN.Prediction2Frame:GetIconID()
+    if self.ID then
+        return self.ID
+    end
+    return nil
+end
+
+-- D - LeftIconFrame SetCooldown
+function SYN.LeftIconFrame:SetCooldown(CooldownStart, CooldownDuration)
+    if CooldownStart == 0 or CooldownDuration == 0 then
+        self.CooldownFrame:SetCooldown(0, 0)
+        self.CooldownFrame:Hide()
+        return
+    end
+    self.CooldownFrame:SetCooldown(CooldownStart, CooldownDuration)
+end
+
+-- D - LeftIconFrame GetIconID
+function SYN.LeftIconFrame:GetIconID()
+    if self.ID then
+        return self.ID
+    end
+    return nil
+end
+
+-- E - TopIconFrame SetCooldown
+function SYN.TopIconFrame:SetCooldown(CooldownStart, CooldownDuration)
+    if CooldownStart == 0 or CooldownDuration == 0 then
+        self.CooldownFrame:SetCooldown(0, 0)
+        self.CooldownFrame:Hide()
+        return
+    end
+    self.CooldownFrame:SetCooldown(CooldownStart, CooldownDuration)
+end
+
+-- E - TopIconFrame GetIconID
+function SYN.TopIconFrame:GetIconID()
+    if self.ID then
+        return self.ID
+    end
+    return nil
+end
+
+-- F - SmallTopLeftFrame SetCooldown
+function SYN.SmallTopLeftFrame:SetCooldown(CooldownStart, CooldownDuration)
+    if CooldownStart == 0 or CooldownDuration == 0 then
+        self.CooldownFrame:SetCooldown(0, 0)
+        self.CooldownFrame:Hide()
+        return
+    end
+    self.CooldownFrame:SetCooldown(CooldownStart, CooldownDuration)
+end
+
+-- F - SmallTopLeftFrame GetIconID
+function SYN.SmallTopLeftFrame:GetIconID()
+    if self.ID then
+        return self.ID
+    end
+    return nil
+end
+
+-- G - SmallTopRightFrame SetCooldown
+function SYN.SmallTopRightFrame:SetCooldown(CooldownStart, CooldownDuration)
+    if CooldownStart == 0 or CooldownDuration == 0 then
+        self.CooldownFrame:SetCooldown(0, 0)
+        self.CooldownFrame:Hide()
+        return
+    end
+    self.CooldownFrame:SetCooldown(CooldownStart, CooldownDuration)
+end
+
+-- G - SmallTopRightFrame GetIconID
+function SYN.SmallTopRightFrame:GetIconID()
+    if self.ID then
+        return self.ID
+    end
+    return nil
+end
+
+-- H - SmallBottomLeftFrame SetCooldown
+function SYN.SmallBottomLeftFrame:SetCooldown(CooldownStart, CooldownDuration)
+    if CooldownStart == 0 or CooldownDuration == 0 then
+        self.CooldownFrame:SetCooldown(0, 0)
+        self.CooldownFrame:Hide()
+        return
+    end
+    self.CooldownFrame:SetCooldown(CooldownStart, CooldownDuration)
+end
+
+-- H - SmallBottomLeftFrame GetIconID
+function SYN.SmallBottomLeftFrame:GetIconID()
+    if self.ID then
+        return self.ID
+    end
+    return nil
+end
+
+-- I - SmallBottomRightFrame SetCooldown
+function SYN.SmallBottomRightFrame:SetCooldown(CooldownStart, CooldownDuration)
+    if CooldownStart == 0 or CooldownDuration == 0 then
+        self.CooldownFrame:SetCooldown(0, 0)
+        self.CooldownFrame:Hide()
+        return
+    end
+    self.CooldownFrame:SetCooldown(CooldownStart, CooldownDuration)
+end
+
+-- I - SmallBottomRightFrame GetIconID
+function SYN.SmallBottomRightFrame:GetIconID()
+    if self.ID then
+        return self.ID
+    end
+    return nil
+end
+
+--- ================ HIDE ICON METHODS ================
+
+-- B - Prediction1Frame HideIcon
+function SYN.Prediction1Frame:HideIcon()
+    self:Hide()
+    self.Backdrop:Hide()
+    ActionButton_HideOverlayGlow(self)
+end
+
+-- C - Prediction2Frame HideIcon
+function SYN.Prediction2Frame:HideIcon()
+    self:Hide()
+    self.Backdrop:Hide()
+    ActionButton_HideOverlayGlow(self)
+end
+
+-- D - LeftIconFrame HideIcon
+function SYN.LeftIconFrame:HideIcon()
+    self:Hide()
+    self.Backdrop:Hide()
+    ActionButton_HideOverlayGlow(self)
+end
+
+-- E - TopIconFrame HideIcon
+function SYN.TopIconFrame:HideIcon()
+    self:Hide()
+    self.Backdrop:Hide()
+    ActionButton_HideOverlayGlow(self)
+end
+
+-- F - SmallTopLeftFrame HideIcon
+function SYN.SmallTopLeftFrame:HideIcon()
+    self:Hide()
+    self.Backdrop:Hide()
+    ActionButton_HideOverlayGlow(self)
+end
+
+-- G - SmallTopRightFrame HideIcon
+function SYN.SmallTopRightFrame:HideIcon()
+    self:Hide()
+    self.Backdrop:Hide()
+    ActionButton_HideOverlayGlow(self)
+end
+
+-- H - SmallBottomLeftFrame HideIcon
+function SYN.SmallBottomLeftFrame:HideIcon()
+    self:Hide()
+    self.Backdrop:Hide()
+    ActionButton_HideOverlayGlow(self)
+end
+
+-- I - SmallBottomRightFrame HideIcon
+function SYN.SmallBottomRightFrame:HideIcon()
+    self:Hide()
+    self.Backdrop:Hide()
+    ActionButton_HideOverlayGlow(self)
+end
+
 --- ================ fuckin' everything else lol ================
 
 

@@ -35,10 +35,28 @@ SYN.MainFrame:SetScript("OnEvent", function (self, Event, Arg1)
         SYN.MainFrame:SetFrameStrata("HIGH")
         SYN.MainFrame:Show()
         SYN.MainIconFrame:Init()
+        
+        -- Initialize all the new frames
+        SYN.Prediction1Frame:Init()
+        SYN.Prediction2Frame:Init()
+        SYN.LeftIconFrame:Init()
+        SYN.TopIconFrame:Init()
+        SYN.SmallTopLeftFrame:Init()
+        SYN.SmallTopRightFrame:Init()
+        SYN.SmallBottomLeftFrame:Init()
+        SYN.SmallBottomRightFrame:Init()
 
         UIFrames = {
             SYN.MainFrame,
             SYN.MainIconFrame,
+            SYN.Prediction1Frame,
+            SYN.Prediction2Frame,
+            SYN.LeftIconFrame,
+            SYN.TopIconFrame,
+            SYN.SmallTopLeftFrame,
+            SYN.SmallTopRightFrame,
+            SYN.SmallBottomLeftFrame,
+            SYN.SmallBottomRightFrame,
         }
 
         C_Timer.After(2, function()
@@ -46,6 +64,9 @@ SYN.MainFrame:SetScript("OnEvent", function (self, Event, Arg1)
             print("Welcome to synecdoche.")
             print("This is the Main.lua file in the ADDON_LOADED event handler.")
             -- SYN.PulseInit()
+            
+            -- Show all frames with placeholder data for testing
+            SYN.ShowAllFramesWithPlaceholders()
             
             -- Start glow toggle timer
             SYN.StartGlowTimer()
@@ -65,6 +86,21 @@ function SYN.PulseInit()
     --     -- Force a refresh of everything from the core.
     --     print("cool we got the spec")
     -- end
+end
+
+function SYN.ShowAllFramesWithPlaceholders()
+    -- Show all frames with placeholder data for testing
+    SYN.MainIconFrame:ChangeIcon(1, "Interface\\Icons\\Spell_Holy_WordFortitude", false, false, "1", "Main", false)
+    
+    SYN.Prediction1Frame:ChangeIcon(2, "Interface\\Icons\\Spell_Shadow_ShadowBolt", false, false, "2", "Pred1", false)
+    SYN.Prediction2Frame:ChangeIcon(3, "Interface\\Icons\\Spell_Fire_FlameBolt", false, false, "3", "Pred2", false)
+    SYN.LeftIconFrame:ChangeIcon(4, "Interface\\Icons\\Spell_Nature_HealingTouch", false, false, "4", "Left", false)
+    SYN.TopIconFrame:ChangeIcon(5, "Interface\\Icons\\Spell_Frost_FrostBolt", false, false, "5", "Top", false)
+    
+    SYN.SmallTopLeftFrame:ChangeIcon(6, "Interface\\Icons\\Spell_Shadow_DeathCoil", false, false, "Shift+1", "OffCD", false)
+    SYN.SmallTopRightFrame:ChangeIcon(7, "Interface\\Icons\\Spell_Holy_Heal", false, false, "Shift+2", "DefCD", false)
+    SYN.SmallBottomLeftFrame:ChangeIcon(8, "Interface\\Icons\\Spell_Nature_Lightning", false, false, "Ctrl+1", "PreGCD", false)
+    SYN.SmallBottomRightFrame:ChangeIcon(9, "Interface\\Icons\\Spell_Arcane_Arcane01", false, false, "Ctrl+2", "PostGCD", false)
 end
 
 function SYN.StartGlowTimer()
