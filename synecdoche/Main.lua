@@ -10,6 +10,9 @@ local mathmin = math.min
 local pairs = pairs
 local select = select
 
+-- LibRangeCheck
+local rc = LibStub("LibRangeCheck-3.0")
+
 
 -- File Locals
 local IsAddOnLoaded = C_AddOns.IsAddOnLoaded
@@ -70,6 +73,14 @@ SYN.MainFrame:SetScript("OnEvent", function (self, Event, Arg1)
             
             -- Start glow toggle timer
             SYN.StartGlowTimer()
+            
+            -- Demo LibRangeCheck
+            print("LibRangeCheck demo: Use /synrange command to test range checking")
+            if rc then
+                print("LibRangeCheck-3.0 loaded successfully!")
+            else
+                print("Warning: LibRangeCheck-3.0 failed to load")
+            end
         end)
     end
 end)
@@ -124,4 +135,35 @@ function SYN.StartGlowTimer()
     
     -- Start the first toggle after 5 seconds
     C_Timer.After(5, toggleGlow)
+end
+
+-- LibRangeCheck demonstration function
+function SYN.DemoRangeCheck()
+    if not rc then
+        print("LibRangeCheck not loaded!")
+        return
+    end
+    
+    local target = "target"
+    if not UnitExists(target) then
+        print("No target selected for range check")
+        return
+    end
+    
+    local minRange, maxRange = rc:GetRange(target)
+    if not minRange then
+        print("Cannot determine range to target")
+    elseif not maxRange then
+        print("Target is > " .. minRange .. " yards away")
+    else
+        print("Target is in (" .. minRange .. ", " .. maxRange .. "] yards away")
+    end
+end
+
+
+
+-- Debug command to test range checking
+SLASH_SYNRANGE1 = "/synrange"
+SlashCmdList["SYNRANGE"] = function(msg)
+    SYN.DemoRangeCheck()
 end

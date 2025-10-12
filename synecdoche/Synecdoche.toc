@@ -1,13 +1,18 @@
-## Interface: 110200
+## Interface: 110200, 110205
 
 ## Title: Synecdoche
 ## Author: Synecd0che
 ## Version: 11.2.5
-## Notes: Pseudo-fork of HeroRotation
+## Notes: Action Policy Engine for combat suggestions
 ## DefaultState: Enabled
 ## LoadOnDemand: 0
 
 # We *could* depend on HeroDBC for data; maybe useful?
+
+#@no-lib-strip#
+# Libraries
+libs/libs.xml
+#@end-no-lib-strip@
 
 # Util
 Utils.lua
@@ -22,7 +27,7 @@ GUI\CombatUI.lua
 Core.lua
 
 # Classes / Objects
-# ... 
+# EnemyStateTracking.lua
 
 # Events
 # ...
