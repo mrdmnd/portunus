@@ -269,7 +269,7 @@ function SYN.Prediction1Frame:Init()
     -- Keybind
     local KeybindFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     self.Keybind = KeybindFrame
-    KeybindFrame:SetFont(SYN.FontSelect(KeybindFrame), 14, "OUTLINE")
+    KeybindFrame:SetFont(SYN.FontSelect(KeybindFrame), 12, "OUTLINE")
     KeybindFrame:SetAllPoints(true)
     KeybindFrame:SetJustifyH("RIGHT")
     KeybindFrame:SetJustifyV("TOP")
@@ -285,7 +285,7 @@ function SYN.Prediction1Frame:Init()
     AnnotationFrame:SetJustifyV("MIDDLE")
     AnnotationFrame:SetPoint("CENTER")
     AnnotationFrame:SetTextColor(1, 1, 1, 1)
-    AnnotationFrame:SetFont(SYN.FontSelect(AnnotationFrame), 8, "OUTLINE")
+    AnnotationFrame:SetFont(SYN.FontSelect(AnnotationFrame), 7, "OUTLINE")
     AnnotationFrame:SetText("")
     
     -- Set black border
@@ -315,7 +315,7 @@ function SYN.Prediction2Frame:Init()
     -- Keybind
     local KeybindFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     self.Keybind = KeybindFrame
-    KeybindFrame:SetFont(SYN.FontSelect(KeybindFrame), 14, "OUTLINE")
+    KeybindFrame:SetFont(SYN.FontSelect(KeybindFrame), 12, "OUTLINE")
     KeybindFrame:SetAllPoints(true)
     KeybindFrame:SetJustifyH("RIGHT")
     KeybindFrame:SetJustifyV("TOP")
@@ -331,7 +331,7 @@ function SYN.Prediction2Frame:Init()
     AnnotationFrame:SetJustifyV("MIDDLE")
     AnnotationFrame:SetPoint("CENTER")
     AnnotationFrame:SetTextColor(1, 1, 1, 1)
-    AnnotationFrame:SetFont(SYN.FontSelect(AnnotationFrame), 8, "OUTLINE")
+    AnnotationFrame:SetFont(SYN.FontSelect(AnnotationFrame), 7, "OUTLINE")
     AnnotationFrame:SetText("")
     
     -- Set black border
@@ -345,8 +345,8 @@ end
 function SYN.LeftIconFrame:Init()
     self:SetFrameStrata(SYN.MainFrame:GetFrameStrata())
     self:SetFrameLevel(SYN.MainFrame:GetFrameLevel() - 1)
-    self:SetWidth(64)
-    self:SetHeight(64)
+    self:SetWidth(48)
+    self:SetHeight(48)
     self:SetPoint("RIGHT", SYN.MainIconFrame, "LEFT", -5, 0)
     
     -- Texture
@@ -361,7 +361,7 @@ function SYN.LeftIconFrame:Init()
     -- Keybind
     local KeybindFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     self.Keybind = KeybindFrame
-    KeybindFrame:SetFont(SYN.FontSelect(KeybindFrame), 14, "OUTLINE")
+    KeybindFrame:SetFont(SYN.FontSelect(KeybindFrame), 12, "OUTLINE")
     KeybindFrame:SetAllPoints(true)
     KeybindFrame:SetJustifyH("RIGHT")
     KeybindFrame:SetJustifyV("TOP")
@@ -377,7 +377,7 @@ function SYN.LeftIconFrame:Init()
     AnnotationFrame:SetJustifyV("MIDDLE")
     AnnotationFrame:SetPoint("CENTER")
     AnnotationFrame:SetTextColor(1, 1, 1, 1)
-    AnnotationFrame:SetFont(SYN.FontSelect(AnnotationFrame), 8, "OUTLINE")
+    AnnotationFrame:SetFont(SYN.FontSelect(AnnotationFrame), 7, "OUTLINE")
     AnnotationFrame:SetText("")
     
     -- Set black border
@@ -391,8 +391,8 @@ end
 function SYN.TopIconFrame:Init()
     self:SetFrameStrata(SYN.MainFrame:GetFrameStrata())
     self:SetFrameLevel(SYN.MainFrame:GetFrameLevel() - 1)
-    self:SetWidth(64)
-    self:SetHeight(64)
+    self:SetWidth(48)
+    self:SetHeight(48)
     self:SetPoint("BOTTOM", SYN.MainIconFrame, "TOP", 0, 5)
     
     -- Texture
@@ -407,7 +407,7 @@ function SYN.TopIconFrame:Init()
     -- Keybind
     local KeybindFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     self.Keybind = KeybindFrame
-    KeybindFrame:SetFont(SYN.FontSelect(KeybindFrame), 14, "OUTLINE")
+    KeybindFrame:SetFont(SYN.FontSelect(KeybindFrame), 12, "OUTLINE")
     KeybindFrame:SetAllPoints(true)
     KeybindFrame:SetJustifyH("RIGHT")
     KeybindFrame:SetJustifyV("TOP")
@@ -423,7 +423,7 @@ function SYN.TopIconFrame:Init()
     AnnotationFrame:SetJustifyV("MIDDLE")
     AnnotationFrame:SetPoint("CENTER")
     AnnotationFrame:SetTextColor(1, 1, 1, 1)
-    AnnotationFrame:SetFont(SYN.FontSelect(AnnotationFrame), 8, "OUTLINE")
+    AnnotationFrame:SetFont(SYN.FontSelect(AnnotationFrame), 7, "OUTLINE")
     AnnotationFrame:SetText("")
     
     -- Set black border
@@ -735,8 +735,8 @@ function SYN.LeftIconFrame:ChangeIcon(ID, Texture, Unusable, OutOfRange, Keybind
     
     local SelectedFont = SYN.FontSelect(self.Keybind)
 
-    self.Keybind:SetFont(SelectedFont, 14, "OUTLINE")
-    self.Annotation:SetFont(SelectedFont, 8, "OUTLINE")
+    self.Keybind:SetFont(SelectedFont, 12, "OUTLINE")
+    self.Annotation:SetFont(SelectedFont, 7, "OUTLINE")
 
     if Keybind then
         self.Keybind:SetText(Keybind)
@@ -782,8 +782,8 @@ function SYN.TopIconFrame:ChangeIcon(ID, Texture, Unusable, OutOfRange, Keybind,
     
     local SelectedFont = SYN.FontSelect(self.Keybind)
 
-    self.Keybind:SetFont(SelectedFont, 14, "OUTLINE")
-    self.Annotation:SetFont(SelectedFont, 8, "OUTLINE")
+    self.Keybind:SetFont(SelectedFont, 12, "OUTLINE")
+    self.Annotation:SetFont(SelectedFont, 7, "OUTLINE")
 
     if Keybind then
         self.Keybind:SetText(Keybind)
