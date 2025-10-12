@@ -157,16 +157,16 @@ function SYN.MainIconFrame:Init()
     KeybindFrame:SetTextColor(0.8, 0.8, 0.8, 1)
     KeybindFrame:SetText("=)")
 
-    -- Overlay Text
-    local TextFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    self.Text = TextFrame
-    TextFrame:SetAllPoints(true)
-    TextFrame:SetJustifyH("CENTER")
-    TextFrame:SetJustifyV("MIDDLE")
-    TextFrame:SetPoint("CENTER")
-    TextFrame:SetTextColor(1, 1, 1, 1)
-    TextFrame:SetFont(SYN.FontSelect(TextFrame), 8, "OUTLINE")
-    TextFrame:SetText("Placeholder")
+    -- Annotation Text
+    local AnnotationFrame = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.Annotation = AnnotationFrame
+    AnnotationFrame:SetAllPoints(true)
+    AnnotationFrame:SetJustifyH("CENTER")
+    AnnotationFrame:SetJustifyV("MIDDLE")
+    AnnotationFrame:SetPoint("CENTER")
+    AnnotationFrame:SetTextColor(1, 1, 1, 1)
+    AnnotationFrame:SetFont(SYN.FontSelect(AnnotationFrame), 8, "OUTLINE")
+    AnnotationFrame:SetText("Placeholder")
 
     -- Set black border
     self.Texture:SetTexCoord(0.01, 0.92, 0.08, 0.92)
@@ -184,7 +184,8 @@ end
 -- Annotation: this is the annotation text that shows up sometimes if you want the engine to pass notes to you
 -- FontSize: this is the font size for the annotation
 -- CooldownStart: this is the 
-function SYN.MainIconFrame:ChangeIcon(ID, Texture, Unusable, OutOfRange, Keybind, Annotation)
+-- Glow: if true, adds a glow effect around the icon
+function SYN.MainIconFrame:ChangeIcon(ID, Texture, Unusable, OutOfRange, Keybind, Annotation, Glow)
     self.ID = ID
     self.Texture:SetTexture(Texture)
     if Unusable then
@@ -195,10 +196,18 @@ function SYN.MainIconFrame:ChangeIcon(ID, Texture, Unusable, OutOfRange, Keybind
         self.Texture:SetVertexColor(1.0, 1.0, 1.0)
     end
     self.Texture:SetAllPoints(self)
+    
+    -- Handle glow effect using WoW's built-in system
+    if Glow then
+        ActionButton_ShowOverlayGlow(self)
+    else
+        ActionButton_HideOverlayGlow(self)
+    end
+    
     local SelectedFont = SYN.FontSelect(self.Keybind)
 
     self.Keybind:SetFont(SelectedFont, 14, "OUTLINE")
-    self.Text:SetFont(SelectedFont, 8, "OUTLINE")
+    self.Annotation:SetFont(SelectedFont, 8, "OUTLINE")
 
     if Keybind then
         self.Keybind:SetText(Keybind)
@@ -207,9 +216,9 @@ function SYN.MainIconFrame:ChangeIcon(ID, Texture, Unusable, OutOfRange, Keybind
     end
 
     if Annotation then
-        self.Text:SetText(Annotation)
+        self.Annotation:SetText(Annotation)
     else
-        self.Text:SetText("")
+        self.Annotation:SetText("")
     end
 
     if not self.Backdrop:IsVisible() then

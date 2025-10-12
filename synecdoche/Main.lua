@@ -46,6 +46,9 @@ SYN.MainFrame:SetScript("OnEvent", function (self, Event, Arg1)
             print("Welcome to synecdoche.")
             print("This is the Main.lua file in the ADDON_LOADED event handler.")
             -- SYN.PulseInit()
+            
+            -- Start glow toggle timer
+            SYN.StartGlowTimer()
         end)
     end
 end)
@@ -62,4 +65,27 @@ function SYN.PulseInit()
     --     -- Force a refresh of everything from the core.
     --     print("cool we got the spec")
     -- end
+end
+
+function SYN.StartGlowTimer()
+    local glowState = false
+    
+    local function toggleGlow()
+        glowState = not glowState
+        if SYN.MainIconFrame then
+            if glowState then
+                ActionButton_ShowOverlayGlow(SYN.MainIconFrame)
+                print("Glow ON")
+            else
+                ActionButton_HideOverlayGlow(SYN.MainIconFrame)
+                print("Glow OFF")
+            end
+        end
+        
+        -- Schedule next toggle in 5 seconds
+        C_Timer.After(5, toggleGlow)
+    end
+    
+    -- Start the first toggle after 5 seconds
+    C_Timer.After(5, toggleGlow)
 end
