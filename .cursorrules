@@ -1,0 +1,57 @@
+This repository (Portunus) contains a few parts. Here's a small overview of each component:
+
+portunus/
+├───engine
+├───exporter
+├───planning
+└───training
+
+## Exporter
+This sub-directory contains LUA code designed to run a World of Warcraft (WoW) data-exporting addon, which is responsible
+for exporting (serializing) game state data from the World of Warcraft process obtainable through it's LUA API.
+This data is represented as an array of pixels, which is rendered to the upper left corner of the game window.
+
+The World of Warcraft LUA environment / virtual machine is a bit different than the usual server-side LUA environments.
+
+Here are some important rules:
+- The World of Warcraft LUA environment is not a POSIX, Windows, or Linux environment.
+- The World of Warcraft LUA environment is a proprietary environment, which cannot perform file reads, writes, network access, etc. It's a sandboxed environment.
+- The World of Warcraft LUA environment cannot import libraries from the outside world, so you cannot use external libraries.
+- The available LUA version is 5.1. Do not use features that are not available in LUA 5.1, either from the standard library or from other libraries.
+- The world of warcraft API does not provide all standard lua functions. 
+
+### Events
+Much of World of Warcraft's combat is based on *events*. Addons can subscribe to events and register event handlers.
+For example, some events that can be subscribed to are:
+- "UNIT_SPELL_CAST_START": when a unit around you starts casting a spell
+- "UPDATE_MOUSEOVER_UNIT": when you hover over a unit
+- "PLAYER_STARTED_MOVING": when you start moving
+There are many other events not listed here, but you can obtain a list of them from here:
+https://warcraft.wiki.gg/wiki/Events
+
+### Frames
+To listen to an event, we first need to create a Frame. Almost everything in WoW is a Frame. 
+Frames are nested. The "master" frame is called UIParent.
+Every other frame of the WoW UI was put explicitly into UIParent (or implicitly, by putting it into a frame which already is inside UIParent).
+Frames follow a basic layout system, called FrameStrata.
+These settings establish the frame order management, i. e. which frame should overlap another frame when shown at the same time. 
+We can subscribe to events on a frame, and the frame can execute handler functions when a subscribed event occurs.
+
+### Combat Log
+The combat log is a log of combat actions and results taken by all units "in range" of the player.
+Events in the combat log are called "combat log events".
+You can subscribe to COMBAT_LOG_EVENT_UNFILTERED to get all combat log events, and handle them appropriately.
+
+## Overlay
+
+This subdirectory contains Rust code designed to do a few things.
+
+1) First, there is a process that runs in a loop and continuously maintains an in-memory representation of the World of
+Warcraft client's game state. This is obtained by taking screenshots of the World of Warcraft window and reading in the
+pixels from the frame rendered by the Addon.
+
+2) Second, we take that in-memory representation and feeding it into the policy controller. This provides a horizon of
+expected actions.
+
+3) Third, those actions are rendered to an *overlay*, which acts as both a debug interface for the policy controller as
+well as a useful user interface for a player. This overlay represents the current game state "in-window" for the player.

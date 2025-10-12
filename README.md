@@ -8,14 +8,13 @@ See [this document](HISTORY.md) for historical context on the problem space.
 Core goal: build a framework for bringing AlphaZero style MCTS and policy improvement to World of Warcraft PVE.
 
 ## Installation
-- (1) Load the data-export addon into your client.
+- (1) Load the data exporting addon into your client.
 - (2) Launch the WoW Client.
-- (3) Compile and launch the overlay executable, which will launch the simulation service and the tree search service.
-
-If you want to run your own training or fine tune, plase look at the scripts in /training.
+- (3) Compile and launch the main rust executable, which will spin up and listen to the data exported from the addon.
 
 ## Components and Design
 ### Overlay (AlphAzeroth) (Rust)
+
 We'll have a debug overlay (written in rust) that presents a nice rotation-helper style icon, as well as details on the MCTS tree and the likely next action. We'll try to have this update quickly, depending on the inference budget (may be slow, though anything slower than about 500ms is not useful).
 
 This overlay will show a little view of the MTCS tree (configurable depth visibility), with actions on each branch of the tree. We'll have do do a little figma/design work to do here before starting.

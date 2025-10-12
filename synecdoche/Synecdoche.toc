@@ -1,0 +1,34 @@
+## Interface: 110200
+
+## Title: Synecdoche
+## Author: Synecd0che
+## Version: 11.2.5
+## Notes: Pseudo-fork of HeroRotation
+## DefaultState: Enabled
+## LoadOnDemand: 0
+
+# We *could* depend on HeroDBC for data; maybe useful?
+
+# Util
+Utils.lua
+
+# GUI
+GUI\Panels.lua
+GUI\CombatUI.xml
+GUI\CombatUI.lua
+
+# API
+# Settings.lua
+Core.lua
+
+# Classes / Objects
+# ... 
+
+# Events
+# ...
+
+# Misc
+# ...
+
+
+Main.lua
