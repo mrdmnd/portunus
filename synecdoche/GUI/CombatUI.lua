@@ -65,6 +65,12 @@ local function CreateBaseIconFrame(name, parent)
     end
     
     function frame:ChangeIcon(ID, Texture, Unusable, OutOfRange, Keybind, Annotation, Glow)
+        -- If no ID or Texture is provided, hide the icon
+        if not ID or not Texture then
+            self:HideIcon()
+            return
+        end
+        
         self.ID = ID
         self.Texture:SetTexture(Texture)
         if Unusable then
@@ -348,7 +354,7 @@ function SYN.SmallTopLeftFrame:Init()
         relativeTo = SYN.MainIconFrame,
         relativePoint = "TOPLEFT",
         xOffset = 0,
-        yOffset = 0,
+        yOffset = 5,
         keybindFontSize = 10,
         annotationFontSize = 6,
         showOnInit = false
@@ -364,7 +370,7 @@ function SYN.SmallTopRightFrame:Init()
         relativeTo = SYN.MainIconFrame,
         relativePoint = "TOPRIGHT",
         xOffset = 0,
-        yOffset = 0,
+        yOffset = 5,
         keybindFontSize = 10,
         annotationFontSize = 6,
         showOnInit = false
@@ -380,7 +386,7 @@ function SYN.SmallBottomLeftFrame:Init()
         relativeTo = SYN.MainIconFrame,
         relativePoint = "BOTTOMLEFT",
         xOffset = 0,
-        yOffset = 0,
+        yOffset = -5,
         keybindFontSize = 10,
         annotationFontSize = 6,
         showOnInit = false
@@ -396,7 +402,7 @@ function SYN.SmallBottomRightFrame:Init()
         relativeTo = SYN.MainIconFrame,
         relativePoint = "BOTTOMRIGHT",
         xOffset = 0,
-        yOffset = 0,
+        yOffset = -5,
         keybindFontSize = 10,
         annotationFontSize = 6,
         showOnInit = false
