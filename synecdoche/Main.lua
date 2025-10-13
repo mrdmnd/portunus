@@ -48,6 +48,7 @@ SYN.MainFrame:SetScript("OnEvent", function (self, Event, Arg1)
         SYN.SmallTopRightFrame:Init()
         SYN.SmallBottomLeftFrame:Init()
         SYN.SmallBottomRightFrame:Init()
+        SYN.TimelineBarFrame:Init()
 
         UIFrames = {
             SYN.MainFrame,
@@ -64,23 +65,19 @@ SYN.MainFrame:SetScript("OnEvent", function (self, Event, Arg1)
 
         C_Timer.After(2, function()
             SYN.MainFrame:UnregisterEvent("ADDON_LOADED")
-            print("Welcome to synecdoche.")
+            print("Welcome to synecdoche's combat addon.")
             print("This is the Main.lua file in the ADDON_LOADED event handler.")
             -- SYN.PulseInit()
+
+            -- Initialize Timeline and hooks
+            if SYN.Timeline and SYN.Timeline.Init then
+                SYN.Timeline:Init()
+                print("Synecdoche Timeline initialized")
+            end
             
             -- Show all frames with placeholder data for testing
             SYN.ShowAllFramesWithPlaceholders()
             
-            -- Start glow toggle timer
-            SYN.StartGlowTimer()
-            
-            -- Demo LibRangeCheck
-            print("LibRangeCheck demo: Use /synrange command to test range checking")
-            if rc then
-                print("LibRangeCheck-3.0 loaded successfully!")
-            else
-                print("Warning: LibRangeCheck-3.0 failed to load")
-            end
         end)
     end
 end)
@@ -112,58 +109,4 @@ function SYN.ShowAllFramesWithPlaceholders()
     SYN.SmallTopRightFrame:ChangeIcon(7, "Interface\\Icons\\Spell_Holy_Heal", false, false, "Shift+2", "DefCD", false)
     SYN.SmallBottomLeftFrame:ChangeIcon(8, "Interface\\Icons\\Spell_Nature_Lightning", false, false, "Ctrl+1", "PreGCD", false)
     SYN.SmallBottomRightFrame:ChangeIcon(9, "Interface\\Icons\\Spell_Arcane_Arcane01", false, false, "Ctrl+2", "PostGCD", false)
-end
-
-function SYN.StartGlowTimer()
-    local glowState = false
-    
-    local function toggleGlow()
-        glowState = not glowState
-        if SYN.MainIconFrame then
-            if glowState then
-                ActionButton_ShowOverlayGlow(SYN.MainIconFrame)
-                print("Glow ON")
-            else
-                ActionButton_HideOverlayGlow(SYN.MainIconFrame)
-                print("Glow OFF")
-            end
-        end
-        
-        -- Schedule next toggle in 5 seconds
-        C_Timer.After(5, toggleGlow)
-    end
-    
-    -- Start the first toggle after 5 seconds
-    C_Timer.After(5, toggleGlow)
-end
-
--- LibRangeCheck demonstration function
-function SYN.DemoRangeCheck()
-    if not rc then
-        print("LibRangeCheck not loaded!")
-        return
-    end
-    
-    local target = "target"
-    if not UnitExists(target) then
-        print("No target selected for range check")
-        return
-    end
-    
-    local minRange, maxRange = rc:GetRange(target)
-    if not minRange then
-        print("Cannot determine range to target")
-    elseif not maxRange then
-        print("Target is > " .. minRange .. " yards away")
-    else
-        print("Target is in (" .. minRange .. ", " .. maxRange .. "] yards away")
-    end
-end
-
-
-
--- Debug command to test range checking
-SLASH_SYNRANGE1 = "/synrange"
-SlashCmdList["SYNRANGE"] = function(msg)
-    SYN.DemoRangeCheck()
 end

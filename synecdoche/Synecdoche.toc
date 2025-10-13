@@ -17,6 +17,9 @@ libs/libs.xml
 # Util
 Utils.lua
 
+# Timeline
+Timeline.lua
+
 # GUI
 GUI\Panels.lua
 GUI\CombatUI.xml

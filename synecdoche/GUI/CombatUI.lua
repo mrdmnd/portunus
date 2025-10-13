@@ -198,6 +198,104 @@ SYN.SmallTopRightFrame = CreateBaseIconFrame("SYN_SmallTopRightFrame", UIParent)
 SYN.SmallBottomLeftFrame = CreateBaseIconFrame("SYN_SmallBottomLeftFrame", UIParent)
 SYN.SmallBottomRightFrame = CreateBaseIconFrame("SYN_SmallBottomRightFrame", UIParent)
 
+-- Timeline Bar - long thin horizontal bar with scrolling category icons
+SYN.TimelineBarFrame = CreateFrame("Frame", "SYN_TimelineBarFrame", UIParent)
+SYN.TimelineBarFrame.IconById = {}
+SYN.TimelineBarFrame.ActiveIds = {}
+
+-- Category -> icon texture mapping
+local CATEGORY_ICONS = {
+    movement = "Interface\\Icons\\Ability_Rogue_Sprint",
+    defensive = "Interface\\Icons\\Ability_Warrior_ShieldWall",
+    burst = "Interface\\Icons\\Ability_Warrior_Revenge",
+    immune = "Interface\\Icons\\Spell_Holy_DivineProtection",
+}
+
+function SYN.TimelineBarFrame:Init()
+    self:SetFrameStrata(SYN.MainFrame:GetFrameStrata())
+    self:SetFrameLevel(SYN.MainFrame:GetFrameLevel() - 1)
+    self:SetWidth(360)
+    self:SetHeight(18)
+    self:SetPoint("TOP", SYN.TopIconFrame, "TOP", 0, 22)
+
+    -- Background and border
+    self.Bg = self:CreateTexture(nil, "BACKGROUND")
+    self.Bg:SetAllPoints(self)
+    self.Bg:SetColorTexture(0, 0, 0, 0.5)
+    SYN.CreateBackdrop(self)
+
+    -- t=0 marker at the far left
+    self.ZeroMarker = self:CreateTexture(nil, "ARTWORK")
+    self.ZeroMarker:SetColorTexture(1, 1, 1, 0.8)
+    self.ZeroMarker:SetPoint("LEFT", self, "LEFT", 0, 0)
+    self.ZeroMarker:SetWidth(2)
+    self.ZeroMarker:SetHeight(self:GetHeight())
+
+    -- seconds spanned by the bar from left (t=0) to right (t=horizon)
+    self.HorizonSeconds = 15
+
+    -- OnUpdate drives icon positions
+    self:SetScript("OnUpdate", function(_, elapsed)
+        self:UpdateIcons()
+    end)
+
+    self:Show()
+end
+
+function SYN.TimelineBarFrame:GetIconForEvent(ev)
+    local id = ev.id
+    local icon = self.IconById[id]
+    if icon then return icon end
+
+    icon = CreateFrame("Frame", nil, self)
+    icon:SetSize(18, 18)
+    icon.Tex = icon:CreateTexture(nil, "ARTWORK")
+    icon.Tex:SetAllPoints(icon)
+    local tex = CATEGORY_ICONS[ev.category or ""]
+    if not tex then
+        tex = "Interface\\Icons\\INV_Misc_QuestionMark"
+    end
+    icon.Tex:SetTexture(tex)
+    SYN.CreateBackdrop(icon)
+    icon:Show()
+
+    self.IconById[id] = icon
+    return icon
+end
+
+function SYN.TimelineBarFrame:UpdateIcons()
+    if not SYN.Timeline or not SYN.Timeline.All then return end
+    local events = SYN.Timeline:All()
+
+    -- Mark all as inactive initially
+    for k in pairs(self.ActiveIds) do self.ActiveIds[k] = nil end
+
+    local now = GetTime()
+    local width = self:GetWidth()
+    local horizon = self.HorizonSeconds
+
+    for i = 1, #events do
+        local ev = events[i]
+        local inSec = (ev.startAt or now) - now
+        if inSec >= 0 and inSec <= horizon then
+            local icon = self:GetIconForEvent(ev)
+            -- Position: right edge is horizon, left edge is t=0
+            local x = (inSec / horizon) * width
+            icon:ClearAllPoints()
+            icon:SetPoint("LEFT", self, "LEFT", x - (icon:GetWidth() / 2), 0)
+            icon:Show()
+            self.ActiveIds[ev.id] = true
+        end
+    end
+
+    -- Hide icons no longer active
+    for id, icon in pairs(self.IconById) do
+        if not self.ActiveIds[id] then
+            icon:Hide()
+        end
+    end
+end
+
 function SYN.ResetIcons()
     -- A - Main icon uses regular Hide() since it doesn't have HideIcon method
     SYN.MainIconFrame:Hide()
@@ -212,6 +310,8 @@ function SYN.ResetIcons()
     SYN.SmallTopRightFrame:HideIcon()
     SYN.SmallBottomLeftFrame:HideIcon()
     SYN.SmallBottomRightFrame:HideIcon()
+    -- Timeline bar icons are managed by UpdateIcons; just hide frame
+    SYN.TimelineBarFrame:Hide()
 end
 
 function SYN.CreateBackdrop(Frame, Strata)
@@ -408,6 +508,8 @@ function SYN.SmallBottomRightFrame:Init()
         showOnInit = false
     })
 end
+
+
 
 --- ================ CHANGE ICON METHODS ================
 -- Note: All ChangeIcon methods are now inherited from the base class
