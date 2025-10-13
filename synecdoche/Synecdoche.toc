@@ -28,6 +28,7 @@ GUI\CombatUI.lua
 # API
 # Settings.lua
 Core.lua
+StateCache.lua
 
 # Classes / Objects
 # EnemyStateTracking.lua

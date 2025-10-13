@@ -69,6 +69,12 @@ SYN.MainFrame:SetScript("OnEvent", function (self, Event, Arg1)
             print("This is the Main.lua file in the ADDON_LOADED event handler.")
             -- SYN.PulseInit()
 
+            -- Initialize slowly-changing state cache (talents/spells/gear/stats)
+            if SYN.StateCache and SYN.StateCache.Init then
+                SYN.StateCache:Init()
+                print("Synecdoche StateCache initialized")
+            end
+
             -- Initialize Timeline and hooks
             if SYN.Timeline and SYN.Timeline.Init then
                 SYN.Timeline:Init()
