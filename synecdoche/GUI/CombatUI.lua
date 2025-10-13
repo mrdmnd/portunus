@@ -218,7 +218,7 @@ function SYN.TimelineBarFrame:Init()
     self:SetWidth(18)
     self:SetHeight(220)
     -- Place to the left of all combat frames (anchor to main icon cluster)
-    self:SetPoint("RIGHT", SYN.LeftIconFrame, "LEFT", -10, 0)
+    self:SetPoint("BOTTOMRIGHT", SYN.LeftIconFrame, "BOTTOMLEFT", -10, 0)
 
     -- Background and border
     self.Bg = self:CreateTexture(nil, "BACKGROUND")
@@ -268,6 +268,13 @@ function SYN.TimelineBarFrame:GetIconForEvent(ev)
     label:SetFont(SYN.FontSelect(label), 10, "OUTLINE")
     label:SetText(ev.label or "")
     label:Show()
+    -- Duration line drawn to the right of the timeline bar
+    -- Parent to the bar so it can sit just outside the bar's right edge
+    local dline = self:CreateTexture(nil, "ARTWORK")
+    icon.DurationLine = dline
+    dline:SetColorTexture(1, 1, 1, 0.9)
+    dline:SetWidth(2)
+    dline:Hide()
     icon:Show()
 
     self.IconById[id] = icon
@@ -301,6 +308,27 @@ function SYN.TimelineBarFrame:UpdateIcons()
                 icon.Label:SetPoint("RIGHT", icon, "LEFT", -4, 0)
                 icon.Label:Show()
             end
+            -- Draw duration line for events with a duration
+            local dur = ev.duration or 0
+            if icon.DurationLine then
+                if dur and dur > 0 then
+                    local endTime = (ev.expiresAt or (ev.startAt or now))
+                    local maxTime = now + horizon
+                    if endTime > maxTime then endTime = maxTime end
+                    local durPixels = math.max(0, (endTime - (ev.startAt or now)) / horizon * height)
+                    -- Start at top of the icon, extend upward (toward horizon)
+                    local topOfIconOffsetFromTop = y - (icon:GetHeight() / 2)
+                    -- Anchor the line's top and bottom to the bar's TOPRIGHT so we can position by offsets
+                    icon.DurationLine:ClearAllPoints()
+                    -- Bottom of the line at the top of the icon
+                    icon.DurationLine:SetPoint("BOTTOMRIGHT", self, "TOPRIGHT", 2, -topOfIconOffsetFromTop)
+                    -- Top of the line durPixels above the icon (toward horizon)
+                    icon.DurationLine:SetPoint("TOPRIGHT", self, "TOPRIGHT", 2, -(topOfIconOffsetFromTop - durPixels))
+                    icon.DurationLine:Show()
+                else
+                    icon.DurationLine:Hide()
+                end
+            end
             icon:Show()
             self.ActiveIds[ev.id] = true
         end
@@ -311,6 +339,7 @@ function SYN.TimelineBarFrame:UpdateIcons()
         if not self.ActiveIds[id] then
             icon:Hide()
             if icon.Label then icon.Label:Hide() end
+            if icon.DurationLine then icon.DurationLine:Hide() end
         end
     end
 end
