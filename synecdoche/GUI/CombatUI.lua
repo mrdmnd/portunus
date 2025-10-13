@@ -198,7 +198,7 @@ SYN.SmallTopRightFrame = CreateBaseIconFrame("SYN_SmallTopRightFrame", UIParent)
 SYN.SmallBottomLeftFrame = CreateBaseIconFrame("SYN_SmallBottomLeftFrame", UIParent)
 SYN.SmallBottomRightFrame = CreateBaseIconFrame("SYN_SmallBottomRightFrame", UIParent)
 
--- Timeline Bar - long thin horizontal bar with scrolling category icons
+-- Timeline Bar - vertical bar with scrolling category icons (top -> bottom)
 SYN.TimelineBarFrame = CreateFrame("Frame", "SYN_TimelineBarFrame", UIParent)
 SYN.TimelineBarFrame.IconById = {}
 SYN.TimelineBarFrame.ActiveIds = {}
@@ -214,9 +214,11 @@ local CATEGORY_ICONS = {
 function SYN.TimelineBarFrame:Init()
     self:SetFrameStrata(SYN.MainFrame:GetFrameStrata())
     self:SetFrameLevel(SYN.MainFrame:GetFrameLevel() - 1)
-    self:SetWidth(360)
-    self:SetHeight(18)
-    self:SetPoint("TOP", SYN.TopIconFrame, "TOP", 0, 22)
+    -- Vertical bar geometry
+    self:SetWidth(18)
+    self:SetHeight(220)
+    -- Place to the left of all combat frames (anchor to main icon cluster)
+    self:SetPoint("RIGHT", SYN.LeftIconFrame, "LEFT", -10, 0)
 
     -- Background and border
     self.Bg = self:CreateTexture(nil, "BACKGROUND")
@@ -224,14 +226,14 @@ function SYN.TimelineBarFrame:Init()
     self.Bg:SetColorTexture(0, 0, 0, 0.5)
     SYN.CreateBackdrop(self)
 
-    -- t=0 marker at the far left
+    -- t=0 marker at the bottom
     self.ZeroMarker = self:CreateTexture(nil, "ARTWORK")
     self.ZeroMarker:SetColorTexture(1, 1, 1, 0.8)
-    self.ZeroMarker:SetPoint("LEFT", self, "LEFT", 0, 0)
-    self.ZeroMarker:SetWidth(2)
-    self.ZeroMarker:SetHeight(self:GetHeight())
+    self.ZeroMarker:SetPoint("BOTTOM", self, "BOTTOM", 0, 0)
+    self.ZeroMarker:SetHeight(2)
+    self.ZeroMarker:SetWidth(self:GetWidth())
 
-    -- seconds spanned by the bar from left (t=0) to right (t=horizon)
+    -- seconds spanned by the bar from bottom (t=0) to top (t=horizon)
     self.HorizonSeconds = 15
 
     -- OnUpdate drives icon positions
@@ -257,6 +259,15 @@ function SYN.TimelineBarFrame:GetIconForEvent(ev)
     end
     icon.Tex:SetTexture(tex)
     SYN.CreateBackdrop(icon)
+    -- Label shown to the left of the icon
+    local label = self:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    icon.Label = label
+    label:SetJustifyH("RIGHT")
+    label:SetJustifyV("MIDDLE")
+    label:SetTextColor(1, 1, 1, 1)
+    label:SetFont(SYN.FontSelect(label), 10, "OUTLINE")
+    label:SetText(ev.label or "")
+    label:Show()
     icon:Show()
 
     self.IconById[id] = icon
@@ -271,7 +282,7 @@ function SYN.TimelineBarFrame:UpdateIcons()
     for k in pairs(self.ActiveIds) do self.ActiveIds[k] = nil end
 
     local now = GetTime()
-    local width = self:GetWidth()
+    local height = self:GetHeight()
     local horizon = self.HorizonSeconds
 
     for i = 1, #events do
@@ -279,10 +290,17 @@ function SYN.TimelineBarFrame:UpdateIcons()
         local inSec = (ev.startAt or now) - now
         if inSec >= 0 and inSec <= horizon then
             local icon = self:GetIconForEvent(ev)
-            -- Position: right edge is horizon, left edge is t=0
-            local x = (inSec / horizon) * width
+            -- Position: top edge is horizon, bottom edge is t=0
+            local y = (1 - (inSec / horizon)) * height
             icon:ClearAllPoints()
-            icon:SetPoint("LEFT", self, "LEFT", x - (icon:GetWidth() / 2), 0)
+            icon:SetPoint("TOP", self, "TOP", 0, -y + (icon:GetHeight() / 2))
+            -- Update label text and position to the left of the icon
+            if icon.Label then
+                icon.Label:ClearAllPoints()
+                icon.Label:SetText(ev.label or "")
+                icon.Label:SetPoint("RIGHT", icon, "LEFT", -4, 0)
+                icon.Label:Show()
+            end
             icon:Show()
             self.ActiveIds[ev.id] = true
         end
@@ -292,6 +310,7 @@ function SYN.TimelineBarFrame:UpdateIcons()
     for id, icon in pairs(self.IconById) do
         if not self.ActiveIds[id] then
             icon:Hide()
+            if icon.Label then icon.Label:Hide() end
         end
     end
 end
