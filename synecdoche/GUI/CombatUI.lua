@@ -300,7 +300,8 @@ function SYN.TimelineBarFrame:UpdateIcons()
             -- Position: top edge is horizon, bottom edge is t=0
             local y = (1 - (inSec / horizon)) * height
             icon:ClearAllPoints()
-            icon:SetPoint("TOP", self, "TOP", 0, -y + (icon:GetHeight() / 2))
+            -- Place so the icon's bottom edge is at the time position
+            icon:SetPoint("BOTTOM", self, "TOP", 0, -y)
             -- Update label text and position to the left of the icon
             if icon.Label then
                 icon.Label:ClearAllPoints()
@@ -316,14 +317,14 @@ function SYN.TimelineBarFrame:UpdateIcons()
                     local maxTime = now + horizon
                     if endTime > maxTime then endTime = maxTime end
                     local durPixels = math.max(0, (endTime - (ev.startAt or now)) / horizon * height)
-                    -- Start at top of the icon, extend upward (toward horizon)
-                    local topOfIconOffsetFromTop = y - (icon:GetHeight() / 2)
+                    -- Start at icon's bottom-right corner, extend upward (toward horizon)
+                    local bottomOfIconOffsetFromTop = y
                     -- Anchor the line's top and bottom to the bar's TOPRIGHT so we can position by offsets
                     icon.DurationLine:ClearAllPoints()
-                    -- Bottom of the line at the top of the icon
-                    icon.DurationLine:SetPoint("BOTTOMRIGHT", self, "TOPRIGHT", 2, -topOfIconOffsetFromTop)
+                    -- Bottom of the line at the icon's bottom
+                    icon.DurationLine:SetPoint("BOTTOMRIGHT", self, "TOPRIGHT", 2, -bottomOfIconOffsetFromTop)
                     -- Top of the line durPixels above the icon (toward horizon)
-                    icon.DurationLine:SetPoint("TOPRIGHT", self, "TOPRIGHT", 2, -(topOfIconOffsetFromTop - durPixels))
+                    icon.DurationLine:SetPoint("TOPRIGHT", self, "TOPRIGHT", 2, -(bottomOfIconOffsetFromTop - durPixels))
                     icon.DurationLine:Show()
                 else
                     icon.DurationLine:Hide()
