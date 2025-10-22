@@ -165,30 +165,70 @@ local function GetDebuffFrame(bar, index)
         SYN.CreateBackdrop(debuff)
         debuff.Backdrop:SetBackdropBorderColor(0.8, 0.2, 0.2, 1.0)
         
-        -- Pandemic glow effect (golden glow)
-        debuff.GlowTexture = debuff:CreateTexture(nil, "OVERLAY")
-        debuff.GlowTexture:SetPoint("CENTER", debuff, "CENTER", 0, 0)
-        debuff.GlowTexture:SetSize(24, 24)
-        debuff.GlowTexture:SetTexture("Interface\\SpellActivationOverlay\\IconAlert")
-        debuff.GlowTexture:SetTexCoord(0.00781250, 0.50781250, 0.27734375, 0.52734375)
-        debuff.GlowTexture:SetBlendMode("ADD")
-        debuff.GlowTexture:SetAlpha(0)
-        debuff.GlowTexture:Hide()
+        -- Pandemic glow effect (border glow approach)
+        -- Create 4 edge textures for a complete border glow
+        debuff.GlowTop = debuff:CreateTexture(nil, "OVERLAY")
+        debuff.GlowTop:SetHeight(2)
+        debuff.GlowTop:SetPoint("BOTTOMLEFT", debuff, "TOPLEFT", -2, 0)
+        debuff.GlowTop:SetPoint("BOTTOMRIGHT", debuff, "TOPRIGHT", 2, 0)
+        debuff.GlowTop:SetTexture("Interface\\Buttons\\WHITE8X8")
+        debuff.GlowTop:SetVertexColor(1.0, 0.85, 0.0, 1.0)
+        debuff.GlowTop:SetBlendMode("ADD")
+        debuff.GlowTop:Hide()
         
-        -- Glow animation
-        debuff.GlowAnim = debuff.GlowTexture:CreateAnimationGroup()
+        debuff.GlowBottom = debuff:CreateTexture(nil, "OVERLAY")
+        debuff.GlowBottom:SetHeight(2)
+        debuff.GlowBottom:SetPoint("TOPLEFT", debuff, "BOTTOMLEFT", -2, 0)
+        debuff.GlowBottom:SetPoint("TOPRIGHT", debuff, "BOTTOMRIGHT", 2, 0)
+        debuff.GlowBottom:SetTexture("Interface\\Buttons\\WHITE8X8")
+        debuff.GlowBottom:SetVertexColor(1.0, 0.85, 0.0, 1.0)
+        debuff.GlowBottom:SetBlendMode("ADD")
+        debuff.GlowBottom:Hide()
+        
+        debuff.GlowLeft = debuff:CreateTexture(nil, "OVERLAY")
+        debuff.GlowLeft:SetWidth(2)
+        debuff.GlowLeft:SetPoint("TOPRIGHT", debuff, "TOPLEFT", 0, 2)
+        debuff.GlowLeft:SetPoint("BOTTOMRIGHT", debuff, "BOTTOMLEFT", 0, -2)
+        debuff.GlowLeft:SetTexture("Interface\\Buttons\\WHITE8X8")
+        debuff.GlowLeft:SetVertexColor(1.0, 0.85, 0.0, 1.0)
+        debuff.GlowLeft:SetBlendMode("ADD")
+        debuff.GlowLeft:Hide()
+        
+        debuff.GlowRight = debuff:CreateTexture(nil, "OVERLAY")
+        debuff.GlowRight:SetWidth(2)
+        debuff.GlowRight:SetPoint("TOPLEFT", debuff, "TOPRIGHT", 0, 2)
+        debuff.GlowRight:SetPoint("BOTTOMLEFT", debuff, "BOTTOMRIGHT", 0, -2)
+        debuff.GlowRight:SetTexture("Interface\\Buttons\\WHITE8X8")
+        debuff.GlowRight:SetVertexColor(1.0, 0.85, 0.0, 1.0)
+        debuff.GlowRight:SetBlendMode("ADD")
+        debuff.GlowRight:Hide()
+        
+        -- Glow animation group
+        debuff.GlowAnim = debuff:CreateAnimationGroup()
         debuff.GlowAnim:SetLooping("REPEAT")
-        local pulse = debuff.GlowAnim:CreateAnimation("Alpha")
-        pulse:SetFromAlpha(0.5)
-        pulse:SetToAlpha(1.0)
-        pulse:SetDuration(0.5)
-        pulse:SetSmoothing("IN_OUT")
-        local pulse2 = debuff.GlowAnim:CreateAnimation("Alpha")
-        pulse2:SetFromAlpha(1.0)
-        pulse2:SetToAlpha(0.5)
-        pulse2:SetDuration(0.5)
-        pulse2:SetSmoothing("IN_OUT")
-        pulse2:SetOrder(2)
+        
+        -- Create pulsing alpha animation for all 4 edges
+        local function CreatePulseForTexture(texture)
+            local ag = texture:CreateAnimationGroup()
+            ag:SetLooping("REPEAT")
+            local pulse1 = ag:CreateAnimation("Alpha")
+            pulse1:SetFromAlpha(0.6)
+            pulse1:SetToAlpha(1.0)
+            pulse1:SetDuration(0.5)
+            pulse1:SetSmoothing("IN_OUT")
+            local pulse2 = ag:CreateAnimation("Alpha")
+            pulse2:SetFromAlpha(1.0)
+            pulse2:SetToAlpha(0.6)
+            pulse2:SetDuration(0.5)
+            pulse2:SetSmoothing("IN_OUT")
+            pulse2:SetOrder(2)
+            return ag
+        end
+        
+        debuff.GlowTopAnim = CreatePulseForTexture(debuff.GlowTop)
+        debuff.GlowBottomAnim = CreatePulseForTexture(debuff.GlowBottom)
+        debuff.GlowLeftAnim = CreatePulseForTexture(debuff.GlowLeft)
+        debuff.GlowRightAnim = CreatePulseForTexture(debuff.GlowRight)
         
         -- Stack count text (anchored to inner left)
         debuff.Count = debuff:CreateFontString(nil, "OVERLAY", 
@@ -485,11 +525,17 @@ function SYN.EnemyTrackerFrame:UpdateBars()
             -- Update debuff display
             -- Hide all debuff frames first
             for _, debuffFrame in ipairs(bar.DebuffFrames) do
-                if debuffFrame.GlowAnim then
-                    debuffFrame.GlowAnim:Stop()
+                if debuffFrame.GlowTopAnim then
+                    debuffFrame.GlowTopAnim:Stop()
+                    debuffFrame.GlowBottomAnim:Stop()
+                    debuffFrame.GlowLeftAnim:Stop()
+                    debuffFrame.GlowRightAnim:Stop()
                 end
-                if debuffFrame.GlowTexture then
-                    debuffFrame.GlowTexture:Hide()
+                if debuffFrame.GlowTop then
+                    debuffFrame.GlowTop:Hide()
+                    debuffFrame.GlowBottom:Hide()
+                    debuffFrame.GlowLeft:Hide()
+                    debuffFrame.GlowRight:Hide()
                 end
                 debuffFrame:Hide()
             end
@@ -585,14 +631,26 @@ function SYN.EnemyTrackerFrame:UpdateBars()
                     
                     -- Show/hide glow effect
                     if shouldGlow then
-                        if not debuffFrame.GlowTexture:IsShown() then
-                            debuffFrame.GlowTexture:Show()
-                            debuffFrame.GlowAnim:Play()
+                        if not debuffFrame.GlowTop:IsShown() then
+                            debuffFrame.GlowTop:Show()
+                            debuffFrame.GlowBottom:Show()
+                            debuffFrame.GlowLeft:Show()
+                            debuffFrame.GlowRight:Show()
+                            debuffFrame.GlowTopAnim:Play()
+                            debuffFrame.GlowBottomAnim:Play()
+                            debuffFrame.GlowLeftAnim:Play()
+                            debuffFrame.GlowRightAnim:Play()
                         end
                     else
-                        if debuffFrame.GlowTexture:IsShown() then
-                            debuffFrame.GlowTexture:Hide()
-                            debuffFrame.GlowAnim:Stop()
+                        if debuffFrame.GlowTop:IsShown() then
+                            debuffFrame.GlowTop:Hide()
+                            debuffFrame.GlowBottom:Hide()
+                            debuffFrame.GlowLeft:Hide()
+                            debuffFrame.GlowRight:Hide()
+                            debuffFrame.GlowTopAnim:Stop()
+                            debuffFrame.GlowBottomAnim:Stop()
+                            debuffFrame.GlowLeftAnim:Stop()
+                            debuffFrame.GlowRightAnim:Stop()
                         end
                     end
                     
@@ -629,11 +687,17 @@ function SYN.EnemyTrackerFrame:Reset()
         end
         if bar.DebuffFrames then
             for _, debuffFrame in ipairs(bar.DebuffFrames) do
-                if debuffFrame.GlowAnim then
-                    debuffFrame.GlowAnim:Stop()
+                if debuffFrame.GlowTopAnim then
+                    debuffFrame.GlowTopAnim:Stop()
+                    debuffFrame.GlowBottomAnim:Stop()
+                    debuffFrame.GlowLeftAnim:Stop()
+                    debuffFrame.GlowRightAnim:Stop()
                 end
-                if debuffFrame.GlowTexture then
-                    debuffFrame.GlowTexture:Hide()
+                if debuffFrame.GlowTop then
+                    debuffFrame.GlowTop:Hide()
+                    debuffFrame.GlowBottom:Hide()
+                    debuffFrame.GlowLeft:Hide()
+                    debuffFrame.GlowRight:Hide()
                 end
                 if debuffFrame.Cooldown then
                     debuffFrame.Cooldown:Clear()
