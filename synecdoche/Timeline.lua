@@ -30,15 +30,10 @@ end
 
 local function purgeExpiredUnsafe(currentTime)
 	local keep = {}
-	local removed = 0
 	for i = 1, #events do
 		local e = events[i]
 		if not e.expiresAt or e.expiresAt > currentTime then
 			keep[#keep + 1] = e
-		else
-			removed = removed + 1
-			print(string.format("Purging event '%s': expiresAt=%.2f, currentTime=%.2f", 
-				e.label or "?", e.expiresAt or 0, currentTime))
 		end
 	end
 	events = keep
@@ -76,11 +71,6 @@ function Timeline:AddEventAt(timestamp, duration, category, label, source, id)
 	local dur = duration or 0
 	local expires = startTime + dur
 	local cat = category
-	
-	-- Debug: print what we're creating
-	print(string.format("AddEventAt: startTime=%.2f, duration=%.2f, expires=%.2f, now=%.2f", 
-		startTime, dur, expires, now()))
-	
 	local ev = {
 		id = id or (tostring(source or "manual") .. ":" .. tostring(label)
 			.. ":" .. tostring(startTime)),
@@ -137,16 +127,7 @@ function Timeline:HasUpcoming(category, withinSeconds)
 end
 
 function Timeline:All()
-	local beforePurge = #events
 	self:PurgeExpired()
-	local afterPurge = #events
-	
-	-- Debug: track if purge removed events unexpectedly
-	if beforePurge ~= afterPurge then
-		print(string.format("Timeline:All() - Purge removed %d events (%d -> %d)", 
-			beforePurge - afterPurge, beforePurge, afterPurge))
-	end
-	
 	return events
 end
 
@@ -175,9 +156,6 @@ SlashCmdList["SYNTIMELINE"] = function(msg)
 		local id = Timeline:AddEventIn(inSec, dur, cat, label, "slash_command_source")
 		print(string.format("Added: %s in %.1fs for %.1fs [%s] id=%s",
 			label, inSec, dur, cat, id or "?"))
-		-- Verify the event was actually added
-		local allEvents = Timeline:All()
-		print(string.format("Timeline now has %d total events", #allEvents))
 		return
 	end
 

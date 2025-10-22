@@ -212,7 +212,6 @@ local CATEGORY_ICONS = {
 }
 
 function SYN.TimelineBarFrame:Init()
-    print("Timeline: Initializing TimelineBarFrame")
     self:SetFrameStrata(SYN.MainFrame:GetFrameStrata())
     self:SetFrameLevel(SYN.MainFrame:GetFrameLevel() - 1)
     -- Vertical bar geometry
@@ -243,7 +242,6 @@ function SYN.TimelineBarFrame:Init()
     end)
 
     self:Show()
-    print("Timeline: TimelineBarFrame initialized and shown")
 end
 
 function SYN.TimelineBarFrame:GetIconForEvent(ev)
@@ -284,21 +282,7 @@ function SYN.TimelineBarFrame:GetIconForEvent(ev)
 end
 
 function SYN.TimelineBarFrame:UpdateIcons()
-    -- Debug counter to print status occasionally
-    self.updateCounter = (self.updateCounter or 0) + 1
-    
-    -- Unconditional heartbeat every 5 seconds to verify function is being called
-    self.heartbeatCounter = (self.heartbeatCounter or 0) + 1
-    if self.heartbeatCounter >= 150 then
-        print(string.format("Timeline: UpdateIcons heartbeat (counter=%d)", self.updateCounter))
-        self.heartbeatCounter = 0
-    end
-    
     if not SYN.Timeline or not SYN.Timeline.All then
-        -- Print warning occasionally
-        if self.updateCounter % 300 == 1 then
-            print("Timeline: UpdateIcons running, but Timeline not initialized")
-        end
         -- Hide the bar visuals if Timeline isn't initialized yet
         if self.Bg and self.Bg:IsShown() then
             self.Bg:Hide()
@@ -308,24 +292,11 @@ function SYN.TimelineBarFrame:UpdateIcons()
         return
     end
     
-    if self.updateCounter % 300 == 1 then
-        print("Timeline: UpdateIcons is running (check #" .. math.floor(self.updateCounter / 300) .. ")")
-    end
-    
     local events = SYN.Timeline:All()
     
     -- Safety check
     if not events then
-        print("Timeline: ERROR - Timeline:All() returned nil!")
         events = {}
-    end
-    
-    -- Track previous event count to detect changes
-    local eventCount = #events
-    self.lastEventCount = self.lastEventCount or 0
-    if eventCount ~= self.lastEventCount then
-        print(string.format("Timeline: Event count changed from %d to %d", self.lastEventCount, eventCount))
-        self.lastEventCount = eventCount
     end
 
     -- Mark all as inactive initially
@@ -336,42 +307,14 @@ function SYN.TimelineBarFrame:UpdateIcons()
     local horizon = self.HorizonSeconds
     local hasVisibleEvents = false
 
-    -- Debug: print event count occasionally (every ~2 seconds worth of frames)
-    self.debugCounter = (self.debugCounter or 0) + 1
-    if self.debugCounter >= 60 then
-        if #events > 0 then
-            print(string.format("Timeline: %d events in timeline (t=%.1f, horizon=%.1f)", #events, now, horizon))
-            -- Print details of each event
-            for i = 1, #events do
-                local ev = events[i]
-                local inSec = (ev.startAt or now) - now
-                local expiresAt = ev.expiresAt or now
-                print(string.format("  Event %d: '%s' starts in %.1fs, expires at %.1f (now=%.1f)", 
-                    i, ev.label or "?", inSec, expiresAt, now))
-            end
-        end
-        self.debugCounter = 0
-    end
-
     for i = 1, #events do
         local ev = events[i]
         local inSec = (ev.startAt or now) - now
         local expiresAt = ev.expiresAt or now
-        local isInHorizon = inSec <= horizon
-        local notExpired = expiresAt >= now
-        
-        -- Debug visibility check
-        if self.debugCounter == 0 then
-            print(string.format("Timeline: Checking event '%s': inSec=%.2f, horizon=%.2f, inHorizon=%s, expiresAt=%.2f, now=%.2f, notExpired=%s",
-                ev.label or "?", inSec, horizon, tostring(isInHorizon), expiresAt, now, tostring(notExpired)))
-        end
         
         -- Show event until its endpoint crosses zero
-        if isInHorizon and notExpired then
+        if inSec <= horizon and expiresAt >= now then
             hasVisibleEvents = true
-            if self.debugCounter == 0 then
-                print(string.format("Timeline: Event '%s' IS visible!", ev.label or "?"))
-            end
             local icon = self:GetIconForEvent(ev)
             -- Position: top edge is horizon, bottom edge is t=0
             local y = (1 - (inSec / horizon)) * height
@@ -429,20 +372,9 @@ function SYN.TimelineBarFrame:UpdateIcons()
     -- Hide or show the timeline bar CHILDREN based on whether there are visible events
     -- Note: We can't hide the frame itself because OnUpdate won't fire if the frame is hidden!
     -- Instead, hide/show the background, border, and zero marker
-    
-    -- Debug: print status periodically (use separate counter to be sure it prints)
-    self.showHideDebugCounter = (self.showHideDebugCounter or 0) + 1
-    if self.showHideDebugCounter >= 60 then
-        local bgShown = self.Bg and self.Bg:IsShown() or false
-        print(string.format("Timeline: Show/hide check - hasVisibleEvents=%s, BgShown=%s, #events=%d", 
-            tostring(hasVisibleEvents), tostring(bgShown), #events))
-        self.showHideDebugCounter = 0
-    end
-    
     if hasVisibleEvents then
         -- Show background, border, and zero marker
         if self.Bg and not self.Bg:IsShown() then
-            print("Timeline: Showing bar visuals (found visible events)")
             self.Bg:Show()
             if self.Backdrop then self.Backdrop:Show() end
             if self.ZeroMarker then self.ZeroMarker:Show() end
@@ -450,7 +382,6 @@ function SYN.TimelineBarFrame:UpdateIcons()
     else
         -- Hide background, border, and zero marker
         if self.Bg and self.Bg:IsShown() then
-            print("Timeline: Hiding bar visuals (no visible events)")
             self.Bg:Hide()
             if self.Backdrop then self.Backdrop:Hide() end
             if self.ZeroMarker then self.ZeroMarker:Hide() end
