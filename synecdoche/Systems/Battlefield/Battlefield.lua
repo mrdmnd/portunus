@@ -34,13 +34,15 @@ local CombatUnits = {}          -- [guid] = { name, inCombat, lastSeen,
                                 --            health, healthMax, 
                                 --            threatStatus, isDead,
                                 --            minRange, maxRange,
-                                --            castInfo }
+                                --            castInfo, auras }
 local NameplateToUnit = {}      -- [unitToken] = guid
 local UnitToNameplate = {}      -- [guid] = unitToken
 local UnitCasts = {}            -- [guid] = { spellID, spellName, 
                                 --            startTime, endTime, 
                                 --            isChanneled, notInterruptible,
                                 --            targetGUID }
+local UnitAuras = {}            -- [guid] = { [spellID] = { name, icon, 
+                                --            count, duration, expirationTime } }
 
 -- Event frame
 local EventFrame = nil
@@ -156,6 +158,57 @@ local function GetUnitCastInfo(unitToken)
     return nil
 end
 
+-- Get whitelisted auras on a unit based on current engine
+local function GetTrackedAuras(unitToken, isEnemy)
+    if not unitToken or not UnitExists(unitToken) then
+        return nil
+    end
+    
+    -- Get the current engine's whitelist
+    local whitelist = nil
+    if SYN and SYN.Elemental and SYN.Elemental.GetTrackedDebuffs then
+        if isEnemy then
+            whitelist = SYN.Elemental:GetTrackedDebuffs()
+        else
+            whitelist = SYN.Elemental:GetTrackedBuffs()
+        end
+    end
+    
+    if not whitelist then
+        return nil
+    end
+    
+    local trackedAuras = {}
+    
+    -- Use modern C_UnitAuras API with index iteration
+    local filter = isEnemy and "HARMFUL|PLAYER" or "HELPFUL"
+    
+    -- Iterate through aura indices (max 40 auras per unit)
+    for i = 1, 40 do
+        local auraData = C_UnitAuras.GetAuraDataByIndex(unitToken, i, filter)
+        
+        if not auraData then
+            break -- No more auras
+        end
+        
+        local spellID = auraData.spellId
+        
+        -- Check if this aura is in the whitelist
+        if spellID and whitelist[spellID] then
+            trackedAuras[spellID] = {
+                name = auraData.name,
+                icon = auraData.icon,
+                count = auraData.applications or 0,
+                duration = auraData.duration or 0,
+                expirationTime = auraData.expirationTime or 0,
+                spellID = spellID
+            }
+        end
+    end
+    
+    return next(trackedAuras) and trackedAuras or nil
+end
+
 --- ================= NAMEPLATE TRACKING =================
 
 -- Add a nameplate to tracking
@@ -222,10 +275,12 @@ function Battlefield:UpdateCombatUnit(unitInfo)
         return
     end
     
-    -- Get existing cast info if it exists
+    -- Get existing cast info and auras if they exist
     local existingCast = nil
+    local existingAuras = nil
     if CombatUnits[unitInfo.guid] then
         existingCast = CombatUnits[unitInfo.guid].castInfo
+        existingAuras = CombatUnits[unitInfo.guid].auras
     end
     
     -- Store or update combat unit
@@ -239,7 +294,8 @@ function Battlefield:UpdateCombatUnit(unitInfo)
         minRange = unitInfo.minRange,
         maxRange = unitInfo.maxRange,
         lastSeen = unitInfo.lastSeen,
-        castInfo = existingCast -- Preserve cast info
+        castInfo = existingCast, -- Preserve cast info
+        auras = existingAuras -- Preserve aura info
     }
 end
 
@@ -267,6 +323,32 @@ function Battlefield:ClearUnitCast(guid)
         unit.castInfo = nil
     end
     UnitCasts[guid] = nil
+end
+
+-- Update aura info for a unit
+function Battlefield:UpdateUnitAuras(guid, auras)
+    if not guid then
+        return
+    end
+    
+    local unit = CombatUnits[guid]
+    if unit then
+        unit.auras = auras
+        UnitAuras[guid] = auras
+    end
+end
+
+-- Clear aura info for a unit
+function Battlefield:ClearUnitAuras(guid)
+    if not guid then
+        return
+    end
+    
+    local unit = CombatUnits[guid]
+    if unit then
+        unit.auras = nil
+    end
+    UnitAuras[guid] = nil
 end
 
 -- Mark a unit as dead
@@ -373,6 +455,14 @@ function Battlefield:PulseUpdate()
                         self:UpdateUnitCast(unitInfo.guid, castInfo)
                     else
                         self:ClearUnitCast(unitInfo.guid)
+                    end
+                    
+                    -- Update aura info (for enemy units)
+                    local auras = GetTrackedAuras(unitToken, true)
+                    if auras then
+                        self:UpdateUnitAuras(unitInfo.guid, auras)
+                    else
+                        self:ClearUnitAuras(unitInfo.guid)
                     end
                 end
             end
@@ -599,6 +689,15 @@ function Battlefield:GetCastingUnits()
         end
     end
     return castingUnits
+end
+
+-- Get aura info for a specific unit GUID
+function Battlefield:GetUnitAuras(guid)
+    local unit = CombatUnits[guid]
+    if unit then
+        return unit.auras
+    end
+    return nil
 end
 
 -- Get detailed info for debugging

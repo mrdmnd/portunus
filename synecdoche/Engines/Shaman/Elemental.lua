@@ -13,11 +13,87 @@ local Elemental = SYN.Elemental
 local isInitialized = false
 local updateTicker = nil
 
+--- ================ AURA TRACKING ================
+-- Build tracked aura tables from spell definitions
+-- This is populated after spell definitions are loaded
+
+-- Whitelisted buffs to track on friendly units (player, party, raid)
+Elemental.TrackedBuffs = {}
+
+-- Whitelisted debuffs to track on enemy units
+Elemental.TrackedDebuffs = {}
+
+-- Build the tracked aura whitelist from spell definitions
+function Elemental:BuildTrackedAuras()
+    -- Clear existing
+    self.TrackedBuffs = {}
+    self.TrackedDebuffs = {}
+    
+    -- Add all defined debuffs
+    if SYN.ElementalAuras then
+        -- Add Flame Shock
+        if SYN.ElementalAuras.FlameShock then
+            local aura = SYN.ElementalAuras.FlameShock
+            self.TrackedDebuffs[aura:GetID()] = aura
+        end
+        
+        -- Add Lightning Rod
+        if SYN.ElementalAuras.LightningRod then
+            local aura = SYN.ElementalAuras.LightningRod
+            self.TrackedDebuffs[aura:GetID()] = aura
+        end
+        
+        -- Add important buffs to track on player
+        if SYN.ElementalAuras.Stormkeeper then
+            local aura = SYN.ElementalAuras.Stormkeeper
+            self.TrackedBuffs[aura:GetID()] = aura
+        end
+        
+        if SYN.ElementalAuras.SurgeOfPower then
+            local aura = SYN.ElementalAuras.SurgeOfPower
+            self.TrackedBuffs[aura:GetID()] = aura
+        end
+        
+        if SYN.ElementalAuras.MasterOfTheElements then
+            local aura = SYN.ElementalAuras.MasterOfTheElements
+            self.TrackedBuffs[aura:GetID()] = aura
+        end
+        
+        if SYN.ElementalAuras.LavaSurge then
+            local aura = SYN.ElementalAuras.LavaSurge
+            self.TrackedBuffs[aura:GetID()] = aura
+        end
+        
+        if SYN.ElementalAuras.Icefury then
+            local aura = SYN.ElementalAuras.Icefury
+            self.TrackedBuffs[aura:GetID()] = aura
+        end
+        
+        if SYN.ElementalAuras.Ascendance then
+            local aura = SYN.ElementalAuras.Ascendance
+            self.TrackedBuffs[aura:GetID()] = aura
+        end
+    end
+end
+
+-- Get the tracked buffs for this spec
+function Elemental:GetTrackedBuffs()
+    return self.TrackedBuffs
+end
+
+-- Get the tracked debuffs for this spec
+function Elemental:GetTrackedDebuffs()
+    return self.TrackedDebuffs
+end
+
 -- Initialize the Elemental engine
 function Elemental:Init()
     if isInitialized then
         return
     end
+    
+    -- Build tracked aura whitelist from spell definitions
+    self:BuildTrackedAuras()
     
     print("Elemental Shaman engine initialized")
     isInitialized = true

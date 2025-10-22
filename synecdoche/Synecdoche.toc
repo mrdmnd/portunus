@@ -47,6 +47,7 @@ Systems\Battlefield\Battlefield.lua
 # ============================================
 # SPEC ENGINES
 # ============================================
+Engines\Shaman\SpellDefinitions.lua
 Engines\Shaman\Elemental.lua
 
 # ============================================

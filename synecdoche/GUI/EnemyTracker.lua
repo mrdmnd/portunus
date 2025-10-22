@@ -132,9 +132,52 @@ local function CreateEnemyHealthBar(parent)
     bar.CastBar.TargetFrame:Hide()
     bar.CastBar:Hide()
     
+    -- Debuff frames container (on left edge)
+    bar.DebuffFrames = {}
+    
     bar.guid = nil
     bar:Hide()
     return bar
+end
+
+-- Create or get a debuff icon frame
+local function GetDebuffFrame(bar, index)
+    if not bar.DebuffFrames[index] then
+        local debuff = CreateFrame("Frame", nil, bar)
+        debuff:SetSize(16, 16)
+        debuff:SetFrameLevel(bar:GetFrameLevel() + 3)
+        
+        -- Icon texture
+        debuff.Icon = debuff:CreateTexture(nil, "ARTWORK")
+        debuff.Icon:SetAllPoints(debuff)
+        debuff.Icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        
+        -- Border
+        SYN.CreateBackdrop(debuff)
+        debuff.Backdrop:SetBackdropBorderColor(0.8, 0.2, 0.2, 1.0)
+        
+        -- Stack count text
+        debuff.Count = debuff:CreateFontString(nil, "OVERLAY", 
+                                               "GameFontHighlight")
+        debuff.Count:SetPoint("BOTTOMRIGHT", debuff, "BOTTOMRIGHT", -1, 1)
+        debuff.Count:SetJustifyH("RIGHT")
+        debuff.Count:SetTextColor(1, 1, 1, 1)
+        local font = SYN.FontSelect(debuff.Count)
+        debuff.Count:SetFont(font, 8, "OUTLINE")
+        
+        -- Duration text
+        debuff.Duration = debuff:CreateFontString(nil, "OVERLAY", 
+                                                  "GameFontHighlight")
+        debuff.Duration:SetPoint("CENTER", debuff, "BOTTOM", 0, -8)
+        debuff.Duration:SetJustifyH("CENTER")
+        debuff.Duration:SetTextColor(1, 1, 0, 1)
+        debuff.Duration:SetFont(font, 8, "OUTLINE")
+        
+        debuff:Hide()
+        bar.DebuffFrames[index] = debuff
+    end
+    
+    return bar.DebuffFrames[index]
 end
 
 function SYN.EnemyTrackerFrame:Init()
@@ -405,6 +448,84 @@ function SYN.EnemyTrackerFrame:UpdateBars()
                 end
             end
             
+            -- Update debuff display
+            -- Hide all debuff frames first
+            for _, debuffFrame in ipairs(bar.DebuffFrames) do
+                debuffFrame:Hide()
+            end
+            
+            -- Get auras from Battlefield
+            local auras = nil
+            if SYN.Battlefield and SYN.Battlefield.GetUnitAuras then
+                auras = SYN.Battlefield:GetUnitAuras(unitInfo.guid)
+            end
+            
+            if auras then
+                local debuffIndex = 1
+                local debuffSpacing = 18 -- Icon width + spacing
+                
+                -- Sort debuffs by remaining time (shortest first)
+                local sortedDebuffs = {}
+                for spellID, auraData in pairs(auras) do
+                    table.insert(sortedDebuffs, auraData)
+                end
+                table.sort(sortedDebuffs, function(a, b)
+                    return a.expirationTime < b.expirationTime
+                end)
+                
+                -- Display debuffs on left edge
+                for _, auraData in ipairs(sortedDebuffs) do
+                    local debuffFrame = GetDebuffFrame(bar, debuffIndex)
+                    
+                    -- Set icon
+                    debuffFrame.Icon:SetTexture(auraData.icon)
+                    
+                    -- Set stack count
+                    if auraData.count and auraData.count > 1 then
+                        debuffFrame.Count:SetText(auraData.count)
+                        debuffFrame.Count:Show()
+                    else
+                        debuffFrame.Count:Hide()
+                    end
+                    
+                    -- Set remaining duration
+                    if auraData.duration and auraData.duration > 0 then
+                        local remaining = auraData.expirationTime - GetTime()
+                        if remaining > 0 then
+                            if remaining >= 60 then
+                                -- Show minutes for long durations
+                                debuffFrame.Duration:SetText(
+                                    string.format("%dm", math.floor(remaining / 60))
+                                )
+                            elseif remaining >= 10 then
+                                -- Show seconds without decimal for medium durations
+                                debuffFrame.Duration:SetText(
+                                    string.format("%d", math.floor(remaining))
+                                )
+                            else
+                                -- Show with decimal for short durations
+                                debuffFrame.Duration:SetText(
+                                    string.format("%.1f", remaining)
+                                )
+                            end
+                            debuffFrame.Duration:Show()
+                        else
+                            debuffFrame.Duration:Hide()
+                        end
+                    else
+                        debuffFrame.Duration:Hide()
+                    end
+                    
+                    -- Position on left edge of health bar
+                    debuffFrame:ClearAllPoints()
+                    debuffFrame:SetPoint("RIGHT", bar, "LEFT", 
+                                         -(debuffIndex - 1) * debuffSpacing - 2, 0)
+                    
+                    debuffFrame:Show()
+                    debuffIndex = debuffIndex + 1
+                end
+            end
+            
             bar:Show()
         end
     else
@@ -424,6 +545,11 @@ function SYN.EnemyTrackerFrame:Reset()
             bar.CastBar:Hide()
             if bar.CastBar.TargetFrame then
                 bar.CastBar.TargetFrame:Hide()
+            end
+        end
+        if bar.DebuffFrames then
+            for _, debuffFrame in ipairs(bar.DebuffFrames) do
+                debuffFrame:Hide()
             end
         end
     end
