@@ -38,7 +38,6 @@ GUI\IconFrames.lua
 GUI\TimelineBar.lua
 GUI\Nameplates.lua
 GUI\EnemyTracker.lua
-GUI\CombatUI.lua
 
 # ============================================
 # GAME STATE SYSTEMS

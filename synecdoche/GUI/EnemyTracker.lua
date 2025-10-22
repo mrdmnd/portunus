@@ -11,6 +11,8 @@ local math = math
 local GetTime = GetTime
 local UnitExists = UnitExists
 local UnitGUID = UnitGUID
+local UnitName = UnitName
+local IsInRaid = IsInRaid
 
 --- ================= ENEMY TRACKER =================
 -- Displays all enemies in combat with the party as health bars
@@ -102,6 +104,32 @@ local function CreateEnemyHealthBar(parent)
     bar.CastBar.TimeText:SetTextColor(1, 1, 1, 1)
     bar.CastBar.TimeText:SetFont(font, 9, "OUTLINE")
     
+    -- Target indicator (shows who the spell is targeting)
+    bar.CastBar.TargetFrame = CreateFrame("Frame", nil, bar.CastBar)
+    bar.CastBar.TargetFrame:SetSize(80, 18)
+    bar.CastBar.TargetFrame:SetPoint("LEFT", bar.CastBar, "RIGHT", 2, 0)
+    bar.CastBar.TargetFrame:SetFrameLevel(bar.CastBar:GetFrameLevel())
+    
+    -- Target frame background
+    bar.CastBar.TargetFrame.Bg = bar.CastBar.TargetFrame:CreateTexture(nil, 
+                                                                "BACKGROUND")
+    bar.CastBar.TargetFrame.Bg:SetAllPoints(bar.CastBar.TargetFrame)
+    bar.CastBar.TargetFrame.Bg:SetColorTexture(0.1, 0.1, 0.1, 0.8)
+    
+    -- Target frame border
+    SYN.CreateBackdrop(bar.CastBar.TargetFrame)
+    bar.CastBar.TargetFrame.Backdrop:SetBackdropBorderColor(0.3, 0.3, 0.3, 1.0)
+    
+    -- Target name text
+    bar.CastBar.TargetFrame.Text = bar.CastBar.TargetFrame:CreateFontString(
+                                        nil, "OVERLAY", "GameFontHighlight")
+    bar.CastBar.TargetFrame.Text:SetPoint("CENTER", bar.CastBar.TargetFrame, 
+                                           "CENTER", 0, 0)
+    bar.CastBar.TargetFrame.Text:SetJustifyH("CENTER")
+    bar.CastBar.TargetFrame.Text:SetTextColor(1, 1, 0.5, 1)
+    bar.CastBar.TargetFrame.Text:SetFont(font, 9, "OUTLINE")
+    
+    bar.CastBar.TargetFrame:Hide()
     bar.CastBar:Hide()
     
     bar.guid = nil
@@ -173,6 +201,9 @@ function SYN.EnemyTrackerFrame:UpdateBars()
         bar:Hide()
         if bar.CastBar then
             bar.CastBar:Hide()
+            if bar.CastBar.TargetFrame then
+                bar.CastBar.TargetFrame:Hide()
+            end
         end
     end
     
@@ -314,9 +345,64 @@ function SYN.EnemyTrackerFrame:UpdateBars()
                     bar.CastBar.TimeText:SetText("0.0")
                 end
                 
+                -- Update target indicator if there's a target
+                if castInfo.targetGUID then
+                    local targetName = nil
+                    
+                    -- Try to get target name from combat units
+                    local targetUnit = combatUnits[castInfo.targetGUID]
+                    if targetUnit then
+                        targetName = targetUnit.name
+                    else
+                        -- Try to get from player/party/raid
+                        if UnitExists("player") and 
+                           UnitGUID("player") == castInfo.targetGUID then
+                            targetName = UnitName("player")
+                        else
+                            -- Check party members
+                            for i = 1, 4 do
+                                local unit = "party" .. i
+                                if UnitExists(unit) and 
+                                   UnitGUID(unit) == castInfo.targetGUID then
+                                    targetName = UnitName(unit)
+                                    break
+                                end
+                            end
+                            
+                            -- Check raid members if in raid
+                            if not targetName and IsInRaid() then
+                                for i = 1, 40 do
+                                    local unit = "raid" .. i
+                                    if UnitExists(unit) and 
+                                       UnitGUID(unit) == castInfo.targetGUID then
+                                        targetName = UnitName(unit)
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    
+                    if targetName then
+                        -- Truncate if needed
+                        if #targetName > 10 then
+                            targetName = targetName:sub(1, 8) .. ".."
+                        end
+                        bar.CastBar.TargetFrame.Text:SetText("→ " .. targetName)
+                        bar.CastBar.TargetFrame:Show()
+                    else
+                        bar.CastBar.TargetFrame:Hide()
+                    end
+                else
+                    bar.CastBar.TargetFrame:Hide()
+                end
+                
                 bar.CastBar:Show()
             else
                 bar.CastBar:Hide()
+                if bar.CastBar.TargetFrame then
+                    bar.CastBar.TargetFrame:Hide()
+                end
             end
             
             bar:Show()
@@ -336,6 +422,9 @@ function SYN.EnemyTrackerFrame:Reset()
         bar.guid = nil
         if bar.CastBar then
             bar.CastBar:Hide()
+            if bar.CastBar.TargetFrame then
+                bar.CastBar.TargetFrame:Hide()
+            end
         end
     end
     for k in pairs(self.ActiveBars) do
