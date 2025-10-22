@@ -19,6 +19,7 @@ Utils.lua
 
 # Timeline
 Timeline.lua
+VoiceAnnouncer.lua
 
 # GUI
 GUI\Panels.lua

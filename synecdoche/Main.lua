@@ -86,6 +86,12 @@ SYN.MainFrame:SetScript("OnEvent", function (self, Event, Arg1)
                 print("Synecdoche Timeline initialized")
             end
             
+            -- Initialize Voice Announcer
+            if SYN.VoiceAnnouncer and SYN.VoiceAnnouncer.Init then
+                SYN.VoiceAnnouncer:Init()
+                print("Synecdoche Voice Announcer initialized")
+            end
+            
             -- Initialize spec engine
             SYN.InitializeSpecEngine()
             
