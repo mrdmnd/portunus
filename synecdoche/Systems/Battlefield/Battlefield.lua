@@ -33,9 +33,14 @@ local Nameplates = {}           -- [unitToken] = { guid, name, lastSeen,
 local CombatUnits = {}          -- [guid] = { name, inCombat, lastSeen, 
                                 --            health, healthMax, 
                                 --            threatStatus, isDead,
-                                --            minRange, maxRange }
+                                --            minRange, maxRange,
+                                --            castInfo }
 local NameplateToUnit = {}      -- [unitToken] = guid
 local UnitToNameplate = {}      -- [guid] = unitToken
+local UnitCasts = {}            -- [guid] = { spellID, spellName, 
+                                --            startTime, endTime, 
+                                --            isChanneled, notInterruptible,
+                                --            targetGUID }
 
 -- Event frame
 local EventFrame = nil
@@ -94,6 +99,61 @@ local function IsEnemyUnit(unitToken)
         return false
     end
     return UnitIsEnemy("player", unitToken)
+end
+
+-- Get cast info for a unit
+local function GetUnitCastInfo(unitToken)
+    if not unitToken or not UnitExists(unitToken) then
+        return nil
+    end
+    
+    -- Check for regular cast
+    local name, text, texture, startTimeMS, endTimeMS, isTradeSkill, 
+          castID, notInterruptible = UnitCastingInfo(unitToken)
+    
+    if name then
+        -- Get spell ID from the cast (need to use tooltip or other method)
+        -- For now, we'll use the castID as identifier
+        local targetGUID = nil
+        local targetUnit = unitToken .. "target"
+        if UnitExists(targetUnit) then
+            targetGUID = UnitGUID(targetUnit)
+        end
+        
+        return {
+            spellName = name,
+            spellID = castID,
+            startTime = startTimeMS / 1000, -- Convert to seconds
+            endTime = endTimeMS / 1000,     -- Convert to seconds
+            isChanneled = false,
+            notInterruptible = notInterruptible,
+            targetGUID = targetGUID
+        }
+    end
+    
+    -- Check for channel
+    name, text, texture, startTimeMS, endTimeMS, isTradeSkill, 
+    notInterruptible = UnitChannelInfo(unitToken)
+    
+    if name then
+        local targetGUID = nil
+        local targetUnit = unitToken .. "target"
+        if UnitExists(targetUnit) then
+            targetGUID = UnitGUID(targetUnit)
+        end
+        
+        return {
+            spellName = name,
+            spellID = nil, -- Channels don't have castID in the same way
+            startTime = startTimeMS / 1000,
+            endTime = endTimeMS / 1000,
+            isChanneled = true,
+            notInterruptible = notInterruptible,
+            targetGUID = targetGUID
+        }
+    end
+    
+    return nil
 end
 
 --- ================= NAMEPLATE TRACKING =================
@@ -162,6 +222,12 @@ function Battlefield:UpdateCombatUnit(unitInfo)
         return
     end
     
+    -- Get existing cast info if it exists
+    local existingCast = nil
+    if CombatUnits[unitInfo.guid] then
+        existingCast = CombatUnits[unitInfo.guid].castInfo
+    end
+    
     -- Store or update combat unit
     CombatUnits[unitInfo.guid] = {
         name = unitInfo.name,
@@ -172,8 +238,35 @@ function Battlefield:UpdateCombatUnit(unitInfo)
         threatStatus = unitInfo.threatStatus,
         minRange = unitInfo.minRange,
         maxRange = unitInfo.maxRange,
-        lastSeen = unitInfo.lastSeen
+        lastSeen = unitInfo.lastSeen,
+        castInfo = existingCast -- Preserve cast info
     }
+end
+
+-- Update cast info for a unit
+function Battlefield:UpdateUnitCast(guid, castInfo)
+    if not guid then
+        return
+    end
+    
+    local unit = CombatUnits[guid]
+    if unit then
+        unit.castInfo = castInfo
+        UnitCasts[guid] = castInfo
+    end
+end
+
+-- Clear cast info for a unit
+function Battlefield:ClearUnitCast(guid)
+    if not guid then
+        return
+    end
+    
+    local unit = CombatUnits[guid]
+    if unit then
+        unit.castInfo = nil
+    end
+    UnitCasts[guid] = nil
 end
 
 -- Mark a unit as dead
@@ -273,6 +366,14 @@ function Battlefield:PulseUpdate()
                 -- Update combat unit if in combat
                 if unitInfo.inCombat then
                     self:UpdateCombatUnit(unitInfo)
+                    
+                    -- Update cast info
+                    local castInfo = GetUnitCastInfo(unitToken)
+                    if castInfo then
+                        self:UpdateUnitCast(unitInfo.guid, castInfo)
+                    else
+                        self:ClearUnitCast(unitInfo.guid)
+                    end
                 end
             end
         else
@@ -344,6 +445,36 @@ local function OnCombatLogEvent(self, event, ...)
                 unit.inCombat = true
             end
         end
+    end
+end
+
+-- Handle spell cast start/channel events
+local function OnUnitSpellCast(self, event, unitToken)
+    if not unitToken or not UnitExists(unitToken) then
+        return
+    end
+    
+    -- Only track enemy units
+    if not IsEnemyUnit(unitToken) then
+        return
+    end
+    
+    local guid = SafeGetUnitGUID(unitToken)
+    if not guid then
+        return
+    end
+    
+    -- Update cast info for this unit
+    if event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_CHANNEL_START" then
+        local castInfo = GetUnitCastInfo(unitToken)
+        if castInfo then
+            Battlefield:UpdateUnitCast(guid, castInfo)
+        end
+    elseif event == "UNIT_SPELLCAST_STOP" or 
+           event == "UNIT_SPELLCAST_CHANNEL_STOP" or
+           event == "UNIT_SPELLCAST_INTERRUPTED" or
+           event == "UNIT_SPELLCAST_FAILED" then
+        Battlefield:ClearUnitCast(guid)
     end
 end
 
@@ -447,6 +578,29 @@ function Battlefield:IsUnitBeyondRange(guid, range)
     return false
 end
 
+-- Get cast info for a specific unit GUID
+function Battlefield:GetUnitCastInfo(guid)
+    local unit = CombatUnits[guid]
+    if unit then
+        return unit.castInfo
+    end
+    return nil
+end
+
+-- Get all units that are currently casting
+function Battlefield:GetCastingUnits()
+    local castingUnits = {}
+    for guid, unitData in pairs(CombatUnits) do
+        if not unitData.isDead and unitData.castInfo then
+            castingUnits[guid] = {
+                unitData = unitData,
+                castInfo = unitData.castInfo
+            }
+        end
+    end
+    return castingUnits
+end
+
 -- Get detailed info for debugging
 function Battlefield:GetDebugInfo()
     local info = {
@@ -497,6 +651,14 @@ function Battlefield:Init()
     EventFrame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
     EventFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     
+    -- Register cast events (using RegisterUnitEvent for performance)
+    EventFrame:RegisterEvent("UNIT_SPELLCAST_START")
+    EventFrame:RegisterEvent("UNIT_SPELLCAST_STOP")
+    EventFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
+    EventFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
+    EventFrame:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED")
+    EventFrame:RegisterEvent("UNIT_SPELLCAST_FAILED")
+    
     -- Set event handler
     EventFrame:SetScript("OnEvent", function(self, event, ...)
         if event == "NAME_PLATE_UNIT_ADDED" then
@@ -505,6 +667,13 @@ function Battlefield:Init()
             OnNamePlateRemoved(self, event, ...)
         elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
             OnCombatLogEvent(self, event, ...)
+        elseif event == "UNIT_SPELLCAST_START" or
+               event == "UNIT_SPELLCAST_STOP" or
+               event == "UNIT_SPELLCAST_CHANNEL_START" or
+               event == "UNIT_SPELLCAST_CHANNEL_STOP" or
+               event == "UNIT_SPELLCAST_INTERRUPTED" or
+               event == "UNIT_SPELLCAST_FAILED" then
+            OnUnitSpellCast(self, event, ...)
         end
     end)
     

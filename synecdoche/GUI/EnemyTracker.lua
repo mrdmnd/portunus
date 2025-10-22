@@ -6,6 +6,11 @@ local addonName, SYN = ...
 local pairs = pairs
 local ipairs = ipairs
 local tostring = tostring
+local math = math
+-- WoW API
+local GetTime = GetTime
+local UnitExists = UnitExists
+local UnitGUID = UnitGUID
 
 --- ================= ENEMY TRACKER =================
 -- Displays all enemies in combat with the party as health bars
@@ -59,6 +64,45 @@ local function CreateEnemyHealthBar(parent)
     bar.Highlight.Backdrop:SetBackdropBorderColor(1, 1, 1, 1.0)
     bar.Highlight.Backdrop:SetBackdropColor(0, 0, 0, 0) -- Transparent center
     bar.Highlight:Hide()
+    
+    -- Cast bar (initially hidden)
+    bar.CastBar = CreateFrame("Frame", nil, bar)
+    bar.CastBar:SetSize(120, 18)
+    bar.CastBar:SetPoint("LEFT", bar, "RIGHT", 2, 0)
+    bar.CastBar:SetFrameLevel(bar:GetFrameLevel())
+    
+    -- Cast bar background
+    bar.CastBar.Bg = bar.CastBar:CreateTexture(nil, "BACKGROUND")
+    bar.CastBar.Bg:SetAllPoints(bar.CastBar)
+    bar.CastBar.Bg:SetColorTexture(0.1, 0.1, 0.1, 0.8)
+    
+    -- Cast bar progress
+    bar.CastBar.Progress = bar.CastBar:CreateTexture(nil, "ARTWORK")
+    bar.CastBar.Progress:SetPoint("LEFT", bar.CastBar, "LEFT", 0, 0)
+    bar.CastBar.Progress:SetHeight(12)
+    bar.CastBar.Progress:SetColorTexture(1.0, 0.7, 0.0, 0.9)
+    
+    -- Cast bar border
+    SYN.CreateBackdrop(bar.CastBar)
+    bar.CastBar.Backdrop:SetBackdropBorderColor(0.3, 0.3, 0.3, 1.0)
+    
+    -- Cast bar text (spell name)
+    bar.CastBar.Text = bar.CastBar:CreateFontString(nil, "OVERLAY", 
+                                                     "GameFontHighlight")
+    bar.CastBar.Text:SetPoint("LEFT", bar.CastBar, "LEFT", 3, 0)
+    bar.CastBar.Text:SetJustifyH("LEFT")
+    bar.CastBar.Text:SetTextColor(1, 1, 1, 1)
+    bar.CastBar.Text:SetFont(font, 9, "OUTLINE")
+    
+    -- Cast bar time remaining text
+    bar.CastBar.TimeText = bar.CastBar:CreateFontString(nil, "OVERLAY", 
+                                                        "GameFontHighlight")
+    bar.CastBar.TimeText:SetPoint("RIGHT", bar.CastBar, "RIGHT", -3, 0)
+    bar.CastBar.TimeText:SetJustifyH("RIGHT")
+    bar.CastBar.TimeText:SetTextColor(1, 1, 1, 1)
+    bar.CastBar.TimeText:SetFont(font, 9, "OUTLINE")
+    
+    bar.CastBar:Hide()
     
     bar.guid = nil
     bar:Hide()
@@ -127,6 +171,9 @@ function SYN.EnemyTrackerFrame:UpdateBars()
     for i, bar in ipairs(self.HealthBars) do
         bar.guid = nil
         bar:Hide()
+        if bar.CastBar then
+            bar.CastBar:Hide()
+        end
     end
     
     -- Build sorted list of combat units
@@ -138,6 +185,7 @@ function SYN.EnemyTrackerFrame:UpdateBars()
                 name = unitData.name,
                 health = unitData.health,
                 healthMax = unitData.healthMax,
+                castInfo = unitData.castInfo,
             })
         end
     end
@@ -220,6 +268,57 @@ function SYN.EnemyTrackerFrame:UpdateBars()
                 bar.Highlight:Hide()
             end
             
+            -- Update cast bar if unit is casting
+            if unitInfo.castInfo then
+                local castInfo = unitInfo.castInfo
+                local currentTime = GetTime()
+                local remaining = castInfo.endTime - currentTime
+                local duration = castInfo.endTime - castInfo.startTime
+                
+                -- Calculate progress
+                local progress = 0
+                if castInfo.isChanneled then
+                    -- For channels, progress goes from full to empty
+                    progress = remaining / duration
+                else
+                    -- For casts, progress goes from empty to full
+                    progress = 1 - (remaining / duration)
+                end
+                progress = math.max(0, math.min(1, progress))
+                
+                -- Update cast bar progress
+                bar.CastBar.Progress:SetWidth(bar.CastBar:GetWidth() * progress)
+                
+                -- Color based on interruptible status
+                if castInfo.notInterruptible then
+                    -- Gray/silver for non-interruptible
+                    bar.CastBar.Progress:SetColorTexture(0.5, 0.5, 0.5, 0.9)
+                    bar.CastBar.Backdrop:SetBackdropBorderColor(0.5, 0.5, 0.5, 1.0)
+                else
+                    -- Orange for interruptible
+                    bar.CastBar.Progress:SetColorTexture(1.0, 0.7, 0.0, 0.9)
+                    bar.CastBar.Backdrop:SetBackdropBorderColor(1.0, 0.7, 0.0, 1.0)
+                end
+                
+                -- Update spell name (truncate if needed)
+                local spellName = castInfo.spellName or "Unknown"
+                if #spellName > 14 then
+                    spellName = spellName:sub(1, 12) .. ".."
+                end
+                bar.CastBar.Text:SetText(spellName)
+                
+                -- Update time remaining
+                if remaining > 0 then
+                    bar.CastBar.TimeText:SetText(string.format("%.1f", remaining))
+                else
+                    bar.CastBar.TimeText:SetText("0.0")
+                end
+                
+                bar.CastBar:Show()
+            else
+                bar.CastBar:Hide()
+            end
+            
             bar:Show()
         end
     else
@@ -235,6 +334,9 @@ function SYN.EnemyTrackerFrame:Reset()
     for i, bar in ipairs(self.HealthBars) do
         bar:Hide()
         bar.guid = nil
+        if bar.CastBar then
+            bar.CastBar:Hide()
+        end
     end
     for k in pairs(self.ActiveBars) do
         self.ActiveBars[k] = nil
