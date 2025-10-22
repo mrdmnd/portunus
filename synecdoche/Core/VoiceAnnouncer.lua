@@ -229,62 +229,12 @@ function VoiceAnnouncer:Announce(text)
     speak(text)
 end
 
---- ============ DEBUG / COMMANDS ============
-SLASH_SYNVOICE1 = "/synvoice"
-SLASH_SYNVOICE2 = "/syntts"
-SlashCmdList["SYNVOICE"] = function(msg)
-    local text = msg or ""
-    local args = {}
-    for token in string.gmatch(text, "%S+") do args[#args + 1] = token end
-    local cmd = args[1] and string.lower(args[1]) or "status"
-    
-    if cmd == "enable" or cmd == "on" then
-        VoiceAnnouncer:Enable()
-        print("Voice Announcer: ENABLED")
-        return
-    end
-    
-    if cmd == "disable" or cmd == "off" then
-        VoiceAnnouncer:Disable()
-        print("Voice Announcer: DISABLED")
-        return
-    end
-    
-    if cmd == "test" then
-        local testText = table.concat(args, " ", 2)
-        if testText == "" then testText = "Test" end
-        VoiceAnnouncer:Announce(testText)
-        return
-    end
-    
-    if cmd == "category" then
-        -- Usage: /synvoice category defensive off
-        if #args < 3 then
-            print("Usage: /synvoice category <name> <on|off>")
-            return
-        end
-        local cat = args[2]
-        local enabled = string.lower(args[3]) == "on"
-        VoiceAnnouncer:SetCategoryEnabled(cat, enabled)
-        print(string.format("Category '%s': %s", cat, enabled and "ENABLED" or "DISABLED"))
-        return
-    end
-    
-    -- Default: status
-    print("Voice Announcer Status:")
-    print("  Enabled: " .. tostring(CONFIG.enabled))
-    print("  Countdown steps: " .. table.concat(CONFIG.countdownSteps, ", "))
-    print("  Min time between speech: " .. tostring(CONFIG.minTimeBetweenSpeech) .. "s")
-    print("  Speech rate: " .. tostring(CONFIG.rate) .. "x")
-    print("  Volume: " .. tostring(CONFIG.volume))
-    print("  Categories:")
-    for cat, enabled in pairs(CONFIG.announcedCategories) do
-        print(string.format("    %s: %s", cat, enabled and "ON" or "OFF"))
-    end
-    print("Commands:")
-    print("  /synvoice enable|disable")
-    print("  /synvoice test [message]")
-    print("  /synvoice category <name> on|off")
-    print("Note: Keep announcements SHORT - WoW TTS queue is unreliable")
+-- Get current configuration (for slash commands)
+function VoiceAnnouncer:GetConfig()
+    return CONFIG
 end
+
+--- ============ NOTE ============
+-- Voice commands have been moved to Commands.lua
+-- Use: /syn voice <action> <args>
 

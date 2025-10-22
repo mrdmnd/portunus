@@ -14,33 +14,43 @@
 libs/libs.xml
 #@end-no-lib-strip@
 
-# Util
+# ============================================
+# UTILITIES
+# ============================================
 Utils.lua
+Debug.lua
+Commands.lua
 
-# Timeline
-Timeline.lua
-VoiceAnnouncer.lua
+# ============================================
+# CORE SYSTEMS
+# ============================================
+Core\Timeline.lua
+Core\VoiceAnnouncer.lua
+Core\StateCache.lua
 
-# GUI
+# ============================================
+# GUI MODULES
+# ============================================
 GUI\Panels.lua
 GUI\CombatUI.xml
+GUI\UIHelpers.lua
+GUI\IconFrames.lua
+GUI\TimelineBar.lua
+GUI\Nameplates.lua
+GUI\EnemyTracker.lua
 GUI\CombatUI.lua
 
-# API
-# Settings.lua
-Core.lua
-StateCache.lua
+# ============================================
+# GAME STATE SYSTEMS
+# ============================================
+Systems\Battlefield\Battlefield.lua
 
-# Classes / Objects
-Battlefield\Battlefield.lua
+# ============================================
+# SPEC ENGINES
+# ============================================
+Engines\Shaman\Elemental.lua
 
-# Events
-# ...
-
-# Misc
-# ...
-
-# Spec Engines
-Shaman\Elemental.lua
-
+# ============================================
+# MAIN
+# ============================================
 Main.lua

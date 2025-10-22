@@ -18,3 +18,5 @@ local GUI = SYN.GUI
 -- Addon
 
 --- ================ CONTENTS ================
+-- Eventually, this will be the addon settings control panel.
+-- Right now it's just a placeholder.

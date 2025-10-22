@@ -56,7 +56,7 @@ local isVisible = SYN.Battlefield:IsUnitVisible(guid)
 local minRange, maxRange = SYN.Battlefield:GetUnitRange(guid)
 
 -- Get all units within a specific range (definitely within)
-local closeUnits = SYN.Battlefield:GetUnitsWithinRange(40)
+local closeUnits = SYN.Battlefield:GetUnitsWithinRange(10)
 
 -- Get all units beyond a specific range (definitely beyond)
 local farUnits = SYN.Battlefield:GetUnitsBeyondRange(40)
