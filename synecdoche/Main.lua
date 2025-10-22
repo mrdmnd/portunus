@@ -55,6 +55,7 @@ SYN.MainFrame:SetScript("OnEvent", function (self, Event, Arg1)
         SYN.SmallBottomLeftFrame:Init()
         SYN.SmallBottomRightFrame:Init()
         SYN.TimelineBarFrame:Init()
+        SYN.EnemyTrackerFrame:Init()
 
         UIFrames = {
             SYN.MainFrame,
@@ -169,6 +170,16 @@ function SYN.StartUpdateTicker()
             SYN.Battlefield:Update()
         end
         
+        -- Update Timeline Bar
+        if SYN.TimelineBarFrame and SYN.TimelineBarFrame.UpdateIcons then
+            SYN.TimelineBarFrame:UpdateIcons()
+        end
+        
+        -- Update Enemy Tracker
+        if SYN.EnemyTrackerFrame and SYN.EnemyTrackerFrame.UpdateBars then
+            SYN.EnemyTrackerFrame:UpdateBars()
+        end
+        
         -- Update current spec engine
         if CurrentEngine and CurrentEngine.Update then
             CurrentEngine:Update()
@@ -262,6 +273,16 @@ SlashCmdList["SYNECDOCHE"] = function(msg)
     elseif msg == "test" then
         SYN.ShowAllFramesWithPlaceholders()
         
+    elseif msg == "enemytracker" or msg == "et" then
+        -- Force update enemy tracker
+        if SYN.EnemyTrackerFrame and SYN.EnemyTrackerFrame.UpdateBars then
+            SYN.EnemyTrackerFrame:UpdateBars()
+            print("Enemy tracker updated")
+            print("Note: Enemy tracker shows enemies your party is in combat with")
+        else
+            print("Enemy tracker not initialized")
+        end
+        
     elseif msg == "reload" then
         SYN.InitializeSpecEngine()
         print("Spec engine reloaded")
@@ -269,6 +290,7 @@ SlashCmdList["SYNECDOCHE"] = function(msg)
     elseif msg == "help" or msg == "" then
         print("=== Synecdoche Commands ===")
         print("/syn battlefield (or /syn bf) - Show battlefield state")
+        print("/syn enemytracker (or /syn et) - Force update enemy tracker")
         print("/syn test - Show test frames")
         print("/syn reload - Reload spec engine")
         print("/syn help - Show this help")

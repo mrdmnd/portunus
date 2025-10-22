@@ -23,7 +23,7 @@ do
     local UnitGUIDMap = {}
     SYN.UnitGUIDMap = UnitGUIDMap
     function Unit:RemoveUnitGUIDMapEntry()
-        if UnitGUIDMap[self.UnitGUID] nd UnitGUIDMap[self.UnitGUID][self.UnitID] then
+        if UnitGUIDMap[self.UnitGUID] and UnitGUIDMap[self.UnitGUID][self.UnitID] then
             UnitGUIDMap[self.UnitGUID][self.UnitID] = nil;
             if next(UnitGUIDMap[self.UnitGUID]) == nil then
                 UnitGUIDMap[self.UnitGUID] = nil;
