@@ -92,6 +92,12 @@ SYN.MainFrame:SetScript("OnEvent", function (self, Event, Arg1)
                 print("Synecdoche Voice Announcer initialized")
             end
             
+            -- Initialize Battlefield state tracker
+            if SYN.Battlefield and SYN.Battlefield.Init then
+                SYN.Battlefield:Init()
+                print("Synecdoche Battlefield tracker initialized")
+            end
+            
             -- Initialize Nameplate Frames
             if SYN.Nameplates and SYN.Nameplates.Init then
                 SYN.Nameplates:Init()
@@ -158,6 +164,12 @@ function SYN.StartUpdateTicker()
     end
     
     UpdateTicker = C_Timer.NewTicker(0.03, function() -- 30ms = 0.03 seconds
+        -- Update Battlefield state tracker
+        if SYN.Battlefield and SYN.Battlefield.Update then
+            SYN.Battlefield:Update()
+        end
+        
+        -- Update current spec engine
         if CurrentEngine and CurrentEngine.Update then
             CurrentEngine:Update()
         end
@@ -193,5 +205,63 @@ function SYN.ShowAllFramesWithPlaceholders()
     if SYN.Nameplates and SYN.Nameplates.UpdateFrames then
         SYN.Nameplates:UpdateFrames()
         print("Nameplate frames updated - hover over enemies to see mouseover highlighting")
+    end
+end
+
+--- ================= SLASH COMMANDS =================
+
+SLASH_SYNECDOCHE1 = "/syn"
+SLASH_SYNECDOCHE2 = "/synecdoche"
+
+SlashCmdList["SYNECDOCHE"] = function(msg)
+    msg = msg:lower():match("^%s*(.-)%s*$") -- Trim whitespace (Lua 5.1 compatible)
+    
+    if msg == "battlefield" or msg == "bf" then
+        -- Show battlefield state
+        if SYN.Battlefield then
+            local debugInfo = SYN.Battlefield:GetDebugInfo()
+            print("=== Battlefield State ===")
+            print(string.format("Visible Nameplates: %d", debugInfo.nameplateCount))
+            print(string.format("Combat Units: %d", debugInfo.combatUnitCount))
+            
+            if debugInfo.nameplateCount > 0 then
+                print("\nNameplates:")
+                for unitToken, data in pairs(debugInfo.nameplates) do
+                    print(string.format("  %s: %s (%.1fs ago)", 
+                        unitToken, data.name, data.age))
+                end
+            end
+            
+            if debugInfo.combatUnitCount > 0 then
+                print("\nCombat Units:")
+                for guid, data in pairs(debugInfo.combatUnits) do
+                    local visFlag = data.hasNameplate and "[VISIBLE]" or "[OFF-SCREEN]"
+                    local deadFlag = data.isDead and "[DEAD]" or ""
+                    local combatFlag = data.inCombat and "[COMBAT]" or ""
+                    print(string.format("  %s: %s/%s HP %s %s %s (%.1fs ago)",
+                        data.name, data.health, data.healthMax,
+                        visFlag, combatFlag, deadFlag, data.age))
+                end
+            end
+        else
+            print("Battlefield module not loaded")
+        end
+        
+    elseif msg == "test" then
+        SYN.ShowAllFramesWithPlaceholders()
+        
+    elseif msg == "reload" then
+        SYN.InitializeSpecEngine()
+        print("Spec engine reloaded")
+        
+    elseif msg == "help" or msg == "" then
+        print("=== Synecdoche Commands ===")
+        print("/syn battlefield (or /syn bf) - Show battlefield state")
+        print("/syn test - Show test frames")
+        print("/syn reload - Reload spec engine")
+        print("/syn help - Show this help")
+        
+    else
+        print("Unknown command. Type '/syn help' for available commands.")
     end
 end
