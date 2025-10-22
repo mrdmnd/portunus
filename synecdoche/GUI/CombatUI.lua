@@ -581,27 +581,127 @@ end
 
 --- ================ NAMEPLATES ==================
 SYN.Nameplates = {
-    MainInitialized = false,
-    SuggestedInitialized = false,
+    Frames = {},
+    ActiveFrames = {},
+    UpdateFrame = nil,
+    MouseoverUnit = nil,
 }
 
--- function SYN.Nameplate.AddIcon(Unit, Object)
---     local Token = stringlower(Unit.UnitID)
---     if not Token then return false end
---     local Nameplate = C_NamePlate.GetNamePlateForUnit(Token)
---     if not Nameplate then return false end
---     -- Scale things to screen, basically
---     local ScreenHeight = GetScreenHeight()
---     local NameplateScaler = (ScreenHeight > 768) and (768 / ScreenHeight) or 1
---     local NameplateIconSize = Nameplate:GetHeight() / NameplateScaler
---     local HealthBar = Nameplate.UnitFrame.healthBar
---     NameplateIconSize = (HealthBar:GetWidth() / NameplateScaler)
+-- Create a frame for a nameplate
+function SYN.Nameplates:CreateFrame()
+    local frame = CreateFrame("Frame", nil, UIParent)
+    frame:SetSize(40, 40)
+    frame:SetFrameStrata("HIGH")
+    frame:SetFrameLevel(100)
+    
+    -- Create the main texture
+    frame.Texture = frame:CreateTexture(nil, "ARTWORK")
+    frame.Texture:SetAllPoints(frame)
+    frame.Texture:SetColorTexture(0.2, 0.6, 1.0, 0.3)
+    
+    -- Create backdrop/border
+    SYN.CreateBackdrop(frame)
+    frame.Backdrop:SetBackdropBorderColor(0.2, 0.6, 1.0, 0.5)
+    
+    frame:Hide()
+    return frame
+end
 
---     local IconFrame = SYN.NameplateIconFrame1
---     --- got bored, come back to line 560 on UI.lua on hr
--- end
+-- Get or create a frame from the pool
+function SYN.Nameplates:GetFrame()
+    for i, frame in pairs(self.Frames) do
+        if not frame:IsShown() then
+            return frame
+        end
+    end
+    
+    -- Create new frame if none available
+    local frame = self:CreateFrame()
+    table.insert(self.Frames, frame)
+    return frame
+end
 
--- function SYN.Nameplate.HideIcons()
---     SYN.NameplateIconFrame:Hide()
---     SYN.NameplateSuggestedIconFrame:Hide()
--- end
+-- Update nameplate frame positions and visibility
+function SYN.Nameplates:UpdateFrames()
+    -- Clear active frames tracking
+    for k in pairs(self.ActiveFrames) do
+        self.ActiveFrames[k] = nil
+    end
+    
+    -- Get all visible nameplates
+    local nameplates = C_NamePlate.GetNamePlates()
+    
+    for _, nameplate in pairs(nameplates) do
+        local unit = nameplate.namePlateUnitToken
+        
+        -- Check if unit is an enemy
+        if unit and UnitExists(unit) and 
+           UnitCanAttack("player", unit) and 
+           not UnitIsDead(unit) then
+            
+            -- Get a frame for this nameplate
+            local frame = self:GetFrame()
+            
+            -- Position the frame in the center of the nameplate
+            frame:ClearAllPoints()
+            frame:SetPoint("CENTER", nameplate, "CENTER", 0, 0)
+            
+            -- Check if this unit is the mouseover target
+            local isMouseover = (UnitIsUnit(unit, "mouseover") == true)
+            
+            -- Update border color based on mouseover
+            if isMouseover then
+                frame.Backdrop:SetBackdropBorderColor(1.0, 1.0, 0.0, 1.0)
+                frame.Texture:SetColorTexture(1.0, 1.0, 0.0, 0.5)
+            else
+                frame.Backdrop:SetBackdropBorderColor(0.2, 0.6, 1.0, 0.5)
+                frame.Texture:SetColorTexture(0.2, 0.6, 1.0, 0.3)
+            end
+            
+            frame:Show()
+            self.ActiveFrames[frame] = true
+        end
+    end
+    
+    -- Hide unused frames
+    for _, frame in pairs(self.Frames) do
+        if not self.ActiveFrames[frame] then
+            frame:Hide()
+        end
+    end
+end
+
+-- Initialize the nameplate system
+function SYN.Nameplates:Init()
+    if self.UpdateFrame then
+        return -- Already initialized
+    end
+    
+    -- Create update frame that runs on every frame
+    self.UpdateFrame = CreateFrame("Frame")
+    self.UpdateFrame:SetScript("OnUpdate", function()
+        self:UpdateFrames()
+    end)
+    
+    -- Register for nameplate events
+    self.UpdateFrame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+    self.UpdateFrame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
+    self.UpdateFrame:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
+    
+    self.UpdateFrame:SetScript("OnEvent", function(_, event, ...)
+        if event == "NAME_PLATE_UNIT_ADDED" or 
+           event == "NAME_PLATE_UNIT_REMOVED" or
+           event == "UPDATE_MOUSEOVER_UNIT" then
+            self:UpdateFrames()
+        end
+    end)
+    
+    print("Synecdoche Nameplate Frames initialized")
+end
+
+-- Hide all nameplate frames
+function SYN.Nameplates:HideAll()
+    for _, frame in pairs(self.Frames) do
+        frame:Hide()
+    end
+end

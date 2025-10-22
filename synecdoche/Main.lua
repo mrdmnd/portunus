@@ -92,6 +92,11 @@ SYN.MainFrame:SetScript("OnEvent", function (self, Event, Arg1)
                 print("Synecdoche Voice Announcer initialized")
             end
             
+            -- Initialize Nameplate Frames
+            if SYN.Nameplates and SYN.Nameplates.Init then
+                SYN.Nameplates:Init()
+            end
+            
             -- Initialize spec engine
             SYN.InitializeSpecEngine()
             
@@ -183,4 +188,10 @@ function SYN.ShowAllFramesWithPlaceholders()
     SYN.SmallTopRightFrame:ChangeIcon(7, "Interface\\Icons\\Spell_Holy_Heal", false, false, "Shift+2", "DefCD", false)
     SYN.SmallBottomLeftFrame:ChangeIcon(8, "Interface\\Icons\\Spell_Nature_Lightning", false, false, "Ctrl+1", "PreGCD", false)
     SYN.SmallBottomRightFrame:ChangeIcon(9, "Interface\\Icons\\Spell_Arcane_Arcane01", false, false, "Ctrl+2", "PostGCD", false)
+    
+    -- Force nameplate frames to show (they will automatically track real nameplates)
+    if SYN.Nameplates and SYN.Nameplates.UpdateFrames then
+        SYN.Nameplates:UpdateFrames()
+        print("Nameplate frames updated - hover over enemies to see mouseover highlighting")
+    end
 end
