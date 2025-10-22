@@ -152,24 +152,58 @@ local function GetDebuffFrame(bar, index)
         debuff.Icon:SetAllPoints(debuff)
         debuff.Icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         
+        -- Cooldown frame for swirl animation
+        debuff.Cooldown = CreateFrame("Cooldown", nil, debuff, 
+                                      "CooldownFrameTemplate")
+        debuff.Cooldown:SetAllPoints(debuff.Icon)
+        debuff.Cooldown:SetDrawEdge(false)
+        debuff.Cooldown:SetDrawSwipe(true)
+        debuff.Cooldown:SetReverse(true) -- Count down
+        debuff.Cooldown:SetHideCountdownNumbers(true)
+        
         -- Border
         SYN.CreateBackdrop(debuff)
         debuff.Backdrop:SetBackdropBorderColor(0.8, 0.2, 0.2, 1.0)
         
-        -- Stack count text
+        -- Pandemic glow effect (golden glow)
+        debuff.GlowTexture = debuff:CreateTexture(nil, "OVERLAY")
+        debuff.GlowTexture:SetPoint("CENTER", debuff, "CENTER", 0, 0)
+        debuff.GlowTexture:SetSize(24, 24)
+        debuff.GlowTexture:SetTexture("Interface\\SpellActivationOverlay\\IconAlert")
+        debuff.GlowTexture:SetTexCoord(0.00781250, 0.50781250, 0.27734375, 0.52734375)
+        debuff.GlowTexture:SetBlendMode("ADD")
+        debuff.GlowTexture:SetAlpha(0)
+        debuff.GlowTexture:Hide()
+        
+        -- Glow animation
+        debuff.GlowAnim = debuff.GlowTexture:CreateAnimationGroup()
+        debuff.GlowAnim:SetLooping("REPEAT")
+        local pulse = debuff.GlowAnim:CreateAnimation("Alpha")
+        pulse:SetFromAlpha(0.5)
+        pulse:SetToAlpha(1.0)
+        pulse:SetDuration(0.5)
+        pulse:SetSmoothing("IN_OUT")
+        local pulse2 = debuff.GlowAnim:CreateAnimation("Alpha")
+        pulse2:SetFromAlpha(1.0)
+        pulse2:SetToAlpha(0.5)
+        pulse2:SetDuration(0.5)
+        pulse2:SetSmoothing("IN_OUT")
+        pulse2:SetOrder(2)
+        
+        -- Stack count text (anchored to inner left)
         debuff.Count = debuff:CreateFontString(nil, "OVERLAY", 
                                                "GameFontHighlight")
-        debuff.Count:SetPoint("BOTTOMRIGHT", debuff, "BOTTOMRIGHT", -1, 1)
-        debuff.Count:SetJustifyH("RIGHT")
+        debuff.Count:SetPoint("BOTTOMLEFT", debuff, "BOTTOMLEFT", 1, 1)
+        debuff.Count:SetJustifyH("LEFT")
         debuff.Count:SetTextColor(1, 1, 1, 1)
         local font = SYN.FontSelect(debuff.Count)
         debuff.Count:SetFont(font, 8, "OUTLINE")
         
-        -- Duration text
+        -- Duration text (anchored to inner right)
         debuff.Duration = debuff:CreateFontString(nil, "OVERLAY", 
                                                   "GameFontHighlight")
-        debuff.Duration:SetPoint("CENTER", debuff, "BOTTOM", 0, -8)
-        debuff.Duration:SetJustifyH("CENTER")
+        debuff.Duration:SetPoint("BOTTOMRIGHT", debuff, "BOTTOMRIGHT", -1, 1)
+        debuff.Duration:SetJustifyH("RIGHT")
         debuff.Duration:SetTextColor(1, 1, 0, 1)
         debuff.Duration:SetFont(font, 8, "OUTLINE")
         
@@ -451,6 +485,12 @@ function SYN.EnemyTrackerFrame:UpdateBars()
             -- Update debuff display
             -- Hide all debuff frames first
             for _, debuffFrame in ipairs(bar.DebuffFrames) do
+                if debuffFrame.GlowAnim then
+                    debuffFrame.GlowAnim:Stop()
+                end
+                if debuffFrame.GlowTexture then
+                    debuffFrame.GlowTexture:Hide()
+                end
                 debuffFrame:Hide()
             end
             
@@ -480,7 +520,7 @@ function SYN.EnemyTrackerFrame:UpdateBars()
                     -- Set icon
                     debuffFrame.Icon:SetTexture(auraData.icon)
                     
-                    -- Set stack count
+                    -- Set stack count (show on left side)
                     if auraData.count and auraData.count > 1 then
                         debuffFrame.Count:SetText(auraData.count)
                         debuffFrame.Count:Show()
@@ -488,10 +528,12 @@ function SYN.EnemyTrackerFrame:UpdateBars()
                         debuffFrame.Count:Hide()
                     end
                     
-                    -- Set remaining duration
+                    -- Set remaining duration and cooldown swirl
+                    local remaining = 0
                     if auraData.duration and auraData.duration > 0 then
-                        local remaining = auraData.expirationTime - GetTime()
+                        remaining = auraData.expirationTime - GetTime()
                         if remaining > 0 then
+                            -- Update duration text (show on right side)
                             if remaining >= 60 then
                                 -- Show minutes for long durations
                                 debuffFrame.Duration:SetText(
@@ -509,11 +551,49 @@ function SYN.EnemyTrackerFrame:UpdateBars()
                                 )
                             end
                             debuffFrame.Duration:Show()
+                            
+                            -- Set cooldown swirl
+                            debuffFrame.Cooldown:SetCooldown(
+                                auraData.expirationTime - auraData.duration,
+                                auraData.duration
+                            )
                         else
                             debuffFrame.Duration:Hide()
+                            debuffFrame.Cooldown:Clear()
                         end
                     else
                         debuffFrame.Duration:Hide()
+                        debuffFrame.Cooldown:Clear()
+                    end
+                    
+                    -- Check for pandemic glow
+                    local shouldGlow = false
+                    if auraData.spellID and remaining > 0 then
+                        -- Look up spell definition
+                        local auraDefn = SYN.GetElementalAura and 
+                                        SYN.GetElementalAura(auraData.spellID)
+                        if auraDefn and auraDefn.pandemic then
+                            -- Check if in pandemic window
+                            local pandemicWindow = auraDefn.pandemicWindow or 0.3
+                            local pandemicThreshold = auraData.duration * 
+                                                     pandemicWindow
+                            if remaining <= pandemicThreshold then
+                                shouldGlow = true
+                            end
+                        end
+                    end
+                    
+                    -- Show/hide glow effect
+                    if shouldGlow then
+                        if not debuffFrame.GlowTexture:IsShown() then
+                            debuffFrame.GlowTexture:Show()
+                            debuffFrame.GlowAnim:Play()
+                        end
+                    else
+                        if debuffFrame.GlowTexture:IsShown() then
+                            debuffFrame.GlowTexture:Hide()
+                            debuffFrame.GlowAnim:Stop()
+                        end
                     end
                     
                     -- Position on left edge of health bar
@@ -549,6 +629,15 @@ function SYN.EnemyTrackerFrame:Reset()
         end
         if bar.DebuffFrames then
             for _, debuffFrame in ipairs(bar.DebuffFrames) do
+                if debuffFrame.GlowAnim then
+                    debuffFrame.GlowAnim:Stop()
+                end
+                if debuffFrame.GlowTexture then
+                    debuffFrame.GlowTexture:Hide()
+                end
+                if debuffFrame.Cooldown then
+                    debuffFrame.Cooldown:Clear()
+                end
                 debuffFrame:Hide()
             end
         end
