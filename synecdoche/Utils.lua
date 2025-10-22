@@ -3,6 +3,7 @@
 --- Addon
 local addonName, SYN = ...
 local tableinsert = table.insert
+local setmetatable = setmetatable
 
 -- File Locals
 local Utils = {}
@@ -68,6 +69,22 @@ function MergeTableByKey(T1, T2)
         result[k] = v
     end
     return result
+end
+
+--- ======= PSEUDO-CLASS =======
+function Class()
+  local Class = {}
+  Class.__index = Class
+  setmetatable(Class, {
+    __call =
+    function(self, ...)
+      local Object = {}
+      setmetatable(Object, self)
+      Object:New(...)
+      return Object
+    end
+  })
+  return Class
 end
 
 

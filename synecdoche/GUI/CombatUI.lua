@@ -295,7 +295,8 @@ function SYN.TimelineBarFrame:UpdateIcons()
     for i = 1, #events do
         local ev = events[i]
         local inSec = (ev.startAt or now) - now
-        if inSec >= 0 and inSec <= horizon then
+        -- Show event until its endpoint crosses zero
+        if inSec <= horizon and (ev.expiresAt or now) >= now then
             local icon = self:GetIconForEvent(ev)
             -- Position: top edge is horizon, bottom edge is t=0
             local y = (1 - (inSec / horizon)) * height
@@ -313,6 +314,12 @@ function SYN.TimelineBarFrame:UpdateIcons()
             local dur = ev.duration or 0
             if icon.DurationLine then
                 if dur and dur > 0 then
+                    -- Set color to green if event is live (started), white if upcoming
+                    if inSec <= 0 then
+                        icon.DurationLine:SetColorTexture(0, 1, 0, 0.9)  -- Green when live
+                    else
+                        icon.DurationLine:SetColorTexture(1, 1, 1, 0.9)  -- White when upcoming
+                    end
                     local endTime = (ev.expiresAt or (ev.startAt or now))
                     local maxTime = now + horizon
                     if endTime > maxTime then endTime = maxTime end

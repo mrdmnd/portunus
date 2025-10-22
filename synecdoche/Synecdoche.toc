@@ -39,5 +39,7 @@ StateCache.lua
 # Misc
 # ...
 
+# Spec Engines
+Shaman\Elemental.lua
 
 Main.lua
