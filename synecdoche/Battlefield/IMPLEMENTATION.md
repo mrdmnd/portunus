@@ -10,15 +10,32 @@ The Battlefield state tracker is a Lua module for World of Warcraft that maintai
 
 1. **Nameplates Table**: Tracks currently visible enemy nameplates
    - Key: unitToken (e.g., "nameplate1")
-   - Value: { guid, name, lastSeen }
+   - Value: { guid, name, lastSeen, minRange, maxRange }
 
 2. **CombatUnits Table**: Tracks all alive, in-combat enemy units
    - Key: GUID (unique identifier)
-   - Value: { name, inCombat, isDead, health, healthMax, threatStatus, lastSeen }
+   - Value: { name, inCombat, isDead, health, healthMax, threatStatus, minRange, maxRange, lastSeen }
 
 3. **Mapping Tables**: Bidirectional lookups
    - NameplateToUnit: unitToken → GUID
    - UnitToNameplate: GUID → unitToken
+
+### Range Tracking
+
+The module uses **LibRangeCheck-3.0** to estimate distance bounds for all tracked units:
+
+- **minRange**: The minimum distance the unit could be (lower bound)
+- **maxRange**: The maximum distance the unit could be (upper bound)
+
+Range values are updated every 30ms during the pulse update. LibRangeCheck uses:
+- Spell range checks (most accurate)
+- Item range checks
+- Interact distance checks
+
+**Range Interpretation:**
+- If both minRange and maxRange exist: unit is between minRange and maxRange yards
+- If only minRange exists: unit is beyond minRange yards (out of range)
+- If neither exist: range cannot be determined
 
 ### Event System
 
@@ -83,6 +100,11 @@ function MyCombatEngine:Update()
         if not unitData.isDead then
             -- This is a live enemy in combat
             
+            -- Check range for ability decisions
+            if unitData.maxRange and unitData.maxRange <= 40 then
+                -- Definitely within 40 yards - can use ranged abilities
+            end
+            
             if SYN.Battlefield:IsUnitVisible(guid) then
                 -- Unit is on screen, can interact with nameplate
                 local unitToken = SYN.Battlefield:GetNameplateForUnit(guid)
@@ -92,8 +114,30 @@ function MyCombatEngine:Update()
             end
         end
     end
+    
+    -- Example: AOE targeting decisions
+    local closeTargets = SYN.Battlefield:GetUnitsWithinRange(8)
+    if next(closeTargets) then
+        -- Multiple enemies in melee range, consider AOE rotation
+    end
 end
 ```
+
+### Range API Functions
+
+The module provides several convenience functions for range-based queries:
+
+1. **GetUnitRange(guid)**: Returns minRange, maxRange for a specific unit
+2. **GetUnitsWithinRange(range)**: Returns all units whose maxRange ≤ range
+3. **GetUnitsBeyondRange(range)**: Returns all units whose minRange > range  
+4. **IsUnitWithinRange(guid, range)**: Returns true if unit's maxRange ≤ range
+5. **IsUnitBeyondRange(guid, range)**: Returns true if unit's minRange > range
+
+These functions are useful for:
+- AOE ability targeting (how many enemies in range?)
+- Melee vs ranged ability decisions
+- Positioning and kiting logic
+- Threat management for tanks
 
 ### Debugging
 
@@ -109,7 +153,26 @@ or
 This will print:
 - Count of visible nameplates
 - Count of in-combat units
-- Detailed list of each with health, visibility status, and age
+- Detailed list of each with health, range bounds, visibility status, and age
+
+Example output:
+```
+=== Battlefield State ===
+Visible Nameplates: 3
+Combat Units: 5
+
+Nameplates:
+  nameplate1: Training Dummy [5-10 yds] (0.1s ago)
+  nameplate2: Target Dummy [15-20 yds] (0.1s ago)
+  nameplate3: Practice Dummy [30-40 yds] (0.1s ago)
+
+Combat Units:
+  Training Dummy: 1000/1000 HP [5-10 yds] [VISIBLE] [COMBAT]  (0.1s ago)
+  Target Dummy: 1000/1000 HP [15-20 yds] [VISIBLE] [COMBAT]  (0.1s ago)
+  Practice Dummy: 1000/1000 HP [30-40 yds] [VISIBLE] [COMBAT]  (0.1s ago)
+  Distant Enemy: 500/1000 HP [>40 yds] [OFF-SCREEN] [COMBAT]  (2.3s ago)
+  Boss Enemy: 50000/100000 HP [10-15 yds] [OFF-SCREEN] [COMBAT]  (0.5s ago)
+```
 
 ## Key Design Decisions
 

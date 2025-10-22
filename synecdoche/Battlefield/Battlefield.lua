@@ -20,15 +20,20 @@ local GetTime = GetTime
 local pairs = pairs
 local next = next
 
+-- LibRangeCheck
+local rc = LibStub("LibRangeCheck-3.0")
+
 -- Initialize the Battlefield module
 SYN.Battlefield = SYN.Battlefield or {}
 local Battlefield = SYN.Battlefield
 
 -- State tables
-local Nameplates = {}           -- [unitToken] = { guid, name, lastSeen }
+local Nameplates = {}           -- [unitToken] = { guid, name, lastSeen, 
+                                --                minRange, maxRange }
 local CombatUnits = {}          -- [guid] = { name, inCombat, lastSeen, 
                                 --            health, healthMax, 
-                                --            threatStatus, isDead }
+                                --            threatStatus, isDead,
+                                --            minRange, maxRange }
 local NameplateToUnit = {}      -- [unitToken] = guid
 local UnitToNameplate = {}      -- [guid] = unitToken
 
@@ -66,6 +71,9 @@ local function GetUnitInfo(unitToken)
     -- Threat information
     local threatStatus = UnitThreatSituation(unitToken)
     
+    -- Range information using LibRangeCheck
+    local minRange, maxRange = rc:GetRange(unitToken)
+    
     return {
         guid = guid,
         name = name,
@@ -74,6 +82,8 @@ local function GetUnitInfo(unitToken)
         health = health,
         healthMax = healthMax,
         threatStatus = threatStatus,
+        minRange = minRange,
+        maxRange = maxRange,
         lastSeen = GetTime()
     }
 end
@@ -108,7 +118,9 @@ function Battlefield:AddNameplate(unitToken)
     Nameplates[unitToken] = {
         guid = unitInfo.guid,
         name = unitInfo.name,
-        lastSeen = unitInfo.lastSeen
+        lastSeen = unitInfo.lastSeen,
+        minRange = unitInfo.minRange,
+        maxRange = unitInfo.maxRange
     }
     
     -- Update mappings
@@ -158,6 +170,8 @@ function Battlefield:UpdateCombatUnit(unitInfo)
         health = unitInfo.health,
         healthMax = unitInfo.healthMax,
         threatStatus = unitInfo.threatStatus,
+        minRange = unitInfo.minRange,
+        maxRange = unitInfo.maxRange,
         lastSeen = unitInfo.lastSeen
     }
 end
@@ -251,8 +265,10 @@ function Battlefield:PulseUpdate()
         if UnitExists(unitToken) then
             local unitInfo = GetUnitInfo(unitToken)
             if unitInfo then
-                -- Update nameplate timestamp
+                -- Update nameplate timestamp and range
                 plateData.lastSeen = currentTime
+                plateData.minRange = unitInfo.minRange
+                plateData.maxRange = unitInfo.maxRange
                 
                 -- Update combat unit if in combat
                 if unitInfo.inCombat then
@@ -378,6 +394,59 @@ function Battlefield:IsUnitVisible(guid)
     return UnitToNameplate[guid] ~= nil
 end
 
+-- Get range bounds for a specific unit GUID
+function Battlefield:GetUnitRange(guid)
+    local unit = CombatUnits[guid]
+    if unit then
+        return unit.minRange, unit.maxRange
+    end
+    return nil, nil
+end
+
+-- Get all combat units within a specific range
+-- Returns table of { guid = unitData } for units whose maxRange <= range
+-- (i.e., units that are definitely within the specified range)
+function Battlefield:GetUnitsWithinRange(range)
+    local unitsInRange = {}
+    for guid, unitData in pairs(CombatUnits) do
+        if not unitData.isDead and unitData.maxRange and unitData.maxRange <= range then
+            unitsInRange[guid] = unitData
+        end
+    end
+    return unitsInRange
+end
+
+-- Get all combat units beyond a specific range
+-- Returns table of { guid = unitData } for units whose minRange > range
+-- (i.e., units that are definitely beyond the specified range)
+function Battlefield:GetUnitsBeyondRange(range)
+    local unitsBeyond = {}
+    for guid, unitData in pairs(CombatUnits) do
+        if not unitData.isDead and unitData.minRange and unitData.minRange > range then
+            unitsBeyond[guid] = unitData
+        end
+    end
+    return unitsBeyond
+end
+
+-- Check if a unit is definitely within a specific range
+function Battlefield:IsUnitWithinRange(guid, range)
+    local unit = CombatUnits[guid]
+    if unit and not unit.isDead and unit.maxRange then
+        return unit.maxRange <= range
+    end
+    return false
+end
+
+-- Check if a unit is definitely beyond a specific range
+function Battlefield:IsUnitBeyondRange(guid, range)
+    local unit = CombatUnits[guid]
+    if unit and not unit.isDead and unit.minRange then
+        return unit.minRange > range
+    end
+    return false
+end
+
 -- Get detailed info for debugging
 function Battlefield:GetDebugInfo()
     local info = {
@@ -391,7 +460,9 @@ function Battlefield:GetDebugInfo()
         info.nameplates[unitToken] = {
             guid = plateData.guid,
             name = plateData.name,
-            age = GetTime() - plateData.lastSeen
+            age = GetTime() - plateData.lastSeen,
+            minRange = plateData.minRange,
+            maxRange = plateData.maxRange
         }
     end
     
@@ -403,6 +474,8 @@ function Battlefield:GetDebugInfo()
             health = unitData.health,
             healthMax = unitData.healthMax,
             threatStatus = unitData.threatStatus,
+            minRange = unitData.minRange,
+            maxRange = unitData.maxRange,
             age = GetTime() - unitData.lastSeen,
             hasNameplate = self:IsUnitVisible(guid)
         }

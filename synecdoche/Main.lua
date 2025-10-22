@@ -227,8 +227,14 @@ SlashCmdList["SYNECDOCHE"] = function(msg)
             if debugInfo.nameplateCount > 0 then
                 print("\nNameplates:")
                 for unitToken, data in pairs(debugInfo.nameplates) do
-                    print(string.format("  %s: %s (%.1fs ago)", 
-                        unitToken, data.name, data.age))
+                    local rangeStr = "Unknown"
+                    if data.minRange and data.maxRange then
+                        rangeStr = string.format("%d-%d yds", data.minRange, data.maxRange)
+                    elseif data.minRange then
+                        rangeStr = string.format(">%d yds", data.minRange)
+                    end
+                    print(string.format("  %s: %s [%s] (%.1fs ago)", 
+                        unitToken, data.name, rangeStr, data.age))
                 end
             end
             
@@ -238,8 +244,14 @@ SlashCmdList["SYNECDOCHE"] = function(msg)
                     local visFlag = data.hasNameplate and "[VISIBLE]" or "[OFF-SCREEN]"
                     local deadFlag = data.isDead and "[DEAD]" or ""
                     local combatFlag = data.inCombat and "[COMBAT]" or ""
-                    print(string.format("  %s: %s/%s HP %s %s %s (%.1fs ago)",
-                        data.name, data.health, data.healthMax,
+                    local rangeStr = "Unknown"
+                    if data.minRange and data.maxRange then
+                        rangeStr = string.format("%d-%d yds", data.minRange, data.maxRange)
+                    elseif data.minRange then
+                        rangeStr = string.format(">%d yds", data.minRange)
+                    end
+                    print(string.format("  %s: %s/%s HP [%s] %s %s %s (%.1fs ago)",
+                        data.name, data.health, data.healthMax, rangeStr,
                         visFlag, combatFlag, deadFlag, data.age))
                 end
             end

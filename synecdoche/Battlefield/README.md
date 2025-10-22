@@ -28,6 +28,7 @@ The `Battlefield.lua` module tracks:
 3. **Party/Raid Scanning**: Tracks what party/raid members are in combat with
 4. **Stale Data Cleanup**: Removes units that haven't been seen recently
 5. **Death Tracking**: Properly handles unit death via combat log events
+6. **Range Tracking**: Uses LibRangeCheck-3.0 to track distance bounds (min/max) for all units
 
 ### Public API
 
@@ -51,6 +52,19 @@ local combatUnitCount = SYN.Battlefield:GetCombatUnitCount()
 -- Check if unit is visible on screen
 local isVisible = SYN.Battlefield:IsUnitVisible(guid)
 
+-- Get range bounds for a specific unit
+local minRange, maxRange = SYN.Battlefield:GetUnitRange(guid)
+
+-- Get all units within a specific range (definitely within)
+local closeUnits = SYN.Battlefield:GetUnitsWithinRange(40)
+
+-- Get all units beyond a specific range (definitely beyond)
+local farUnits = SYN.Battlefield:GetUnitsBeyondRange(40)
+
+-- Check if a unit is within/beyond a range
+local isClose = SYN.Battlefield:IsUnitWithinRange(guid, 10)
+local isFar = SYN.Battlefield:IsUnitBeyondRange(guid, 40)
+
 -- Get debug information
 local debugInfo = SYN.Battlefield:GetDebugInfo()
 ```
@@ -62,10 +76,19 @@ local debugInfo = SYN.Battlefield:GetDebugInfo()
 local combatUnits = SYN.Battlefield:GetCombatUnits()
 for guid, unitData in pairs(combatUnits) do
     if not unitData.isDead then
-        print(string.format("Unit %s: %d/%d HP, Threat: %s",
+        -- Get range information
+        local rangeStr = "Unknown"
+        if unitData.minRange and unitData.maxRange then
+            rangeStr = string.format("%d-%d yards", unitData.minRange, unitData.maxRange)
+        elseif unitData.minRange then
+            rangeStr = string.format(">%d yards", unitData.minRange)
+        end
+        
+        print(string.format("Unit %s: %d/%d HP, Range: %s, Threat: %s",
             unitData.name,
             unitData.health,
             unitData.healthMax,
+            rangeStr,
             tostring(unitData.threatStatus)))
         
         -- Check if this unit is on screen
@@ -73,6 +96,19 @@ for guid, unitData in pairs(combatUnits) do
             local unitToken = SYN.Battlefield:GetNameplateForUnit(guid)
             -- Do something with the nameplate
         end
+        
+        -- Check if unit is in melee range
+        if SYN.Battlefield:IsUnitWithinRange(guid, 5) then
+            -- Unit is definitely within 5 yards (melee range)
+        end
     end
 end
+
+-- Example: Find all enemies within 40 yards for AOE abilities
+local unitsInAOERange = SYN.Battlefield:GetUnitsWithinRange(40)
+local aoeTargetCount = 0
+for guid, unitData in pairs(unitsInAOERange) do
+    aoeTargetCount = aoeTargetCount + 1
+end
+print(string.format("Can hit %d enemies with AOE", aoeTargetCount))
 ```
