@@ -1,0 +1,15 @@
+[package]
+name = "sim-engine"
+description = "Game-agnostic simulation kernel: event loop, arena state, analytic resources, predicates, decision points."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sim-types = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

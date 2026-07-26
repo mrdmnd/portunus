@@ -1,0 +1,20 @@
+[package]
+name = "sim-mechanics"
+description = "HAL vocabulary layer: stateless EffectOp primitives and the effect-IR interpreter driven by codex data."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sim-types = { workspace = true }
+sim-engine = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+
+[dev-dependencies]
+sim-encounter = { workspace = true }
+
+[lints]
+workspace = true

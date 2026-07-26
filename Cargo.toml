@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/sim-types",
+    "crates/sim-engine",
+    "crates/sim-mechanics",
+    "crates/sim-encounter",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/mredmond/portunus"
+
+[workspace.dependencies]
+sim-types = { path = "crates/sim-types" }
+sim-engine = { path = "crates/sim-engine" }
+sim-mechanics = { path = "crates/sim-mechanics" }
+sim-encounter = { path = "crates/sim-encounter" }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+toml = "0.8"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

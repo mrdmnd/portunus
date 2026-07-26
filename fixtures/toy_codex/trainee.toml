@@ -1,0 +1,96 @@
+# "Trainee" — the synthetic toy spec (SCAFFOLD.md §1, §12 G0).
+#
+# Five abilities and one proc, defined entirely in effect IR (no scripted
+# escape hatches). The engine and mechanics crates must pass their tests with
+# this data alone: that is the proof the kernel contains no game knowledge.
+
+name = "Trainee"
+max_health = 100000
+gcd_ms = 1500
+
+[[resources]]
+name = "energy"
+max = 100
+initial = 100
+regen_per_sec = 10
+
+# Haste-like self-buff: exercises rate re-anchoring on apply and expiry.
+[[auras]]
+name = "frenzy"
+duration_ms = 6000
+
+[auras.rate_mult]
+resource = "energy"
+mult = 1.5
+
+# Bleed on the target: exercises tick trains and refresh gen-invalidation.
+[[auras]]
+name = "bleed"
+duration_ms = 12000
+
+[auras.tick]
+period_ms = 2000
+
+[[auras.tick.effect]]
+op = "deal_damage"
+amount = 200
+
+# 1. Filler with a 20% proc granting frenzy.
+[[abilities]]
+name = "strike"
+cost = { resource = "energy", amount = 40 }
+
+[[abilities.effect]]
+op = "deal_damage"
+amount = 500
+
+[[abilities.effect]]
+op = "trigger_proc"
+chance = 0.2
+stream = 1
+
+[[abilities.effect.effect]]
+op = "apply_aura"
+aura = "frenzy"
+on_self = true
+
+# 2. Big hit on a cooldown.
+[[abilities]]
+name = "heavy_blow"
+cost = { resource = "energy", amount = 60 }
+cooldown_ms = 6000
+
+[[abilities.effect]]
+op = "deal_damage"
+amount = 1500
+
+# 3. Maintenance DoT.
+[[abilities]]
+name = "rend"
+cost = { resource = "energy", amount = 30 }
+
+[[abilities.effect]]
+op = "apply_aura"
+aura = "bleed"
+
+# 4. Off-GCD resource cooldown.
+[[abilities]]
+name = "surge"
+cooldown_ms = 30000
+on_gcd = false
+targeted = false
+
+[[abilities.effect]]
+op = "grant_resource"
+resource = "energy"
+amount = 50
+
+# 5. A real cast time.
+[[abilities]]
+name = "focus_strike"
+cost = { resource = "energy", amount = 20 }
+cast_time_ms = 1500
+
+[[abilities.effect]]
+op = "deal_damage"
+amount = 900

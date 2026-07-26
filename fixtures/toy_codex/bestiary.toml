@@ -1,0 +1,54 @@
+# Toy enemy codex ("bestiary"). Enemies are codex citizens exactly like
+# players: what a mob does is defined here (and calibrated here), never in a
+# run file — run files only reference these by name.
+#
+# Scripts are relative to each enemy's own engagement: t=0 is when *it*
+# enters combat, not when the pull starts.
+
+[enemies.grunt]
+hp = { mean = 15000, jitter_frac = 0.1 }
+count = 2
+
+[[enemies.grunt.script]]
+id = "swipe"
+first_ms = { base = 3000, jitter = 500 }
+every_ms = { base = 5000, jitter = 1000 }
+kind = "intake"
+amount = 1500
+target = "random_player"
+
+[enemies.patrol]
+hp = { mean = 10000, jitter_frac = 0.05 }
+count = 3
+
+[[enemies.patrol.script]]
+id = "jab"
+first_ms = { base = 2000, jitter = 500 }
+every_ms = { base = 4000, jitter = 500 }
+kind = "intake"
+amount = 1000
+target = "random_player"
+
+[enemies.ritualist]
+hp = { mean = 12000, jitter_frac = 0.1 }
+count = 2
+
+[[enemies.ritualist.script]]
+id = "hex"
+first_ms = { base = 6000, jitter = 1000 }
+every_ms = { base = 9000, jitter = 1500 }
+kind = "intake"
+amount = 2500
+target = "random_player"
+
+[enemies.overseer]
+hp = { mean = 70000, jitter_frac = 0.0 }
+count = 0
+
+[[enemies.overseer.script]]
+id = "slam"
+first_ms = { base = 8000, jitter = 1000 }
+every_ms = { base = 12000, jitter = 2000 }
+kind = "intake"
+amount = 2000
+target = "all_players"

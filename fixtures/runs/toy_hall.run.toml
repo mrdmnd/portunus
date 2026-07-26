@@ -1,0 +1,67 @@
+# Toy run definition: the "pull sheet". Describes what we pull and when —
+# engagement waves (gather / timed body-pull / chain condition), travel time
+# between pulls, and static cooldown assignments (compiled into Plan windows
+# the policies read). Nothing here says what mobs *do*; that's bestiary.toml.
+
+name = "toy_hall"
+codex = "toy@1"
+count_requirement = 10
+
+# -- Pull 1: a chained trash pull ---------------------------------------------
+
+[[pulls]]
+name = "opener"
+travel_in = { base = 8000, jitter = 1000 }
+timeout_ms = 300000
+lust = true
+
+# Opening gather.
+[[pulls.engage]]
+mobs = { grunt = 2 }
+
+# Patrol body-pulled on a timer.
+[[pulls.engage]]
+mobs = { patrol = 1 }
+after_ms = 8000
+
+# Chain the ritualist in when the pull is 60% dead.
+[[pulls.engage]]
+mobs = { ritualist = 1 }
+when = { engaged_hp_frac_below = 0.4 }
+
+[[pulls.cooldowns]]
+player = 0
+ability = "heavy_blow"
+anchor = "start"
+
+[[pulls.cooldowns]]
+player = 0
+ability = "surge"
+anchor = "grunt#1/swipe@2"
+
+# -- Pull 2: trash pulled onto the boss ---------------------------------------
+
+[[pulls]]
+name = "overseer"
+travel_in = { base = 12000, jitter = 2000 }
+timeout_ms = 420000
+
+# Boss opener...
+[[pulls.engage]]
+mobs = { overseer = 1 }
+
+# ...with the next grunt pack dragged in 5s later. Same construct as any
+# chain: a boss is just another spawn.
+[[pulls.engage]]
+mobs = { grunt = 2 }
+after_ms = 5000
+
+[[pulls.cooldowns]]
+player = 0
+ability = "surge"
+anchor = { offset_ms = 5000 }
+
+[[pulls.cooldowns]]
+player = 0
+ability = "heavy_blow"
+anchor = "overseer#1/slam@2"

@@ -1,0 +1,16 @@
+[package]
+name = "sim-encounter"
+description = "Run definition DSL (the pull sheet): bestiary + run files parsed from TOML, compiled and sampled into concrete ResolvedRuns plus Plan artifacts."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sim-types = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+
+[lints]
+workspace = true
