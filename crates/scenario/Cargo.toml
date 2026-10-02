@@ -1,0 +1,16 @@
+[package]
+name = "portunus-scenario"
+description = "Routes (what you pull and when) and their sampling into concrete ResolvedRuns."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+portunus-core = { workspace = true }
+portunus-gamedata = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

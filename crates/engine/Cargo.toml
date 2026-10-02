@@ -1,0 +1,18 @@
+[package]
+name = "portunus-engine"
+description = "Game-agnostic discrete-event kernel: time, gates, auras, resources, enemy rules, and decision points. Game semantics plug in via Mechanics."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+portunus-core = { workspace = true }
+portunus-gamedata = { workspace = true }
+portunus-loadout = { workspace = true }
+portunus-scenario = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

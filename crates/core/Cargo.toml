@@ -1,0 +1,13 @@
+[package]
+name = "portunus-core"
+description = "Shared vocabulary: integer time, identifiers, name-keyed randomness, distributions, and the trigger language."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+
+[lints]
+workspace = true

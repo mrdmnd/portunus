@@ -1,0 +1,15 @@
+[package]
+name = "portunus-ingest"
+description = "Offline tools that build GameData and EnemyData from outside sources and calibrate them against combat logs."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+portunus-core = { workspace = true }
+portunus-gamedata = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

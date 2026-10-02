@@ -1,0 +1,19 @@
+[package]
+name = "portunus-env"
+description = "The decision-making boundary: episodes, observations and information sets, action spaces, and rewards."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+portunus-core = { workspace = true }
+portunus-gamedata = { workspace = true }
+portunus-loadout = { workspace = true }
+portunus-plan = { workspace = true }
+portunus-scenario = { workspace = true }
+portunus-engine = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

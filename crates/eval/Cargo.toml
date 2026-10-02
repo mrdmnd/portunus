@@ -1,0 +1,15 @@
+[package]
+name = "portunus-eval"
+description = "Experiments: many seeds, paired comparisons between arms, and statistical reports."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+portunus-core = { workspace = true }
+portunus-engine = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

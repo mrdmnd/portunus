@@ -1,0 +1,16 @@
+[package]
+name = "portunus-mechanics"
+description = "Spec behavior: the data-effect interpreter, combat math, and per-spec kits that implement code hooks."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+portunus-core = { workspace = true }
+portunus-gamedata = { workspace = true }
+portunus-loadout = { workspace = true }
+portunus-engine = { workspace = true }
+
+[lints]
+workspace = true

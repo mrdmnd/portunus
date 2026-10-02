@@ -1,0 +1,16 @@
+[package]
+name = "portunus-loadout"
+description = "Pre-combat configuration (gear, talents, consumables) and its compilation into an ActorTemplate."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+portunus-core = { workspace = true }
+portunus-gamedata = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,10 +1,20 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/sim-types",
-    "crates/sim-engine",
-    "crates/sim-mechanics",
-    "crates/sim-encounter",
+    "crates/core",
+    "crates/gamedata",
+    "crates/loadout",
+    "crates/plan",
+    "crates/scenario",
+    "crates/engine",
+    "crates/mechanics",
+    "crates/env",
+    "crates/policy",
+    "crates/learn",
+    "crates/eval",
+    "crates/optimize",
+    "crates/export",
+    "crates/ingest",
 ]
 
 [workspace.package]
@@ -14,13 +24,25 @@ license = "MIT"
 repository = "https://github.com/mredmond/portunus"
 
 [workspace.dependencies]
-sim-types = { path = "crates/sim-types" }
-sim-engine = { path = "crates/sim-engine" }
-sim-mechanics = { path = "crates/sim-mechanics" }
-sim-encounter = { path = "crates/sim-encounter" }
+portunus-core = { path = "crates/core" }
+portunus-gamedata = { path = "crates/gamedata" }
+portunus-loadout = { path = "crates/loadout" }
+portunus-plan = { path = "crates/plan" }
+portunus-scenario = { path = "crates/scenario" }
+portunus-engine = { path = "crates/engine" }
+portunus-mechanics = { path = "crates/mechanics" }
+portunus-env = { path = "crates/env" }
+portunus-policy = { path = "crates/policy" }
+portunus-learn = { path = "crates/learn" }
+portunus-eval = { path = "crates/eval" }
+portunus-optimize = { path = "crates/optimize" }
+portunus-export = { path = "crates/export" }
+portunus-ingest = { path = "crates/ingest" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
-toml = "0.8"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

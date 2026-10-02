@@ -1,0 +1,14 @@
+[package]
+name = "portunus-export"
+description = "Turning trained policies into something a player can run: distillation and rotation-addon emission."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+portunus-env = { workspace = true }
+portunus-policy = { workspace = true }
+
+[lints]
+workspace = true

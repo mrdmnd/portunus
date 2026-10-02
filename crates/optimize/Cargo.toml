@@ -1,0 +1,13 @@
+[package]
+name = "portunus-optimize"
+description = "Outer-loop search over decision variables (loadouts, plans), scored by experiments."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+portunus-eval = { workspace = true }
+
+[lints]
+workspace = true

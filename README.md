@@ -1,6 +1,6 @@
 # Portunus
 
-Portunus is the Roman god of keys and gates — an appropriate name for a suite of tools that attempts to automatically optimize a character control policy for performing keystone speedruns in World of Warcraft.
+Portunus is the Roman god of keys and gates - hopefully an appropriate name for a suite of tools that attempt to automatically dungeon speedruns in World of Warcraft.
 
 There are several planned layers and components to this project, but everything here is a work in progress and under active development.
 

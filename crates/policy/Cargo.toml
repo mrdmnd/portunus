@@ -1,0 +1,16 @@
+[package]
+name = "portunus-policy"
+description = "In-combat controllers: deployable observation-only policies, simulator-backed search, and model interfaces."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+portunus-core = { workspace = true }
+portunus-engine = { workspace = true }
+portunus-env = { workspace = true }
+serde = { workspace = true }
+
+[lints]
+workspace = true

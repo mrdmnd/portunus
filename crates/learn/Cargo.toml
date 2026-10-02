@@ -1,0 +1,16 @@
+[package]
+name = "portunus-learn"
+description = "Self-play data collection and the boundary to model training."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+portunus-core = { workspace = true }
+portunus-engine = { workspace = true }
+portunus-policy = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true
