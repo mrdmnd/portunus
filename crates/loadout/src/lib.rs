@@ -1,14 +1,14 @@
 //! Pre-combat configuration: one of the three things being optimized.
 //!
 //! A [`Loadout`] is what a player chooses before the key starts. Compiling it
-//! against [`GameData`] yields an [`ActorTemplate`]: final stats, the ability
-//! list (whose order defines the policy's action slots), and the permanent
-//! auras that carry every passive effect. Compilation is pure and cheap,
-//! because configuration search calls it constantly.
+//! against [`GameData`] yields an [`ActorTemplate`]: final stats, the
+//! abilities the seat can press, and the permanent auras that carry every
+//! passive effect. Compilation is pure and cheap, because configuration
+//! search calls it constantly.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use portunus_core::{AbilitySlot, AuraId, ItemId, PetId, SpecId, SpellId, TalentId};
+use portunus_core::{AuraId, ItemId, PetId, SpecId, SpellId, TalentId};
 use portunus_gamedata::item::{GearSlot, WeaponDef};
 use portunus_gamedata::spec::Role;
 use portunus_gamedata::stats::{DerivedStats, ResourceDef, StatBlock};
@@ -44,8 +44,9 @@ pub struct ActorTemplate {
     pub role: Role,
     pub stats: StatBlock,
     pub derived: DerivedStats,
-    /// Index in this list is the [`portunus_core::AbilitySlot`].
-    pub abilities: Vec<SpellId>,
+    /// Every spell the seat can press, by the id it was granted under:
+    /// baseline and talent spells, equipped on-use items, and consumables.
+    pub abilities: BTreeSet<SpellId>,
     /// Applied at combat start and never expire: spec passives, talents,
     /// set bonuses, item effects, enchants, consumables.
     pub passive_auras: Vec<AuraId>,
@@ -54,8 +55,6 @@ pub struct ActorTemplate {
     pub off_hand: Option<WeaponDef>,
     /// Summoned at run start (a hunter's or warlock's chosen pet).
     pub permanent_pet: Option<PetId>,
-    /// Which ability slot fires each equipped on-use item.
-    pub item_slots: BTreeMap<GearSlot, AbilitySlot>,
     /// The configuration this was compiled from: static, inspectable facts
     /// (talents, set pieces, trinkets) that policies may condition on.
     pub source: Loadout,
@@ -73,6 +72,9 @@ pub enum LoadoutIssue {
         a: ItemId,
         b: ItemId,
     },
+    /// Two equipped items or consumables grant the same on-use spell, so
+    /// one ability would fire both.
+    DuplicateOnUse(SpellId),
     UnknownTalent(TalentId),
     TalentRankTooHigh {
         talent: TalentId,
@@ -96,4 +98,10 @@ pub trait LoadoutCompiler {
     /// Every problem, not just the first.
     fn validate(&self, data: &GameData, loadout: &Loadout) -> Vec<LoadoutIssue>;
     fn compile(&self, data: &GameData, loadout: &Loadout) -> Result<ActorTemplate, LoadoutError>;
+}
+
+/// Simple loadouts for party members whose roles aren't being optimized,
+/// compiled like any other.
+pub trait StandIns {
+    fn loadout(&self, data: &GameData, role: Role) -> Loadout;
 }

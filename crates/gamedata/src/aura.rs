@@ -23,7 +23,7 @@ pub struct AuraDef {
     pub modifiers: Vec<Modifier>,
     pub listeners: Vec<Listener>,
     /// While active, pressing `from` casts `to` (e.g. Ascendance turning
-    /// Chain Lightning into Lava Beam). The ability slot doesn't change.
+    /// Chain Lightning into Lava Beam). The ability is still `from`.
     pub overrides: Vec<(SpellId, SpellId)>,
     pub on_expire: Vec<Effect>,
     /// The holder may remove it (`Choice::CancelAura`).

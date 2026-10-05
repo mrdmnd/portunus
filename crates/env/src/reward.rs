@@ -2,6 +2,7 @@
 
 use portunus_core::SimTime;
 use portunus_engine::StateView;
+use portunus_scenario::ResolvedRun;
 
 /// A summary of run progress at one moment.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -18,7 +19,9 @@ pub struct Progress {
 }
 
 pub trait ProgressMeter {
-    fn measure(&self, state: &dyn StateView) -> Progress;
+    /// `run` supplies what the state doesn't carry, such as each spawn's
+    /// forces.
+    fn measure(&self, state: &dyn StateView, run: &ResolvedRun) -> Progress;
 }
 
 /// e.g. negative elapsed time, priority damage dealt, or a blend.

@@ -1,10 +1,7 @@
 //! Pets and guardians: allied actors owned by a seat.
 //!
-//! They are actors, not seats. They never get decision points: each one runs
-//! its [`PetDef::autocast`] priority on its owner's target, auto-attacks with
-//! its own swing timer, and casts on command (`Effect::CommandPet`). Their
-//! stats follow the owner's, so owner buffs reach them through scaling
-//! rather than duplicated auras.
+//! Their stats follow the owner's, so owner buffs reach them through
+//! scaling rather than duplicated auras.
 
 use portunus_core::{AuraId, PetId, SpellId};
 use serde::{Deserialize, Serialize};

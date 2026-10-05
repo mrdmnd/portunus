@@ -1,6 +1,8 @@
 //! Legality, as the engine sees it.
 
-use portunus_core::{ActorId, AuraId, SimDuration};
+use std::collections::BTreeMap;
+
+use portunus_core::{ActorId, AuraId, SimDuration, SpellId};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -14,11 +16,10 @@ pub enum Readiness {
     Blocked,
 }
 
-/// Per-slot readiness for one seat; index is the ability slot. Waiting is
-/// always legal.
+/// Readiness of each of one seat's abilities. Waiting is always legal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ActionMask {
-    pub slots: Vec<Readiness>,
+    pub abilities: BTreeMap<SpellId, Readiness>,
     /// A cast or channel is in progress and may be stopped.
     pub can_stop: bool,
     /// A channel is in progress and has a tick left to wait for.

@@ -1,15 +1,14 @@
 //! Self-play and training.
 //!
-//! The simulator side collects [`Trajectory`]s; a [`Trainer`] (most likely
-//! Python, behind bindings or a batch file format) turns them into new model
-//! versions held by a [`ModelStore`]. Samples are plain numbers so the
-//! boundary stays language-neutral.
+//! The simulator side collects [`Trajectory`]s; a [`Trainer`] turns them
+//! into new model versions held by a [`ModelStore`]. Samples are plain
+//! numbers so the trainer can live in another language.
 
 use std::sync::Arc;
 
 use portunus_core::{Seat, Seed};
 use portunus_engine::Outcome;
-use portunus_policy::{Model, ModelVersion};
+use portunus_policy::{Model, ModelVersion, SchemaId};
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -27,6 +26,8 @@ pub struct Sample {
 pub struct Trajectory {
     pub seed: Seed,
     pub model: ModelVersion,
+    /// The encoding every sample in this trajectory uses.
+    pub schema: SchemaId,
     pub samples: Vec<Sample>,
     pub outcome: Outcome,
 }
@@ -43,15 +44,27 @@ pub struct TrainStats {
     pub samples_seen: u64,
 }
 
+/// A trained model, serialized by the trainer in its own format.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Checkpoint {
+    pub version: ModelVersion,
+    pub schema: SchemaId,
+    pub weights: Vec<u8>,
+}
+
 pub trait Trainer {
+    fn schema(&self) -> &SchemaId;
+    /// Every sample must come from a trajectory with this trainer's schema.
     fn train(&mut self, batch: &[Sample]) -> TrainStats;
-    fn checkpoint(&mut self) -> ModelVersion;
+    fn checkpoint(&mut self) -> Checkpoint;
 }
 
 #[derive(Debug, Error)]
 pub enum StoreError {
     #[error("unknown model version {0:?}")]
     Unknown(ModelVersion),
+    #[error("version {0:?} already stored")]
+    Exists(ModelVersion),
     #[error("io: {0}")]
     Io(String),
 }
@@ -59,4 +72,6 @@ pub enum StoreError {
 pub trait ModelStore {
     fn latest(&self, name: &str) -> Option<ModelVersion>;
     fn load(&self, version: &ModelVersion) -> Result<Arc<dyn Model>, StoreError>;
+    /// Versions are immutable once saved.
+    fn save(&mut self, checkpoint: &Checkpoint) -> Result<(), StoreError>;
 }

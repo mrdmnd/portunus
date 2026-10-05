@@ -1,6 +1,6 @@
 [package]
 name = "portunus-plan"
-description = "Group-level commitments made before the run: who uses what cooldown when."
+description = "Group-level commitments made before the run: who uses what cooldown when, and on whom."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,6 +8,9 @@ repository.workspace = true
 
 [dependencies]
 portunus-core = { workspace = true }
+portunus-gamedata = { workspace = true }
+portunus-loadout = { workspace = true }
+portunus-scenario = { workspace = true }
 serde = { workspace = true }
 
 [lints]

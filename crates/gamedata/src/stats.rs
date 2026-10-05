@@ -116,7 +116,7 @@ pub enum SpendScaling {
 }
 
 /// A spec's resource pool. Between events it evolves linearly at its regen
-/// rate, so wake-up times are solved exactly instead of polled.
+/// rate.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ResourceDef {
     pub kind: ResourceKind,

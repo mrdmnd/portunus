@@ -18,7 +18,7 @@
 
 use std::sync::Arc;
 
-use portunus_core::Seat;
+use portunus_core::{Seat, SimDuration};
 use portunus_engine::Choice;
 use portunus_env::{Decision, Env};
 use serde::{Deserialize, Serialize};
@@ -49,13 +49,20 @@ pub struct MctsConfig {
     pub dirichlet_alpha: f32,
     pub dirichlet_frac: f32,
     pub temperature: f32,
-    /// Stop expanding this far (in sim time) past the root.
-    pub horizon_ms: u32,
+    /// Stop expanding this far past the root.
+    pub horizon: SimDuration,
 }
+
+/// Names an observation encoding and action space together. A model only
+/// makes sense on the schema it was trained under, and samples from
+/// different schemas must never be mixed.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct SchemaId(pub String);
 
 /// A trained network: features in, action priors and a value out.
 pub trait Model: Send + Sync {
     fn version(&self) -> ModelVersion;
+    fn schema(&self) -> &SchemaId;
     fn input_width(&self) -> usize;
     fn output_width(&self) -> usize;
     fn evaluate(&self, batch: &[&[f32]]) -> Vec<Evaluation>;

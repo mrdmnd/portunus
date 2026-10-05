@@ -16,6 +16,9 @@ pub struct SpellDef {
     pub cooldown: Option<CooldownDef>,
     pub costs: Vec<Cost>,
     pub targeting: Targeting,
+    /// Harms enemies or starts combat. Only non-hostile spells are usable
+    /// before a pull begins.
+    pub hostile: bool,
     /// Projectile flight time: effects resolve on impact, and the spell is
     /// "in flight" until then.
     pub travel: Option<SimDuration>,

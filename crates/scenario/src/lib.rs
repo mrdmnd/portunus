@@ -13,7 +13,7 @@ pub mod spec;
 
 use std::sync::Arc;
 
-use portunus_core::{EventName, PullName, Seed, SimDuration, SpawnLabel};
+use portunus_core::{EnemyKey, EventName, PullName, Seed, SimDuration, SpawnLabel};
 use portunus_gamedata::EnemyData;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -23,8 +23,44 @@ pub use spec::ScenarioSpec;
 
 #[derive(Debug, Error)]
 pub enum ScenarioError {
-    #[error("invalid scenario:\n  {}", .0.join("\n  "))]
-    Invalid(Vec<String>),
+    #[error("invalid scenario: {0:?}")]
+    Invalid(Vec<ScenarioIssue>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ScenarioIssue {
+    DuplicatePull(PullName),
+    EmptyPull(PullName),
+    UnknownEnemy {
+        pull: PullName,
+        enemy: EnemyKey,
+    },
+    /// An engagement trigger names a spawn that isn't in its pull.
+    UnknownSpawn {
+        pull: PullName,
+        spawn: SpawnLabel,
+    },
+    /// An engagement trigger names a wave index past the pull's last.
+    UnknownWave {
+        pull: PullName,
+        wave: usize,
+    },
+    /// An engagement trigger names a rule the spawn's enemy doesn't have.
+    UnknownEvent {
+        pull: PullName,
+        spawn: SpawnLabel,
+        event: EventName,
+    },
+    /// No wave can ever engage (e.g. it waits on itself).
+    NeverEngages {
+        pull: PullName,
+        wave: usize,
+    },
+    PrepullExceedsTravel(PullName),
+    NotEnoughForces {
+        required: u32,
+        available: u32,
+    },
 }
 
 /// What a realistic player knows about enemy timing in advance: averages,

@@ -2,11 +2,10 @@
 //!
 //! Rule: mechanics hold no mutable state of their own. Everything that
 //! changes during a rollout lives in kernel primitives (auras, resources,
-//! cooldowns, timers), which keeps forks cheap and all state observable.
+//! cooldowns, timers, proc bookkeeping), which keeps forks cheap and all
+//! state observable.
 
-use portunus_core::{
-    AbilitySlot, ActorId, AuraId, PetId, Seat, SimDuration, SimTime, SpellId, StreamKey,
-};
+use portunus_core::{ActorId, AuraId, PetId, Seat, SimDuration, SimTime, SpellId, StreamKey};
 use portunus_gamedata::effect::CooldownChange;
 use portunus_gamedata::enemy::RuleIndex;
 use portunus_gamedata::item::WeaponHand;
@@ -15,13 +14,15 @@ use portunus_gamedata::GameData;
 use serde::{Deserialize, Serialize};
 
 use crate::mask::Readiness;
-use crate::state::{Projectile, StateView};
+use crate::state::{AuraRef, ListenerRef, Projectile, StateView};
 use crate::step::WakeReason;
 
 pub trait Mechanics: Clone {
     /// Usability beyond the kernel's generic gates (cost, cooldown, GCD,
     /// casting, movement), e.g. "only during this proc".
-    fn gate(&self, view: &dyn StateView, seat: Seat, slot: AbilitySlot) -> Readiness;
+    fn gate(&self, view: &dyn StateView, seat: Seat, ability: SpellId) -> Readiness;
+    fn combat_started(&self, io: &mut dyn EngineIo, combat: u16);
+    fn combat_ended(&self, io: &mut dyn EngineIo, combat: u16, cleared: bool);
     fn cast_started(&self, io: &mut dyn EngineIo, cast: &CastEvent);
     fn cast_completed(&self, io: &mut dyn EngineIo, cast: &CastEvent);
     fn channel_tick(&self, io: &mut dyn EngineIo, cast: &CastEvent, tick: u8);
@@ -30,7 +31,12 @@ pub trait Mechanics: Clone {
     /// An auto-attack swing resolved.
     fn swing(&self, io: &mut dyn EngineIo, swing: &SwingEvent);
     fn periodic_tick(&self, io: &mut dyn EngineIo, tick: &TickEvent);
+    /// An aura was applied or refreshed, or its stack count changed without
+    /// it being removed. Covers every application, including run-start
+    /// passives and externals.
+    fn aura_changed(&self, io: &mut dyn EngineIo, ev: &AuraChange);
     fn aura_removed(&self, io: &mut dyn EngineIo, ev: &AuraEvent);
+    fn actor_died(&self, io: &mut dyn EngineIo, ev: &DeathEvent);
     /// An enemy rule hit a player: apply mitigation, then call
     /// [`EngineIo::apply_damage`].
     fn enemy_hit(&self, io: &mut dyn EngineIo, hit: &EnemyHit);
@@ -42,15 +48,23 @@ pub trait Mechanics: Clone {
 pub trait EngineIo {
     fn view(&self) -> &dyn StateView;
     fn data(&self) -> &GameData;
-    fn apply_damage(&mut self, d: DamageEvent);
+    /// Returns the amount that landed after absorbs, overkill included.
+    fn apply_damage(&mut self, d: DamageEvent) -> f64;
     fn apply_heal(&mut self, h: HealEvent);
     fn apply_aura(&mut self, a: AuraApplication);
+    /// `source: None` removes the aura from every source.
     fn remove_aura(&mut self, holder: ActorId, aura: AuraId, source: Option<ActorId>);
+    /// Remove up to `stacks` stacks; the aura goes when none remain.
+    fn remove_stacks(&mut self, aura: AuraRef, stacks: u8);
     /// Push back an existing aura's expiry (no-op if absent).
-    fn extend_aura(&mut self, holder: ActorId, aura: AuraId, source: ActorId, by: SimDuration);
+    fn extend_aura(&mut self, aura: AuraRef, by: SimDuration);
     /// Change a valued aura's value, applying the aura if absent. The kernel
     /// enforces the cap and runs threshold effects.
-    fn add_aura_value(&mut self, holder: ActorId, aura: AuraId, source: ActorId, delta: f64);
+    fn add_aura_value(&mut self, aura: AuraRef, delta: f64);
+    /// A listener rolled for a proc. The kernel updates its
+    /// [`crate::state::ProcView`] and, on success, starts its internal
+    /// cooldown.
+    fn record_proc_attempt(&mut self, listener: ListenerRef, procced: bool);
     fn add_resource(&mut self, actor: ActorId, kind: ResourceKind, delta: f64);
     fn set_regen_mult(&mut self, actor: ActorId, kind: ResourceKind, mult: f64);
     /// Rescales GCDs, casts, hasted cooldowns, regen, and ticks from now on.
@@ -75,9 +89,18 @@ pub trait EngineIo {
     /// Make an owner's pets cast `spell` at `target` outside their autocast
     /// priority (`pet: None` commands every type).
     fn command_pets(&mut self, owner: Seat, pet: Option<PetId>, spell: SpellId, target: ActorId);
-    /// Timers are invisible to observers. Anything a player could see
-    /// coming (a sigil about to land, a bomb about to detonate) must be an
-    /// aura with `on_expire` effects instead.
+    /// Cast `spell` for free: no gates, costs, cast time, or cooldown. It
+    /// resolves through [`Mechanics::cast_completed`] (or
+    /// [`Mechanics::projectile_landed`] after its travel time) as a new event
+    /// at the current time, never re-entrantly.
+    fn trigger_spell(&mut self, caster: ActorId, spell: SpellId, target: Option<ActorId>);
+    /// Stop `target`'s cast if it is interruptible. Returns whether one was
+    /// stopped.
+    fn interrupt(&mut self, target: ActorId) -> bool;
+    /// Pending timers are readable through [`StateView::timers`], but
+    /// realistic observers can't tell what a token means. Anything a player
+    /// could see coming (a sigil about to land) should be an aura with
+    /// `on_expire` effects instead.
     fn schedule(&mut self, delay: SimDuration, timer: TimerEvent);
     /// Uniform in `[0, 1)` from the actor's named stream.
     fn roll(&mut self, actor: ActorId, stream: StreamKey) -> f64;
@@ -91,8 +114,10 @@ pub struct CastEvent {
     pub seat: Seat,
     /// Who is casting: the seat's actor or a pet.
     pub actor: ActorId,
-    /// `None` for pet casts and triggered spells.
-    pub slot: Option<AbilitySlot>,
+    /// The ability pressed, before aura overrides; `None` for pet casts and
+    /// triggered spells.
+    pub ability: Option<SpellId>,
+    /// What was actually cast.
     pub spell: SpellId,
     pub target: Option<ActorId>,
     pub started: SimTime,
@@ -112,19 +137,23 @@ pub struct SwingEvent {
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct TickEvent {
-    pub holder: ActorId,
-    pub source: ActorId,
-    pub aura: AuraId,
+    pub aura: AuraRef,
     pub index: u32,
     /// `1.0` for a full tick; less for a partial final tick.
     pub fraction: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuraChange {
+    pub aura: AuraRef,
+    /// 0 for a fresh application.
+    pub previous_stacks: u8,
+    pub stacks: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuraEvent {
-    pub holder: ActorId,
-    pub source: ActorId,
-    pub aura: AuraId,
+    pub aura: AuraRef,
     pub reason: AuraRemoval,
 }
 
@@ -133,6 +162,13 @@ pub enum AuraRemoval {
     Expired,
     Removed,
     HolderDied,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeathEvent {
+    pub actor: ActorId,
+    /// Whoever dealt the killing blow, if anyone did.
+    pub killer: Option<ActorId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -172,9 +208,7 @@ pub struct HealEvent {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuraApplication {
-    pub holder: ActorId,
-    pub source: ActorId,
-    pub aura: AuraId,
+    pub aura: AuraRef,
     pub stacks: u8,
     /// Override the data duration (e.g. a talent-extended buff).
     pub duration: Option<SimDuration>,

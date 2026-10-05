@@ -11,13 +11,12 @@
 //! Most behavior should be data; kits are the escape hatch, and they hold no
 //! state of their own (see the rule in `portunus_engine::mechanics`).
 
-use portunus_core::{AbilitySlot, ActorId, AuraId, HookKey, Seat, SpecId, SpellId};
-use portunus_engine::{EngineIo, Readiness, StateView};
+use portunus_core::{ActorId, HookKey, Seat, SpecId, SpellId};
+use portunus_engine::mechanics::TimerEvent;
+use portunus_engine::{AuraRef, EngineIo, Readiness, StateView};
 use portunus_gamedata::effect::{Coefficient, Effect};
-use portunus_gamedata::spec::Role;
 use portunus_gamedata::stats::SchoolMask;
 use portunus_gamedata::GameData;
-use portunus_loadout::ActorTemplate;
 
 /// Where an effect list is running from.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -25,8 +24,15 @@ pub struct EffectCtx {
     pub caster: ActorId,
     pub target: Option<ActorId>,
     pub spell: Option<SpellId>,
-    pub aura: Option<AuraId>,
-    /// Multiplier from context: partial ticks, AoE scaling.
+    /// The aura instance whose tick, listener, expiry, or threshold is
+    /// running; what `Coefficient::AuraValue` reads.
+    pub aura: Option<AuraRef>,
+    /// What `Coefficient::EventAmount` scales: the damage or healing a
+    /// listener reacted to, the resource it saw spent, or a bank tick's
+    /// draw.
+    pub event_amount: Option<f64>,
+    /// Multiplier on every amount: partial ticks, AoE falloff, and
+    /// `SpendScaling`.
     pub scale: f64,
 }
 
@@ -56,21 +62,41 @@ pub trait CombatMath {
     fn haste_mult(&self, view: &dyn StateView, actor: ActorId) -> f64;
 }
 
+/// The shared machinery a kit builds on, so hooks deal damage and run
+/// effects exactly as data does.
+#[derive(Clone, Copy)]
+pub struct KitTools<'a> {
+    pub effects: &'a dyn EffectInterpreter,
+    pub math: &'a dyn CombatMath,
+}
+
 pub trait SpecKit: Send + Sync {
     fn spec(&self) -> SpecId;
     /// Every hook this kit implements; data naming any other is invalid.
     fn hooks(&self) -> &[HookKey];
-    fn run_hook(&self, key: &HookKey, io: &mut dyn EngineIo, ctx: &EffectCtx);
-    fn gate(&self, view: &dyn StateView, seat: Seat, slot: AbilitySlot) -> Readiness;
+    fn run_hook(
+        &self,
+        tools: KitTools<'_>,
+        io: &mut dyn EngineIo,
+        ctx: &EffectCtx,
+        key: &HookKey,
+    );
+    /// A timer this kit scheduled has fired; `token` is the kit's own.
+    fn timer(&self, tools: KitTools<'_>, io: &mut dyn EngineIo, timer: &TimerEvent);
+    fn gate(&self, view: &dyn StateView, seat: Seat, ability: SpellId) -> Readiness;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KitIssue {
+    /// A spec in the data has no kit.
+    MissingKit(SpecId),
+    /// Data names a hook that no kit implements.
+    UnknownHook(HookKey),
+    /// Two kits claim the same hook.
+    DuplicateHook(HookKey),
 }
 
 pub trait SpecRegistry: Send + Sync {
     fn kit(&self, spec: SpecId) -> Option<&dyn SpecKit>;
-    /// Hooks named in data that no kit implements, and similar gaps.
-    fn validate(&self, data: &GameData) -> Vec<String>;
-}
-
-/// Simple templates for party members whose roles aren't being optimized.
-pub trait StandIns {
-    fn template(&self, data: &GameData, role: Role) -> ActorTemplate;
+    fn validate(&self, data: &GameData) -> Vec<KitIssue>;
 }

@@ -1,6 +1,6 @@
 //! What a policy can answer at a decision point.
 
-use portunus_core::{AbilitySlot, ActorId, AuraId, SimTime};
+use portunus_core::{ActorId, AuraId, SimTime, SpellId};
 use portunus_gamedata::stats::ResourceKind;
 use serde::{Deserialize, Serialize};
 
@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum Choice {
     Cast {
-        slot: AbilitySlot,
+        /// One of the seat's abilities, by the id it was granted under; aura
+        /// overrides change what it casts, not this key.
+        ability: SpellId,
         target: TargetSel,
         opts: CastOpts,
     },
@@ -82,21 +84,23 @@ pub enum Condition {
     Any(Vec<Condition>),
 }
 
+/// Durations and times are in milliseconds, like everywhere else.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Scalar {
     Resource(ResourceKind),
-    /// Seconds until ready (0 if ready).
-    CooldownRemaining(AbilitySlot),
-    Charges(AbilitySlot),
-    /// Seconds remaining on an aura this seat holds (0 if absent).
+    /// Until ready (0 if ready).
+    CooldownRemaining(SpellId),
+    Charges(SpellId),
+    /// Remaining on an aura this seat holds (0 if absent).
     AuraRemaining(AuraId),
     AuraStacks(AuraId),
     /// The value carried by an aura this seat holds (0 if absent).
     AuraValue(AuraId),
-    /// Seconds remaining on this seat's aura on its primary target.
+    /// Remaining on this seat's aura on its primary target (0 if absent).
     TargetAuraRemaining(AuraId),
-    TimeSeconds,
+    /// Since the start of the run.
+    Time,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

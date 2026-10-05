@@ -5,7 +5,7 @@
 //! enemy's own engagement, not to the pull. Routes reference enemies only by
 //! [`EnemyKey`]; nothing about behavior is authored per route.
 
-use portunus_core::{Dist, EnemyKey, EventName, SimDuration, Trigger};
+use portunus_core::{AuraId, Dist, EnemyKey, EventName, SimDuration, Trigger};
 use serde::{Deserialize, Serialize};
 
 use crate::stats::SchoolMask;
@@ -62,7 +62,7 @@ pub enum EnemySubject {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EnemyRule {
-    /// Stable name: plans and traces anchor to `spawn/name@n`.
+    /// Stable name that plan anchors and triggers refer to.
     pub name: EventName,
     /// Only active while the enemy is in this phase.
     pub phase: Option<PhaseName>,
@@ -92,10 +92,9 @@ pub enum EnemyAction {
         duration: Dist<SimDuration>,
         target: EnemyTarget,
     },
-    SelfEffect {
-        effect: EnemySelfEffect,
-        duration: Option<SimDuration>,
-    },
+    /// Apply an aura from [`crate::GameData::auras`] to this enemy, e.g. an
+    /// immunity shield or an enrage.
+    SelfAura(AuraId),
     SpawnAdds {
         adds: Vec<(EnemyKey, u32)>,
     },
@@ -112,12 +111,4 @@ pub enum EnemyTarget {
     /// This many distinct random players.
     RandomPlayers(u8),
     AllPlayers,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum EnemySelfEffect {
-    Immune,
-    DamageTakenMult(f64),
-    DamageDoneMult(f64),
 }

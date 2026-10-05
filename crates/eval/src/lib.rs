@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use portunus_core::{Seat, Seed};
+use portunus_core::{PullName, Seat, Seed};
 use portunus_engine::Outcome;
 use thiserror::Error;
 
@@ -28,12 +28,24 @@ pub struct SeedSet {
     pub count: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Metric {
     TotalTime,
     CompletionRate,
     Deaths,
     SeatDamage(Seat),
+    /// 1 if anyone died in this pull, else 0; its mean is the pull's death
+    /// chance.
+    DeathChance(PullName),
+}
+
+/// One value per seed: `values[i]` is for seed `seeds.first + i`, and `None`
+/// marks a failed rollout. Results on the same seeds pair up index by index;
+/// a seed that failed on either side is left out of the pair.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PerSeed {
+    pub seeds: SeedSet,
+    pub values: Vec<Option<f64>>,
 }
 
 pub struct Experiment {
@@ -55,7 +67,8 @@ pub struct Estimate {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Report {
     pub arms: Vec<ArmReport>,
-    /// Each non-baseline arm minus the baseline, per metric, on paired seeds.
+    /// Each non-baseline arm minus the baseline, per metric, on the seeds
+    /// both completed.
     pub paired: Vec<PairedDelta>,
     pub failures: Vec<(String, Seed)>,
 }

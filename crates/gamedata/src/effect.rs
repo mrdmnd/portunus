@@ -90,9 +90,19 @@ pub enum Effect {
         spell: SpellId,
         target: EffectTarget,
     },
+    /// Stop the target's cast if it is interruptible; its payload never
+    /// lands.
+    Interrupt {
+        target: EffectTarget,
+    },
     /// Run exactly one branch, chosen by weight from the caster's proc
     /// stream (e.g. one of three random buffs).
     RandomOf(Vec<(f64, Effect)>),
+    If {
+        when: Predicate,
+        then: Vec<Effect>,
+        otherwise: Vec<Effect>,
+    },
     Hook(HookKey),
 }
 
@@ -156,12 +166,14 @@ pub struct Modifier {
     pub per_stack: bool,
     /// Applies only while this holds, e.g. "crits against targets with your
     /// Flame Shock".
-    pub condition: Option<ModCondition>,
+    pub condition: Option<Predicate>,
 }
 
+/// A test against the current caster, target, and spell, used by
+/// conditional modifiers and `Effect::If`.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum ModCondition {
+pub enum Predicate {
     /// The target has this aura; `from_self` requires the holder to be its
     /// source.
     TargetHasAura {
@@ -206,6 +218,9 @@ pub enum ModKind {
     /// Non-instant spells in scope become castable while moving (`value`
     /// unused).
     CastWhileMoving,
+    /// Takes no damage in scope (`value` unused), e.g. an enemy's shield
+    /// phase.
+    Immune,
 }
 
 /// A reaction to combat events: procs, on-hit effects, and the like.

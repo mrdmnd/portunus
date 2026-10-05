@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::ids::Seed;
-use crate::rng::{Domain, KeyedRng};
+use crate::rng::Domain;
 
 /// A value an author declares as uncertain.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -22,9 +22,8 @@ pub enum Dist<T> {
     },
 }
 
-/// Draw one value. Implemented for the numeric `Dist`s the sim uses.
 pub trait Sample<T> {
-    fn sample<R: KeyedRng>(&self, rng: &R, seed: Seed, domain: Domain, index: u64) -> T;
+    fn sample(&self, seed: Seed, domain: Domain, index: u64) -> T;
     /// The value a realistic player would plan around.
     fn mean(&self) -> T;
 }

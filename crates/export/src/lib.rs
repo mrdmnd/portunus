@@ -3,8 +3,8 @@
 //! A network can't run in the game's Lua at useful speed, so export is two
 //! steps: distill the teacher into a small student (a decision tree or tiny
 //! network), then emit Lua that rebuilds the student's observation from the
-//! game API. Only observers that respect `InfoSet::Realistic` can be
-//! exported, since the addon can't see anything more. Because observations
+//! game API. Only students of `InfoSet::Realistic` observations are
+//! exportable, since the addon can't see anything more. Because observations
 //! are a function of current state only, the addon needs no history: it
 //! reads the game state at each decision and nothing else.
 

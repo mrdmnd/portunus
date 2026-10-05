@@ -2,8 +2,9 @@
 //!
 //! Two tables, both pinned to a [`GameBuild`]:
 //!
-//! - [`GameData`]: everything player-side — specs, spells, auras, items,
-//!   talents, and the stat curves that turn ratings into percentages;
+//! - [`GameData`]: specs, spells, auras (including the ones enemies put on
+//!   themselves), items, talents, and the stat curves that turn ratings
+//!   into percentages;
 //! - [`EnemyData`]: every enemy type and its behavior rules.
 //!
 //! Abstraction rule: anything passive (a talent, a tier bonus, a trinket's
@@ -43,7 +44,6 @@ pub struct GameBuild {
     pub build: u32,
 }
 
-/// Player-side game data for one build.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GameData {
     pub build: GameBuild,

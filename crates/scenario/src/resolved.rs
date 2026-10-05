@@ -1,11 +1,14 @@
 //! One concrete run: static random values drawn, names resolved to indices.
 
-use portunus_core::{Domain, EnemyKey, PullName, SimDuration, SpawnLabel, Trigger};
+use portunus_core::{Domain, EnemyKey, PullName, Seed, SimDuration, SpawnLabel, Trigger};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResolvedRun {
     pub name: String,
+    /// The seed this run was sampled from. The engine draws every dynamic
+    /// value from it too, so it is the rollout's only seed.
+    pub seed: Seed,
     pub segments: Vec<Segment>,
 }
 
@@ -24,8 +27,8 @@ pub enum Segment {
 pub struct ResolvedCombat {
     pub pull: PullName,
     pub timeout: SimDuration,
-    /// Adds created mid-combat by `SpawnAdds` are appended by the engine and
-    /// labeled under their parent, e.g. `boss#1/add#3`.
+    /// Spawns known before combat. Adds from `SpawnAdds` exist only in
+    /// engine state, labeled under their parent, e.g. `boss#1/add#3`.
     pub spawns: Vec<ResolvedSpawn>,
 }
 

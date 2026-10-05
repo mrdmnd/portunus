@@ -1,6 +1,6 @@
 //! Decision points.
 
-use portunus_core::{AbilitySlot, ActorId, AuraId, Seat, SimTime};
+use portunus_core::{ActorId, AuraId, Seat, SimTime, SpellId};
 use serde::{Deserialize, Serialize};
 
 use crate::outcome::Outcome;
@@ -45,7 +45,7 @@ pub enum WakeReason {
     /// The seat just started a GCD-triggering cast and an off-GCD ability
     /// is ready right now.
     OffGcdReady,
-    CooldownReady(AbilitySlot),
+    CooldownReady(SpellId),
     AuraGained(AuraId),
     AuraLost(AuraId),
     WaitElapsed,

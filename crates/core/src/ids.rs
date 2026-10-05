@@ -24,7 +24,6 @@ macro_rules! name_id {
     };
 }
 
-/// Party size for a keystone group.
 pub const PARTY_SIZE: usize = 5;
 
 numeric_id!(
@@ -40,11 +39,8 @@ numeric_id!(
     ActorId(u16)
 );
 numeric_id!(
-    /// Index into an actor's ability list; the stable action head for policies.
-    AbilitySlot(u8)
-);
-numeric_id!(
-    /// A named random stream owned by one actor (crit rolls, one proc, ...).
+    /// One of an actor's random streams (crit rolls, one proc, ...), numbered
+    /// by whoever declares it. Renumbering one shifts its rolls.
     StreamKey(u16)
 );
 

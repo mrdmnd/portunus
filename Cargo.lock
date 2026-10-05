@@ -95,7 +95,6 @@ dependencies = [
  "portunus-core",
  "portunus-engine",
  "portunus-gamedata",
- "portunus-loadout",
 ]
 
 [[package]]
@@ -110,6 +109,9 @@ name = "portunus-plan"
 version = "0.1.0"
 dependencies = [
  "portunus-core",
+ "portunus-gamedata",
+ "portunus-loadout",
+ "portunus-scenario",
  "serde",
 ]
 

@@ -90,13 +90,13 @@ pub mod trace;
 use portunus_core::Seat;
 
 pub use choice::{CastOpts, Choice, Condition, TargetSel, Wait};
-pub use error::EngineError;
+pub use error::{EngineError, IllegalChoice, SetupIssue};
 pub use mask::{ActionMask, Readiness};
 pub use mechanics::{EngineIo, Mechanics};
 pub use order::EventClass;
 pub use outcome::Outcome;
 pub use setup::{Externals, Latency, RunSetup, SeatSetup};
-pub use state::{SeatPhase, SegmentView, StateView};
+pub use state::{AuraRef, ListenerRef, PendingTimer, ProcView, SeatPhase, SegmentView, StateView};
 pub use step::{DecisionRequest, Step, WakeReason};
 pub use trace::TraceRecord;
 

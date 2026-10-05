@@ -6,17 +6,19 @@
 //! The state is complete, so decisions are Markov: nothing about the past
 //! matters except what is still present here. Facts a player would "remember"
 //! are kept as current facts instead — a cooldown's remaining time rather
-//! than when it was used, time since an enemy rule last fired rather than a
-//! log of its casts. Timings the engine derives (hasted GCD, cast times,
+//! than when it was used, when an enemy rule last fired rather than a log of
+//! its casts. Timings the engine derives (hasted GCD, cast times,
 //! recharge progress) are exposed directly so observers never re-derive
 //! game formulas.
 
-use portunus_core::{AbilitySlot, ActorId, AuraId, PetId, Seat, SimDuration, SimTime, SpellId};
-use portunus_gamedata::enemy::RuleIndex;
+use portunus_core::{ActorId, AuraId, PetId, Seat, SimDuration, SimTime, SpellId};
+use portunus_gamedata::enemy::{PhaseName, RuleIndex};
 use portunus_gamedata::item::WeaponHand;
 use portunus_gamedata::stats::ResourceKind;
 use portunus_scenario::resolved::SpawnIndex;
+use serde::{Deserialize, Serialize};
 
+use crate::mechanics::TimerEvent;
 use crate::step::WakeReason;
 
 pub trait StateView {
@@ -28,19 +30,20 @@ pub trait StateView {
     fn enemies(&self) -> &[ActorId];
     fn actor(&self, id: ActorId) -> Option<ActorView>;
     fn resource(&self, id: ActorId, kind: ResourceKind) -> Option<ResourceView>;
-    /// Any seat's cooldowns, including teammates'.
-    fn cooldown(&self, seat: Seat, slot: AbilitySlot) -> Option<CooldownView>;
-    /// A pet's cooldown on one of its spells (autocast or commanded).
-    fn pet_cooldown(&self, pet: ActorId, spell: SpellId) -> Option<CooldownView>;
+    /// Any actor's cooldown on a spell: a seat's abilities (teammates'
+    /// included) or a pet's spells.
+    fn cooldown(&self, id: ActorId, spell: SpellId) -> Option<CooldownView>;
     fn gcd_end(&self, seat: Seat) -> Option<SimTime>;
     /// How long a GCD started now would last.
     fn gcd_length(&self, seat: Seat) -> SimDuration;
-    /// What a slot would cast right now (after aura overrides).
-    fn resolved_spell(&self, seat: Seat, slot: AbilitySlot) -> SpellId;
+    /// What pressing `ability` would cast right now (after aura overrides).
+    fn resolved_spell(&self, seat: Seat, ability: SpellId) -> SpellId;
     /// How long that cast would take if started now (0 for instants).
-    fn cast_time(&self, seat: Seat, slot: AbilitySlot) -> SimDuration;
+    fn cast_time(&self, seat: Seat, ability: SpellId) -> SimDuration;
     fn phase(&self, seat: Seat) -> SeatPhase;
     fn auras(&self, holder: ActorId) -> &[AuraInstance];
+    /// Proc bookkeeping for the listeners on this holder's auras.
+    fn procs(&self, holder: ActorId) -> &[ProcView];
     /// The persistent multiplier (`ModKind::PersistentPct`) this aura would
     /// snapshot if `source` applied it now; compare with the instance's
     /// `pmultiplier` to decide whether a refresh is worth it.
@@ -56,6 +59,10 @@ pub trait StateView {
     /// The seat's most recent completed (or released) cast.
     fn last_cast(&self, seat: Seat) -> Option<LastCast>;
     fn rule(&self, enemy: ActorId, rule: RuleIndex) -> RuleView;
+    /// An enemy's current phase; `None` for enemies without phases.
+    fn enemy_phase(&self, enemy: ActorId) -> Option<&PhaseName>;
+    /// Mechanics timers not yet fired, soonest first.
+    fn timers(&self) -> &[PendingTimer];
     /// Unanticipated events that have happened but that this seat hasn't
     /// perceived yet, because their reaction delays are still running.
     /// Realistic observers hide these (and any legality they enable).
@@ -80,6 +87,12 @@ pub struct CombatView {
     pub index: u16,
     pub started: SimTime,
     pub deadline: SimTime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PendingTimer {
+    pub timer: TimerEvent,
+    pub fires_at: SimTime,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,7 +151,8 @@ pub enum ActorKind {
 pub struct CastView {
     pub what: CastWhat,
     pub started: SimTime,
-    /// For empowers, when the hold runs out.
+    /// When the cast or channel completes; for empowers, when the hold runs
+    /// out.
     pub ends: SimTime,
     pub interruptible: bool,
     /// Channels: when the next tick lands.
@@ -174,6 +188,37 @@ pub struct CooldownView {
     pub next_charge_at: Option<SimTime>,
     /// Full recharge time at the current rate.
     pub recharge: SimDuration,
+}
+
+/// One aura instance: auras are held per `(holder, aura, source)`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct AuraRef {
+    pub holder: ActorId,
+    pub aura: AuraId,
+    pub source: ActorId,
+}
+
+/// One listener on an aura instance, by its index in `AuraDef::listeners`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct ListenerRef {
+    pub aura: AuraRef,
+    pub index: u8,
+}
+
+/// Everything a proc's chance depends on besides its definition and the
+/// holder's haste. Kept by the kernel for as long as the aura instance
+/// lasts. A player who watches their procs knows all of it; the outcome of
+/// the next roll is never part of the state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProcView {
+    pub listener: ListenerRef,
+    /// When the listener last rolled (RPPM's chance grows with this gap).
+    pub last_attempt: Option<SimTime>,
+    /// When it last succeeded (RPPM's bad-luck protection grows with this
+    /// gap).
+    pub last_proc: Option<SimTime>,
+    /// When the internal cooldown ends, if one is running.
+    pub icd_ready_at: Option<SimTime>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

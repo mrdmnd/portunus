@@ -69,11 +69,9 @@ pub struct ItemDef {
     pub unique_group: Option<u32>,
 }
 
-/// Auto-attacks: each equipped weapon swings on its own timer at the
-/// holder's target while in combat. Hasted by attack speed; hard casts and
-/// channels pause melee swings.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct WeaponDef {
+    /// Unhasted swing interval.
     pub speed: SimDuration,
     pub min_damage: f64,
     pub max_damage: f64,

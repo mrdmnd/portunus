@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use portunus_core::{AuraId, Dist, Seed, SimDuration};
+use portunus_core::{AuraId, Dist, SimDuration};
 use portunus_gamedata::{EnemyData, GameData};
 use portunus_loadout::ActorTemplate;
 use portunus_scenario::ResolvedRun;
@@ -11,11 +11,11 @@ use portunus_scenario::ResolvedRun;
 /// through observations, and has no effect on the world.
 ///
 /// Party members whose roles aren't being optimized (tank, healer) are
-/// ordinary seats with simple stand-in templates driven by scripted
+/// ordinary seats with simple stand-in loadouts driven by scripted
 /// policies, not a separate engine concept.
 #[derive(Debug, Clone)]
 pub struct RunSetup {
-    pub seed: Seed,
+    /// Carries the rollout's seed.
     pub run: Arc<ResolvedRun>,
     pub data: Arc<GameData>,
     pub enemies: Arc<EnemyData>,
@@ -36,7 +36,7 @@ pub struct SeatSetup {
 ///
 /// Anticipated wakes (a wait the seat named, its own cast or GCD ending)
 /// model the spell queue window: a real player lines the next cast up in
-/// advance, so these default to zero delay. Unanticipated wakes (procs,
+/// advance, so these are usually zero. Unanticipated wakes (procs,
 /// enemy casts, engagements) cost a human reaction time, drawn separately
 /// for each event.
 #[derive(Debug, Clone, PartialEq)]
