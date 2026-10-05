@@ -4,6 +4,15 @@
 //! files) produce [`GameData`] and [`EnemyData`]; combat logs calibrate
 //! enemy timings and damage. Messy outside formats stop here and never leak
 //! into the simulator.
+//!
+//! [`RonFile`] reads hand-written tables; [`check_game_data`] and
+//! [`check_enemy_data`] catch dangling references in whatever was loaded.
+
+mod check;
+mod ron_file;
+
+pub use check::{check_enemy_data, check_game_data, DataIssue, Owner};
+pub use ron_file::{read_ron, RonFile};
 
 use portunus_core::{EnemyKey, EventName, SimTime};
 use portunus_gamedata::{EnemyData, GameBuild, GameData};

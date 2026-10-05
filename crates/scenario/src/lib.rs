@@ -4,11 +4,13 @@
 //!   do lives in [`portunus_gamedata::EnemyData`].
 //! - [`resolved`]: one concrete run, with every *static* random value drawn
 //!   (travel times, enemy health). Dynamic values (rule timings, targets)
-//!   are drawn by the engine from the same name-keyed random stream, via
-//!   each spawn's domain, so rollouts stay reproducible and paired.
-//! - [`ScenarioSampler`]: validates once, then samples per seed.
+//!   are drawn by the engine under the same seed, in domains keyed by pull
+//!   and spawn label, so rollouts stay reproducible and paired.
+//! - [`ScenarioSampler`]: validates once, then samples per seed;
+//!   [`Sampler`] is the implementation.
 
 pub mod resolved;
+mod sampler;
 pub mod spec;
 
 use std::sync::Arc;
@@ -19,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub use resolved::ResolvedRun;
+pub use sampler::Sampler;
 pub use spec::ScenarioSpec;
 
 #[derive(Debug, Error)]
@@ -56,7 +59,10 @@ pub enum ScenarioIssue {
         pull: PullName,
         wave: usize,
     },
+    /// The pre-pull window can be longer than the shortest travel time.
     PrepullExceedsTravel(PullName),
+    /// The travel time's bounds are reversed.
+    InvalidTravel(PullName),
     NotEnoughForces {
         required: u32,
         available: u32,

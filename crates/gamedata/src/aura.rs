@@ -10,32 +10,49 @@ use serde::{Deserialize, Serialize};
 use crate::effect::{Coefficient, Effect, Listener, Modifier};
 use crate::stats::SchoolMask;
 
+/// Fields with defaults may be omitted from authored files; `duration` may
+/// not, so a forgotten duration can't silently make an aura permanent.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AuraDef {
     pub id: AuraId,
     pub name: String,
     /// `None` is permanent (talents, tier bonuses, mastery).
     pub duration: Option<SimDuration>,
+    #[serde(default = "one")]
     pub max_stacks: u8,
+    #[serde(default)]
     pub refresh: RefreshRule,
+    #[serde(default)]
     pub periodic: Option<Periodic>,
+    #[serde(default)]
     pub value: Option<AuraValue>,
+    #[serde(default)]
     pub modifiers: Vec<Modifier>,
+    #[serde(default)]
     pub listeners: Vec<Listener>,
     /// While active, pressing `from` casts `to` (e.g. Ascendance turning
     /// Chain Lightning into Lava Beam). The ability is still `from`.
+    #[serde(default)]
     pub overrides: Vec<(SpellId, SpellId)>,
+    #[serde(default)]
     pub on_expire: Vec<Effect>,
     /// The holder may remove it (`Choice::CancelAura`).
+    #[serde(default)]
     pub cancelable: bool,
     /// Can't be applied while the target holds this aura (Bloodlust and
     /// Exhaustion).
+    #[serde(default)]
     pub blocked_by: Option<AuraId>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub(crate) fn one() -> u8 {
+    1
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RefreshRule {
+    #[default]
     Replace,
     /// Carry over remaining time up to this fraction of the base duration.
     Pandemic(f64),

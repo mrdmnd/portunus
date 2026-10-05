@@ -1,6 +1,6 @@
 //! One concrete run: static random values drawn, names resolved to indices.
 
-use portunus_core::{Domain, EnemyKey, PullName, Seed, SimDuration, SpawnLabel, Trigger};
+use portunus_core::{EnemyKey, PullName, Seed, SimDuration, SpawnLabel, Trigger};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -53,7 +53,4 @@ pub struct ResolvedSpawn {
     pub max_health: f64,
     pub forces: u32,
     pub engage: Trigger<SpawnSet>,
-    /// Root of this spawn's dynamic random draws, derived from
-    /// `(pull, label)`.
-    pub domain: Domain,
 }

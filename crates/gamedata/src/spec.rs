@@ -22,10 +22,16 @@ pub struct SpecDef {
     pub role: Role,
     pub primary_stat: Stat,
     pub base_stats: StatBlock,
+    /// Mastery before any rating, in percent.
+    pub base_mastery_pct: f64,
+    /// Mastery percent per percent of converted mastery rating; specs'
+    /// masteries scale differently.
+    pub mastery_coef: f64,
     pub resources: Vec<ResourceDef>,
     pub baseline_spells: Vec<SpellId>,
     /// Always-on spec passives, including mastery.
     pub baseline_auras: Vec<AuraId>,
     /// Class tree, spec tree, hero trees.
+    #[serde(default)]
     pub trees: Vec<TalentTree>,
 }

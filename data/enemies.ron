@@ -1,0 +1,15 @@
+// Enemies for the placeholder build in game.ron. Health is a placeholder
+// sized so the dummy dies in a few minutes at the placeholder coefficients.
+(
+    build: (version: "placeholder", build: 0),
+    enemies: {
+        "target_dummy": (
+            key: "target_dummy",
+            name: "Target Dummy",
+            kind: boss,
+            health: jitter(base: 400000.0, jitter: 40000.0),
+            forces: 0,
+            defense: (level_offset: 3, armor: 0.0),
+        ),
+    },
+)

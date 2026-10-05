@@ -47,3 +47,47 @@ pub enum Trigger<S> {
     Any(Vec<Trigger<S>>),
     Never,
 }
+
+impl<S> Trigger<S> {
+    /// The same trigger over another subject type.
+    pub fn map<T>(&self, f: &mut impl FnMut(&S) -> T) -> Trigger<T> {
+        match self {
+            Trigger::Now => Trigger::Now,
+            Trigger::Elapsed(d) => Trigger::Elapsed(*d),
+            Trigger::HpFracBelow { who, frac } => Trigger::HpFracBelow {
+                who: f(who),
+                frac: *frac,
+            },
+            Trigger::AliveAtMost { who, count } => Trigger::AliveAtMost {
+                who: f(who),
+                count: *count,
+            },
+            Trigger::Died(who) => Trigger::Died(f(who)),
+            Trigger::Fired { who, event, nth } => Trigger::Fired {
+                who: f(who),
+                event: event.clone(),
+                nth: *nth,
+            },
+            Trigger::Delayed { delay, after } => Trigger::Delayed {
+                delay: *delay,
+                after: Box::new(after.map(f)),
+            },
+            Trigger::All(ts) => Trigger::All(ts.iter().map(|t| t.map(f)).collect()),
+            Trigger::Any(ts) => Trigger::Any(ts.iter().map(|t| t.map(f)).collect()),
+            Trigger::Never => Trigger::Never,
+        }
+    }
+
+    /// Every subject mentioned, with the event name for `Fired`.
+    pub fn visit(&self, f: &mut impl FnMut(&S, Option<&EventName>)) {
+        match self {
+            Trigger::Now | Trigger::Elapsed(_) | Trigger::Never => {}
+            Trigger::HpFracBelow { who, .. }
+            | Trigger::AliveAtMost { who, .. }
+            | Trigger::Died(who) => f(who, None),
+            Trigger::Fired { who, event, .. } => f(who, Some(event)),
+            Trigger::Delayed { after, .. } => after.visit(f),
+            Trigger::All(ts) | Trigger::Any(ts) => ts.iter().for_each(|t| t.visit(f)),
+        }
+    }
+}

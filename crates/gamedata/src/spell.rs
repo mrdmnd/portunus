@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use crate::effect::Effect;
 use crate::stats::{Cost, SchoolMask};
 
+/// `gcd` (`None` is off the GCD) and `hostile` must always be written out;
+/// fields with defaults may be omitted.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpellDef {
     pub id: SpellId,
@@ -13,7 +15,9 @@ pub struct SpellDef {
     pub school: SchoolMask,
     pub cast: CastKind,
     pub gcd: Option<GcdDef>,
+    #[serde(default)]
     pub cooldown: Option<CooldownDef>,
+    #[serde(default)]
     pub costs: Vec<Cost>,
     pub targeting: Targeting,
     /// Harms enemies or starts combat. Only non-hostile spells are usable
@@ -21,11 +25,15 @@ pub struct SpellDef {
     pub hostile: bool,
     /// Projectile flight time: effects resolve on impact, and the spell is
     /// "in flight" until then.
+    #[serde(default)]
     pub travel: Option<SimDuration>,
     /// Usable while forced to move (instants and a few exceptions).
+    #[serde(default)]
     pub castable_while_moving: bool,
     /// Usable while another cast is in progress (off-GCD, off-cast).
+    #[serde(default)]
     pub usable_while_casting: bool,
+    #[serde(default)]
     pub effects: Vec<Effect>,
 }
 

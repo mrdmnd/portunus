@@ -1,0 +1,221 @@
+// Hand-written Elemental Shaman slice.
+//
+// Spell and aura ids follow the live game where known, but every
+// coefficient, duration, proc rate, and stat curve here is an UNCALIBRATED
+// PLACEHOLDER until this file is regenerated from the SimulationCraft spell
+// dump. Do not read balance conclusions from it.
+(
+    build: (version: "placeholder", build: 0),
+    specs: {
+        262: (
+            id: 262,
+            class: "Shaman",
+            name: "Elemental",
+            role: damage,
+            primary_stat: intellect,
+            base_stats: { intellect: 2000.0, stamina: 2000.0 },
+            base_mastery_pct: 8.0,
+            mastery_coef: 1.0,
+            resources: [
+                (kind: maelstrom, max: 100.0, initial: 0.0, regen_per_sec: 0.0, regen_hasted: false),
+            ],
+            baseline_spells: [188196, 51505, 188389, 8042],
+            baseline_auras: [168534, 77756, 51505, 60188],
+        ),
+    },
+    spells: {
+        188196: (
+            id: 188196,
+            name: "Lightning Bolt",
+            school: 8,
+            cast: cast(time: 2000, hasted: true),
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            targeting: enemy,
+            hostile: true,
+            effects: [
+                damage(amount: spell_power(1.15), school: 8, target: target),
+                resource((kind: maelstrom, amount: 8.0)),
+            ],
+        ),
+        45284: (
+            id: 45284,
+            name: "Lightning Bolt Overload",
+            school: 8,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            effects: [
+                damage(amount: spell_power(0.86), school: 8, target: target),
+                resource((kind: maelstrom, amount: 3.0)),
+            ],
+        ),
+        51505: (
+            id: 51505,
+            name: "Lava Burst",
+            school: 4,
+            cast: cast(time: 2000, hasted: true),
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            cooldown: Some((duration: 8000, charges: 1, hasted: true, category: None)),
+            targeting: enemy,
+            hostile: true,
+            travel: Some(400),
+            effects: [
+                damage(amount: spell_power(1.08), school: 4, target: target),
+                resource((kind: maelstrom, amount: 10.0)),
+            ],
+        ),
+        77451: (
+            id: 77451,
+            name: "Lava Burst Overload",
+            school: 4,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            travel: Some(400),
+            effects: [
+                damage(amount: spell_power(0.81), school: 4, target: target),
+                resource((kind: maelstrom, amount: 3.0)),
+            ],
+        ),
+        188389: (
+            id: 188389,
+            name: "Flame Shock",
+            school: 4,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            cooldown: Some((duration: 6000, charges: 1, hasted: false, category: None)),
+            targeting: enemy,
+            hostile: true,
+            castable_while_moving: true,
+            effects: [
+                damage(amount: spell_power(0.195), school: 4, target: target),
+                apply_aura(aura: 188389, target: target),
+            ],
+        ),
+        8042: (
+            id: 8042,
+            name: "Earth Shock",
+            school: 8,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            costs: [(kind: maelstrom, amount: 60.0, extra: 0.0, scaling: none)],
+            targeting: enemy,
+            hostile: true,
+            castable_while_moving: true,
+            effects: [
+                damage(amount: spell_power(2.1), school: 8, target: target),
+            ],
+        ),
+    },
+    auras: {
+        188389: (
+            id: 188389,
+            name: "Flame Shock",
+            duration: Some(18000),
+            refresh: pandemic(0.3),
+            periodic: Some((
+                period: 2000,
+                hasted: true,
+                partial_final_tick: true,
+                effects: [damage(amount: spell_power(0.116), school: 4, target: target)],
+            )),
+        ),
+        77756: (
+            id: 77756,
+            name: "Lava Surge",
+            duration: None,
+            listeners: [
+                (
+                    on: periodic_tick(188389),
+                    chance: flat(0.08),
+                    effects: [
+                        apply_aura(aura: 77762, target: caster),
+                        adjust_cooldown(spell: 51505, change: reset),
+                    ],
+                ),
+            ],
+        ),
+        77762: (
+            id: 77762,
+            name: "Lava Surge",
+            duration: Some(10000),
+            modifiers: [(scope: spell(51505), kind: cast_time_pct, value: -100.0)],
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(51505), school: None),
+                    chance: always,
+                    effects: [remove_aura(aura: 77762, target: caster)],
+                ),
+            ],
+        ),
+        // Lava Burst and its overload always crit against your Flame Shock.
+        51505: (
+            id: 51505,
+            name: "Lava Burst (crit rule)",
+            duration: None,
+            modifiers: [
+                (
+                    scope: spell(51505),
+                    kind: crit_chance_add,
+                    value: 100.0,
+                    condition: Some(target_has_aura(aura: 188389, from_self: true)),
+                ),
+                (
+                    scope: spell(77451),
+                    kind: crit_chance_add,
+                    value: 100.0,
+                    condition: Some(target_has_aura(aura: 188389, from_self: true)),
+                ),
+            ],
+        ),
+        168534: (
+            id: 168534,
+            name: "Mastery: Elemental Overload",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(188196), school: None),
+                    chance: stat_scaled(stat: mastery, coef: 1.0),
+                    effects: [trigger_spell(spell: 45284, target: target)],
+                ),
+                (
+                    on: cast_complete(spell: Some(51505), school: None),
+                    chance: stat_scaled(stat: mastery, coef: 1.0),
+                    effects: [trigger_spell(spell: 77451, target: target)],
+                ),
+            ],
+        ),
+        60188: (
+            id: 60188,
+            name: "Elemental Fury",
+            duration: None,
+            modifiers: [(scope: all, kind: crit_damage_pct, value: 15.0)],
+        ),
+    },
+    items: {
+        1: (
+            id: 1,
+            name: "Placeholder Robe",
+            equip: chest,
+            stat_allocation: [(intellect, 0.6), (stamina, 0.4), (crit_rating, 0.25), (mastery_rating, 0.25)],
+        ),
+    },
+    item_sets: {},
+    talents: {},
+    pets: {},
+    curves: (
+        ratings: {
+            crit_rating: (rating_per_pct: 700.0, diminishing: [(30.0, 0.9), (39.0, 0.8), (47.0, 0.7), (54.0, 0.6), (66.0, 0.5)]),
+            haste_rating: (rating_per_pct: 660.0, diminishing: [(30.0, 0.9), (39.0, 0.8), (47.0, 0.7), (54.0, 0.6), (66.0, 0.5)]),
+            mastery_rating: (rating_per_pct: 700.0, diminishing: [(30.0, 0.9), (39.0, 0.8), (47.0, 0.7), (54.0, 0.6), (66.0, 0.5)]),
+            versatility_rating: (rating_per_pct: 780.0, diminishing: [(30.0, 0.9), (39.0, 0.8), (47.0, 0.7), (54.0, 0.6), (66.0, 0.5)]),
+        },
+        item_budget: { 600: 1000.0 },
+        base_crit_pct: 5.0,
+        spell_power_per_intellect: 1.0,
+        attack_power_per_primary: 1.0,
+        health_per_stamina: 20.0,
+    ),
+)

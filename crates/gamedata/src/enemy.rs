@@ -19,7 +19,9 @@ pub struct EnemyDef {
     /// Enemy-forces contribution.
     pub forces: u32,
     pub defense: EnemyDefense,
+    #[serde(default)]
     pub initial_phase: Option<PhaseName>,
+    #[serde(default)]
     pub rules: Vec<EnemyRule>,
 }
 
@@ -65,9 +67,11 @@ pub struct EnemyRule {
     /// Stable name that plan anchors and triggers refer to.
     pub name: EventName,
     /// Only active while the enemy is in this phase.
+    #[serde(default)]
     pub phase: Option<PhaseName>,
     pub when: Trigger<EnemySubject>,
     /// Re-fire on this interval after the first firing, while active.
+    #[serde(default)]
     pub repeat: Option<Dist<SimDuration>>,
     pub action: EnemyAction,
 }

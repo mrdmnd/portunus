@@ -38,6 +38,7 @@ portunus-eval = { path = "crates/eval" }
 portunus-optimize = { path = "crates/optimize" }
 portunus-export = { path = "crates/export" }
 portunus-ingest = { path = "crates/ingest" }
+ron = "0.12"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 

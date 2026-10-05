@@ -16,6 +16,7 @@ pub enum Effect {
         amount: Coefficient,
         school: SchoolMask,
         target: EffectTarget,
+        #[serde(default)]
         aoe: Option<AoeRule>,
     },
     Heal {
@@ -25,6 +26,7 @@ pub enum Effect {
     ApplyAura {
         aura: AuraId,
         target: EffectTarget,
+        #[serde(default = "crate::aura::one")]
         stacks: u8,
     },
     RemoveAura {
@@ -101,6 +103,7 @@ pub enum Effect {
     If {
         when: Predicate,
         then: Vec<Effect>,
+        #[serde(default)]
         otherwise: Vec<Effect>,
     },
     Hook(HookKey),
@@ -127,7 +130,8 @@ pub enum Coefficient {
 #[serde(rename_all = "snake_case")]
 pub enum EffectTarget {
     Caster,
-    /// The cast's chosen target.
+    /// The cast's chosen target. For an aura's ticks, its holder; for a
+    /// listener, the target of the event it reacted to.
     Target,
     /// Every engaged enemy (subject to the AoE rule).
     AllEnemies,
@@ -161,11 +165,15 @@ pub enum CooldownChange {
 pub struct Modifier {
     pub scope: ModScope,
     pub kind: ModKind,
+    /// In percent for `*Pct` kinds and `CritChanceAdd` (`10.0` is +10%, or
+    /// +10 percentage points of crit); in stat points for `StatFlat`.
     pub value: f64,
     /// Multiply `value` by the aura's stack count.
+    #[serde(default)]
     pub per_stack: bool,
     /// Applies only while this holds, e.g. "crits against targets with your
     /// Flame Shock".
+    #[serde(default)]
     pub condition: Option<Predicate>,
 }
 
@@ -228,6 +236,7 @@ pub enum ModKind {
 pub struct Listener {
     pub on: ListenFor,
     pub chance: ProcChance,
+    #[serde(default)]
     pub internal_cooldown: Option<SimDuration>,
     pub effects: Vec<Effect>,
 }
@@ -263,14 +272,16 @@ pub enum ListenFor {
 #[serde(rename_all = "snake_case")]
 pub enum ProcChance {
     Always,
+    /// A probability in `[0, 1]`.
     Flat(f64),
     /// Real procs-per-minute, with bad-luck protection.
     Rppm {
         rate: f64,
         hasted: bool,
     },
-    /// Chance is `coef` times a rated percentage, e.g. mastery-driven
-    /// overloads.
+    /// Chance in percent is `coef` times a rated percentage, e.g.
+    /// mastery-driven overloads (`coef: 1.0` at 20% mastery is a 20%
+    /// chance).
     StatScaled {
         stat: RatedStat,
         coef: f64,

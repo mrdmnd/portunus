@@ -49,7 +49,9 @@ pub struct DerivedStats {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RatingCurve {
     pub rating_per_pct: f64,
-    /// `(pct threshold, fraction kept above it)`, ascending.
+    /// `(threshold, fraction kept above it)`, ascending. Thresholds are in
+    /// percent before diminishing returns; each band keeps its own fraction.
+    #[serde(default)]
     pub diminishing: Vec<(f64, f64)>,
 }
 
@@ -58,12 +60,28 @@ pub struct StatCurves {
     pub ratings: BTreeMap<Stat, RatingCurve>,
     /// Item stat budget by item level.
     pub item_budget: BTreeMap<u16, f64>,
+    /// Crit before any rating, in percent.
+    pub base_crit_pct: f64,
+    pub spell_power_per_intellect: f64,
+    /// Per point of agility or strength, whichever is the spec's primary.
+    pub attack_power_per_primary: f64,
+    pub health_per_stamina: f64,
 }
 
 /// Bitmask over magic schools; multi-school spells set several bits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct SchoolMask(pub u8);
+
+impl SchoolMask {
+    pub const PHYSICAL: Self = Self(1);
+    pub const HOLY: Self = Self(2);
+    pub const FIRE: Self = Self(4);
+    pub const NATURE: Self = Self(8);
+    pub const FROST: Self = Self(16);
+    pub const SHADOW: Self = Self(32);
+    pub const ARCANE: Self = Self(64);
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

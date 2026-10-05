@@ -74,13 +74,7 @@ pub trait SpecKit: Send + Sync {
     fn spec(&self) -> SpecId;
     /// Every hook this kit implements; data naming any other is invalid.
     fn hooks(&self) -> &[HookKey];
-    fn run_hook(
-        &self,
-        tools: KitTools<'_>,
-        io: &mut dyn EngineIo,
-        ctx: &EffectCtx,
-        key: &HookKey,
-    );
+    fn run_hook(&self, tools: KitTools<'_>, io: &mut dyn EngineIo, ctx: &EffectCtx, key: &HookKey);
     /// A timer this kit scheduled has fired; `token` is the kit's own.
     fn timer(&self, tools: KitTools<'_>, io: &mut dyn EngineIo, timer: &TimerEvent);
     fn gate(&self, view: &dyn StateView, seat: Seat, ability: SpellId) -> Readiness;

@@ -57,15 +57,22 @@ pub struct ItemDef {
     pub id: ItemId,
     pub name: String,
     pub equip: EquipKind,
-    /// Share of the item-level stat budget per stat.
+    /// Share of the item-level stat budget per stat. Gems have no item
+    /// level; they grant stats through `passive_auras` (`StatFlat`).
+    #[serde(default)]
     pub stat_allocation: Vec<(Stat, f64)>,
+    #[serde(default)]
     pub weapon: Option<WeaponDef>,
     /// Always-on effects while equipped (procs live on these auras).
+    #[serde(default)]
     pub passive_auras: Vec<AuraId>,
     /// A player-triggered effect; the policy decides when.
+    #[serde(default)]
     pub on_use: Option<SpellId>,
+    #[serde(default)]
     pub set: Option<ItemSetId>,
     /// Only one equipped item may share this group (e.g. unique-equipped).
+    #[serde(default)]
     pub unique_group: Option<u32>,
 }
 

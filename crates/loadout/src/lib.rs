@@ -4,7 +4,9 @@
 //! against [`GameData`] yields an [`ActorTemplate`]: final stats, the
 //! abilities the seat can press, and the permanent auras that carry every
 //! passive effect. Compilation is pure and cheap, because configuration
-//! search calls it constantly.
+//! search calls it constantly. [`Compiler`] is the implementation.
+
+mod compile;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -16,11 +18,16 @@ use portunus_gamedata::GameData;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+pub use compile::Compiler;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Loadout {
     pub spec: SpecId,
+    #[serde(default)]
     pub gear: BTreeMap<GearSlot, EquippedItem>,
+    #[serde(default)]
     pub talents: TalentSelection,
+    #[serde(default)]
     pub consumables: Vec<ItemId>,
 }
 
@@ -28,7 +35,9 @@ pub struct Loadout {
 pub struct EquippedItem {
     pub item: ItemId,
     pub item_level: u16,
+    #[serde(default)]
     pub enchant: Option<AuraId>,
+    #[serde(default)]
     pub gems: Vec<ItemId>,
 }
 
@@ -64,10 +73,15 @@ pub struct ActorTemplate {
 pub enum LoadoutIssue {
     UnknownSpec(SpecId),
     UnknownItem(ItemId),
+    UnknownAura(AuraId),
+    /// The stat curves have no budget for this item level.
+    UnknownItemLevel(u16),
     WrongSlot {
         slot: GearSlot,
         item: ItemId,
     },
+    NotConsumable(ItemId),
+    NotAGem(ItemId),
     UniqueConflict {
         a: ItemId,
         b: ItemId,
@@ -81,6 +95,11 @@ pub enum LoadoutIssue {
         rank: u8,
     },
     TalentUnreachable(TalentId),
+    /// Two talents from the same choice node.
+    ChoiceConflict {
+        a: TalentId,
+        b: TalentId,
+    },
     TooManyTalentPoints {
         tree: String,
         spent: u8,

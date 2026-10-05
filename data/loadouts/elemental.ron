@@ -1,0 +1,6 @@
+(
+    spec: 262,
+    gear: {
+        chest: (item: 1, item_level: 600),
+    },
+)
