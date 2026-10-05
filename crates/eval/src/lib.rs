@@ -4,12 +4,18 @@
 //! combination of scenario, loadouts, plan, and policies. Every arm in an
 //! experiment runs on the same seeds, so differences between arms are
 //! measured pairwise, which cancels most of the run-to-run noise.
+//!
+//! [`LocalRunner`] runs experiments on this machine's threads.
+
+mod runner;
 
 use std::sync::Arc;
 
 use portunus_core::{PullName, Seat, Seed};
 use portunus_engine::Outcome;
 use thiserror::Error;
+
+pub use runner::{estimate, metric_value, LocalRunner};
 
 #[derive(Debug, Error)]
 pub enum ArmError {
@@ -28,12 +34,21 @@ pub struct SeedSet {
     pub count: u32,
 }
 
+impl SeedSet {
+    pub fn iter(&self) -> impl Iterator<Item = Seed> {
+        (self.first..self.first + u64::from(self.count)).map(Seed)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Metric {
     TotalTime,
     CompletionRate,
     Deaths,
     SeatDamage(Seat),
+    /// Damage per second in combat: time from each pull's start to its clear
+    /// (or the end of the run).
+    SeatDps(Seat),
     /// 1 if anyone died in this pull, else 0; its mean is the pull's death
     /// chance.
     DeathChance(PullName),

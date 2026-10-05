@@ -1,6 +1,6 @@
 [package]
-name = "portunus-env"
-description = "The decision-making boundary: episodes, observations and information sets, action spaces, and rewards."
+name = "portunus-run"
+description = "The composition root: loads a run file, wires data, kernel, mechanics, env, and policies together, and reports experiments."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,6 +13,11 @@ portunus-loadout = { workspace = true }
 portunus-plan = { workspace = true }
 portunus-scenario = { workspace = true }
 portunus-engine = { workspace = true }
+portunus-mechanics = { workspace = true }
+portunus-env = { workspace = true }
+portunus-policy = { workspace = true }
+portunus-eval = { workspace = true }
+portunus-ingest = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 

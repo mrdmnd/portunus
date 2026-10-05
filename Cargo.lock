@@ -69,6 +69,7 @@ dependencies = [
  "portunus-loadout",
  "portunus-plan",
  "portunus-scenario",
+ "serde",
  "thiserror",
 ]
 
@@ -168,6 +169,25 @@ dependencies = [
  "portunus-engine",
  "portunus-env",
  "serde",
+]
+
+[[package]]
+name = "portunus-run"
+version = "0.1.0"
+dependencies = [
+ "portunus-core",
+ "portunus-engine",
+ "portunus-env",
+ "portunus-eval",
+ "portunus-gamedata",
+ "portunus-ingest",
+ "portunus-loadout",
+ "portunus-mechanics",
+ "portunus-plan",
+ "portunus-policy",
+ "portunus-scenario",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]

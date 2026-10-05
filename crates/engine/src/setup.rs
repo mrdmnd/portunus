@@ -6,6 +6,7 @@ use portunus_core::{AuraId, Dist, SimDuration};
 use portunus_gamedata::{EnemyData, GameData};
 use portunus_loadout::ActorTemplate;
 use portunus_scenario::ResolvedRun;
+use serde::{Deserialize, Serialize};
 
 /// The plan is deliberately absent: it is advice for policies, delivered
 /// through observations, and has no effect on the world.
@@ -39,7 +40,7 @@ pub struct SeatSetup {
 /// advance, so these are usually zero. Unanticipated wakes (procs,
 /// enemy casts, engagements) cost a human reaction time, drawn separately
 /// for each event.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Latency {
     pub anticipated: Dist<SimDuration>,
     pub reaction: Dist<SimDuration>,
@@ -53,10 +54,12 @@ pub struct Latency {
 /// and Exhaustion-style lockouts are `AuraDef::blocked_by`.
 ///
 /// External auras use their holder as source.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Externals {
     /// Applied to every seat at run start.
+    #[serde(default)]
     pub party_auras: Vec<AuraId>,
     /// Applied to every enemy when it engages.
+    #[serde(default)]
     pub enemy_auras: Vec<AuraId>,
 }

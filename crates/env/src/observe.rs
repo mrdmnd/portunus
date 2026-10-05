@@ -14,8 +14,10 @@ use portunus_gamedata::{EnemyData, GameData};
 use portunus_loadout::ActorTemplate;
 use portunus_plan::PullPlan;
 use portunus_scenario::{ResolvedRun, TimelinePriors};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum InfoSet {
     /// Sees the sampled truth, including future enemy timings. An upper
     /// bound, and a training aid.

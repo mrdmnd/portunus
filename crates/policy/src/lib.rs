@@ -23,8 +23,19 @@ use portunus_engine::Choice;
 use portunus_env::{Decision, Env};
 use serde::{Deserialize, Serialize};
 
+/// Any `fn(&Decision<O>) -> Choice`, or a closure of that shape, is a
+/// policy.
 pub trait Policy<O>: Send + Sync {
     fn act(&self, decision: &Decision<O>) -> Choice;
+}
+
+impl<O, F> Policy<O> for F
+where
+    F: Fn(&Decision<O>) -> Choice + Send + Sync,
+{
+    fn act(&self, decision: &Decision<O>) -> Choice {
+        self(decision)
+    }
 }
 
 /// May cache work between calls (e.g. reuse a search tree), but caches

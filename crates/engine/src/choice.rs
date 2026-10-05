@@ -31,6 +31,17 @@ pub enum Choice {
     CancelAura(AuraId),
 }
 
+impl Choice {
+    /// A plain cast at the primary target.
+    pub fn cast(ability: SpellId) -> Self {
+        Self::Cast {
+            ability,
+            target: TargetSel::Primary,
+            opts: CastOpts::default(),
+        }
+    }
+}
+
 /// Per-cast options. The default is a plain cast.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CastOpts {

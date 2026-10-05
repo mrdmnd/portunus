@@ -15,6 +15,7 @@ members = [
     "crates/optimize",
     "crates/export",
     "crates/ingest",
+    "crates/run",
 ]
 
 [workspace.package]
@@ -38,6 +39,7 @@ portunus-eval = { path = "crates/eval" }
 portunus-optimize = { path = "crates/optimize" }
 portunus-export = { path = "crates/export" }
 portunus-ingest = { path = "crates/ingest" }
+portunus-run = { path = "crates/run" }
 postcard = { version = "1", default-features = false, features = ["alloc"] }
 ron = "0.12"
 serde = { version = "1", features = ["derive"] }

@@ -29,3 +29,10 @@ pub struct ActionMask {
     /// Auras the seat holds and may cancel.
     pub cancel: Vec<AuraId>,
 }
+
+impl ActionMask {
+    /// The seat has this ability and could cast it right now.
+    pub fn is_ready(&self, ability: SpellId) -> bool {
+        self.abilities.get(&ability) == Some(&Readiness::Now)
+    }
+}
