@@ -189,7 +189,8 @@ pub enum Predicate {
         from_self: bool,
     },
     CasterHasAura(AuraId),
-    /// Execute windows.
+    /// Below this fraction of max health (`0.2` is 20%), for execute
+    /// windows.
     TargetHpBelow(f64),
     /// The spell differs from the caster's previous cast (Windwalker's
     /// combo strikes).

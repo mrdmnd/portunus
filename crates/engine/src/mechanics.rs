@@ -90,9 +90,9 @@ pub trait EngineIo {
     /// priority (`pet: None` commands every type).
     fn command_pets(&mut self, owner: Seat, pet: Option<PetId>, spell: SpellId, target: ActorId);
     /// Cast `spell` for free: no gates, costs, cast time, or cooldown. It
-    /// resolves through [`Mechanics::cast_completed`] (or
-    /// [`Mechanics::projectile_landed`] after its travel time) as a new event
-    /// at the current time, never re-entrantly.
+    /// resolves through [`Mechanics::cast_completed`] as a new event at the
+    /// current time, never re-entrantly, then through
+    /// [`Mechanics::projectile_landed`] after its travel time, if it has one.
     fn trigger_spell(&mut self, caster: ActorId, spell: SpellId, target: Option<ActorId>);
     /// Stop `target`'s cast if it is interruptible. Returns whether one was
     /// stopped.

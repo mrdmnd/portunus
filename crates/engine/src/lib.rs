@@ -78,6 +78,7 @@
 
 pub mod choice;
 pub mod error;
+pub mod kernel;
 pub mod mask;
 pub mod mechanics;
 pub mod order;
@@ -91,6 +92,7 @@ use portunus_core::Seat;
 
 pub use choice::{CastOpts, Choice, Condition, TargetSel, Wait};
 pub use error::{EngineError, IllegalChoice, SetupIssue};
+pub use kernel::{Kernel, World};
 pub use mask::{ActionMask, Readiness};
 pub use mechanics::{EngineIo, Mechanics};
 pub use order::EventClass;

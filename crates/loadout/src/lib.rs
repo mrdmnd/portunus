@@ -56,7 +56,7 @@ pub struct ActorTemplate {
     /// Every spell the seat can press, by the id it was granted under:
     /// baseline and talent spells, equipped on-use items, and consumables.
     pub abilities: BTreeSet<SpellId>,
-    /// Applied at combat start and never expire: spec passives, talents,
+    /// Applied at run start and never expire: spec passives, talents,
     /// set bonuses, item effects, enchants, consumables.
     pub passive_auras: Vec<AuraId>,
     pub resources: Vec<ResourceDef>,

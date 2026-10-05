@@ -11,8 +11,16 @@ portunus-core = { workspace = true }
 portunus-gamedata = { workspace = true }
 portunus-loadout = { workspace = true }
 portunus-scenario = { workspace = true }
+postcard = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+portunus-ingest = { workspace = true }
+
+[[bench]]
+name = "fork"
+harness = false
 
 [lints]
 workspace = true
