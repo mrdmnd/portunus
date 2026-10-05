@@ -257,7 +257,9 @@ fn rating_pct(curve: &RatingCurve, rating: f64) -> f64 {
     out + (raw - prev) * keep
 }
 
-fn derive(curves: &StatCurves, spec: &SpecDef, stats: &StatBlock) -> DerivedStats {
+/// Percentages and derived values for a stat block. Mechanics call this
+/// again whenever auras change a seat's stats.
+pub fn derive(curves: &StatCurves, spec: &SpecDef, stats: &StatBlock) -> DerivedStats {
     let stat = |s: Stat| stats.0.get(&s).copied().unwrap_or(0.0);
     let pct = |s: Stat| {
         curves
@@ -481,6 +483,7 @@ mod tests {
                 spell_power_per_intellect: 1.0,
                 attack_power_per_primary: 1.0,
                 health_per_stamina: 20.0,
+                armor_constant: 7390.0,
             },
         }
     }

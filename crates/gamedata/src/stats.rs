@@ -66,6 +66,8 @@ pub struct StatCurves {
     /// Per point of agility or strength, whichever is the spec's primary.
     pub attack_power_per_primary: f64,
     pub health_per_stamina: f64,
+    /// Physical damage taken is reduced by `armor / (armor + armor_constant)`.
+    pub armor_constant: f64,
 }
 
 /// Bitmask over magic schools; multi-school spells set several bits.

@@ -146,7 +146,7 @@ pub enum EffectTarget {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AoeRule {
     pub max_targets: Option<u8>,
-    /// Damage scales by `sqrt(n / cap)` beyond this many targets.
+    /// Beyond this many targets, each takes `sqrt(cap / n)` of the damage.
     pub sqrt_cap: Option<u8>,
 }
 

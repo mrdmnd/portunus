@@ -1,15 +1,22 @@
 //! Spec behavior.
 //!
-//! The party-level [`portunus_engine::Mechanics`] implementation is built
-//! from three parts:
+//! The party-level [`portunus_engine::Mechanics`] implementation,
+//! [`PartyMechanics`], is built from three parts:
 //!
-//! - an [`EffectInterpreter`] that runs data [`Effect`]s generically;
-//! - [`CombatMath`]: stat, modifier, crit, and mitigation formulas;
+//! - an [`EffectInterpreter`] that runs data [`Effect`]s generically
+//!   ([`Interpreter`]);
+//! - [`CombatMath`]: stat, modifier, crit, and mitigation formulas
+//!   ([`Formulas`]);
 //! - one [`SpecKit`] per spec, for the [`HookKey`]s and gates that data
-//!   can't express.
+//!   can't express ([`Kits`] holds them).
 //!
 //! Most behavior should be data; kits are the escape hatch, and they hold no
 //! state of their own (see the rule in `portunus_engine::mechanics`).
+
+mod interp;
+pub mod kits;
+mod math;
+mod party;
 
 use portunus_core::{ActorId, HookKey, Seat, SpecId, SpellId};
 use portunus_engine::mechanics::TimerEvent;
@@ -17,6 +24,11 @@ use portunus_engine::{AuraRef, EngineIo, Readiness, StateView};
 use portunus_gamedata::effect::{Coefficient, Effect};
 use portunus_gamedata::stats::SchoolMask;
 use portunus_gamedata::GameData;
+
+pub use interp::Interpreter;
+pub use kits::Kits;
+pub use math::Formulas;
+pub use party::PartyMechanics;
 
 /// Where an effect list is running from.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -34,21 +46,34 @@ pub struct EffectCtx {
     /// Multiplier on every amount: partial ticks, AoE falloff, and
     /// `SpendScaling`.
     pub scale: f64,
+    /// How many listeners deep this run is. Effects run by a listener don't
+    /// trigger listeners themselves, so procs can't feed each other.
+    pub depth: u8,
 }
 
 pub trait EffectInterpreter {
     fn run(&self, io: &mut dyn EngineIo, ctx: &EffectCtx, effects: &[Effect]);
 }
 
+/// What an outgoing amount is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Outgoing {
+    Damage(SchoolMask),
+    Heal,
+}
+
 pub trait CombatMath {
+    /// The coefficient's raw value times `ctx.scale`, before any modifier.
+    fn base(&self, view: &dyn StateView, ctx: &EffectCtx, amount: Coefficient) -> f64;
     /// Pre-crit amount after stats and every active modifier.
     fn outgoing(
         &self,
         view: &dyn StateView,
         ctx: &EffectCtx,
         amount: Coefficient,
-        school: SchoolMask,
+        kind: Outgoing,
     ) -> f64;
+    /// A probability in `[0, 1]`.
     fn crit_chance(&self, view: &dyn StateView, ctx: &EffectCtx) -> f64;
     fn crit_multiplier(&self, view: &dyn StateView, ctx: &EffectCtx) -> f64;
     /// Damage after the target's reductions (armor, versatility, defensives).
@@ -92,5 +117,7 @@ pub enum KitIssue {
 
 pub trait SpecRegistry: Send + Sync {
     fn kit(&self, spec: SpecId) -> Option<&dyn SpecKit>;
+    /// The kit implementing a hook, whichever spec is running it.
+    fn hook_owner(&self, key: &HookKey) -> Option<&dyn SpecKit>;
     fn validate(&self, data: &GameData) -> Vec<KitIssue>;
 }

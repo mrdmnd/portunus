@@ -217,5 +217,6 @@
         spell_power_per_intellect: 1.0,
         attack_power_per_primary: 1.0,
         health_per_stamina: 20.0,
+        armor_constant: 7390.0,
     ),
 )

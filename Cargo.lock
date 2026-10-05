@@ -137,6 +137,9 @@ dependencies = [
  "portunus-core",
  "portunus-engine",
  "portunus-gamedata",
+ "portunus-ingest",
+ "portunus-loadout",
+ "portunus-scenario",
 ]
 
 [[package]]

@@ -18,7 +18,7 @@ use portunus_gamedata::GameData;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub use compile::Compiler;
+pub use compile::{derive, Compiler};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Loadout {
