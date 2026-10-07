@@ -120,16 +120,21 @@ fn run(
     for e in effects {
         match e {
             Effect::Damage {
-                amount: Coefficient::SpellPower(c),
+                amount: amount @ (Coefficient::SpellPower(_) | Coefficient::Flat(_)),
                 school,
                 target: t,
                 ..
             } => {
+                let base = match amount {
+                    Coefficient::SpellPower(c) => c * SPELL_POWER,
+                    Coefficient::Flat(x) => *x,
+                    _ => 0.0,
+                };
                 if let Some(target) = pick(*t, caster, target) {
                     io.apply_damage(DamageEvent {
                         source: caster,
                         target,
-                        amount: whole_points(c * SPELL_POWER * scale),
+                        amount: whole_points(base * scale),
                         school: *school,
                         spell,
                         crit: false,
@@ -206,7 +211,25 @@ impl Mechanics for Stub {
     fn aura_removed(&self, _io: &mut dyn EngineIo, _ev: &AuraEvent) {}
     fn actor_died(&self, _io: &mut dyn EngineIo, _ev: &DeathEvent) {}
     fn pet_expired(&self, _io: &mut dyn EngineIo, _ev: &PetEvent) {}
-    fn enemy_hit(&self, _io: &mut dyn EngineIo, _hit: &EnemyHit) {}
+    fn enemy_hit(&self, io: &mut dyn EngineIo, hit: &EnemyHit) {
+        io.apply_damage(DamageEvent {
+            source: hit.source,
+            target: hit.target,
+            amount: whole_points(hit.amount),
+            school: hit.school,
+            spell: None,
+            crit: false,
+        });
+    }
+    fn enemy_effects(
+        &self,
+        io: &mut dyn EngineIo,
+        source: ActorId,
+        target: ActorId,
+        effects: &[Effect],
+    ) {
+        run(io, source, Some(target), None, effects, 1.0);
+    }
     fn timer(&self, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
 }
 

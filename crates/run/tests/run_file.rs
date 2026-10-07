@@ -5,7 +5,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use portunus_core::{HeroTreeId, PetId, Seed, SpellId};
-use portunus_engine::{Choice, Readiness, StateView, Wait, WakeReason};
+use portunus_engine::trace::TraceEvent;
+use portunus_engine::{Choice, MoveGoal, Readiness, StateView, Wait, WakeReason};
 use portunus_env::{Decision, Env, Turn};
 use portunus_eval::{Arm, LocalRunner, Metric, Runner, SeedSet};
 use portunus_run::{Bundle, RunError, SeatObs};
@@ -239,6 +240,44 @@ fn realistic_seats_miss_what_they_have_not_perceived() {
         }
     }
     assert!(hidden_seen > 0);
+}
+
+/// The script dodges every swirl and quake, uses its movement tools, and
+/// chases the dummy back into range after its leap.
+#[test]
+fn elemental_meets_the_mechanics_dummys_demands() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../data/runs/elemental_stormbringer_mechanics.ron");
+    let b = Bundle::load(&path).unwrap();
+    let policy = &b.arm(false).policies[0];
+    let mut env = b.env(true);
+    let mut turn = env.reset(Seed(2)).unwrap();
+    let outcome = loop {
+        match turn {
+            Turn::Done(o) => break o,
+            Turn::Decide(d) => turn = env.step(policy.act(&d)).unwrap().next,
+        }
+    };
+    let trace = env.drain_trace();
+    let count = |pick: fn(&TraceEvent) -> bool| trace.iter().filter(|r| pick(&r.event)).count();
+
+    assert!(outcome.completed);
+    let placed = count(|e| matches!(e, TraceEvent::Demand { .. }));
+    assert!(placed >= 10, "{placed} demands");
+    assert_eq!(count(|e| matches!(e, TraceEvent::DemandMet { .. })), placed);
+    assert_eq!(outcome.seats[0].demands_failed, 0);
+    let far = count(|e| matches!(e, TraceEvent::Distance { distance, .. } if *distance > 40.0));
+    assert!(far >= 3, "{far} leaps");
+    let chased = trace.iter().any(|r| {
+        matches!(
+            &r.event,
+            TraceEvent::Decision {
+                choice: Choice::Move(MoveGoal::Approach { .. }),
+                ..
+            }
+        )
+    });
+    assert!(chased, "approaches after a leap");
 }
 
 #[test]

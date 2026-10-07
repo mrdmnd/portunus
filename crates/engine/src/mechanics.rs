@@ -6,7 +6,7 @@
 //! state observable.
 
 use portunus_core::{ActorId, AuraId, PetId, Seat, SimDuration, SimTime, SpellId, StreamKey};
-use portunus_gamedata::effect::CooldownChange;
+use portunus_gamedata::effect::{CooldownChange, Effect};
 use portunus_gamedata::enemy::RuleIndex;
 use portunus_gamedata::item::WeaponHand;
 use portunus_gamedata::stats::{ResourceAmount, ResourceKind, SchoolMask};
@@ -50,6 +50,15 @@ pub trait Mechanics: Clone {
     /// An enemy rule hit a player: apply mitigation, then call
     /// [`EngineIo::apply_damage`].
     fn enemy_hit(&self, io: &mut dyn EngineIo, hit: &EnemyHit);
+    /// Run effects cast by an enemy at a player: an enemy rule's `Effects`
+    /// action, or a movement demand's failure.
+    fn enemy_effects(
+        &self,
+        io: &mut dyn EngineIo,
+        source: ActorId,
+        target: ActorId,
+        effects: &[Effect],
+    );
     fn timer(&self, io: &mut dyn EngineIo, timer: &TimerEvent);
 }
 
@@ -119,6 +128,10 @@ pub trait EngineIo {
     /// Stop `target`'s cast if it is interruptible. Returns whether one was
     /// stopped.
     fn interrupt(&mut self, target: ActorId) -> bool;
+    /// Move a seat's actor `yards` at once (no-op for anyone else). It
+    /// counts toward movement the seat owes, and closes distance to
+    /// `toward` if that is an enemy.
+    fn displace(&mut self, actor: ActorId, yards: f64, toward: Option<ActorId>);
     /// Pending timers are readable through [`StateView::timers`], but
     /// realistic observers can't tell what a token means. Anything a player
     /// could see coming (a sigil about to land) should be an aura with

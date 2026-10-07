@@ -145,6 +145,8 @@ pub fn metric_value(metric: &Metric, o: &Outcome) -> Option<f64> {
         Metric::TotalTime => Some(secs(o.end_time)),
         Metric::CompletionRate => Some(if o.completed { 1.0 } else { 0.0 }),
         Metric::Deaths => Some(o.seats.iter().map(|s| f64::from(s.deaths)).sum()),
+        Metric::DemandsFailed => Some(o.seats.iter().map(|s| f64::from(s.demands_failed)).sum()),
+        Metric::DamageTaken => Some(o.seats.iter().map(|s| s.damage_taken as f64).sum()),
         Metric::SeatDamage(s) => seat(*s).map(|s| s.damage_done as f64),
         Metric::SeatDps(s) => {
             let combat: f64 = o
@@ -237,6 +239,9 @@ mod tests {
                     damage_done: seed.0 * 10 + self.bonus,
                     casts: 1,
                     deaths: 0,
+                    damage_taken: 0,
+                    healing_done: 0,
+                    demands_failed: 0,
                 }],
             })
         }

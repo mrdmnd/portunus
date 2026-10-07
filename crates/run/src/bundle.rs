@@ -215,7 +215,8 @@ impl Bundle {
         }
     }
 
-    /// Per-seat damage and DPS, plus party-wide time, completion, and deaths.
+    /// Per-seat damage and DPS, plus party-wide time, completion, deaths,
+    /// damage taken, and failed movement demands.
     pub fn experiment(&self, seeds: SeedSet) -> Experiment {
         let mut metrics = Vec::new();
         for s in 0..self.templates.len() {
@@ -223,7 +224,13 @@ impl Bundle {
             metrics.push(Metric::SeatDps(seat));
             metrics.push(Metric::SeatDamage(seat));
         }
-        metrics.extend([Metric::TotalTime, Metric::CompletionRate, Metric::Deaths]);
+        metrics.extend([
+            Metric::TotalTime,
+            Metric::CompletionRate,
+            Metric::Deaths,
+            Metric::DamageTaken,
+            Metric::DemandsFailed,
+        ]);
         Experiment {
             arms: vec![Arc::new(self.arm(false))],
             baseline: 0,

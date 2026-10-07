@@ -6,9 +6,10 @@ use std::sync::Arc;
 use portunus_core::rng::{self, Purpose};
 use portunus_core::{ActorId, Sample, Seat, SimDuration, SimTime, Trigger, PARTY_SIZE};
 use portunus_gamedata::effect::{ModKind, Modifier};
+use portunus_gamedata::enemy::{EnemyAction, EnemySubject};
 use portunus_gamedata::spell::CastKind;
 use portunus_gamedata::stats::ResourceDef;
-use portunus_scenario::resolved::{Segment, SpawnSet};
+use portunus_scenario::resolved::{Segment, SpawnIndex, SpawnSet};
 
 use crate::error::{EngineError, SetupIssue};
 use crate::mechanics::whole_points;
@@ -70,12 +71,52 @@ fn issues(setup: &RunSetup) -> Vec<SetupIssue> {
     out
 }
 
-fn uses_unsupported_trigger(t: &Trigger<SpawnSet>) -> bool {
-    match t {
-        Trigger::Fired { .. } | Trigger::Delayed { .. } => true,
-        Trigger::All(ts) | Trigger::Any(ts) => ts.iter().any(uses_unsupported_trigger),
+fn spawns_adds(a: &EnemyAction) -> bool {
+    match a {
+        EnemyAction::SpawnAdds { .. } => true,
+        EnemyAction::Cast { then, .. } => spawns_adds(then),
+        EnemyAction::Sequence(actions) => actions.iter().any(spawns_adds),
         _ => false,
     }
+}
+
+/// Per combat, spawn, and rule: each rule's trigger with its subjects
+/// resolved to the spawn it belongs to.
+fn rule_triggers(setup: &RunSetup) -> Vec<Vec<Vec<Trigger<SpawnSet>>>> {
+    setup
+        .run
+        .segments
+        .iter()
+        .filter_map(|s| match s {
+            Segment::Combat(c) => Some(c),
+            Segment::Travel { .. } => None,
+        })
+        .map(|c| {
+            c.spawns
+                .iter()
+                .enumerate()
+                .map(|(i, spawn)| {
+                    let me = SpawnIndex(i as u16);
+                    setup
+                        .enemies
+                        .enemies
+                        .get(&spawn.enemy)
+                        .map(|def| {
+                            def.rules
+                                .iter()
+                                .map(|r| {
+                                    r.when.map(&mut |subject| match subject {
+                                        EnemySubject::Itself => SpawnSet::One(me),
+                                        EnemySubject::Combat => SpawnSet::Engaged,
+                                    })
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                })
+                .collect()
+        })
+        .collect()
 }
 
 fn unsupported(setup: &RunSetup) -> Option<&'static str> {
@@ -104,12 +145,9 @@ fn unsupported(setup: &RunSetup) -> Option<&'static str> {
                 .enemies
                 .enemies
                 .get(&spawn.enemy)
-                .is_some_and(|e| !e.rules.is_empty())
+                .is_some_and(|e| e.rules.iter().any(|r| spawns_adds(&r.action)))
             {
-                return Some("enemy rules");
-            }
-            if uses_unsupported_trigger(&spawn.engage) {
-                return Some("Fired and Delayed engagement triggers");
+                return Some("enemy adds");
             }
         }
     }
@@ -217,16 +255,26 @@ pub(crate) fn build(setup: RunSetup) -> World {
                 damage_done: 0,
                 casts: 0,
                 deaths: 0,
+                damage_taken: 0,
+                healing_done: 0,
+                demands_failed: 0,
             },
+            moving: None,
+            move_gen: 0,
+            demands: Vec::new(),
         })
         .collect();
     let record = setup.record_trace;
+    let roles = setup.seats.iter().map(|s| s.template.role).collect();
+    let rule_triggers = rule_triggers(&setup);
     World {
         s: Arc::new(Statics {
             setup,
             latency,
             abilities,
             gcd,
+            roles,
+            rule_triggers,
         }),
         now: SimTime::ZERO,
         seg: Seg::Finished,
@@ -249,6 +297,7 @@ pub(crate) fn build(setup: RunSetup) -> World {
         pulls: Vec::new(),
         next_id: 0,
         triggers_queued: None,
+        delayed: BTreeMap::new(),
         fault: None,
         trace: Trace::new(record),
         finished: None,

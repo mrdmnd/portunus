@@ -1,0 +1,13 @@
+(
+    name: "light_movement_dummy",
+    forces_required: None,
+    pulls: [
+        (
+            name: "dummy",
+            travel_in: fixed(10000),
+            prepull: 3000,
+            timeout: 600000,
+            waves: [(mobs: [("light_movement_dummy", 1)], engage: now)],
+        ),
+    ],
+)

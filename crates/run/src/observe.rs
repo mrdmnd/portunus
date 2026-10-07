@@ -46,8 +46,27 @@ pub struct TargetObs {
     pub actor: ActorId,
     /// Percent of max health, 0 to 100.
     pub health_pct: f64,
+    /// Yards away.
+    pub distance: f64,
     /// This seat's own auras on the target.
     pub mine: BTreeMap<AuraId, AuraObs>,
+}
+
+/// Movement in progress.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MovementObs {
+    /// Until it ends at the current speed.
+    pub remaining: SimDuration,
+    /// Forced movement can't be stopped.
+    pub forced: bool,
+}
+
+/// Movement owed by a deadline.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DemandObs {
+    pub yards: f64,
+    /// Until the deadline.
+    pub remaining: SimDuration,
 }
 
 /// One seat's view of the moment, in game terms.
@@ -61,6 +80,15 @@ pub struct SeatObs {
     pub combat_time: Option<SimDuration>,
     pub gcd_remaining: SimDuration,
     pub casting: Option<SpellId>,
+    /// Until the current cast completes.
+    pub cast_remaining: Option<SimDuration>,
+    /// Percent of max health, 0 to 100.
+    pub health_pct: f64,
+    pub movement: Option<MovementObs>,
+    /// Soonest deadline first.
+    pub demands: Vec<DemandObs>,
+    /// Yards per second.
+    pub run_speed: f64,
     pub resources: BTreeMap<ResourceKind, f64>,
     pub resource_max: BTreeMap<ResourceKind, f64>,
     /// Auras the seat holds, from any source.
@@ -161,14 +189,30 @@ impl SeatObs {
             .get(&ability)
             .map_or(0.0, CooldownObs::fractional)
     }
+
+    /// Seconds to spare before running at full speed would still meet
+    /// every demand (any movement counts toward all of them); negative if
+    /// running now is already too late, `None` with nothing owed.
+    pub fn move_slack(&self) -> Option<f64> {
+        let speed = self.run_speed.max(f64::MIN_POSITIVE);
+        self.demands
+            .iter()
+            .map(|d| f64::from(d.remaining.millis()) / 1000.0 - d.yards / speed)
+            .min_by(f64::total_cmp)
+    }
+
+    /// Yards to the target; `None` with no target.
+    pub fn target_distance(&self) -> Option<f64> {
+        self.target.as_ref().map(|t| t.distance)
+    }
 }
 
 /// Builds [`SeatObs`].
 ///
 /// Under [`InfoSet::Realistic`], what the seat hasn't perceived yet is
 /// hidden: auras it gained, cooldowns that came back (shown with no charge,
-/// and blocked in the mask), and enemies that engaged. Other unperceived
-/// events are not hidden yet.
+/// and blocked in the mask), enemies that engaged, and movement demands
+/// just placed on it. Other unperceived events are not hidden yet.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ScriptObserver;
 
@@ -178,6 +222,8 @@ struct Hidden {
     auras: Vec<AuraId>,
     cooldowns: Vec<SpellId>,
     enemies: Vec<ActorId>,
+    /// When each unseen demand was placed.
+    demands: Vec<SimTime>,
 }
 
 fn hidden(ctx: &ObsContext<'_>, seat: Seat) -> Hidden {
@@ -190,6 +236,7 @@ fn hidden(ctx: &ObsContext<'_>, seat: Seat) -> Hidden {
             WakeReason::AuraGained(a) => h.auras.push(a),
             WakeReason::CooldownReady(s) => h.cooldowns.push(s),
             WakeReason::EnemyEngaged(e) => h.enemies.push(e),
+            WakeReason::MustMove => h.demands.push(p.event_at),
             _ => {}
         }
     }
@@ -308,6 +355,7 @@ impl Observer for ScriptObserver {
                 Some(TargetObs {
                     actor: t,
                     health_pct: 100.0 * a.health_frac(),
+                    distance: state.distance(seat, t).unwrap_or(0.0),
                     mine: state
                         .auras(t)
                         .iter()
@@ -331,6 +379,24 @@ impl Observer for ScriptObserver {
                 CastWhat::Spell(s) => Some(s),
                 CastWhat::EnemyRule(_) => None,
             }),
+            cast_remaining: actor
+                .and_then(|a| a.casting)
+                .map(|c| c.ends.saturating_since(now)),
+            health_pct: actor.map_or(0.0, |a| 100.0 * a.health_frac()),
+            movement: state.movement(seat).map(|m| MovementObs {
+                remaining: m.ends.saturating_since(now),
+                forced: m.forced,
+            }),
+            demands: state
+                .demands(seat)
+                .into_iter()
+                .filter(|d| !hide.demands.contains(&d.placed))
+                .map(|d| DemandObs {
+                    yards: d.yards,
+                    remaining: d.deadline.saturating_since(now),
+                })
+                .collect(),
+            run_speed: state.run_speed(seat),
             resources,
             resource_max,
             buffs,

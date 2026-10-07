@@ -47,6 +47,45 @@ pub enum TraceEvent {
         actor: ActorId,
         rule: RuleIndex,
     },
+    EnemyCastStart {
+        actor: ActorId,
+        rule: RuleIndex,
+        ends: SimTime,
+    },
+    EnemyCastEnd {
+        actor: ActorId,
+        rule: RuleIndex,
+        reason: CastEndReason,
+    },
+    MovementStart {
+        actor: ActorId,
+        ends: SimTime,
+        forced: bool,
+    },
+    MovementEnd {
+        actor: ActorId,
+    },
+    /// `actor` owes `yards` of movement by `deadline`.
+    Demand {
+        actor: ActorId,
+        yards: f64,
+        deadline: SimTime,
+    },
+    DemandMet {
+        actor: ActorId,
+    },
+    DemandFailed {
+        actor: ActorId,
+    },
+    /// The enemy `actor` is now `distance` yards from `seat`.
+    Distance {
+        actor: ActorId,
+        seat: Seat,
+        distance: f64,
+    },
+    Resurrect {
+        actor: ActorId,
+    },
     Damage(DamageEvent),
     Heal(HealEvent),
     AuraApplied {

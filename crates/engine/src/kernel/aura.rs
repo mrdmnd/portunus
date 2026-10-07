@@ -57,6 +57,16 @@ impl World {
     }
 
     pub(crate) fn apply_aura(&mut self, app: AuraApplication) {
+        if self.affects_movement(app.aura.aura) {
+            self.before_movement_aura(app.aura.holder);
+            self.apply_aura_now(app);
+            self.after_movement_aura(app.aura.holder);
+        } else {
+            self.apply_aura_now(app);
+        }
+    }
+
+    fn apply_aura_now(&mut self, app: AuraApplication) {
         let s = Arc::clone(&self.s);
         let r = app.aura;
         let Some(def) = s.setup.data.auras.get(&r.aura) else {
@@ -225,6 +235,14 @@ impl World {
         if i >= a.auras.len() {
             return;
         }
+        let aura = a.auras[i].aura;
+        let movement = self.affects_movement(aura);
+        if movement {
+            self.before_movement_aura(holder);
+        }
+        let Some(a) = self.actor_mut(holder) else {
+            return;
+        };
         let inst = a.auras.remove(i);
         a.meta.remove(i);
         let r = AuraRef {
@@ -239,6 +257,9 @@ impl World {
             holder,
             aura: inst.aura,
         });
+        if movement {
+            self.after_movement_aura(holder);
+        }
     }
 
     pub(crate) fn remove_aura(&mut self, holder: ActorId, aura: AuraId, source: Option<ActorId>) {

@@ -45,6 +45,10 @@ pub enum Metric {
     TotalTime,
     CompletionRate,
     Deaths,
+    /// Movement demands not met in time, summed over seats.
+    DemandsFailed,
+    /// Damage taken, summed over seats, excluding overkill.
+    DamageTaken,
     SeatDamage(Seat),
     /// Damage per second in combat: time from each pull's start to its clear
     /// (or the end of the run).

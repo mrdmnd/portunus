@@ -1,0 +1,22 @@
+// One Stormbringer Elemental Shaman on a dummy with swirls to dodge, a
+// telegraphed quake, and a leap out of range. Paths are relative to this
+// file.
+(
+    name: "elemental_stormbringer_mechanics",
+    game: "../game.ron",
+    enemies: "../enemies.ron",
+    scenario: "../scenarios/mechanics_dummy.ron",
+    seats: [
+        (
+            loadout: "../loadouts/elemental_stormbringer_build.ron",
+            policy: "elemental",
+            latency: (
+                anticipated: fixed(0),
+                reaction: jitter(base: 250, jitter: 50),
+                cast_lag: fixed(0),
+            ),
+        ),
+    ],
+    info: realistic,
+    seeds: 200,
+)

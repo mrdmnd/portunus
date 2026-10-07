@@ -5,23 +5,27 @@ use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
 use portunus_core::rng::{self, Domain, Purpose};
-use portunus_core::{ActorId, AuraId, Sample, Seat, SimDuration, SimTime, SpellId, StreamKey};
-use portunus_gamedata::effect::{ModKind, ModScope, Predicate};
-use portunus_gamedata::enemy::{PhaseName, RuleIndex};
+use portunus_core::{
+    ActorId, AuraId, Sample, Seat, SimDuration, SimTime, SpellId, StreamKey, Trigger,
+};
+use portunus_gamedata::effect::{Effect, ModKind, ModScope, Predicate};
+use portunus_gamedata::enemy::{EnemyAction, PhaseName, RuleIndex};
 use portunus_gamedata::item::{WeaponDef, WeaponHand};
 use portunus_gamedata::pet::PetKind;
+use portunus_gamedata::spec::Role;
 use portunus_gamedata::spell::{CastKind, GcdDef, SpellDef};
 use portunus_gamedata::stats::{ResourceDef, ResourceKind};
+use portunus_scenario::resolved::SpawnSet;
 
-use crate::choice::{Choice, Wait};
+use crate::choice::{Choice, MoveGoal, Wait};
 use crate::error::EngineError;
 use crate::mechanics::{AuraChange, AuraEvent, CastEvent, DeathEvent, PetEvent, RolledHit};
 use crate::outcome::{Outcome, PullOutcome, SeatOutcome};
 use crate::setup::RunSetup;
 use crate::state::{
     ActorKind, ActorView, AuraInstance, CastView, CastWhat, CombatView, CooldownView, DeckView,
-    LastCast, PendingPerception, PendingTimer, ProcView, Projectile, ResourceView, RuleView,
-    SeatPhase, SegmentView, StateView, SwingView,
+    DemandView, LastCast, MovementView, PendingPerception, PendingTimer, ProcView, Projectile,
+    ResourceView, RuleView, SeatPhase, SegmentView, StateView, SwingView,
 };
 use crate::step::{DecisionRequest, WakeReason};
 use crate::trace::{TraceEvent, TraceRecord};
@@ -37,7 +41,15 @@ pub(crate) struct Statics {
     pub abilities: Vec<Vec<SpellId>>,
     /// Per seat: the longest GCD among its abilities, for `gcd_length`.
     pub gcd: Vec<Option<GcdDef>>,
+    /// Per seat.
+    pub roles: Vec<Role>,
+    /// Per combat, spawn, and rule: the rule's trigger over spawn indices.
+    pub rule_triggers: Vec<Vec<Vec<Trigger<SpawnSet>>>>,
 }
+
+/// Whose `Delayed` trigger a start time belongs to: an enemy's engagement
+/// (`None`) or one of its rules.
+pub(crate) type TriggerOwner = (ActorId, Option<RuleIndex>);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Seg {
@@ -82,9 +94,64 @@ pub(crate) struct Actor {
     pub pet: Option<PetLife>,
     /// Auto-attack timers: `[main hand, off hand]`.
     pub swings: [Option<Swing>; 2],
-    /// Yards from the party, for missile flight times; 0 for the party's
-    /// own actors.
-    pub distance: f64,
+    /// Enemies: yards from each seat, as of that seat's last movement
+    /// settle. Empty for the party's own actors.
+    pub distances: Vec<f64>,
+    /// Enemies: when it engaged, which starts its rules' clocks.
+    pub engaged_at: Option<SimTime>,
+    /// Enemies: one entry per rule of its definition.
+    pub rules: Vec<RuleState>,
+    /// Enemies: a rule's cast bar in progress.
+    pub enemy_cast: Option<EnemyCast>,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct RuleState {
+    pub fired: u32,
+    pub last_fired: Option<SimTime>,
+    /// A firing is queued for then.
+    pub next_at: Option<SimTime>,
+    /// Bumped whenever a queued firing becomes obsolete.
+    pub gen: u32,
+    /// Random draws so far: `[timing, targets, amounts]`.
+    pub draws: [u64; 3],
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct EnemyCast {
+    pub rule: RuleIndex,
+    pub then: Arc<EnemyAction>,
+    pub started: SimTime,
+    pub ends: SimTime,
+    pub interruptible: bool,
+    pub seq: u32,
+}
+
+/// A seat's movement in progress. Distance covered is settled into its
+/// demands, its goal, and the enemy it approaches whenever anything that
+/// depends on it changes.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Moving {
+    pub started: SimTime,
+    /// Settled up to here.
+    pub at: SimTime,
+    /// `None` while forced.
+    pub goal: Option<MoveGoal>,
+    pub forced_until: Option<SimTime>,
+    pub ends: SimTime,
+}
+
+/// Movement a seat owes by a deadline.
+#[derive(Debug, Clone)]
+pub(crate) struct Demand {
+    pub id: u32,
+    pub source: ActorId,
+    pub rule: RuleIndex,
+    /// Still to cover, as of the seat's last settle.
+    pub yards: f64,
+    pub placed: SimTime,
+    pub deadline: SimTime,
+    pub on_fail: Arc<[Effect]>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -143,7 +210,10 @@ impl Actor {
             phase: None,
             pet: None,
             swings: [None, None],
-            distance: 0.0,
+            distances: Vec::new(),
+            engaged_at: None,
+            rules: Vec::new(),
+            enemy_cast: None,
         }
     }
 
@@ -268,6 +338,11 @@ pub(crate) struct SeatState {
     /// Pets summoned so far, for naming their random streams.
     pub summons: u32,
     pub outcome: SeatOutcome,
+    pub moving: Option<Moving>,
+    /// Bumped whenever a queued movement end becomes obsolete.
+    pub move_gen: u32,
+    /// Soonest deadline first.
+    pub demands: Vec<Demand>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -349,6 +424,9 @@ pub struct World {
     pub(crate) pulls: Vec<PullOutcome>,
     pub(crate) next_id: u32,
     pub(crate) triggers_queued: Option<SimTime>,
+    /// When each `Delayed` trigger's inner condition first held, by owner
+    /// and the node's position in its trigger.
+    pub(crate) delayed: BTreeMap<(TriggerOwner, u32), SimTime>,
     pub(crate) fault: Option<EngineError>,
     pub(crate) trace: Trace,
     pub(crate) finished: Option<Outcome>,
@@ -627,12 +705,32 @@ impl World {
         kind: ModKind,
         target: Option<ActorId>,
     ) -> f64 {
+        let mut total = 0.0;
+        self.each_mod(caster, spell, kind, target, |v| total += v);
+        total
+    }
+
+    /// Whether any of the caster's modifiers of one kind applies to `spell`.
+    pub(crate) fn has_mod(&self, caster: ActorId, spell: SpellId, kind: ModKind) -> bool {
+        let mut any = false;
+        self.each_mod(caster, spell, kind, None, |_| any = true);
+        any
+    }
+
+    /// Each matching modifier's value, times stacks if per stack.
+    fn each_mod(
+        &self,
+        caster: ActorId,
+        spell: SpellId,
+        kind: ModKind,
+        target: Option<ActorId>,
+        mut f: impl FnMut(f64),
+    ) {
         let data = &self.s.setup.data;
         let Some(a) = self.actor_ref(caster) else {
-            return 0.0;
+            return;
         };
         let sdef = data.spells.get(&spell);
-        let mut total = 0.0;
         for inst in &a.auras {
             let Some(def) = data.auras.get(&inst.aura) else {
                 continue;
@@ -651,10 +749,9 @@ impl World {
                 } else {
                     1.0
                 };
-                total += m.value * stacks;
+                f(m.value * stacks);
             }
         }
-        total
     }
 
     pub(crate) fn cast_time_of(
@@ -790,6 +887,9 @@ impl World {
         if let Some(seat) = self.owner_seat(d.source) {
             self.seat_mut(seat).outcome.damage_done += d.amount.min(before);
         }
+        if let Some(seat) = self.player_seat(d.target) {
+            self.seat_mut(seat).outcome.damage_taken += d.amount.min(before);
+        }
         self.record(TraceEvent::Damage(d));
         if died {
             self.kill(d.target, Some(d.source));
@@ -805,7 +905,12 @@ impl World {
         if !t.alive {
             return;
         }
+        let before = t.health;
         t.health = t.health.saturating_add(h.amount).min(t.max_health);
+        let healed = t.health - before;
+        if let Some(seat) = self.owner_seat(h.source) {
+            self.seat_mut(seat).outcome.healing_done += healed;
+        }
         self.record(TraceEvent::Heal(h));
         self.queue_triggers();
     }
@@ -829,6 +934,7 @@ impl World {
         };
         a.alive = false;
         self.cancel_cast(actor, CastEndReason::Interrupted);
+        self.cancel_enemy_cast(actor, CastEndReason::Interrupted);
         self.record(TraceEvent::Death { actor });
         self.followups
             .push_back(Followup::Died(DeathEvent { actor, killer }));
@@ -839,6 +945,7 @@ impl World {
             self.remove_instance(actor, last, crate::mechanics::AuraRemoval::HolderDied);
         }
         if let Some(seat) = self.player_seat(actor) {
+            self.clear_movement(seat);
             let st = self.seat_mut(seat);
             st.phase = SeatPhase::Dead;
             st.gen += 1;
@@ -876,6 +983,7 @@ impl World {
             let now = self.now;
             self.notify(seat, WakeReason::EnemyDied(actor), false, None, now);
         }
+        self.approach_lost(actor);
         for pet in self.all_pets() {
             if casting_at_it(self, pet) {
                 self.cancel_cast(pet, CastEndReason::Interrupted);
@@ -885,6 +993,7 @@ impl World {
     }
 
     pub(crate) fn engage(&mut self, enemy: ActorId) {
+        let now = self.now;
         let Some(a) = self.actor_mut(enemy) else {
             return;
         };
@@ -892,7 +1001,9 @@ impl World {
             return;
         }
         a.engaged = true;
+        a.engaged_at = Some(now);
         self.record(TraceEvent::Engage { actor: enemy });
+        self.schedule_rule_marks(enemy);
         let auras = self.s.setup.externals.enemy_auras.clone();
         for aura in auras {
             self.apply_aura(crate::mechanics::AuraApplication {
@@ -930,8 +1041,8 @@ impl World {
     pub(crate) fn launch(&mut self, ev: CastEvent, def: &SpellDef) {
         let distance = ev
             .target
-            .and_then(|t| self.actor_ref(t))
-            .map_or(0.0, |a| a.distance);
+            .and_then(|t| self.distance_now(ev.seat, t))
+            .unwrap_or(0.0);
         let Some(travel) = def
             .flight_time(distance)
             .or(ev.prerolled.then_some(SimDuration::ZERO))
@@ -1023,16 +1134,34 @@ impl StateView for World {
             max_health: a.max_health,
             alive: a.alive,
             engaged: a.engaged,
-            casting: a.casting.map(|c| CastView {
-                what: CastWhat::Spell(c.ev.spell),
-                started: c.ev.started,
-                ends: c.ends,
-                interruptible: false,
-                next_tick: None,
-                empower_stage: None,
-                next_stage_at: None,
-            }),
-            moving_until: None,
+            casting: a
+                .casting
+                .map(|c| CastView {
+                    what: CastWhat::Spell(c.ev.spell),
+                    started: c.ev.started,
+                    ends: c.ends,
+                    interruptible: false,
+                    next_tick: None,
+                    empower_stage: None,
+                    next_stage_at: None,
+                })
+                .or_else(|| {
+                    a.enemy_cast.as_ref().map(|c| CastView {
+                        what: CastWhat::EnemyRule(c.rule),
+                        started: c.started,
+                        ends: c.ends,
+                        interruptible: c.interruptible,
+                        next_tick: None,
+                        empower_stage: None,
+                        next_stage_at: None,
+                    })
+                }),
+            moving_until: match a.kind {
+                ActorKind::Player(seat) => {
+                    self.seat_ref(seat).and_then(|st| st.moving).map(|m| m.ends)
+                }
+                _ => None,
+            },
             expires: a.pet.and_then(|p| p.expires),
         })
     }
@@ -1144,11 +1273,16 @@ impl StateView for World {
         self.seat_ref(seat)?.last_cast
     }
 
-    fn rule(&self, _enemy: ActorId, _rule: RuleIndex) -> RuleView {
+    fn rule(&self, enemy: ActorId, rule: RuleIndex) -> RuleView {
+        let state = self
+            .actor_ref(enemy)
+            .and_then(|a| a.rules.get(usize::from(rule.0)))
+            .copied()
+            .unwrap_or_default();
         RuleView {
-            fired: 0,
-            last_fired: None,
-            active: false,
+            fired: state.fired,
+            last_fired: state.last_fired,
+            active: self.rule_active(enemy, rule),
         }
     }
 
@@ -1162,5 +1296,41 @@ impl StateView for World {
 
     fn unperceived(&self, seat: Seat) -> &[PendingPerception] {
         self.seat_ref(seat).map_or(&[], |s| &s.unperceived)
+    }
+
+    fn movement(&self, seat: Seat) -> Option<MovementView> {
+        let m = self.seat_ref(seat)?.moving?;
+        Some(MovementView {
+            started: m.started,
+            ends: m.ends,
+            forced: m.forced_until.is_some(),
+            goal: m.goal,
+        })
+    }
+
+    fn demands(&self, seat: Seat) -> Vec<DemandView> {
+        let moved = self.unsettled_yards(seat);
+        self.seat_ref(seat)
+            .map(|st| {
+                st.demands
+                    .iter()
+                    .map(|d| DemandView {
+                        source: d.source,
+                        rule: d.rule,
+                        yards: (d.yards - moved).max(0.0),
+                        placed: d.placed,
+                        deadline: d.deadline,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn run_speed(&self, seat: Seat) -> f64 {
+        self.speed(seat)
+    }
+
+    fn distance(&self, seat: Seat, enemy: ActorId) -> Option<f64> {
+        self.distance_now(seat, enemy)
     }
 }

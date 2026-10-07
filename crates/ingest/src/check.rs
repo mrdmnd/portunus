@@ -4,7 +4,8 @@
 use std::collections::BTreeSet;
 
 use portunus_core::{
-    AuraId, EnemyKey, HeroTreeId, ItemId, ItemSetId, PetId, SpecId, SpellId, TalentId,
+    AuraId, EnemyKey, HeroTreeId, ItemId, ItemSetId, PetId, Sample, SimDuration, SpecId, SpellId,
+    TalentId,
 };
 use portunus_gamedata::effect::{
     Effect, EffectTarget, ListenFor, Listener, ModScope, Predicate, ProcChance,
@@ -89,6 +90,15 @@ pub enum DataIssue {
     InvalidChance(Owner),
     /// A missile speed that isn't a positive number.
     InvalidSpeed(SpellId),
+    /// A range that isn't a positive number.
+    InvalidRange(SpellId),
+    /// A distance, displacement, or movement demand that isn't a positive
+    /// number, or a demand with no time to meet it.
+    InvalidMovement(Owner),
+}
+
+fn positive(x: f64) -> bool {
+    x > 0.0 && x.is_finite()
 }
 
 pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
@@ -162,8 +172,11 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
     for spell in data.spells.values() {
         let owner = Owner::Spell(spell.id);
         c.effects(&owner, &spell.effects);
-        if spell.speed.is_some_and(|s| !(s > 0.0 && s.is_finite())) {
+        if spell.speed.is_some_and(|s| !positive(s)) {
             c.issues.push(DataIssue::InvalidSpeed(spell.id));
+        }
+        if spell.range.is_some_and(|r| !positive(r)) {
+            c.issues.push(DataIssue::InvalidRange(spell.id));
         }
         if let CastKind::Empower { stage_effects, .. } = &spell.cast {
             stage_effects.iter().for_each(|e| c.effects(&owner, e));
@@ -488,6 +501,11 @@ impl Checker<'_> {
                     self.effects(owner, then);
                     self.effects(owner, otherwise);
                 }
+                Effect::Displace { yards, .. } => {
+                    if !positive(*yards) {
+                        self.issues.push(DataIssue::InvalidMovement(owner.clone()));
+                    }
+                }
                 Effect::Resource(_) | Effect::Hook(_) => {}
             }
         }
@@ -512,6 +530,29 @@ impl Checker<'_> {
                     }
                 }
             }
+            EnemyAction::MustMove {
+                yards,
+                within,
+                on_fail,
+                ..
+            } => {
+                if !positive(*yards) || *within == SimDuration::ZERO {
+                    self.issues.push(DataIssue::InvalidMovement(owner.clone()));
+                }
+                self.effects(owner, on_fail);
+            }
+            EnemyAction::Reposition { distance } => {
+                let (lo, hi) = distance.bounds();
+                if !(lo >= 0.0 && lo <= hi && hi.is_finite()) {
+                    self.issues.push(DataIssue::InvalidMovement(owner.clone()));
+                }
+            }
+            EnemyAction::Knockback { yards, .. } => {
+                if !positive(*yards) {
+                    self.issues.push(DataIssue::InvalidMovement(owner.clone()));
+                }
+            }
+            EnemyAction::Effects { effects, .. } => self.effects(owner, effects),
             EnemyAction::Damage { .. }
             | EnemyAction::ForceMovement { .. }
             | EnemyAction::EnterPhase(_) => {}

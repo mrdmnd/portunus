@@ -11,6 +11,8 @@ fn label(m: &Metric) -> String {
         Metric::TotalTime => "total time (s)".into(),
         Metric::CompletionRate => "completion rate".into(),
         Metric::Deaths => "deaths".into(),
+        Metric::DemandsFailed => "demands failed".into(),
+        Metric::DamageTaken => "damage taken".into(),
         Metric::SeatDamage(s) => format!("seat {} damage", s.0),
         Metric::SeatDps(s) => format!("seat {} dps", s.0),
         Metric::DeathChance(p) => format!("{} death chance", p.0),

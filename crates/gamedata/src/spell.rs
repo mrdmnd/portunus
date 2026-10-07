@@ -23,6 +23,9 @@ pub struct SpellDef {
     /// Harms enemies or starts combat. Only non-hostile spells are usable
     /// before a pull begins.
     pub hostile: bool,
+    /// Farthest an enemy target may be, in yards (`None`: no limit).
+    #[serde(default)]
+    pub range: Option<f64>,
     /// Missile speed in yards per second. A spell travels if it has a speed
     /// or a `min_travel`: effects resolve on impact, and it is "in flight"
     /// until then. Direct damage is rolled at launch, as SimC snapshots at
@@ -134,6 +137,7 @@ mod tests {
             costs: Vec::new(),
             targeting: Targeting::Enemy,
             hostile: true,
+            range: None,
             speed,
             min_travel: SimDuration(min_travel),
             rolls_on_impact: false,

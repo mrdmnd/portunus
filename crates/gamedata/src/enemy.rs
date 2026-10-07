@@ -8,6 +8,7 @@
 use portunus_core::{AuraId, Dist, EnemyKey, EventName, SimDuration, Trigger};
 use serde::{Deserialize, Serialize};
 
+use crate::effect::Effect;
 use crate::stats::SchoolMask;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -96,6 +97,33 @@ pub enum EnemyAction {
     /// spells castable while moving are usable for the duration.
     ForceMovement {
         duration: Dist<SimDuration>,
+        target: EnemyTarget,
+    },
+    /// Each player in `target` owes `yards` of movement within `within`,
+    /// covered however they like: running, a blink, a knockback. Anyone
+    /// still short when it runs out suffers `on_fail`, cast by this enemy
+    /// with the player as its target.
+    MustMove {
+        yards: f64,
+        within: SimDuration,
+        target: EnemyTarget,
+        #[serde(default)]
+        on_fail: Vec<Effect>,
+    },
+    /// This enemy moves to `distance` yards from every player: a leap, a
+    /// teleport, a run to the far side of the room.
+    Reposition {
+        distance: Dist<f64>,
+    },
+    /// Players in `target` are thrown `yards` farther from this enemy.
+    Knockback {
+        yards: f64,
+        target: EnemyTarget,
+    },
+    /// Effects cast by this enemy on each player in `target`: debuffs,
+    /// percent-of-health damage, anything the effect language says.
+    Effects {
+        effects: Vec<Effect>,
         target: EnemyTarget,
     },
     /// Apply an aura from [`crate::GameData::auras`] to this enemy, e.g. an

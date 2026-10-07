@@ -30,9 +30,10 @@
             resources: [
                 (kind: maelstrom, max: 100.0, initial: 0.0, regen_per_sec: 0.0, regen_hasted: false),
             ],
-            // Chain Lightning, Frost Shock, and Lightning Shield come from
-            // the class tree, which isn't modelled.
-            baseline_spells: [188196, 51505, 188389, 8042, 188443, 196840, 192106],
+            // Chain Lightning, Frost Shock, Lightning Shield, Spiritwalker's
+            // Grace, and Gust of Wind come from the class tree, which isn't
+            // modelled.
+            baseline_spells: [188196, 51505, 188389, 8042, 188443, 196840, 192106, 79206, 192063],
             baseline_auras: [168534, 77756, 51505, 60188],
             trees: [
                 // The 12.0 tree as SimC's dump lays it out, each talent
@@ -96,6 +97,7 @@
             gcd: Some((base: 1500, hasted: true, floor: 750)),
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             speed: Some(60.0),
             effects: [
                 damage(amount: spell_power(1.15), school: 8, target: target),
@@ -110,6 +112,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             // Overloads are triggered 400 ms after their spell launches
             // (SimC's elemental_overload_event_t), then fly.
             speed: Some(50.0),
@@ -127,6 +130,7 @@
             cooldown: Some((duration: 8000, charges: 1, hasted: true, category: None)),
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             speed: Some(50.0),
             // SimC's Lava Burst damage is a missile that computes on impact.
             rolls_on_impact: true,
@@ -143,6 +147,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             speed: Some(50.0),
             rolls_on_impact: true,
             effects: [
@@ -159,6 +164,7 @@
             cooldown: Some((duration: 6000, charges: 1, hasted: false, category: None)),
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             castable_while_moving: true,
             effects: [
                 damage(amount: spell_power(0.195), school: 4, target: target),
@@ -174,6 +180,7 @@
             costs: [(kind: maelstrom, amount: 60.0, extra: 0.0, scaling: none)],
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             castable_while_moving: true,
             effects: [
                 damage(amount: spell_power(2.1), school: 8, target: target),
@@ -188,6 +195,7 @@
             gcd: Some((base: 1500, hasted: true, floor: 750)),
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             effects: [
                 damage(
                     amount: spell_power(2.6256),
@@ -206,6 +214,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             effects: [
                 damage(
                     amount: spell_power(1.9637),
@@ -235,6 +244,7 @@
             gcd: Some((base: 1500, hasted: true, floor: 750)),
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             // SimC gives 2 Maelstrom per target hit; this gives the
             // single-target amount.
             effects: [
@@ -255,6 +265,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             effects: [
                 damage(
                     amount: spell_power(0.59),
@@ -273,6 +284,7 @@
             gcd: Some((base: 1500, hasted: true, floor: 750)),
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             castable_while_moving: true,
             effects: [damage(amount: spell_power(0.49), school: 16, target: target)],
         ),
@@ -306,6 +318,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             effects: [damage(amount: spell_power(0.48), school: 8, target: target)],
         ),
         117014: (
@@ -318,6 +331,7 @@
             costs: [(kind: maelstrom, amount: 90.0, extra: 0.0, scaling: none)],
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             speed: Some(40.0),
             effects: [
                 damage(amount: spell_power(3.2), school: 28, target: target),
@@ -334,6 +348,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             speed: Some(40.0),
             effects: [damage(amount: spell_power(1.6), school: 28, target: target)],
         ),
@@ -345,6 +360,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             effects: [damage(amount: spell_power(1.05), school: 8, target: target)],
         ),
         // Fusion of Elements' blast, at 40% as consumed Power of the
@@ -357,6 +373,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             speed: Some(40.0),
             effects: [damage(amount: spell_power(1.28), school: 28, target: target)],
         ),
@@ -370,6 +387,7 @@
             costs: [(kind: maelstrom, amount: 60.0, extra: 0.0, scaling: none)],
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             castable_while_moving: true,
             effects: [apply_aura(aura: 61882, target: caster)],
         ),
@@ -384,6 +402,7 @@
             cooldown: Some((duration: 10000, charges: 1, hasted: false, category: None)),
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             castable_while_moving: true,
             effects: [
                 damage(
@@ -404,6 +423,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             speed: Some(40.0),
             effects: [
                 damage(amount: spell_power(0.195), school: 4, target: target),
@@ -421,6 +441,7 @@
             cooldown: Some((duration: 180000, charges: 1, hasted: false, category: None)),
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             castable_while_moving: true,
             effects: [
                 apply_aura(aura: 1219480, target: caster),
@@ -436,6 +457,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             speed: Some(50.0),
             rolls_on_impact: true,
             effects: [damage(amount: spell_power(0.54), school: 4, target: target)],
@@ -503,6 +525,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             effects: [damage(amount: spell_power(0.29), school: 8, target: target)],
         ),
         // The Elementals' spells.
@@ -514,6 +537,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             effects: [damage(amount: spell_power(3.0), school: 4, target: target)],
         ),
         117588: (
@@ -525,6 +549,7 @@
             cooldown: Some((duration: 60000, charges: 1, hasted: false, category: None)),
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             min_travel: 1000,
             effects: [
                 damage(
@@ -544,6 +569,7 @@
             cooldown: Some((duration: 10000, charges: 1, hasted: false, category: None)),
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             effects: [
                 damage(amount: spell_power(0.89), school: 4, target: target),
                 apply_aura(aura: 118297, target: target),
@@ -557,6 +583,7 @@
             gcd: Some((base: 500, hasted: false, floor: 500)),
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             speed: Some(30.0),
             effects: [damage(amount: spell_power(1.0), school: 8, target: target)],
         ),
@@ -569,6 +596,7 @@
             cooldown: Some((duration: 20000, charges: 1, hasted: false, category: None)),
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             effects: [
                 damage(amount: spell_power(1.83), school: 8, target: target),
                 apply_aura(aura: 157348, target: caster),
@@ -608,6 +636,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             speed: Some(50.0),
             effects: [damage(amount: spell_power(1.1775), school: 4, target: target)],
         ),
@@ -620,6 +649,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
+            range: Some(40.0),
             speed: Some(40.0),
             effects: [damage(amount: spell_power(2.0271), school: 28, target: target)],
         ),
@@ -634,8 +664,45 @@
             hostile: false,
             effects: [apply_aura(aura: 443454, target: caster)],
         ),
+        // Movement tools from the class tree; numbers are placeholders.
+        79206: (
+            id: 79206,
+            name: "Spiritwalker's Grace",
+            school: 8,
+            cast: instant,
+            gcd: None,
+            cooldown: Some((duration: 120000, charges: 1, hasted: false, category: None)),
+            targeting: self_only,
+            hostile: false,
+            usable_while_casting: true,
+            effects: [apply_aura(aura: 79206, target: caster)],
+        ),
+        192063: (
+            id: 192063,
+            name: "Gust of Wind",
+            school: 8,
+            cast: instant,
+            gcd: None,
+            cooldown: Some((duration: 30000, charges: 1, hasted: false, category: None)),
+            targeting: self_only,
+            hostile: false,
+            effects: [displace(yards: 20.0)],
+        ),
     },
     auras: {
+        // Enemy debuffs, made up for the dummies in enemies.ron.
+        910001: (
+            id: 910001,
+            name: "Scorched",
+            duration: Some(10000),
+            modifiers: [(scope: all, kind: damage_done_pct, value: -10.0)],
+        ),
+        79206: (
+            id: 79206,
+            name: "Spiritwalker's Grace",
+            duration: Some(15000),
+            modifiers: [(scope: all, kind: cast_while_moving, value: 0.0)],
+        ),
         188389: (
             id: 188389,
             name: "Flame Shock",

@@ -641,6 +641,10 @@ impl Interpreter {
                     io.interrupt(t);
                 }
             }
+            &Effect::Displace {
+                yards,
+                toward_target,
+            } => io.displace(caster, yards, ctx.target.filter(|_| toward_target)),
             Effect::ApplyOneOf { auras, target } => {
                 for t in self.targets(io, ctx, *target) {
                     let held = |a: &AuraId| io.view().auras(t).iter().any(|i| i.aura == *a);

@@ -8,6 +8,7 @@ use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
 
 use portunus_core::{ActorId, Seat, SimTime, SpellId};
+use portunus_gamedata::enemy::RuleIndex;
 use portunus_gamedata::item::WeaponHand;
 
 use crate::mechanics::RolledHit;
@@ -78,6 +79,27 @@ pub(crate) enum Event {
         hand: WeaponHand,
         gen: u32,
     },
+    /// An enemy rule fires, if its generation still matches.
+    RuleFire {
+        enemy: ActorId,
+        rule: RuleIndex,
+        gen: u32,
+    },
+    /// An enemy's cast bar may be complete.
+    EnemyCastEnd {
+        enemy: ActorId,
+        seq: u32,
+    },
+    /// A seat may have reached its movement's goal or end.
+    MovementEnd {
+        seat: Seat,
+        gen: u32,
+    },
+    /// A movement demand's time is up.
+    DemandDeadline {
+        seat: Seat,
+        id: u32,
+    },
     /// An armed seat's predicted wake time arrived; check it still holds.
     Recheck {
         seat: Seat,
@@ -99,11 +121,14 @@ impl Event {
             | Event::Timer { .. }
             | Event::PetAct { .. }
             | Event::PetExpire { .. }
-            | Event::Swing { .. } => EventClass::World,
+            | Event::Swing { .. }
+            | Event::DemandDeadline { .. } => EventClass::World,
+            Event::RuleFire { .. } | Event::EnemyCastEnd { .. } => EventClass::EnemyRules,
             Event::EvalTriggers => EventClass::Triggers,
-            Event::PrepullOpen | Event::CombatTimeout { .. } | Event::CooldownReady { .. } => {
-                EventClass::Legality
-            }
+            Event::PrepullOpen
+            | Event::CombatTimeout { .. }
+            | Event::CooldownReady { .. }
+            | Event::MovementEnd { .. } => EventClass::Legality,
             Event::Recheck { .. } | Event::Deliver(_) => EventClass::Decisions,
         }
     }

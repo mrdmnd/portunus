@@ -53,8 +53,14 @@ pub enum WakeReason {
     EnemyEngaged(ActorId),
     EnemyDied(ActorId),
     EnemyCastStart(ActorId),
+    /// Forced movement began.
     MovementStart,
+    /// The seat's movement, forced or voluntary, ended (anticipated).
     MovementEnd,
+    /// The seat owes movement by a deadline.
+    MustMove,
+    /// An enemy's distance from the seat changed: a leap or a knockback.
+    EnemyMoved(ActorId),
     /// Requested by mechanics (e.g. a proc that changes priorities).
     Mechanics,
 }

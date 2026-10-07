@@ -95,6 +95,7 @@ fn spell(id: SpellId, cast: CastKind, gcd: Option<GcdDef>, effects: Vec<Effect>)
         costs: Vec::new(),
         targeting: Targeting::Enemy,
         hostile: true,
+        range: None,
         speed: None,
         min_travel: SimDuration::ZERO,
         rolls_on_impact: false,

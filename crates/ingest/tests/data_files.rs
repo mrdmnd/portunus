@@ -44,7 +44,7 @@ fn elemental_loadout_compiles() {
     let abilities: Vec<SpellId> = template.abilities.iter().copied().collect();
     assert_eq!(
         abilities,
-        [8042, 51505, 188196, 188389, 188443, 192106, 196840]
+        [8042, 51505, 79206, 188196, 188389, 188443, 192063, 192106, 196840]
             .map(SpellId)
             .to_vec()
     );

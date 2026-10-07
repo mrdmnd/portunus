@@ -11,25 +11,29 @@
 //! Not implemented yet, and rejected at setup or reported as
 //! [`EngineError::Unsupported`] on first use: players' auto-attacks (pets'
 //! work), channels, empowers, shared cooldown categories, cast lag, enemy
-//! rules, `Fired` and `Delayed` engagement triggers, and aura value caps,
-//! thresholds, and absorbs.
+//! adds, and aura value caps, thresholds, and absorbs.
+//!
+//! Between pulls, living seats heal to full and dead ones come back with
+//! full health and their passive auras.
 
 mod aura;
 mod cast;
 mod condition;
 mod io;
+mod movement;
 mod pet;
 mod queue;
+mod rules;
 mod setup;
 mod swing;
 mod world;
 
 use std::sync::Arc;
 
-use portunus_core::{ActorId, Seat, SimTime, SpellId, Trigger};
-use portunus_scenario::resolved::{Segment, SpawnSet};
+use portunus_core::{ActorId, Seat, SimTime, SpellId};
+use portunus_scenario::resolved::Segment;
 
-use crate::choice::{Choice, Wait};
+use crate::choice::{Choice, MoveGoal, Wait};
 use crate::error::{EngineError, IllegalChoice};
 use crate::mask::{ActionMask, Readiness};
 use crate::mechanics::{AuraApplication, CastEvent, EngineIo, Mechanics, RolledHit, TickEvent};
@@ -45,7 +49,7 @@ pub use world::World;
 use cast::Need;
 use io::Io;
 use queue::{Event, Wake};
-use world::{Actor, Batch, Casting, Followup, Seg};
+use world::{Actor, Batch, Casting, Followup, RuleState, Seg};
 
 /// How many queued reactions one callback may cause before the kernel
 /// gives up with [`EngineError::Runaway`].
@@ -103,6 +107,8 @@ impl<M: Mechanics> Kernel<M> {
                 can_wait_tick: false,
                 targets: Vec::new(),
                 cancel: Vec::new(),
+                can_move: false,
+                can_stop_move: false,
             };
         };
         let me = w.seat_actor(seat);
@@ -136,6 +142,11 @@ impl<M: Mechanics> Kernel<M> {
                 Vec::new()
             },
             cancel,
+            can_move: w.can_move(seat),
+            can_stop_move: w
+                .seat_ref(seat)
+                .and_then(|st| st.moving)
+                .is_some_and(|m| m.forced_until.is_none()),
         }
     }
 
@@ -143,6 +154,7 @@ impl<M: Mechanics> Kernel<M> {
         let w = &self.world;
         if w.actor_ref(w.seat_actor(seat))
             .is_some_and(|a| a.casting.is_some())
+            || w.wants_to_move(seat)
         {
             return true;
         }
@@ -168,6 +180,12 @@ impl<M: Mechanics> Kernel<M> {
                 if def.hostile && !w.in_combat() {
                     return Err(IllegalChoice::HostileBeforePull(*ability));
                 }
+                let resolved = w.resolve_target(seat, def, *target)?;
+                if let (Some(t), Some(range)) = (resolved, def.range) {
+                    if w.distance_now(seat, t).is_some_and(|d| d > range + 1e-6) {
+                        return Err(IllegalChoice::OutOfRange(t));
+                    }
+                }
                 let (readiness, _) = self.readiness(seat, *ability);
                 if readiness != Readiness::Now {
                     return Err(IllegalChoice::NotReady {
@@ -175,7 +193,38 @@ impl<M: Mechanics> Kernel<M> {
                         readiness,
                     });
                 }
-                w.resolve_target(seat, def, *target).map(|_| ())
+                Ok(())
+            }
+            Choice::Move(goal) => {
+                if !w.can_move(seat) {
+                    return Err(IllegalChoice::CantMove);
+                }
+                let current = w.seats[usize::from(seat.0)].moving.as_ref();
+                if current.is_some_and(|m| m.goal.as_ref() == Some(goal)) {
+                    return Err(IllegalChoice::AlreadyMoving);
+                }
+                let reachable = match *goal {
+                    MoveGoal::ClearDemands => w.goal_left(seat, *goal) > 0.0,
+                    MoveGoal::Approach { target, within } => {
+                        within.is_finite()
+                            && within >= 0.0
+                            && w.is_live_target(target)
+                            && w.goal_left(seat, *goal) > 0.0
+                    }
+                    MoveGoal::Yards(y) => y.is_finite() && y > 0.0,
+                };
+                if reachable {
+                    Ok(())
+                } else {
+                    Err(IllegalChoice::NoMoveGoal)
+                }
+            }
+            Choice::StopMove => {
+                if self.mask(seat).can_stop_move {
+                    Ok(())
+                } else {
+                    Err(IllegalChoice::NotMoving)
+                }
             }
             Choice::Wait(Wait::ChannelTick) => Err(IllegalChoice::NoChannelTick),
             Choice::Wait(_) => Ok(()),
@@ -217,6 +266,7 @@ impl<M: Mechanics> Kernel<M> {
         let now = self.world.now;
         match seg {
             Segment::Travel { duration, prepull } => {
+                self.recover_seats();
                 let combat_starts = now + *duration;
                 let prepull_from = combat_starts - (*prepull).min(*duration);
                 self.world.seg = Seg::Travel {
@@ -235,6 +285,44 @@ impl<M: Mechanics> Kernel<M> {
         }
     }
 
+    /// Between pulls: everyone back to full health, the dead revived with
+    /// their passive auras.
+    fn recover_seats(&mut self) {
+        let s = Arc::clone(&self.world.s);
+        for (i, setup) in s.setup.seats.iter().enumerate() {
+            let seat = Seat(i as u8);
+            let me = self.world.seat_actor(seat);
+            let Some(a) = self.world.actor_mut(me) else {
+                continue;
+            };
+            let revived = !a.alive;
+            a.alive = true;
+            a.health = a.max_health;
+            if !revived {
+                continue;
+            }
+            self.world.seat_mut(seat).phase = SeatPhase::Idle;
+            self.world.record(TraceEvent::Resurrect { actor: me });
+            let auras = setup
+                .template
+                .passive_auras
+                .iter()
+                .chain(&s.setup.externals.party_auras);
+            for &aura in auras {
+                self.world.apply_aura(AuraApplication {
+                    aura: AuraRef {
+                        holder: me,
+                        aura,
+                        source: me,
+                    },
+                    stacks: 1,
+                    duration: None,
+                });
+            }
+        }
+        self.drain();
+    }
+
     fn begin_combat(
         &mut self,
         segment: usize,
@@ -244,13 +332,10 @@ impl<M: Mechanics> Kernel<M> {
         let s = Arc::clone(&self.world.s);
         let now = self.world.now;
         let first = self.world.actors.len();
+        let seats = self.world.seats.len();
         for (index, spawn) in c.spawns.iter().enumerate() {
-            let phase = s
-                .setup
-                .enemies
-                .enemies
-                .get(&spawn.enemy)
-                .and_then(|e| e.initial_phase.clone());
+            let def = s.setup.enemies.enemies.get(&spawn.enemy);
+            let phase = def.and_then(|e| e.initial_phase.clone());
             let mut enemy = Actor::new(
                 ActorKind::Enemy {
                     combat,
@@ -261,7 +346,8 @@ impl<M: Mechanics> Kernel<M> {
                 1.0,
             );
             enemy.phase = phase;
-            enemy.distance = spawn.distance;
+            enemy.distances = vec![spawn.distance; seats];
+            enemy.rules = vec![RuleState::default(); def.map_or(0, |d| d.rules.len())];
             self.world.actors.push(enemy);
         }
         self.world.enemies = (first..self.world.actors.len())
@@ -279,7 +365,7 @@ impl<M: Mechanics> Kernel<M> {
             .push(deadline, Event::CombatTimeout { combat });
         let mut elapsed = Vec::new();
         for spawn in &c.spawns {
-            elapsed_marks(&spawn.engage, &mut elapsed);
+            rules::elapsed_marks(&spawn.engage, &mut elapsed);
         }
         for d in elapsed {
             self.world.queue.push(now + d, Event::EvalTriggers);
@@ -344,19 +430,16 @@ impl<M: Mechanics> Kernel<M> {
             return;
         };
         loop {
-            let ready: Vec<ActorId> = self
-                .world
-                .enemies
-                .iter()
-                .zip(&c.spawns)
-                .filter(|(&e, spawn)| {
-                    self.world
-                        .actor_ref(e)
-                        .is_some_and(|a| a.alive && !a.engaged)
-                        && self.world.trigger_holds(&spawn.engage, started)
-                })
-                .map(|(&e, _)| e)
-                .collect();
+            let mut ready = Vec::new();
+            for (e, spawn) in self.world.enemies.clone().into_iter().zip(&c.spawns) {
+                let waiting = self
+                    .world
+                    .actor_ref(e)
+                    .is_some_and(|a| a.alive && !a.engaged);
+                if waiting && self.world.trigger_holds(&spawn.engage, started, (e, None)) {
+                    ready.push(e);
+                }
+            }
             if ready.is_empty() {
                 break;
             }
@@ -365,6 +448,7 @@ impl<M: Mechanics> Kernel<M> {
             }
             self.drain();
         }
+        self.arm_rules();
         let cleared = self
             .world
             .enemies
@@ -388,10 +472,15 @@ impl<M: Mechanics> Kernel<M> {
         }
         self.world.record(TraceEvent::CombatEnd { combat, cleared });
         self.call(|m, io| m.combat_ended(io, combat, cleared));
+        for e in self.world.enemies.clone() {
+            self.world.cancel_enemy_cast(e, CastEndReason::Interrupted);
+        }
+        self.world.delayed.clear();
         for i in 0..self.world.seats.len() {
             let seat = Seat(i as u8);
             let me = self.world.seat_actor(seat);
             self.world.cancel_cast(me, CastEndReason::Interrupted);
+            self.world.clear_movement(seat);
             let st = self.world.seat_mut(seat);
             if st.phase != SeatPhase::Dead {
                 st.phase = SeatPhase::Idle;
@@ -656,6 +745,10 @@ impl<M: Mechanics> Kernel<M> {
                 self.world.pet_expire(actor);
                 self.drain();
             }
+            Event::RuleFire { enemy, rule, gen } => self.fire_rule(enemy, rule, gen),
+            Event::EnemyCastEnd { enemy, seq } => self.enemy_cast_end(enemy, seq),
+            Event::MovementEnd { seat, gen } => self.world.movement_end(seat, gen),
+            Event::DemandDeadline { seat, id } => self.demand_deadline(seat, id),
             Event::Recheck { .. } | Event::Deliver(_) => {
                 let mut ignored = Vec::new();
                 self.accept(event, &mut ignored);
@@ -861,7 +954,29 @@ impl<M: Mechanics> Kernel<M> {
                 self.drain();
                 self.world.deliver_now(seat, WakeReason::FreeAction);
             }
+            Choice::Move(goal) => {
+                self.world.start_move(seat, goal);
+                self.free_again(seat);
+            }
+            Choice::StopMove => {
+                self.world.stop_move(seat);
+                self.free_again(seat);
+            }
         }
+    }
+
+    /// After a free action: asked again now, still committed if casting.
+    fn free_again(&mut self, seat: Seat) {
+        let casting = self
+            .world
+            .actor_ref(self.world.seat_actor(seat))
+            .is_some_and(|a| a.casting.is_some());
+        self.world.seat_mut(seat).phase = if casting {
+            SeatPhase::Committed
+        } else {
+            SeatPhase::Deciding
+        };
+        self.world.deliver_now(seat, WakeReason::FreeAction);
     }
 
     fn apply_batch(&mut self) {
@@ -923,70 +1038,6 @@ impl<M: Mechanics> Kernel<M> {
             if let Some((t, _)) = target {
                 self.world.queue.push(t, Event::Recheck { seat, gen });
             }
-        }
-    }
-}
-
-/// Every `Elapsed` duration in a trigger, so the kernel can re-evaluate at
-/// those moments.
-fn elapsed_marks(t: &Trigger<SpawnSet>, out: &mut Vec<portunus_core::SimDuration>) {
-    match t {
-        Trigger::Elapsed(d) => out.push(*d),
-        Trigger::All(ts) | Trigger::Any(ts) => {
-            for t in ts {
-                elapsed_marks(t, out);
-            }
-        }
-        _ => {}
-    }
-}
-
-impl World {
-    fn members(&self, set: &SpawnSet) -> Vec<ActorId> {
-        match set {
-            SpawnSet::One(i) => self
-                .enemies
-                .get(usize::from(i.0))
-                .copied()
-                .into_iter()
-                .collect(),
-            SpawnSet::Many(is) => is
-                .iter()
-                .filter_map(|i| self.enemies.get(usize::from(i.0)).copied())
-                .collect(),
-            SpawnSet::Engaged => self
-                .enemies
-                .iter()
-                .copied()
-                .filter(|&e| self.actor_ref(e).is_some_and(|a| a.engaged))
-                .collect(),
-        }
-    }
-
-    fn trigger_holds(&self, t: &Trigger<SpawnSet>, started: SimTime) -> bool {
-        let actors = |set: &SpawnSet| -> Vec<&Actor> {
-            self.members(set)
-                .into_iter()
-                .filter_map(|e| self.actor_ref(e))
-                .collect()
-        };
-        match t {
-            Trigger::Now => true,
-            Trigger::Never => false,
-            Trigger::Elapsed(d) => self.now >= started + *d,
-            Trigger::HpFracBelow { who, frac } => {
-                let group = actors(who);
-                let max: u64 = group.iter().map(|a| a.max_health).sum();
-                let hp: u64 = group.iter().map(|a| a.health).sum();
-                max > 0 && (hp as f64) < *frac * max as f64
-            }
-            Trigger::AliveAtMost { who, count } => {
-                actors(who).iter().filter(|a| a.alive).count() <= *count as usize
-            }
-            Trigger::Died(who) => actors(who).iter().all(|a| !a.alive),
-            Trigger::All(ts) => ts.iter().all(|t| self.trigger_holds(t, started)),
-            Trigger::Any(ts) => ts.iter().any(|t| self.trigger_holds(t, started)),
-            Trigger::Fired { .. } | Trigger::Delayed { .. } => false,
         }
     }
 }

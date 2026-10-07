@@ -282,11 +282,24 @@ impl World {
                 if def.targeting == Targeting::Enemy && self.live_targets().is_empty() {
                     need.block();
                 }
+                let target = a.target.filter(|&t| self.is_live_target(t));
+                if let (Some(t), Some(range), Targeting::Enemy) = (target, def.range, def.targeting)
+                {
+                    match self.in_range_at(seat, t, range) {
+                        Some(at) => need.until(at, WakeReason::MovementEnd),
+                        None => need.block(),
+                    }
+                }
             }
         }
         if let Some(c) = &a.casting {
             if !def.usable_while_casting {
                 need.until(c.ends, WakeReason::CastEnd);
+            }
+        }
+        if let Some(m) = st.moving {
+            if !self.usable_while_moving(actor, spell, def) {
+                need.until(m.ends, WakeReason::MovementEnd);
             }
         }
         if def.gcd.is_some() {
@@ -418,7 +431,16 @@ impl World {
                 TargetSel::Actor(id) => Err(IllegalChoice::NotATarget(id)),
                 TargetSel::LowestHealth => pick(self.live_targets(), true),
                 TargetSel::HighestHealth => pick(self.live_targets(), false),
-                TargetSel::Casting => Err(IllegalChoice::NoValidTarget),
+                TargetSel::Casting => self
+                    .live_targets()
+                    .into_iter()
+                    .find(|&t| {
+                        self.actor_ref(t)
+                            .and_then(|a| a.enemy_cast.as_ref())
+                            .is_some_and(|c| c.interruptible)
+                    })
+                    .map(Some)
+                    .ok_or(IllegalChoice::NoValidTarget),
             },
             Targeting::Ally => {
                 let allies: Vec<ActorId> = self

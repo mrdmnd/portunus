@@ -50,4 +50,14 @@ pub enum IllegalChoice {
     NothingToStop,
     NoChannelTick,
     NotCancelable(AuraId),
+    /// The target is beyond the spell's range.
+    OutOfRange(ActorId),
+    /// Dead, out of combat, or being moved by force.
+    CantMove,
+    /// The goal is already met or names nothing reachable.
+    NoMoveGoal,
+    /// Already moving toward this goal.
+    AlreadyMoving,
+    /// No voluntary move to stop.
+    NotMoving,
 }

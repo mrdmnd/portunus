@@ -18,6 +18,7 @@ use portunus_gamedata::stats::ResourceKind;
 use portunus_scenario::resolved::SpawnIndex;
 use serde::{Deserialize, Serialize};
 
+use crate::choice::MoveGoal;
 use crate::mechanics::TimerEvent;
 use crate::step::WakeReason;
 
@@ -67,6 +68,38 @@ pub trait StateView {
     /// perceived yet, because their reaction delays are still running.
     /// Realistic observers hide these (and any legality they enable).
     fn unperceived(&self, seat: Seat) -> &[PendingPerception];
+    /// The seat's current movement, if it is moving.
+    fn movement(&self, seat: Seat) -> Option<MovementView>;
+    /// Movement the seat owes, as of now, soonest deadline first.
+    fn demands(&self, seat: Seat) -> Vec<DemandView>;
+    /// The seat's run speed in yards per second.
+    fn run_speed(&self, seat: Seat) -> f64;
+    /// Yards between the seat and an enemy, as of now; `None` if `enemy`
+    /// isn't one.
+    fn distance(&self, seat: Seat, enemy: ActorId) -> Option<f64>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MovementView {
+    pub started: SimTime,
+    /// When it stops at the current speed: the goal reached, or the forced
+    /// movement over.
+    pub ends: SimTime,
+    /// Forced movement can't be stopped.
+    pub forced: bool,
+    /// `None` while forced.
+    pub goal: Option<MoveGoal>,
+}
+
+/// Movement owed by a deadline.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DemandView {
+    pub source: ActorId,
+    pub rule: RuleIndex,
+    /// Yards still to cover.
+    pub yards: f64,
+    pub placed: SimTime,
+    pub deadline: SimTime,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

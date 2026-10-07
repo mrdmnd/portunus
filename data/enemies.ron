@@ -1,5 +1,7 @@
-// Enemies for the placeholder build in game.ron. Health is a placeholder
-// sized so the dummy dies in a few minutes at the placeholder coefficients.
+// Enemies for the placeholder build in game.ron. Health is a placeholder:
+// the plain dummy dies in under a minute at the placeholder coefficients,
+// the movement dummies in about four so their mechanics repeat.
+// Mechanic timings, distances, and failure penalties are made up.
 (
     build: (version: "placeholder", build: 0),
     enemies: {
@@ -10,6 +12,96 @@
             health: 1000000,
             forces: 0,
             defense: (level_offset: 3, armor: 0.0),
+        ),
+        // Planned, predictable movement now and then, in the spirit of
+        // SimC's LightMovement fight style.
+        "light_movement_dummy": (
+            key: "light_movement_dummy",
+            name: "Target Dummy (light movement)",
+            kind: boss,
+            health: 6000000,
+            forces: 0,
+            defense: (level_offset: 3, armor: 0.0),
+            rules: [
+                (
+                    name: "move",
+                    when: elapsed(15000),
+                    repeat: Some(jitter(base: 85000, jitter: 5000)),
+                    action: force_movement(duration: fixed(7000), target: all_players),
+                ),
+            ],
+        ),
+        // Short, frequent forced moves, in the spirit of SimC's
+        // HeavyMovement fight style.
+        "heavy_movement_dummy": (
+            key: "heavy_movement_dummy",
+            name: "Target Dummy (heavy movement)",
+            kind: boss,
+            health: 6000000,
+            forces: 0,
+            defense: (level_offset: 3, armor: 0.0),
+            rules: [
+                (
+                    name: "move",
+                    when: elapsed(10000),
+                    repeat: Some(jitter(base: 10000, jitter: 2000)),
+                    action: force_movement(duration: uniform(lo: 2500, hi: 4000), target: all_players),
+                ),
+            ],
+        ),
+        // Movement the player chooses how to meet: swirls under a random
+        // player, a telegraphed quake everyone must step out of, and a leap
+        // out of range followed by a return.
+        "mechanics_dummy": (
+            key: "mechanics_dummy",
+            name: "Target Dummy (mechanics)",
+            kind: boss,
+            health: 6000000,
+            forces: 0,
+            defense: (level_offset: 3, armor: 0.0),
+            rules: [
+                (
+                    name: "swirl",
+                    when: elapsed(8000),
+                    repeat: Some(uniform(lo: 12000, hi: 20000)),
+                    action: must_move(
+                        yards: 8.0,
+                        within: 1500,
+                        target: random_player,
+                        on_fail: [
+                            damage(amount: pct_max_health(40.0), school: 4, target: target),
+                            apply_aura(aura: 910001, target: target),
+                        ],
+                    ),
+                ),
+                (
+                    name: "quake",
+                    when: elapsed(20000),
+                    repeat: Some(jitter(base: 30000, jitter: 5000)),
+                    action: cast(
+                        time: 2500,
+                        interruptible: false,
+                        then: must_move(
+                            yards: 10.0,
+                            within: 2000,
+                            target: all_players,
+                            on_fail: [damage(amount: pct_max_health(30.0), school: 8, target: target)],
+                        ),
+                    ),
+                ),
+                (
+                    name: "leap",
+                    when: elapsed(45000),
+                    repeat: Some(fixed(60000)),
+                    action: reposition(distance: uniform(lo: 45.0, hi: 55.0)),
+                ),
+                (
+                    name: "return",
+                    when: delayed(delay: 8000, after: fired(who: itself, event: "leap", nth: 1)),
+                    repeat: Some(fixed(60000)),
+                    action: reposition(distance: fixed(20.0)),
+                ),
+            ],
         ),
     },
 )

@@ -90,7 +90,7 @@ pub mod trace;
 
 use portunus_core::Seat;
 
-pub use choice::{CastOpts, Choice, Condition, TargetSel, Wait};
+pub use choice::{CastOpts, Choice, Condition, MoveGoal, TargetSel, Wait};
 pub use error::{EngineError, IllegalChoice, SetupIssue};
 pub use kernel::{Kernel, World};
 pub use mask::{ActionMask, Readiness};
@@ -99,7 +99,8 @@ pub use order::EventClass;
 pub use outcome::Outcome;
 pub use setup::{Externals, Latency, RunSetup, SeatSetup};
 pub use state::{
-    AuraRef, DeckView, ListenerRef, PendingTimer, ProcView, SeatPhase, SegmentView, StateView,
+    AuraRef, DeckView, DemandView, ListenerRef, MovementView, PendingTimer, ProcView, SeatPhase,
+    SegmentView, StateView,
 };
 pub use step::{DecisionRequest, Step, WakeReason};
 pub use trace::TraceRecord;

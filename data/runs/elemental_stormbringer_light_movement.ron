@@ -1,0 +1,21 @@
+// One Stormbringer Elemental Shaman on a dummy that forces a long move now
+// and then. Paths are relative to this file.
+(
+    name: "elemental_stormbringer_light_movement",
+    game: "../game.ron",
+    enemies: "../enemies.ron",
+    scenario: "../scenarios/light_movement_dummy.ron",
+    seats: [
+        (
+            loadout: "../loadouts/elemental_stormbringer_build.ron",
+            policy: "elemental",
+            latency: (
+                anticipated: fixed(0),
+                reaction: jitter(base: 250, jitter: 50),
+                cast_lag: fixed(0),
+            ),
+        ),
+    ],
+    info: realistic,
+    seeds: 200,
+)

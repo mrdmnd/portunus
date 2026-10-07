@@ -28,4 +28,10 @@ pub struct SeatOutcome {
     pub damage_done: u64,
     pub casts: u32,
     pub deaths: u32,
+    /// After mitigation and absorbs, excluding overkill.
+    pub damage_taken: u64,
+    /// Excludes overhealing.
+    pub healing_done: u64,
+    /// Movement demands still unmet when their time ran out.
+    pub demands_failed: u32,
 }

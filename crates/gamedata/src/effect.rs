@@ -105,6 +105,14 @@ pub enum Effect {
     Interrupt {
         target: EffectTarget,
     },
+    /// Move the caster `yards` at once (Blink, Gust of Wind). It counts
+    /// toward movement the caster owes, and closes distance to the cast's
+    /// target if `toward_target`.
+    Displace {
+        yards: f64,
+        #[serde(default)]
+        toward_target: bool,
+    },
     /// Run exactly one branch, chosen by weight from the caster's proc
     /// stream (e.g. one of three random buffs).
     RandomOf(Vec<(f64, Effect)>),
@@ -290,6 +298,8 @@ pub enum ModKind {
     /// Non-instant spells in scope become castable while moving (`value`
     /// unused).
     CastWhileMoving,
+    /// Run speed, in percent; `scope` is unused.
+    MoveSpeedPct,
     /// Takes no damage in scope (`value` unused), e.g. an enemy's shield
     /// phase.
     Immune,

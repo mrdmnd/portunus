@@ -10,7 +10,7 @@ use portunus_engine::mechanics::{
 use portunus_engine::state::Projectile;
 use portunus_engine::{EngineIo, Mechanics, Readiness, RunSetup, StateView};
 use portunus_gamedata::aura::AuraDef;
-use portunus_gamedata::effect::{Coefficient, EffectTarget, ModKind};
+use portunus_gamedata::effect::{Coefficient, Effect, EffectTarget, ModKind};
 use portunus_gamedata::spell::SpellDef;
 use portunus_gamedata::stats::{SchoolMask, SpendScaling, Stat};
 
@@ -342,6 +342,25 @@ impl Mechanics for PartyMechanics {
             };
             self.interp.fire(io, hit.target, taken);
         }
+    }
+
+    fn enemy_effects(
+        &self,
+        io: &mut dyn EngineIo,
+        source: ActorId,
+        target: ActorId,
+        effects: &[Effect],
+    ) {
+        let ctx = EffectCtx {
+            caster: source,
+            target: Some(target),
+            spell: None,
+            aura: None,
+            event_amount: None,
+            scale: 1.0,
+            depth: 0,
+        };
+        self.interp.run(io, &ctx, effects);
     }
 
     fn timer(&self, io: &mut dyn EngineIo, timer: &TimerEvent) {

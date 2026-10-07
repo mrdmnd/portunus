@@ -126,8 +126,12 @@ impl EngineIo for Io<'_> {
         );
     }
 
-    fn interrupt(&mut self, _target: ActorId) -> bool {
-        false
+    fn interrupt(&mut self, target: ActorId) -> bool {
+        self.w.interrupt(target)
+    }
+
+    fn displace(&mut self, actor: ActorId, yards: f64, toward: Option<ActorId>) {
+        self.w.displace(actor, yards, toward);
     }
 
     fn schedule(&mut self, delay: SimDuration, timer: TimerEvent) {

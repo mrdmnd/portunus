@@ -28,6 +28,11 @@ pub struct ActionMask {
     pub targets: Vec<ActorId>,
     /// Auras the seat holds and may cancel.
     pub cancel: Vec<AuraId>,
+    /// `Move` is legal: the seat is alive, in combat, and not being moved
+    /// by force. Which goals make sense is the policy's call.
+    pub can_move: bool,
+    /// A voluntary move is in progress and may be stopped.
+    pub can_stop_move: bool,
 }
 
 impl ActionMask {

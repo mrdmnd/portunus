@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use portunus_core::{AuraId, SimDuration, SpellId};
-use portunus_engine::{Choice, Wait};
+use portunus_engine::{ActionMask, Choice, MoveGoal, Wait};
 use portunus_env::Decision;
 use portunus_gamedata::stats::ResourceKind;
 use portunus_policy::Policy;
@@ -66,10 +66,62 @@ const CRACKLING_FURY: AuraId = AuraId(1269215);
 const TEMPEST_TALENT: AuraId = AuraId(454009);
 const CALL_OF_THE_ANCESTORS_TALENT: AuraId = AuraId(443450);
 
+const SPIRITWALKERS_GRACE: SpellId = SpellId(79206);
+const SPIRITWALKERS_GRACE_BUFF: AuraId = AuraId(79206);
+const GUST_OF_WIND: SpellId = SpellId(192063);
+
+/// Seconds kept between finishing a cast and having to start running.
+const MOVE_MARGIN: f64 = 0.1;
+/// The reach of the spec's damage spells, in yards.
+const SPELL_RANGE: f64 = 40.0;
+
 /// Flame Shock inside 30% of its 18 s duration.
 const PANDEMIC: SimDuration = SimDuration(5400);
 /// SimC's `gcd`, unhasted.
 const GCD: SimDuration = SimDuration(1500);
+
+fn secs(d: SimDuration) -> f64 {
+    f64::from(d.millis()) / 1000.0
+}
+
+/// Dodging and keeping in range, ahead of the rotation: a cast in progress
+/// finishes if there is still time to run afterwards, otherwise the seat
+/// runs at once, with Gust of Wind when running alone can't make it.
+/// Spiritwalker's Grace keeps casting through long forced movement, and an
+/// idle seat walks back into range of its target.
+fn movement(obs: &SeatObs, legal: &ActionMask) -> Option<Choice> {
+    let graced = obs.has_buff(SPIRITWALKERS_GRACE_BUFF);
+    if let Some(m) = obs.movement {
+        if m.forced && m.remaining > SimDuration(3000) && !graced {
+            return legal
+                .is_ready(SPIRITWALKERS_GRACE)
+                .then(|| Choice::cast(SPIRITWALKERS_GRACE));
+        }
+    }
+    let slack = obs.move_slack();
+    if slack.is_some_and(|s| s < 0.0) && legal.is_ready(GUST_OF_WIND) {
+        return Some(Choice::cast(GUST_OF_WIND));
+    }
+    if !legal.can_move || obs.movement.is_some() {
+        return None;
+    }
+    let casting = obs.cast_remaining.map_or(0.0, secs);
+    if let Some(slack) = slack {
+        if casting > 0.0 && !graced && casting + MOVE_MARGIN <= slack {
+            return Some(Choice::Wait(Wait::NextEvent));
+        }
+        return Some(Choice::Move(MoveGoal::ClearDemands));
+    }
+    match &obs.target {
+        Some(t) if casting == 0.0 && t.distance > SPELL_RANGE => {
+            Some(Choice::Move(MoveGoal::Approach {
+                target: t.actor,
+                within: SPELL_RANGE,
+            }))
+        }
+        _ => None,
+    }
+}
 
 /// SimulationCraft's Elemental single-target list (12.0), without its
 /// set-bonus, trinket, and two-target lines. A cooldown the build lacks
@@ -77,6 +129,9 @@ const GCD: SimDuration = SimDuration(1500);
 /// Flame Shock or Stormkeeper.
 pub fn elemental(d: &Decision<SeatObs>) -> Choice {
     let (obs, legal) = (&d.obs, &d.legal);
+    if let Some(choice) = movement(obs, legal) {
+        return choice;
+    }
     let ready = |s: SpellId| legal.is_ready(s);
     let talent = |a: AuraId| obs.has_buff(a);
     let known = |s: SpellId| legal.abilities.contains_key(&s);

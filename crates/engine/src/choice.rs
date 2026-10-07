@@ -29,6 +29,27 @@ pub enum Choice {
     /// Remove one of this seat's own cancelable auras. Free; the seat is
     /// asked again at the same timestamp.
     CancelAura(AuraId),
+    /// Start running toward a goal. A cast that can't continue while moving
+    /// stops, as with `StopCast`; while moving, only spells castable while
+    /// moving are usable. Any movement counts toward every demand the seat
+    /// owes. Free; the seat is asked again at the same timestamp, and woken
+    /// when the goal is reached.
+    Move(MoveGoal),
+    /// Stop a voluntary move. Free; the seat is asked again at the same
+    /// timestamp. Forced movement can't be stopped.
+    StopMove,
+}
+
+/// Where a voluntary move ends.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MoveGoal {
+    /// Until every movement demand the seat owes is met.
+    ClearDemands,
+    /// Toward an enemy until within this many yards of it.
+    Approach { target: ActorId, within: f64 },
+    /// This many yards, in no particular direction.
+    Yards(f64),
 }
 
 impl Choice {
