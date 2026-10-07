@@ -31,7 +31,8 @@ pub struct SpecDef {
     pub baseline_spells: Vec<SpellId>,
     /// Always-on spec passives, including mastery.
     pub baseline_auras: Vec<AuraId>,
-    /// Class tree, spec tree, hero trees.
+    /// Class tree and spec tree. Hero trees are shared between specs and
+    /// live in `GameData::hero_trees`.
     #[serde(default)]
     pub trees: Vec<TalentTree>,
 }

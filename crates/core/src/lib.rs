@@ -15,8 +15,8 @@ pub mod trigger;
 
 pub use dist::{Dist, Sample};
 pub use ids::{
-    ActorId, AuraId, EnemyKey, EventName, HookKey, ItemId, ItemSetId, PetId, PullName, Seat, Seed,
-    SpawnLabel, SpecId, SpellId, StreamKey, TalentId, PARTY_SIZE,
+    ActorId, AuraId, EnemyKey, EventName, HeroTreeId, HookKey, ItemId, ItemSetId, PetId, PullName,
+    Seat, Seed, SpawnLabel, SpecId, SpellId, StreamKey, TalentId, PARTY_SIZE,
 };
 pub use rng::{Domain, Purpose};
 pub use time::{SimDuration, SimOffset, SimTime};

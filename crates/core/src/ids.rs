@@ -51,6 +51,10 @@ numeric_id!(ItemSetId(u32));
 numeric_id!(TalentId(u32));
 numeric_id!(SpecId(u16));
 numeric_id!(
+    /// A hero talent tree in `GameData` (Farseer, Stormbringer).
+    HeroTreeId(u32)
+);
+numeric_id!(
     /// A pet or guardian type in `GameData`.
     PetId(u32)
 );

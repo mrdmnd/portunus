@@ -10,7 +10,7 @@ mod compile;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use portunus_core::{AuraId, ItemId, PetId, SpecId, SpellId, TalentId};
+use portunus_core::{AuraId, HeroTreeId, ItemId, PetId, SpecId, SpellId, TalentId};
 use portunus_gamedata::item::{GearSlot, WeaponDef};
 use portunus_gamedata::spec::Role;
 use portunus_gamedata::stats::{DerivedStats, ResourceDef, StatBlock};
@@ -25,6 +25,9 @@ pub struct Loadout {
     pub spec: SpecId,
     #[serde(default)]
     pub gear: BTreeMap<GearSlot, EquippedItem>,
+    /// Its keystone comes free; its other talents go in `talents`.
+    #[serde(default)]
+    pub hero_tree: Option<HeroTreeId>,
     #[serde(default)]
     pub talents: TalentSelection,
     #[serde(default)]
@@ -51,6 +54,7 @@ pub struct TalentSelection(pub BTreeMap<TalentId, u8>);
 pub struct ActorTemplate {
     pub spec: SpecId,
     pub role: Role,
+    pub hero_tree: Option<HeroTreeId>,
     pub stats: StatBlock,
     pub derived: DerivedStats,
     /// Every spell the seat can press, by the id it was granted under:
@@ -105,6 +109,11 @@ pub enum LoadoutIssue {
         spent: u8,
         allowed: u8,
     },
+    UnknownHeroTree(HeroTreeId),
+    /// The spec can't choose this hero tree.
+    HeroTreeNotForSpec(HeroTreeId),
+    /// A hero talent from a tree the loadout didn't choose.
+    HeroTalentWithoutTree(TalentId),
 }
 
 #[derive(Debug, Error)]

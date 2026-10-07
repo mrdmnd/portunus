@@ -1,6 +1,6 @@
 //! Talent trees and what talents grant.
 
-use portunus_core::{AuraId, SpellId, TalentId};
+use portunus_core::{AuraId, HeroTreeId, SpecId, SpellId, TalentId};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -39,4 +39,18 @@ pub enum Grant {
     Spell(SpellId),
     PassiveAura(AuraId),
     ReplaceSpell { from: SpellId, to: SpellId },
+}
+
+/// A hero talent tree, shared by the specs that may choose it (Farseer:
+/// Elemental and Restoration). A loadout picks at most one.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HeroTreeDef {
+    pub id: HeroTreeId,
+    pub name: String,
+    pub specs: Vec<SpecId>,
+    /// `tree.points` is what the player spends; the keystone is free.
+    pub tree: TalentTree,
+    /// Granted at rank 1 when the tree is chosen. One of `tree`'s nodes,
+    /// usually the root the others require.
+    pub keystone: TalentId,
 }

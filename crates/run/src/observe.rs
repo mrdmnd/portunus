@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use portunus_core::{ActorId, AuraId, PetId, Seat, SimDuration, SimTime, SpellId};
+use portunus_core::{ActorId, AuraId, HeroTreeId, PetId, Seat, SimDuration, SimTime, SpellId};
 use portunus_engine::state::{ActorKind, AuraInstance, CastWhat};
 use portunus_engine::{ActionMask, Readiness, SegmentView, WakeReason};
 use portunus_env::{InfoSet, ObsContext, Observer};
@@ -37,6 +37,9 @@ pub struct TargetObs {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SeatObs {
     pub now: SimTime,
+    /// The seat's hero tree: fixed for the run, for policies that play
+    /// each tree differently.
+    pub hero_tree: Option<HeroTreeId>,
     /// Time since the current pull started; `None` out of combat.
     pub combat_time: Option<SimDuration>,
     pub gcd_remaining: SimDuration,
@@ -276,6 +279,7 @@ impl Observer for ScriptObserver {
 
         SeatObs {
             now,
+            hero_tree: template.and_then(|t| t.hero_tree),
             combat_time: match state.segment() {
                 SegmentView::Combat(c) => Some(now.saturating_since(c.started)),
                 SegmentView::Travel { .. } | SegmentView::Finished => None,

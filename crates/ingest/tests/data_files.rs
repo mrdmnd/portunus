@@ -3,8 +3,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use portunus_core::{AuraId, Seed, SpellId};
-use portunus_gamedata::{EnemyData, GameData};
+use portunus_core::{AuraId, HeroTreeId, Seed, SpecId, SpellId, TalentId};
+use portunus_gamedata::talent::{TalentNode, TalentTree};
+use portunus_gamedata::{EnemyData, GameData, HeroTreeDef};
 use portunus_ingest::{
     check_enemy_data, check_game_data, read_ron, DataIssue, EnemyDataSource, GameDataSource, Owner,
     RonFile,
@@ -88,7 +89,46 @@ fn broken_references_are_reported() {
         aura: AuraId(77762),
     }));
     assert!(issues.contains(&DataIssue::UnknownSpell {
-        owner: Owner::Spec(portunus_core::SpecId(262)),
+        owner: Owner::Spec(SpecId(262)),
         spell: SpellId(8042),
+    }));
+}
+
+#[test]
+fn broken_hero_trees_are_reported() {
+    let mut game = game();
+    let elemental = SpecId(262);
+    let shared = TalentId(9000);
+    let tree = |id: u32, keystone: u32| HeroTreeDef {
+        id: HeroTreeId(id),
+        name: format!("hero {id}"),
+        specs: vec![elemental, SpecId(9999)],
+        tree: TalentTree {
+            name: format!("hero {id}"),
+            points: 1,
+            nodes: vec![TalentNode {
+                row: 0,
+                choices: vec![shared],
+                max_rank: 1,
+                requires_any: Vec::new(),
+            }],
+            gates: Vec::new(),
+        },
+        keystone: TalentId(keystone),
+    };
+    game.hero_trees = [tree(1, 9000), tree(2, 9999)]
+        .into_iter()
+        .map(|h| (h.id, h))
+        .collect();
+    let issues = check_game_data(&game);
+    assert!(issues.contains(&DataIssue::UnknownSpec {
+        owner: Owner::HeroTree(HeroTreeId(1)),
+        spec: SpecId(9999),
+    }));
+    assert!(!issues.contains(&DataIssue::KeystoneNotInTree(HeroTreeId(1))));
+    assert!(issues.contains(&DataIssue::KeystoneNotInTree(HeroTreeId(2))));
+    assert!(issues.contains(&DataIssue::TalentInTwoTrees {
+        spec: elemental,
+        talent: shared,
     }));
 }

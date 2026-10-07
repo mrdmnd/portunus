@@ -1,7 +1,11 @@
 //! Reference checks for loaded tables: every id points at something, and
 //! every table entry sits under its own id.
 
-use portunus_core::{AuraId, EnemyKey, ItemId, ItemSetId, PetId, SpecId, SpellId, TalentId};
+use std::collections::BTreeSet;
+
+use portunus_core::{
+    AuraId, EnemyKey, HeroTreeId, ItemId, ItemSetId, PetId, SpecId, SpellId, TalentId,
+};
 use portunus_gamedata::effect::{
     Effect, EffectTarget, ListenFor, Listener, ModScope, Predicate, ProcChance,
 };
@@ -20,6 +24,7 @@ pub enum Owner {
     Item(ItemId),
     ItemSet(ItemSetId),
     Talent(TalentId),
+    HeroTree(HeroTreeId),
     Pet(PetId),
     Enemy(EnemyKey),
 }
@@ -42,6 +47,18 @@ pub enum DataIssue {
     },
     UnknownTalent {
         owner: Owner,
+        talent: TalentId,
+    },
+    UnknownSpec {
+        owner: Owner,
+        spec: SpecId,
+    },
+    /// A hero tree's keystone is not one of its own nodes.
+    KeystoneNotInTree(HeroTreeId),
+    /// A talent sits in more than one of a spec's trees (counting the hero
+    /// trees it may choose), so a loadout can't say which it took.
+    TalentInTwoTrees {
+        spec: SpecId,
         talent: TalentId,
     },
     UnknownItemSet {
@@ -80,6 +97,53 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
             .flat_map(|n| n.choices.iter().chain(&n.requires_any))
         {
             c.talent(&owner, *talent);
+        }
+        let hero = data
+            .hero_trees
+            .values()
+            .filter(|h| h.specs.contains(&spec.id))
+            .map(|h| &h.tree);
+        let mut seen = BTreeSet::new();
+        for talent in spec
+            .trees
+            .iter()
+            .chain(hero)
+            .flat_map(|t| &t.nodes)
+            .flat_map(|n| &n.choices)
+        {
+            if !seen.insert(*talent) {
+                c.issues.push(DataIssue::TalentInTwoTrees {
+                    spec: spec.id,
+                    talent: *talent,
+                });
+            }
+        }
+    }
+    for hero in data.hero_trees.values() {
+        let owner = Owner::HeroTree(hero.id);
+        for &spec in &hero.specs {
+            if !data.specs.contains_key(&spec) {
+                c.issues.push(DataIssue::UnknownSpec {
+                    owner: owner.clone(),
+                    spec,
+                });
+            }
+        }
+        for talent in hero
+            .tree
+            .nodes
+            .iter()
+            .flat_map(|n| n.choices.iter().chain(&n.requires_any))
+        {
+            c.talent(&owner, *talent);
+        }
+        if !hero
+            .tree
+            .nodes
+            .iter()
+            .any(|n| n.choices.contains(&hero.keystone))
+        {
+            c.issues.push(DataIssue::KeystoneNotInTree(hero.id));
         }
     }
     for spell in data.spells.values() {
@@ -225,6 +289,12 @@ impl Checker<'_> {
                     .iter()
                     .filter(|(k, v)| **k != v.id)
                     .map(|(k, _)| Owner::Talent(*k)),
+            )
+            .chain(
+                d.hero_trees
+                    .iter()
+                    .filter(|(k, v)| **k != v.id)
+                    .map(|(k, _)| Owner::HeroTree(*k)),
             )
             .chain(
                 d.pets

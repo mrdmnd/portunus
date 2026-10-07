@@ -3,8 +3,8 @@
 //! Two tables, both pinned to a [`GameBuild`]:
 //!
 //! - [`GameData`]: specs, spells, auras (including the ones enemies put on
-//!   themselves), items, talents, and the stat curves that turn ratings
-//!   into percentages;
+//!   themselves), items, talents and hero trees, pets, and the stat curves
+//!   that turn ratings into percentages;
 //! - [`EnemyData`]: every enemy type and its behavior rules.
 //!
 //! Abstraction rule: anything passive (a talent, a tier bonus, a trinket's
@@ -24,7 +24,9 @@ pub mod talent;
 
 use std::collections::BTreeMap;
 
-use portunus_core::{AuraId, EnemyKey, ItemId, ItemSetId, PetId, SpecId, SpellId, TalentId};
+use portunus_core::{
+    AuraId, EnemyKey, HeroTreeId, ItemId, ItemSetId, PetId, SpecId, SpellId, TalentId,
+};
 use serde::{Deserialize, Serialize};
 
 pub use aura::AuraDef;
@@ -34,7 +36,7 @@ pub use pet::PetDef;
 pub use spec::SpecDef;
 pub use spell::SpellDef;
 pub use stats::StatCurves;
-pub use talent::TalentDef;
+pub use talent::{HeroTreeDef, TalentDef};
 
 /// The game version a table was extracted from and calibrated against.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -53,6 +55,8 @@ pub struct GameData {
     pub items: BTreeMap<ItemId, ItemDef>,
     pub item_sets: BTreeMap<ItemSetId, ItemSetDef>,
     pub talents: BTreeMap<TalentId, TalentDef>,
+    #[serde(default)]
+    pub hero_trees: BTreeMap<HeroTreeId, HeroTreeDef>,
     pub pets: BTreeMap<PetId, PetDef>,
     pub curves: StatCurves,
 }

@@ -4,7 +4,7 @@ use portunus_core::{AuraId, ItemSetId, SpellId, TalentId};
 use portunus_gamedata::item::{EquipKind, GearSlot, ItemDef};
 use portunus_gamedata::spec::SpecDef;
 use portunus_gamedata::stats::{DerivedStats, RatingCurve, Stat, StatBlock, StatCurves};
-use portunus_gamedata::talent::{Grant, TalentNode, TalentTree};
+use portunus_gamedata::talent::{Grant, HeroTreeDef, TalentNode, TalentTree};
 use portunus_gamedata::GameData;
 
 use crate::{ActorTemplate, Loadout, LoadoutCompiler, LoadoutError, LoadoutIssue};
@@ -43,6 +43,7 @@ impl LoadoutCompiler for Compiler {
         Ok(ActorTemplate {
             spec: spec.id,
             role: spec.role,
+            hero_tree: loadout.hero_tree,
             stats,
             derived,
             abilities,
@@ -126,12 +127,48 @@ fn check_gear(data: &GameData, loadout: &Loadout, issues: &mut Vec<LoadoutIssue>
     }
 }
 
-fn find_node(spec: &SpecDef, talent: TalentId) -> Option<(&TalentTree, &TalentNode)> {
-    spec.trees.iter().find_map(|tree| {
+/// The loadout's hero tree, if it exists and the spec may choose it.
+fn hero_tree<'a>(data: &'a GameData, spec: &SpecDef, loadout: &Loadout) -> Option<&'a HeroTreeDef> {
+    let tree = data.hero_trees.get(&loadout.hero_tree?)?;
+    tree.specs.contains(&spec.id).then_some(tree)
+}
+
+/// Talents taken at rank 1 or more, keyed by id. `spent` leaves out the
+/// free hero keystone; `taken` includes it.
+struct Taken {
+    taken: BTreeMap<TalentId, u8>,
+    spent: BTreeMap<TalentId, u8>,
+}
+
+fn taken(data: &GameData, spec: &SpecDef, loadout: &Loadout) -> Taken {
+    let mut spent: BTreeMap<TalentId, u8> = loadout
+        .talents
+        .0
+        .iter()
+        .filter(|(_, &rank)| rank > 0)
+        .map(|(&t, &r)| (t, r))
+        .collect();
+    let mut taken = spent.clone();
+    if let Some(hero) = hero_tree(data, spec, loadout) {
+        let rank = taken.entry(hero.keystone).or_insert(1);
+        if let Some(paid) = spent.get_mut(&hero.keystone) {
+            *paid = rank.saturating_sub(1);
+        }
+    }
+    Taken { taken, spent }
+}
+
+/// The tree (by index into `trees`), node index, and node holding a talent.
+fn find_node<'a>(
+    trees: &[&'a TalentTree],
+    talent: TalentId,
+) -> Option<(usize, usize, &'a TalentNode)> {
+    trees.iter().enumerate().find_map(|(t, tree)| {
         tree.nodes
             .iter()
-            .find(|n| n.choices.contains(&talent))
-            .map(|n| (tree, n))
+            .enumerate()
+            .find(|(_, n)| n.choices.contains(&talent))
+            .map(|(i, n)| (t, i, n))
     })
 }
 
@@ -141,56 +178,65 @@ fn check_talents(
     loadout: &Loadout,
     issues: &mut Vec<LoadoutIssue>,
 ) {
-    let taken: BTreeMap<TalentId, u8> = loadout
-        .talents
-        .0
-        .iter()
-        .filter(|(_, &rank)| rank > 0)
-        .map(|(&t, &r)| (t, r))
-        .collect();
-    let mut spent_by_tree: BTreeMap<&str, u8> = BTreeMap::new();
-    let mut node_picks: BTreeMap<(&str, usize), TalentId> = BTreeMap::new();
+    if let Some(id) = loadout.hero_tree {
+        match data.hero_trees.get(&id) {
+            None => issues.push(LoadoutIssue::UnknownHeroTree(id)),
+            Some(h) if !h.specs.contains(&spec.id) => {
+                issues.push(LoadoutIssue::HeroTreeNotForSpec(id));
+            }
+            Some(_) => {}
+        }
+    }
+    let hero = hero_tree(data, spec, loadout);
+    let trees: Vec<&TalentTree> = spec.trees.iter().chain(hero.map(|h| &h.tree)).collect();
+    let Taken { taken, spent } = taken(data, spec, loadout);
+    let mut spent_by_tree: BTreeMap<usize, u8> = BTreeMap::new();
+    let mut node_picks: BTreeMap<(usize, usize), TalentId> = BTreeMap::new();
 
     for (&talent, &rank) in &taken {
         if !data.talents.contains_key(&talent) {
             issues.push(LoadoutIssue::UnknownTalent(talent));
             continue;
         }
-        let Some((tree, node)) = find_node(spec, talent) else {
-            issues.push(LoadoutIssue::TalentUnreachable(talent));
+        let Some((tree_index, node_index, node)) = find_node(&trees, talent) else {
+            let elsewhere = data
+                .hero_trees
+                .values()
+                .any(|h| h.tree.nodes.iter().any(|n| n.choices.contains(&talent)));
+            issues.push(if elsewhere {
+                LoadoutIssue::HeroTalentWithoutTree(talent)
+            } else {
+                LoadoutIssue::TalentUnreachable(talent)
+            });
             continue;
         };
+        let tree = trees[tree_index];
         if rank > node.max_rank {
             issues.push(LoadoutIssue::TalentRankTooHigh { talent, rank });
         }
-        let node_index = tree
-            .nodes
-            .iter()
-            .position(|n| std::ptr::eq(n, node))
-            .unwrap_or_default();
-        if let Some(&other) = node_picks.get(&(tree.name.as_str(), node_index)) {
+        if let Some(&other) = node_picks.get(&(tree_index, node_index)) {
             issues.push(LoadoutIssue::ChoiceConflict {
                 a: other,
                 b: talent,
             });
         } else {
-            node_picks.insert((tree.name.as_str(), node_index), talent);
+            node_picks.insert((tree_index, node_index), talent);
         }
-        let spent = spent_by_tree.entry(tree.name.as_str()).or_default();
-        *spent = spent.saturating_add(rank);
+        let total = spent_by_tree.entry(tree_index).or_default();
+        *total = total.saturating_add(spent.get(&talent).copied().unwrap_or(0));
 
         let prerequisite_met =
             node.requires_any.is_empty() || node.requires_any.iter().any(|t| taken.contains_key(t));
         let gates_met = tree.gates.iter().all(|&(gate_row, need)| {
-            node.row < gate_row || points_above(tree, &taken, gate_row) >= need
+            node.row < gate_row || points_above(tree, &spent, gate_row) >= need
         });
         if !prerequisite_met || !gates_met {
             issues.push(LoadoutIssue::TalentUnreachable(talent));
         }
     }
 
-    for tree in &spec.trees {
-        let spent = spent_by_tree.get(tree.name.as_str()).copied().unwrap_or(0);
+    for (i, tree) in trees.iter().enumerate() {
+        let spent = spent_by_tree.get(&i).copied().unwrap_or(0);
         if spent > tree.points {
             issues.push(LoadoutIssue::TooManyTalentPoints {
                 tree: tree.name.clone(),
@@ -201,12 +247,12 @@ fn check_talents(
     }
 }
 
-fn points_above(tree: &TalentTree, taken: &BTreeMap<TalentId, u8>, row: u8) -> u8 {
+fn points_above(tree: &TalentTree, spent: &BTreeMap<TalentId, u8>, row: u8) -> u8 {
     tree.nodes
         .iter()
         .filter(|n| n.row < row)
         .flat_map(|n| &n.choices)
-        .filter_map(|t| taken.get(t))
+        .filter_map(|t| spent.get(t))
         .fold(0u8, |sum, &r| sum.saturating_add(r))
 }
 
@@ -289,7 +335,7 @@ fn grants(data: &GameData, spec: &SpecDef, loadout: &Loadout) -> (BTreeSet<Spell
     let mut auras: Vec<AuraId> = spec.baseline_auras.clone();
     let mut replacements = Vec::new();
 
-    for (talent, &rank) in &loadout.talents.0 {
+    for (talent, &rank) in &taken(data, spec, loadout).taken {
         let def = &data.talents[talent];
         for grant in def.ranks.iter().take(usize::from(rank)).flatten() {
             match *grant {
@@ -342,7 +388,7 @@ fn grants(data: &GameData, spec: &SpecDef, loadout: &Loadout) -> (BTreeSet<Spell
 #[cfg(test)]
 mod tests {
     use super::*;
-    use portunus_core::{ItemId, SpecId};
+    use portunus_core::{HeroTreeId, ItemId, SpecId};
     use portunus_gamedata::item::ItemSetDef;
     use portunus_gamedata::spec::Role;
     use portunus_gamedata::talent::TalentDef;
@@ -375,6 +421,35 @@ mod tests {
                 ranks,
             },
         )
+    }
+
+    /// A one-point hero tree: the keystone, then `rest` below it.
+    fn hero(id: u32, spec: SpecId, keystone: u32, rest: &[u32]) -> HeroTreeDef {
+        let below = rest.iter().map(|&t| TalentNode {
+            row: 1,
+            choices: vec![TalentId(t)],
+            max_rank: 1,
+            requires_any: vec![TalentId(keystone)],
+        });
+        HeroTreeDef {
+            id: HeroTreeId(id),
+            name: format!("hero {id}"),
+            specs: vec![spec],
+            tree: TalentTree {
+                name: format!("hero {id}"),
+                points: 1,
+                nodes: std::iter::once(TalentNode {
+                    row: 0,
+                    choices: vec![TalentId(keystone)],
+                    max_rank: 1,
+                    requires_any: Vec::new(),
+                })
+                .chain(below)
+                .collect(),
+                gates: Vec::new(),
+            },
+            keystone: TalentId(keystone),
+        }
     }
 
     fn data() -> GameData {
@@ -466,8 +541,28 @@ mod tests {
                 ),
                 talent(3, vec![vec![]]),
                 talent(4, vec![vec![]]),
+                talent(20, vec![vec![Grant::PassiveAura(AuraId(420))]]),
+                talent(
+                    21,
+                    vec![vec![Grant::ReplaceSpell {
+                        from: SpellId(100),
+                        to: SpellId(105),
+                    }]],
+                ),
+                talent(22, vec![vec![]]),
+                talent(30, vec![vec![]]),
+                talent(31, vec![vec![]]),
+                talent(40, vec![vec![]]),
             ]
             .into_iter()
+            .collect(),
+            hero_trees: [
+                hero(1, SPEC, 20, &[21, 22]),
+                hero(2, SPEC, 30, &[31]),
+                hero(3, SpecId(2), 40, &[]),
+            ]
+            .into_iter()
+            .map(|h| (h.id, h))
             .collect(),
             pets: BTreeMap::new(),
             curves: StatCurves {
@@ -504,6 +599,7 @@ mod tests {
                 (GearSlot::Head, equipped(10)),
                 (GearSlot::Trinket1, equipped(12)),
             ]),
+            hero_tree: None,
             talents: TalentSelection(BTreeMap::from([(TalentId(1), 2), (TalentId(2), 1)])),
             consumables: vec![ItemId(13), ItemId(14)],
         }
@@ -596,5 +692,62 @@ mod tests {
 
         l.talents = TalentSelection(BTreeMap::from([(TalentId(1), 2), (TalentId(4), 1)]));
         assert!(Compiler.validate(&data(), &l).is_empty());
+    }
+
+    #[test]
+    fn hero_trees_grant_their_keystone_for_free() {
+        let mut l = loadout();
+        l.hero_tree = Some(HeroTreeId(1));
+        l.talents.0.insert(TalentId(21), 1);
+        let t = Compiler.compile(&data(), &l).unwrap();
+        assert_eq!(t.hero_tree, Some(HeroTreeId(1)));
+        assert!(t.passive_auras.contains(&AuraId(420)), "the keystone");
+        assert!(t.abilities.contains(&SpellId(105)));
+        assert!(
+            !t.abilities.contains(&SpellId(100)),
+            "replaced by a hero talent"
+        );
+
+        // Naming the keystone changes nothing and costs nothing.
+        l.talents.0.insert(TalentId(20), 1);
+        let named = Compiler.compile(&data(), &l).unwrap();
+        assert_eq!(named.abilities, t.abilities);
+        assert_eq!(named.passive_auras, t.passive_auras);
+    }
+
+    #[test]
+    fn hero_talents_need_their_tree() {
+        let check = |hero: Option<u32>, extra: &[u32]| {
+            let mut l = loadout();
+            l.hero_tree = hero.map(HeroTreeId);
+            l.talents.0.extend(extra.iter().map(|&t| (TalentId(t), 1)));
+            Compiler.validate(&data(), &l)
+        };
+        assert_eq!(check(Some(2), &[31]), Vec::new());
+        assert_eq!(
+            check(None, &[21]),
+            [LoadoutIssue::HeroTalentWithoutTree(TalentId(21))]
+        );
+        assert_eq!(
+            check(Some(2), &[21]),
+            [LoadoutIssue::HeroTalentWithoutTree(TalentId(21))],
+            "only one hero tree at a time"
+        );
+        assert_eq!(
+            check(Some(3), &[]),
+            [LoadoutIssue::HeroTreeNotForSpec(HeroTreeId(3))]
+        );
+        assert_eq!(
+            check(Some(9), &[]),
+            [LoadoutIssue::UnknownHeroTree(HeroTreeId(9))]
+        );
+        assert_eq!(
+            check(Some(1), &[21, 22]),
+            [LoadoutIssue::TooManyTalentPoints {
+                tree: "hero 1".into(),
+                spent: 2,
+                allowed: 1,
+            }]
+        );
     }
 }
