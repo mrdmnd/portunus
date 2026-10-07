@@ -72,7 +72,10 @@ impl World {
 
     fn new_cooldown(&self, actor: ActorId, spell: SpellId, def: &CooldownDef) -> Cooldown {
         let pct = self.mod_sum(actor, spell, ModKind::CooldownPct, None);
-        let charges = def.charges.max(1);
+        let extra = self
+            .mod_sum(actor, spell, ModKind::ChargesAdd, None)
+            .round();
+        let charges = (f64::from(def.charges.max(1)) + extra).clamp(1.0, f64::from(u8::MAX)) as u8;
         Cooldown {
             charges,
             max: charges,
@@ -172,6 +175,10 @@ impl World {
         match change {
             CooldownChange::Reset => {
                 cd.charges = cd.max;
+                cd.progress = 0.0;
+            }
+            CooldownChange::Restart => {
+                cd.charges = cd.charges.min(cd.max.saturating_sub(1));
                 cd.progress = 0.0;
             }
             CooldownChange::AddCharge => {

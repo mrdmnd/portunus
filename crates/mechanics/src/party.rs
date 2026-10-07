@@ -5,7 +5,7 @@ use std::sync::Arc;
 use portunus_core::{ActorId, Seat, SpellId};
 use portunus_engine::mechanics::{
     whole_points, AuraChange, AuraEvent, AuraRemoval, CastEvent, DamageEvent, DeathEvent, EnemyHit,
-    SwingEvent, TickEvent, TimerEvent,
+    PetEvent, RolledHit, SwingEvent, TickEvent, TimerEvent,
 };
 use portunus_engine::state::Projectile;
 use portunus_engine::{EngineIo, Mechanics, Readiness, RunSetup, StateView};
@@ -150,6 +150,10 @@ impl Mechanics for PartyMechanics {
         let ctx = self.spell_ctx(cast);
         if def.travel.is_none() {
             self.interp.run(io, &ctx, &def.effects);
+        } else if !def.rolls_on_impact && !cast.prerolled {
+            for hit in self.interp.roll_direct(io, &ctx, &def.effects) {
+                io.stash_hit(hit);
+            }
         }
         let done = Occurrence {
             what: Happening::CastComplete {
@@ -177,10 +181,20 @@ impl Mechanics for PartyMechanics {
 
     fn channel_tick(&self, _io: &mut dyn EngineIo, _cast: &CastEvent, _tick: u8) {}
 
-    fn projectile_landed(&self, io: &mut dyn EngineIo, cast: &CastEvent, _flight: &Projectile) {
+    fn projectile_landed(
+        &self,
+        io: &mut dyn EngineIo,
+        cast: &CastEvent,
+        _flight: &Projectile,
+        hits: &[RolledHit],
+    ) {
         if let Some(def) = self.spell(cast.spell) {
             let ctx = self.spell_ctx(cast);
-            self.interp.run(io, &ctx, &def.effects);
+            if def.rolls_on_impact {
+                self.interp.run(io, &ctx, &def.effects);
+            } else {
+                self.interp.land(io, &ctx, &def.effects, hits);
+            }
         }
     }
 
@@ -286,6 +300,24 @@ impl Mechanics for PartyMechanics {
     }
 
     fn actor_died(&self, _io: &mut dyn EngineIo, _ev: &DeathEvent) {}
+
+    fn pet_expired(&self, io: &mut dyn EngineIo, ev: &PetEvent) {
+        let Some(&owner) = io.view().seats().get(usize::from(ev.owner.0)) else {
+            return;
+        };
+        let departed = Occurrence {
+            what: Happening::Departed,
+            target: io.view().target(owner),
+            amount: None,
+            depth: 0,
+        };
+        self.interp.fire(io, ev.actor, departed);
+        let expired = Occurrence {
+            what: Happening::PetExpired(ev.pet),
+            ..departed
+        };
+        self.interp.fire(io, owner, expired);
+    }
 
     fn enemy_hit(&self, io: &mut dyn EngineIo, hit: &EnemyHit) {
         let amount = self

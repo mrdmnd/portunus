@@ -1,0 +1,21 @@
+// One Farseer Elemental Shaman on the target dummy. Paths are relative to
+// this file.
+(
+    name: "elemental_farseer_dummy",
+    game: "../game.ron",
+    enemies: "../enemies.ron",
+    scenario: "../scenarios/target_dummy.ron",
+    seats: [
+        (
+            loadout: "../loadouts/elemental_farseer_build.ron",
+            policy: "elemental",
+            latency: (
+                anticipated: fixed(0),
+                reaction: jitter(base: 250, jitter: 50),
+                cast_lag: fixed(0),
+            ),
+        ),
+    ],
+    info: realistic,
+    seeds: 200,
+)

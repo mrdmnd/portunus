@@ -10,6 +10,7 @@ use std::collections::BinaryHeap;
 use portunus_core::{ActorId, Seat, SimTime, SpellId};
 use portunus_gamedata::item::WeaponHand;
 
+use crate::mechanics::RolledHit;
 use crate::order::EventClass;
 use crate::state::AuraRef;
 use crate::step::WakeReason;
@@ -39,12 +40,18 @@ pub(crate) enum Event {
         caster: ActorId,
         spell: SpellId,
         target: Option<ActorId>,
+        rolled: Option<Vec<RolledHit>>,
     },
     AuraTick {
         aura: AuraRef,
         uid: u32,
     },
     AuraExpire {
+        aura: AuraRef,
+        uid: u32,
+    },
+    /// An independently timed stack may be dropping (`RefreshRule::Ironfur`).
+    AuraStackExpire {
         aura: AuraRef,
         uid: u32,
     },
@@ -88,6 +95,7 @@ impl Event {
             | Event::Triggered { .. }
             | Event::AuraTick { .. }
             | Event::AuraExpire { .. }
+            | Event::AuraStackExpire { .. }
             | Event::Timer { .. }
             | Event::PetAct { .. }
             | Event::PetExpire { .. }
@@ -159,6 +167,11 @@ impl Queue {
 
     pub fn peek_key(&self) -> Option<Key> {
         self.heap.peek().map(|Reverse(e)| e.key)
+    }
+
+    /// Whether any queued event matches, in no particular order.
+    pub fn any(&self, f: impl Fn(&Event) -> bool) -> bool {
+        self.heap.iter().any(|Reverse(e)| f(&e.event))
     }
 
     pub fn pop(&mut self) -> Option<(Key, Event)> {

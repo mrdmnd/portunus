@@ -15,7 +15,7 @@ use portunus_gamedata::stats::{ResourceDef, ResourceKind};
 
 use crate::choice::{Choice, Wait};
 use crate::error::EngineError;
-use crate::mechanics::{AuraChange, AuraEvent, CastEvent, DeathEvent};
+use crate::mechanics::{AuraChange, AuraEvent, CastEvent, DeathEvent, PetEvent, RolledHit};
 use crate::outcome::{Outcome, PullOutcome, SeatOutcome};
 use crate::setup::RunSetup;
 use crate::state::{
@@ -166,10 +166,13 @@ pub(crate) struct Casting {
     pub seq: u32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) struct AuraMeta {
     pub uid: u32,
     pub tick: Option<Tick>,
+    /// For `RefreshRule::Ironfur` auras with a duration: each stack's
+    /// expiry, oldest first.
+    pub stack_expiries: Vec<SimTime>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -268,6 +271,7 @@ pub(crate) enum Followup {
     Changed(AuraChange),
     Removed(AuraEvent),
     Died(DeathEvent),
+    PetExpired(PetEvent),
 }
 
 #[derive(Debug, Clone)]
@@ -322,7 +326,12 @@ pub struct World {
     pub(crate) enemies: Vec<ActorId>,
     pub(crate) projectiles: Vec<Projectile>,
     /// Parallel to `projectiles`.
-    pub(crate) flights: Vec<(u32, CastEvent)>,
+    pub(crate) flights: Vec<(u32, CastEvent, Vec<RolledHit>)>,
+    /// Hits stashed by the cast completing now, for its launch.
+    pub(crate) stashed: Vec<RolledHit>,
+    /// Pets gone from their owners' lists whose auras wait on their spells
+    /// in flight.
+    pub(crate) departing: Vec<ActorId>,
     pub(crate) timers: Vec<PendingTimer>,
     /// Parallel to `timers`.
     pub(crate) timer_ids: Vec<u32>,
@@ -356,11 +365,13 @@ pub(crate) fn millis_round(ms: f64) -> SimDuration {
     SimDuration(ms.round().clamp(0.0, f64::from(u32::MAX / 2)) as u32)
 }
 
-pub(crate) fn gcd_length(g: &GcdDef, haste: f64) -> SimDuration {
+/// `mult` is the product of the spell's `GcdPct` modifiers.
+pub(crate) fn gcd_length(g: &GcdDef, haste: f64, mult: f64) -> SimDuration {
+    let base = f64::from(g.base.millis()) * mult.max(0.0);
     if g.hasted {
-        millis_round(f64::from(g.base.millis()) / haste).max(g.floor)
+        millis_round(base / haste).max(g.floor)
     } else {
-        g.base
+        millis_round(base)
     }
 }
 
@@ -583,6 +594,15 @@ impl World {
             Predicate::CasterHasAura(aura) => self
                 .actor_ref(caster)
                 .is_some_and(|a| a.auras.iter().any(|i| i.aura == aura)),
+            Predicate::CasterLacksAura(aura) => {
+                !self.predicate(Predicate::CasterHasAura(aura), caster, target, spell)
+            }
+            Predicate::OwnerHasAura(aura) => match self.actor_ref(caster).map(|a| a.kind) {
+                Some(ActorKind::Pet { owner, .. }) => self
+                    .actor_ref(self.seat_actor(owner))
+                    .is_some_and(|a| a.auras.iter().any(|i| i.aura == aura)),
+                _ => false,
+            },
             Predicate::TargetHpBelow(frac) => target
                 .and_then(|t| self.actor_ref(t))
                 .is_some_and(|t| t.max_health > 0 && t.health_frac() < frac),
@@ -656,6 +676,13 @@ impl World {
         }
         let pct = self.mod_sum(caster, spell, ModKind::CastTimePct, target);
         millis_round(ms * (1.0 + pct / 100.0).max(0.0))
+    }
+
+    /// The GCD `spell` triggers for `caster` now.
+    pub(crate) fn spell_gcd(&self, caster: ActorId, spell: SpellId, g: &GcdDef) -> SimDuration {
+        let haste = self.actor_ref(caster).map_or(1.0, |a| a.haste);
+        let pct = self.mod_sum(caster, spell, ModKind::GcdPct, None);
+        gcd_length(g, haste, 1.0 + pct / 100.0)
     }
 
     /// `PersistentPct` modifiers scoped to `Spell(id)` match the aura with
@@ -895,6 +922,7 @@ impl World {
     }
 
     pub(crate) fn launch(&mut self, ev: CastEvent, travel: SimDuration) {
+        let hits = std::mem::take(&mut self.stashed);
         let Some(target) = ev.target else { return };
         let id = self.fresh_id();
         let lands = self.now + travel;
@@ -905,7 +933,7 @@ impl World {
             launched: self.now,
             lands,
         });
-        self.flights.push((id, ev));
+        self.flights.push((id, ev, hits));
         self.record(TraceEvent::ProjectileLaunched {
             actor: ev.actor,
             spell: ev.spell,
@@ -1040,7 +1068,7 @@ impl StateView for World {
             .get(usize::from(seat.0))
             .copied()
             .flatten()
-            .map_or(SimDuration::ZERO, |g| gcd_length(&g, haste))
+            .map_or(SimDuration::ZERO, |g| gcd_length(&g, haste, 1.0))
     }
 
     fn resolved_spell(&self, seat: Seat, ability: SpellId) -> SpellId {

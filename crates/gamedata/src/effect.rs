@@ -28,6 +28,9 @@ pub enum Effect {
         target: EffectTarget,
         #[serde(default = "crate::aura::one")]
         stacks: u8,
+        /// Instead of the aura's own, e.g. a talent-extended buff.
+        #[serde(default)]
+        duration: Option<SimDuration>,
     },
     RemoveAura {
         aura: AuraId,
@@ -101,6 +104,19 @@ pub enum Effect {
     /// Run exactly one branch, chosen by weight from the caster's proc
     /// stream (e.g. one of three random buffs).
     RandomOf(Vec<(f64, Effect)>),
+    /// Run `then` with this probability, rolled from the caster's random
+    /// stream (e.g. an extra overload that must not chain).
+    Chance {
+        chance: f64,
+        then: Vec<Effect>,
+    },
+    /// Apply one of these auras, chosen evenly among those the target
+    /// lacks, or among all of them if it has every one (Elemental Blast's
+    /// buffs, which never repeat one already up).
+    ApplyOneOf {
+        auras: Vec<AuraId>,
+        target: EffectTarget,
+    },
     If {
         when: Predicate,
         then: Vec<Effect>,
@@ -141,20 +157,36 @@ pub enum EffectTarget {
     Pets(Option<PetId>),
     /// The pet's owner, for effects cast by a pet.
     Owner,
+    /// One engaged enemy, chosen evenly from the caster's random stream
+    /// (none out of combat).
+    RandomEnemy,
 }
 
 /// Target caps and damage reduction past a soft cap.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct AoeRule {
     pub max_targets: Option<u8>,
     /// Beyond this many targets, each takes `sqrt(cap / n)` of the damage.
     pub sqrt_cap: Option<u8>,
+    /// The share of the damage that targets other than the cast's target
+    /// take, in `[0, 1]` (SimC's `base_aoe_multiplier`, e.g. Tempest's
+    /// 65%).
+    #[serde(default = "full_share")]
+    pub secondary: f64,
+}
+
+fn full_share() -> f64 {
+    1.0
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CooldownChange {
     Reset,
+    /// Start a full recovery from now, using a charge if all are ready: a
+    /// spell whose cooldown waits for its buff to be spent (Ancestral
+    /// Swiftness, "cooldown on event").
+    Restart,
     Reduce(SimDuration),
     /// Change the recovery rate, e.g. a 100% faster recharge.
     RateMult(f64),
@@ -190,6 +222,10 @@ pub enum Predicate {
         from_self: bool,
     },
     CasterHasAura(AuraId),
+    CasterLacksAura(AuraId),
+    /// For a pet's effects: its owner has this aura, e.g. the owner's
+    /// talent changing what the pet does. False for non-pets.
+    OwnerHasAura(AuraId),
     /// Below this fraction of max health (`0.2` is 20%), for execute
     /// windows.
     TargetHpBelow(f64),
@@ -219,7 +255,9 @@ pub enum ModKind {
     DamageTakenPct,
     CritChanceAdd,
     CritDamagePct,
-    /// On a pet's own aura, stacks with the owner's haste it inherits.
+    /// Multiplies haste from rating (Bloodlust, Unlimited Power). A seat's
+    /// reaches its pets; on a pet's own aura, it stacks with the owner's
+    /// haste the pet inherits.
     HastePct,
     /// Auto-attack speed only, on top of haste.
     AttackSpeedPct,
@@ -228,16 +266,39 @@ pub enum ModKind {
     /// Rake). Live modifiers still apply on top.
     PersistentPct,
     CastTimePct,
+    /// The GCD a spell in scope triggers, before its floor (Windspeaker).
+    GcdPct,
     CooldownPct,
+    /// Extra charges for a spell in scope, as a whole number (Elemental
+    /// Reverb). Read when the cooldown is first used.
+    ChargesAdd,
     CostPct,
+    /// A seat's maximum of this resource, in points (Primordial Capacity).
+    /// Read from the seat's passive auras at the start of the run; `scope`
+    /// is unused.
+    ResourceMax(ResourceKind),
     StatPct(Stat),
     StatFlat(Stat),
+    /// Points added to a rated secondary after rating conversion. Mastery
+    /// points are scaled by the spec's mastery coefficient, as in game
+    /// (Storm Swell's "Mastery +5").
+    RatedPct(RatedStat),
     /// Non-instant spells in scope become castable while moving (`value`
     /// unused).
     CastWhileMoving,
     /// Takes no damage in scope (`value` unused), e.g. an enemy's shield
     /// phase.
     Immune,
+    /// Damage in scope is multiplied by the caster's crit chance, uncapped
+    /// (`value` unused). Paired with a +100 `CritChanceAdd`, a spell always
+    /// crits and grows with crit past that (Farseer's Ancestors' Lava
+    /// Burst, SimC's `base_crit = 1.0` times `composite_crit_chance`).
+    CritChanceScalesDamage,
+    /// Damage in scope is multiplied by one plus the caster's crit chance,
+    /// leaving out crit granted against particular targets (`value`
+    /// unused): Elemental's Lava Burst, whose Flame Shock crit doesn't
+    /// count.
+    CritChanceAddsDamage,
 }
 
 /// A reaction to combat events: procs, on-hit effects, and the like.
@@ -247,6 +308,21 @@ pub struct Listener {
     pub chance: ProcChance,
     #[serde(default)]
     pub internal_cooldown: Option<SimDuration>,
+    /// For `ResourceSpent` only: roll once per whole unit spent instead of
+    /// once per spend, and proc at most once (SimC's per-Maelstrom decks,
+    /// e.g. Tempest). The effects then run once, unscaled.
+    #[serde(default)]
+    pub per_unit: bool,
+    /// Draw from an earlier listener's proc bookkeeping on the same aura
+    /// (its deck, stream, and internal cooldown) instead of keeping its
+    /// own: one SimC `shuffled_rng` rolled from several places, e.g.
+    /// Routine Communication. The chances must match.
+    #[serde(default)]
+    pub shared_with: Option<u8>,
+    /// Only reacts while this holds, checked before rolling, with the
+    /// holder as caster and the event's target as target.
+    #[serde(default)]
+    pub condition: Option<Predicate>,
     pub effects: Vec<Effect>,
 }
 
@@ -275,6 +351,15 @@ pub enum ListenFor {
     ResourceSpent(ResourceKind),
     AuraApplied(AuraId),
     AuraExpired(AuraId),
+    /// One of the holder's pets of this type reached the end of its
+    /// lifetime (not dismissed or replaced), e.g. an Ancestor departing.
+    /// The event's target is the holder's.
+    PetExpired(PetId),
+    /// The holder, a pet, reached the end of its lifetime. It has stopped
+    /// acting but can still cast from here (an Ancestor's parting
+    /// Elemental Blast); fires before its owner's `PetExpired`. The event's
+    /// target is the owner's.
+    Departed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -300,7 +385,7 @@ pub enum ProcChance {
     /// once every card is drawn. Each holder keeps its deck for the whole
     /// run (in game, until logout), even across reapplications of the aura.
     Deck {
-        successes: u8,
-        size: u8,
+        successes: u16,
+        size: u16,
     },
 }

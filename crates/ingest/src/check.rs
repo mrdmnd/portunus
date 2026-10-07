@@ -76,6 +76,17 @@ pub enum DataIssue {
     InvalidHealth(EnemyKey),
     /// A deck-of-cards proc with no cards, or more successes than cards.
     InvalidDeck(Owner),
+    /// A per-unit listener that doesn't listen for a resource spend.
+    PerUnitWithoutSpend(Owner),
+    /// An AoE rule's secondary share is outside `[0, 1]`.
+    InvalidAoeShare(Owner),
+    /// A listener sharing proc bookkeeping with one that isn't earlier on
+    /// its aura, or that rolls a different chance.
+    InvalidSharedProc(Owner),
+    /// An `ApplyOneOf` with no auras to choose from.
+    EmptyChoice(Owner),
+    /// A `Chance` outside `[0, 1]`.
+    InvalidChance(Owner),
 }
 
 pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
@@ -171,6 +182,7 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
             }
         }
         aura.listeners.iter().for_each(|l| c.listener(&owner, l));
+        c.shared_procs(&owner, &aura.listeners);
         for &(from, to) in &aura.overrides {
             c.spell(&owner, from);
             c.spell(&owner, to);
@@ -349,7 +361,10 @@ impl Checker<'_> {
 
     fn predicate(&mut self, owner: &Owner, p: &Predicate) {
         match *p {
-            Predicate::TargetHasAura { aura, .. } | Predicate::CasterHasAura(aura) => {
+            Predicate::TargetHasAura { aura, .. }
+            | Predicate::CasterHasAura(aura)
+            | Predicate::CasterLacksAura(aura)
+            | Predicate::OwnerHasAura(aura) => {
                 self.aura(owner, aura);
             }
             Predicate::TargetHpBelow(_) | Predicate::DiffersFromLastCast => {}
@@ -366,22 +381,55 @@ impl Checker<'_> {
             ListenFor::PeriodicTick(a) | ListenFor::AuraApplied(a) | ListenFor::AuraExpired(a) => {
                 self.aura(owner, a);
             }
-            ListenFor::DamageTaken | ListenFor::Swing { .. } | ListenFor::ResourceSpent(_) => {}
+            ListenFor::PetExpired(p) => self.pet(owner, p),
+            ListenFor::DamageTaken
+            | ListenFor::Swing { .. }
+            | ListenFor::ResourceSpent(_)
+            | ListenFor::Departed => {}
+        }
+        if l.per_unit && !matches!(l.on, ListenFor::ResourceSpent(_)) {
+            self.issues
+                .push(DataIssue::PerUnitWithoutSpend(owner.clone()));
         }
         if let ProcChance::Deck { successes, size } = l.chance {
             if size == 0 || successes > size {
                 self.issues.push(DataIssue::InvalidDeck(owner.clone()));
             }
         }
+        if let Some(p) = &l.condition {
+            self.predicate(owner, p);
+        }
         self.effects(owner, &l.effects);
+    }
+
+    fn shared_procs(&mut self, owner: &Owner, listeners: &[Listener]) {
+        for (index, l) in listeners.iter().enumerate() {
+            let Some(with) = l.shared_with else {
+                continue;
+            };
+            let valid = usize::from(with) < index
+                && listeners
+                    .get(usize::from(with))
+                    .is_some_and(|w| w.shared_with.is_none() && w.chance == l.chance);
+            if !valid {
+                self.issues
+                    .push(DataIssue::InvalidSharedProc(owner.clone()));
+            }
+        }
     }
 
     fn effects(&mut self, owner: &Owner, effects: &[Effect]) {
         for effect in effects {
             match effect {
-                Effect::Damage { target, .. }
-                | Effect::Heal { target, .. }
-                | Effect::Interrupt { target } => self.target(owner, target),
+                Effect::Damage { target, aoe, .. } => {
+                    if aoe.is_some_and(|a| !(0.0..=1.0).contains(&a.secondary)) {
+                        self.issues.push(DataIssue::InvalidAoeShare(owner.clone()));
+                    }
+                    self.target(owner, target);
+                }
+                Effect::Heal { target, .. } | Effect::Interrupt { target } => {
+                    self.target(owner, target);
+                }
                 Effect::ApplyAura { aura, target, .. }
                 | Effect::RemoveAura { aura, target }
                 | Effect::RemoveStacks { aura, target, .. }
@@ -408,10 +456,23 @@ impl Checker<'_> {
                     self.spell(owner, *spell);
                     self.target(owner, target);
                 }
+                Effect::ApplyOneOf { auras, target } => {
+                    if auras.is_empty() {
+                        self.issues.push(DataIssue::EmptyChoice(owner.clone()));
+                    }
+                    auras.iter().for_each(|&a| self.aura(owner, a));
+                    self.target(owner, target);
+                }
                 Effect::RandomOf(branches) => {
                     for (_, e) in branches {
                         self.effects(owner, std::slice::from_ref(e));
                     }
+                }
+                Effect::Chance { chance, then } => {
+                    if !(0.0..=1.0).contains(chance) {
+                        self.issues.push(DataIssue::InvalidChance(owner.clone()));
+                    }
+                    self.effects(owner, then);
                 }
                 Effect::If {
                     when,

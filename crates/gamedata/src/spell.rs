@@ -24,9 +24,14 @@ pub struct SpellDef {
     /// before a pull begins.
     pub hostile: bool,
     /// Projectile flight time: effects resolve on impact, and the spell is
-    /// "in flight" until then.
+    /// "in flight" until then. Direct damage is rolled at launch, as SimC
+    /// snapshots at execute, unless `rolls_on_impact`.
     #[serde(default)]
     pub travel: Option<SimDuration>,
+    /// Roll direct damage as the projectile lands instead (Lava Burst,
+    /// whose Flame Shock crit is checked on impact).
+    #[serde(default)]
+    pub rolls_on_impact: bool,
     /// Usable while forced to move (instants and a few exceptions).
     #[serde(default)]
     pub castable_while_moving: bool,

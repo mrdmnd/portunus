@@ -96,6 +96,7 @@ fn spell(id: SpellId, cast: CastKind, gcd: Option<GcdDef>, effects: Vec<Effect>)
         targeting: Targeting::Enemy,
         hostile: true,
         travel: None,
+        rolls_on_impact: false,
         castable_while_moving: false,
         usable_while_casting: false,
         effects,
@@ -158,7 +159,12 @@ struct Fixture {
 fn fixture() -> Fixture {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data");
     let data: GameData = GameDataSource::load(&RonFile::new(dir.join("game.ron"))).unwrap();
-    let enemies: EnemyData = EnemyDataSource::load(&RonFile::new(dir.join("enemies.ron"))).unwrap();
+    let mut enemies: EnemyData =
+        EnemyDataSource::load(&RonFile::new(dir.join("enemies.ron"))).unwrap();
+    // The fight lengths below assume a 400k dummy.
+    for e in enemies.enemies.values_mut() {
+        e.health = 400_000;
+    }
     let loadout: Loadout = read_ron(&dir.join("loadouts/elemental.ron")).unwrap();
     let template = Compiler.compile(&data, &loadout).unwrap();
     let spec: ScenarioSpec = read_ron(&dir.join("scenarios/target_dummy.ron")).unwrap();
@@ -593,10 +599,14 @@ fn decks_proc_exactly_once_per_deck() {
             size: 4,
         },
         internal_cooldown: None,
+        per_unit: false,
+        shared_with: None,
+        condition: None,
         effects: vec![Effect::ApplyAura {
             aura: DECK_MARKER,
             target: EffectTarget::Caster,
             stacks: 1,
+            duration: None,
         }],
     }];
     f.data.auras.insert(deck.id, deck);
@@ -644,6 +654,9 @@ fn malformed_decks_are_rejected() {
             size: 4,
         },
         internal_cooldown: None,
+        per_unit: false,
+        shared_with: None,
+        condition: None,
         effects: Vec::new(),
     }];
     f.data.auras.insert(bad.id, bad);
@@ -664,10 +677,14 @@ fn decks_persist_across_reapplication() {
             size: 4,
         },
         internal_cooldown: None,
+        per_unit: false,
+        shared_with: None,
+        condition: None,
         effects: vec![Effect::ApplyAura {
             aura: DECK_MARKER,
             target: EffectTarget::Caster,
             stacks: 1,
+            duration: None,
         }],
     }];
     f.data.auras.insert(deck.id, deck);
@@ -682,6 +699,7 @@ fn decks_persist_across_reapplication() {
             aura: DECK_AURA,
             target: EffectTarget::Caster,
             stacks: 1,
+            duration: None,
         }],
     );
     toggle.targeting = Targeting::SelfOnly;
@@ -798,10 +816,14 @@ fn pet_melee_and_haste_follow_owner_and_pet_buffs() {
         },
         chance: ProcChance::Always,
         internal_cooldown: None,
+        per_unit: false,
+        shared_with: None,
+        condition: None,
         effects: vec![Effect::ApplyAura {
             aura: SWING_MARKER,
             target: EffectTarget::Caster,
             stacks: 1,
+            duration: None,
         }],
     }];
     f.data.auras.insert(FRENZY, frenzy);
@@ -822,6 +844,7 @@ fn pet_melee_and_haste_follow_owner_and_pet_buffs() {
             aura: BLOODLUST_AURA,
             target: EffectTarget::Caster,
             stacks: 1,
+            duration: None,
         }],
     );
     bloodlust.targeting = Targeting::SelfOnly;

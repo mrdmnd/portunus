@@ -27,6 +27,14 @@ struct SeatStats {
     weapons: [Option<WeaponDef>; 2],
 }
 
+/// A seat's stats at one moment, with its auras applied.
+struct SeatSnapshot {
+    spec: SpecId,
+    stats: StatBlock,
+    /// `RatedPct` points by stat, added after rating conversion.
+    rated: BTreeMap<RatedStat, f64>,
+}
+
 /// Whose stats and modifiers an actor's actions use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Role {
@@ -204,16 +212,18 @@ impl Formulas {
         self.s.seats.get(usize::from(seat.0)).map(|s| s.spec)
     }
 
-    /// A seat's stats with every active aura applied; `None` for actors
-    /// that aren't players.
-    fn stat_block(&self, view: &dyn StateView, actor: ActorId) -> Option<(SpecId, StatBlock)> {
+    /// A seat's stats with every active aura applied, and its `RatedPct`
+    /// additions; `None` for actors that aren't players.
+    fn stat_block(&self, view: &dyn StateView, actor: ActorId) -> Option<SeatSnapshot> {
         let seat = player_seat(view, actor)?;
         let base = self.s.seats.get(usize::from(seat.0))?;
         let mut stats = base.stats.clone();
         let mut pct: BTreeMap<Stat, f64> = BTreeMap::new();
+        let mut rated: BTreeMap<RatedStat, f64> = BTreeMap::new();
         self.each_mod(view, &Query::holder(actor), |m, value| match m.kind {
             ModKind::StatFlat(stat) => *stats.0.entry(stat).or_default() += value,
             ModKind::StatPct(stat) => *pct.entry(stat).or_insert(1.0) *= 1.0 + value / 100.0,
+            ModKind::RatedPct(stat) => *rated.entry(stat).or_default() += value,
             _ => {}
         });
         for (stat, mult) in pct {
@@ -221,7 +231,11 @@ impl Formulas {
                 *v *= mult;
             }
         }
-        Some((base.spec, stats))
+        Some(SeatSnapshot {
+            spec: base.spec,
+            stats,
+            rated,
+        })
     }
 
     /// Percentages and derived values with every active aura applied. Pets
@@ -241,9 +255,20 @@ impl Formulas {
         }
         let spec = self
             .stat_block(view, actor)
-            .and_then(|(spec, stats)| Some((self.s.data.specs.get(&spec)?, stats)));
+            .and_then(|s| Some((self.s.data.specs.get(&s.spec)?, s)));
         match spec {
-            Some((spec, stats)) => portunus_loadout::derive(&self.s.data.curves, spec, &stats),
+            Some((spec, s)) => {
+                let mut d = portunus_loadout::derive(&self.s.data.curves, spec, &s.stats);
+                for (stat, points) in s.rated {
+                    match stat {
+                        RatedStat::Crit => d.crit_pct += points,
+                        RatedStat::Haste => d.haste_pct += points,
+                        RatedStat::Mastery => d.mastery_pct += points * spec.mastery_coef,
+                        RatedStat::Versatility => d.versatility_pct += points,
+                    }
+                }
+                d
+            }
             None => DerivedStats {
                 max_health: view.actor(actor).map_or(0.0, |a| a.max_health as f64),
                 ..DerivedStats::default()
@@ -303,7 +328,7 @@ impl Formulas {
                 .unwrap_or(0.0),
             Some(ActorKind::Player(_)) => self
                 .stat_block(view, target)
-                .and_then(|(_, stats)| stats.0.get(&Stat::Armor).copied())
+                .and_then(|s| s.stats.0.get(&Stat::Armor).copied())
                 .unwrap_or(0.0),
             Some(ActorKind::Pet { .. }) | None => 0.0,
         }
@@ -406,6 +431,16 @@ impl Formulas {
         self.mod_product(view, &q, kind)
     }
 
+    /// Crit chance as a fraction, before clamping to `[0, 1]`.
+    fn uncapped_crit(&self, view: &dyn StateView, ctx: &EffectCtx) -> f64 {
+        let add = self.mod_sum(
+            view,
+            &self.spell_query(view, ctx, None),
+            ModKind::CritChanceAdd,
+        ) + self.owner_crit_add(view, ctx.caster);
+        (self.derived(view, ctx.caster).crit_pct + add) / 100.0
+    }
+
     /// Crit the owner's unscoped modifiers grant, which pets inherit.
     fn owner_crit_add(&self, view: &dyn StateView, actor: ActorId) -> f64 {
         match self.role(view, actor) {
@@ -451,11 +486,22 @@ impl CombatMath for Formulas {
         let base = self.base(view, ctx, amount);
         let done = match kind {
             Outgoing::Damage(school) => {
-                self.mod_product(
-                    view,
-                    &self.spell_query(view, ctx, Some(school)),
-                    ModKind::DamageDonePct,
-                ) * self.owner_pet_mult(view, ctx, school)
+                let q = self.spell_query(view, ctx, Some(school));
+                let mut by_crit = if self.mod_any(view, &q, ModKind::CritChanceScalesDamage) {
+                    self.uncapped_crit(view, ctx).max(0.0)
+                } else {
+                    1.0
+                };
+                if self.mod_any(view, &q, ModKind::CritChanceAddsDamage) {
+                    let untargeted = EffectCtx {
+                        target: None,
+                        ..*ctx
+                    };
+                    by_crit *= 1.0 + self.uncapped_crit(view, &untargeted).max(0.0);
+                }
+                self.mod_product(view, &q, ModKind::DamageDonePct)
+                    * self.owner_pet_mult(view, ctx, school)
+                    * by_crit
             }
             Outgoing::Heal => 1.0,
         };
@@ -468,12 +514,7 @@ impl CombatMath for Formulas {
     }
 
     fn crit_chance(&self, view: &dyn StateView, ctx: &EffectCtx) -> f64 {
-        let add = self.mod_sum(
-            view,
-            &self.spell_query(view, ctx, None),
-            ModKind::CritChanceAdd,
-        ) + self.owner_crit_add(view, ctx.caster);
-        ((self.derived(view, ctx.caster).crit_pct + add) / 100.0).clamp(0.0, 1.0)
+        self.uncapped_crit(view, ctx).clamp(0.0, 1.0)
     }
 
     fn crit_multiplier(&self, view: &dyn StateView, ctx: &EffectCtx) -> f64 {
@@ -564,6 +605,14 @@ pub(crate) fn predicate(
                 .any(|i| i.aura == aura && (!from_self || i.source == caster))
         }),
         Predicate::CasterHasAura(aura) => view.auras(caster).iter().any(|i| i.aura == aura),
+        Predicate::CasterLacksAura(aura) => !view.auras(caster).iter().any(|i| i.aura == aura),
+        Predicate::OwnerHasAura(aura) => match view.actor(caster).map(|a| a.kind) {
+            Some(ActorKind::Pet { owner, .. }) => view
+                .seats()
+                .get(usize::from(owner.0))
+                .is_some_and(|&o| view.auras(o).iter().any(|i| i.aura == aura)),
+            _ => false,
+        },
         Predicate::TargetHpBelow(frac) => target
             .and_then(|t| view.actor(t))
             .is_some_and(|t| t.max_health > 0 && t.health_frac() < frac),

@@ -15,12 +15,14 @@ use portunus_core::{ActorId, PetId, Seat, SimDuration, SpellId};
 use portunus_gamedata::pet::PetKind;
 
 use crate::mask::Readiness;
-use crate::mechanics::{whole_points, AuraApplication, AuraRemoval, CastEvent, Mechanics};
+use crate::mechanics::{
+    whole_points, AuraApplication, AuraRemoval, CastEvent, Mechanics, PetEvent,
+};
 use crate::state::{ActorKind, AuraRef};
 use crate::trace::{CastEndReason, TraceEvent};
 
 use super::queue::Event;
-use super::world::{gcd_length, Actor, PetLife, Resource, Swing, World};
+use super::world::{Actor, Followup, PetLife, Resource, Swing, World};
 use super::Kernel;
 
 impl World {
@@ -118,7 +120,7 @@ impl World {
                 })
                 .collect();
             for id in controlled {
-                self.release_pet(id);
+                self.release_pet(id, false);
             }
         }
         let expires = def
@@ -133,7 +135,7 @@ impl World {
                 let mine = self.pets_of(owner, Some(pet));
                 let excess = (mine.len() + 1).saturating_sub(usize::from(max.max(1)));
                 for &old in mine.iter().take(excess) {
-                    self.release_pet(old);
+                    self.release_pet(old, false);
                 }
             }
             let Ok(raw) = u16::try_from(self.actors.len()) else {
@@ -201,7 +203,7 @@ impl World {
         let mine = self.pets_of(owner, Some(pet));
         let n = count.map_or(mine.len(), usize::from);
         for id in mine.into_iter().take(n) {
-            self.release_pet(id);
+            self.release_pet(id, false);
         }
     }
 
@@ -233,6 +235,7 @@ impl World {
                     caster,
                     spell,
                     target: Some(target),
+                    rolled: None,
                 },
             );
         }
@@ -242,16 +245,21 @@ impl World {
         let now = self.now;
         let due = self
             .actor_ref(actor)
-            .filter(|a| a.alive)
-            .and_then(|a| a.pet)
-            .is_some_and(|p| p.expires == Some(now));
-        if due {
-            self.release_pet(actor);
+            .filter(|a| a.alive && a.pet.is_some_and(|p| p.expires == Some(now)))
+            .map(|a| a.kind);
+        if let Some(ActorKind::Pet { owner, pet }) = due {
+            self.release_pet(actor, true);
+            self.followups
+                .push_back(Followup::PetExpired(PetEvent { owner, pet, actor }));
         }
     }
 
-    /// A pet leaves without dying: timed out, dismissed, or replaced.
-    fn release_pet(&mut self, actor: ActorId) {
+    /// A pet leaves without dying: timed out, dismissed, or replaced. It
+    /// stops acting at once, but keeps its auras until its spells in flight
+    /// land and the spells it was triggered to cast resolve, so they land
+    /// as cast (SimC rolls them at execute). A pet timing out also waits
+    /// out its own reaction to leaving (`expiring`).
+    fn release_pet(&mut self, actor: ActorId, expiring: bool) {
         let Some(a) = self.actor_mut(actor) else {
             return;
         };
@@ -259,8 +267,48 @@ impl World {
             return;
         }
         a.alive = false;
+        if let ActorKind::Pet { owner, .. } = a.kind {
+            if let Some(list) = self.pets.get_mut(usize::from(owner.0)) {
+                list.retain(|&p| p != actor);
+            }
+        }
         self.cancel_cast(actor, CastEndReason::Interrupted);
         self.record(TraceEvent::PetExpired { actor });
+        if expiring || self.has_unfinished_casts(actor) {
+            self.departing.push(actor);
+        } else {
+            self.strip_pet(actor);
+        }
+    }
+
+    fn has_unfinished_casts(&self, actor: ActorId) -> bool {
+        self.flights.iter().any(|(_, ev, _)| ev.actor == actor)
+            || self
+                .queue
+                .any(|e| matches!(e, Event::Triggered { caster, .. } if *caster == actor))
+    }
+
+    /// Whether a pet that has left still finishes casting what it was
+    /// triggered to.
+    pub(crate) fn is_departing(&self, actor: ActorId) -> bool {
+        self.departing.contains(&actor)
+    }
+
+    /// Finish the departures whose last spell has landed or been dropped.
+    pub(crate) fn settle_departures(&mut self) {
+        if self.departing.is_empty() {
+            return;
+        }
+        let (waiting, done): (Vec<ActorId>, Vec<ActorId>) = std::mem::take(&mut self.departing)
+            .into_iter()
+            .partition(|&p| self.has_unfinished_casts(p));
+        self.departing = waiting;
+        for pet in done {
+            self.strip_pet(pet);
+        }
+    }
+
+    fn strip_pet(&mut self, actor: ActorId) {
         while let Some(last) = self
             .actor_ref(actor)
             .and_then(|a| a.auras.len().checked_sub(1))
@@ -348,9 +396,9 @@ impl<M: Mechanics> Kernel<M> {
             return;
         };
         let now = self.world.now;
-        if let (Some(g), Some(a)) = (&def.gcd, self.world.actor_mut(actor)) {
-            let end = now + gcd_length(g, a.haste);
-            if let Some(life) = &mut a.pet {
+        if let Some(g) = &def.gcd {
+            let end = now + self.world.spell_gcd(actor, spell, g);
+            if let Some(life) = self.world.actor_mut(actor).and_then(|a| a.pet.as_mut()) {
                 life.gcd_end = Some(end);
             }
         }
@@ -363,6 +411,7 @@ impl<M: Mechanics> Kernel<M> {
             started: now,
             empower: None,
             spent: None,
+            prerolled: false,
         });
     }
 }

@@ -1,0 +1,25 @@
+// The Elemental loadout with Stormkeeper and every Stormbringer node,
+// taking Electroshock, Supercharge, and Surging Currents at the choices.
+(
+    spec: 262,
+    gear: {
+        chest: (item: 1, item_level: 600),
+    },
+    hero_tree: Some(54),
+    talents: {
+        191634: 1,
+        454391: 1,
+        454021: 1,
+        454022: 1,
+        1264762: 1,
+        455110: 1,
+        455096: 1,
+        454026: 1,
+        1264691: 1,
+        454919: 1,
+        455123: 1,
+        454372: 1,
+        1264688: 1,
+        455129: 1,
+    },
+)

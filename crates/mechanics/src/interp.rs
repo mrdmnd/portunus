@@ -2,8 +2,10 @@
 
 use std::sync::Arc;
 
-use portunus_core::{ActorId, AuraId, SimTime, SpellId, StreamKey};
-use portunus_engine::mechanics::{whole_points, AuraApplication, DamageEvent, HealEvent};
+use portunus_core::{ActorId, AuraId, PetId, SimTime, SpellId, StreamKey};
+use portunus_engine::mechanics::{
+    whole_points, AuraApplication, DamageEvent, HealEvent, RolledHit,
+};
 use portunus_engine::state::ActorKind;
 use portunus_engine::{AuraRef, EngineIo, ListenerRef, ProcView, SegmentView, StateView};
 use portunus_gamedata::effect::{
@@ -53,6 +55,9 @@ pub(crate) enum Happening {
     ResourceSpent(ResourceKind),
     AuraApplied(AuraId),
     AuraExpired(AuraId),
+    PetExpired(PetId),
+    /// The holder, a pet, reached the end of its lifetime.
+    Departed,
 }
 
 /// A happening, as seen by the listeners of one holder.
@@ -116,32 +121,50 @@ impl Interpreter {
                 }
                 let listener = ListenerRef {
                     aura: r,
-                    index: u8::try_from(index).unwrap_or(u8::MAX),
+                    index: l
+                        .shared_with
+                        .unwrap_or_else(|| u8::try_from(index).unwrap_or(u8::MAX)),
                 };
                 let now = io.view().now();
-                let proc = io
-                    .view()
-                    .procs(holder)
-                    .iter()
-                    .find(|p| p.listener == listener)
-                    .copied();
-                if proc
+                let proc_view = |io: &dyn EngineIo| {
+                    io.view()
+                        .procs(holder)
+                        .iter()
+                        .find(|p| p.listener == listener)
+                        .copied()
+                };
+                if proc_view(io)
                     .and_then(|p| p.icd_ready_at)
                     .is_some_and(|ready| ready > now)
                 {
                     continue;
                 }
-                let procced = match l.chance {
-                    ProcChance::Always => true,
-                    chance => {
-                        let p = self.chance(io.view(), holder, chance, proc, now);
-                        io.roll(holder, proc_stream(listener)) < p
-                    }
+                if l.condition
+                    .is_some_and(|p| !predicate(io.view(), p, holder, ev.target, None))
+                {
+                    continue;
+                }
+                let per_unit = l.per_unit && matches!(ev.what, Happening::ResourceSpent(_));
+                let attempts = if per_unit {
+                    ev.amount.map_or(0, |a| a.max(0.0).round() as u32)
+                } else {
+                    1
                 };
-                io.record_proc_attempt(listener, procced);
+                let mut procced = false;
+                for _ in 0..attempts {
+                    let hit = match l.chance {
+                        ProcChance::Always => true,
+                        chance => {
+                            let p = self.chance(io.view(), holder, chance, proc_view(io), now);
+                            io.roll(holder, proc_stream(listener)) < p
+                        }
+                    };
+                    io.record_proc_attempt(listener, hit);
+                    procced |= hit;
+                }
                 if procced {
                     let scale = match ev.what {
-                        Happening::ResourceSpent(_) => ev.amount.unwrap_or(1.0),
+                        Happening::ResourceSpent(_) if !per_unit => ev.amount.unwrap_or(1.0),
                         _ => 1.0,
                     };
                     let ctx = EffectCtx {
@@ -209,17 +232,28 @@ impl Interpreter {
         }
     }
 
-    fn targets(&self, view: &dyn StateView, ctx: &EffectCtx, target: EffectTarget) -> Vec<ActorId> {
+    fn targets(
+        &self,
+        io: &mut dyn EngineIo,
+        ctx: &EffectCtx,
+        target: EffectTarget,
+    ) -> Vec<ActorId> {
+        if target == EffectTarget::RandomEnemy {
+            let engaged = engaged_enemies(io.view());
+            if engaged.is_empty() {
+                return engaged;
+            }
+            let pick = io.roll(ctx.caster, RANDOM_STREAM) * engaged.len() as f64;
+            let index = (pick as usize).min(engaged.len() - 1);
+            return vec![engaged[index]];
+        }
+        let view = io.view();
         let alive = |id: &ActorId| view.actor(*id).is_some_and(|a| a.alive);
         let mut out: Vec<ActorId> = match target {
             EffectTarget::Caster => vec![ctx.caster],
             EffectTarget::Target => ctx.target.into_iter().collect(),
-            EffectTarget::AllEnemies => view
-                .enemies()
-                .iter()
-                .copied()
-                .filter(|&e| view.actor(e).is_some_and(|a| a.engaged))
-                .collect(),
+            EffectTarget::AllEnemies => engaged_enemies(view),
+            EffectTarget::RandomEnemy => Vec::new(),
             EffectTarget::Party => view.seats().to_vec(),
             EffectTarget::Pets(kind) => owner_seat(view, ctx.caster)
                 .map(|seat| {
@@ -260,8 +294,23 @@ impl Interpreter {
         target: EffectTarget,
         aoe: Option<AoeRule>,
     ) {
-        let mut targets = self.targets(io.view(), ctx, target);
+        for c in self.damage_targets(io, ctx, target, aoe) {
+            let hit = self.roll_hit(io, &c, amount, school);
+            self.deliver(io, hit);
+        }
+    }
+
+    /// One context per target hit, each scaled by its AoE share.
+    fn damage_targets(
+        &self,
+        io: &mut dyn EngineIo,
+        ctx: &EffectCtx,
+        target: EffectTarget,
+        aoe: Option<AoeRule>,
+    ) -> Vec<EffectCtx> {
+        let mut targets = self.targets(io, ctx, target);
         let mut falloff = 1.0;
+        let secondary = aoe.map_or(1.0, |rule| rule.secondary);
         if let Some(rule) = aoe {
             if let Some(primary) = ctx
                 .target
@@ -279,47 +328,172 @@ impl Interpreter {
                 }
             }
         }
-        for t in targets {
-            let c = EffectCtx {
-                target: Some(t),
-                scale: ctx.scale * falloff,
-                ..*ctx
-            };
-            let view = io.view();
-            let raw = self
-                .math
-                .outgoing(view, &c, amount, Outgoing::Damage(school));
-            let chance = self.math.crit_chance(view, &c);
-            let mult = self.math.crit_multiplier(view, &c);
-            let crit = io.roll(ctx.caster, CRIT_STREAM) < chance;
-            let hit = if crit { raw * mult } else { raw };
-            let hit = self.math.mitigate(io.view(), t, hit, school);
-            let landed = io.apply_damage(DamageEvent {
-                source: ctx.caster,
-                target: t,
-                amount: whole_points(hit),
-                school,
-                spell: ctx.spell,
-                crit,
-            });
-            if landed > 0 {
-                let dealt = Occurrence {
-                    what: Happening::DamageDealt {
-                        spell: ctx.spell,
-                        school,
-                        crit,
-                    },
+        targets
+            .into_iter()
+            .map(|t| {
+                let share = if ctx.target == Some(t) {
+                    1.0
+                } else {
+                    secondary
+                };
+                EffectCtx {
                     target: Some(t),
-                    amount: Some(landed as f64),
-                    depth: ctx.depth,
-                };
-                self.fire(io, ctx.caster, dealt);
-                let taken = Occurrence {
-                    what: Happening::DamageTaken,
-                    target: Some(ctx.caster),
-                    ..dealt
-                };
-                self.fire(io, t, taken);
+                    scale: ctx.scale * falloff * share,
+                    ..*ctx
+                }
+            })
+            .collect()
+    }
+
+    /// Amount and crit against `c.target`, before its mitigation.
+    fn roll_hit(
+        &self,
+        io: &mut dyn EngineIo,
+        c: &EffectCtx,
+        amount: Coefficient,
+        school: SchoolMask,
+    ) -> RolledHit {
+        let view = io.view();
+        let raw = self
+            .math
+            .outgoing(view, c, amount, Outgoing::Damage(school));
+        let chance = self.math.crit_chance(view, c);
+        let mult = self.math.crit_multiplier(view, c);
+        let crit = io.roll(c.caster, CRIT_STREAM) < chance;
+        RolledHit {
+            source: c.caster,
+            target: c.target.unwrap_or(c.caster),
+            amount: if crit { raw * mult } else { raw },
+            school,
+            spell: c.spell,
+            crit,
+            depth: c.depth,
+        }
+    }
+
+    /// Mitigate, apply, and run the listeners for a hit.
+    fn deliver(&self, io: &mut dyn EngineIo, hit: RolledHit) {
+        let t = hit.target;
+        let amount = self.math.mitigate(io.view(), t, hit.amount, hit.school);
+        let landed = io.apply_damage(DamageEvent {
+            source: hit.source,
+            target: t,
+            amount: whole_points(amount),
+            school: hit.school,
+            spell: hit.spell,
+            crit: hit.crit,
+        });
+        if landed > 0 {
+            let dealt = Occurrence {
+                what: Happening::DamageDealt {
+                    spell: hit.spell,
+                    school: hit.school,
+                    crit: hit.crit,
+                },
+                target: Some(t),
+                amount: Some(landed as f64),
+                depth: hit.depth,
+            };
+            self.fire(io, hit.source, dealt);
+            let taken = Occurrence {
+                what: Happening::DamageTaken,
+                target: Some(hit.source),
+                ..dealt
+            };
+            self.fire(io, t, taken);
+        }
+    }
+
+    /// A travelling spell's direct damage, rolled now as SimC does at
+    /// execute and delivered when it lands. Conditions on damage are read
+    /// now too.
+    pub(crate) fn roll_direct(
+        &self,
+        io: &mut dyn EngineIo,
+        ctx: &EffectCtx,
+        effects: &[Effect],
+    ) -> Vec<RolledHit> {
+        let mut hits = Vec::new();
+        for effect in effects {
+            match effect {
+                &Effect::Damage {
+                    amount,
+                    school,
+                    target,
+                    aoe,
+                } => {
+                    for c in self.damage_targets(io, ctx, target, aoe) {
+                        hits.push(self.roll_hit(io, &c, amount, school));
+                    }
+                }
+                Effect::If {
+                    when,
+                    then,
+                    otherwise,
+                } => {
+                    let holds = predicate(io.view(), *when, ctx.caster, ctx.target, ctx.spell);
+                    hits.extend(self.roll_direct(io, ctx, if holds { then } else { otherwise }));
+                }
+                _ => {}
+            }
+        }
+        hits
+    }
+
+    /// A triggered spell that rolls at launch, rolled at once: an overload
+    /// snapshots its parent's buffs before the parent's own listeners spend
+    /// them.
+    fn roll_ahead(
+        &self,
+        io: &mut dyn EngineIo,
+        caster: ActorId,
+        spell: SpellId,
+        target: Option<ActorId>,
+    ) -> Option<Vec<RolledHit>> {
+        let def = self.math.data().spells.get(&spell)?;
+        if def.travel.is_none() || def.rolls_on_impact {
+            return None;
+        }
+        let ctx = EffectCtx {
+            caster,
+            target,
+            spell: Some(spell),
+            aura: None,
+            event_amount: None,
+            scale: 1.0,
+            depth: 0,
+        };
+        Some(self.roll_direct(io, &ctx, &def.effects))
+    }
+
+    /// Its landing: deliver the hits rolled at launch, then run everything
+    /// else (resources, auras) as it lands.
+    pub(crate) fn land(
+        &self,
+        io: &mut dyn EngineIo,
+        ctx: &EffectCtx,
+        effects: &[Effect],
+        hits: &[RolledHit],
+    ) {
+        for &hit in hits {
+            self.deliver(io, hit);
+        }
+        self.run_besides_damage(io, ctx, effects);
+    }
+
+    fn run_besides_damage(&self, io: &mut dyn EngineIo, ctx: &EffectCtx, effects: &[Effect]) {
+        for effect in effects {
+            match effect {
+                Effect::Damage { .. } => {}
+                Effect::If {
+                    when,
+                    then,
+                    otherwise,
+                } => {
+                    let holds = predicate(io.view(), *when, ctx.caster, ctx.target, ctx.spell);
+                    self.run_besides_damage(io, ctx, if holds { then } else { otherwise });
+                }
+                other => self.run_one(io, ctx, other),
             }
         }
     }
@@ -331,7 +505,7 @@ impl Interpreter {
         amount: Coefficient,
         target: EffectTarget,
     ) {
-        for t in self.targets(io.view(), ctx, target) {
+        for t in self.targets(io, ctx, target) {
             let c = EffectCtx {
                 target: Some(t),
                 ..*ctx
@@ -369,17 +543,18 @@ impl Interpreter {
                 aura,
                 target,
                 stacks,
+                duration,
             } => {
-                for t in self.targets(io.view(), ctx, target) {
+                for t in self.targets(io, ctx, target) {
                     io.apply_aura(AuraApplication {
                         aura: aura_on(t, aura),
                         stacks,
-                        duration: None,
+                        duration,
                     });
                 }
             }
             &Effect::RemoveAura { aura, target } => {
-                for t in self.targets(io.view(), ctx, target) {
+                for t in self.targets(io, ctx, target) {
                     io.remove_aura(t, aura, Some(caster));
                 }
             }
@@ -388,12 +563,12 @@ impl Interpreter {
                 target,
                 stacks,
             } => {
-                for t in self.targets(io.view(), ctx, target) {
+                for t in self.targets(io, ctx, target) {
                     io.remove_stacks(aura_on(t, aura), stacks);
                 }
             }
             &Effect::ExtendAura { aura, target, by } => {
-                for t in self.targets(io.view(), ctx, target) {
+                for t in self.targets(io, ctx, target) {
                     io.extend_aura(aura_on(t, aura), by);
                 }
             }
@@ -402,7 +577,7 @@ impl Interpreter {
                 target,
                 amount,
             } => {
-                for t in self.targets(io.view(), ctx, target) {
+                for t in self.targets(io, ctx, target) {
                     let c = EffectCtx {
                         target: Some(t),
                         ..*ctx
@@ -416,14 +591,14 @@ impl Interpreter {
                 target,
                 fraction,
             } => {
-                for t in self.targets(io.view(), ctx, target) {
+                for t in self.targets(io, ctx, target) {
                     let r = aura_on(t, aura);
                     if let Some(value) = instance(io.view(), r).map(|i| i.value) {
                         io.add_aura_value(r, -value * fraction);
                     }
                 }
             }
-            &Effect::Resource(r) => io.add_resource(caster, r.kind, r.amount),
+            &Effect::Resource(r) => io.add_resource(caster, r.kind, r.amount * ctx.scale),
             &Effect::Summon {
                 pet,
                 count,
@@ -452,12 +627,34 @@ impl Interpreter {
             }
             &Effect::AdjustCooldown { spell, change } => io.adjust_cooldown(caster, spell, change),
             &Effect::TriggerSpell { spell, target } => {
-                let target = self.targets(io.view(), ctx, target).first().copied();
-                io.trigger_spell(caster, spell, target);
+                let target = self.targets(io, ctx, target).first().copied();
+                let rolled = self.roll_ahead(io, caster, spell, target);
+                io.trigger_spell(caster, spell, target, rolled);
             }
             &Effect::Interrupt { target } => {
-                for t in self.targets(io.view(), ctx, target) {
+                for t in self.targets(io, ctx, target) {
                     io.interrupt(t);
+                }
+            }
+            Effect::ApplyOneOf { auras, target } => {
+                for t in self.targets(io, ctx, *target) {
+                    let held = |a: &AuraId| io.view().auras(t).iter().any(|i| i.aura == *a);
+                    let lacking: Vec<AuraId> = auras.iter().copied().filter(|a| !held(a)).collect();
+                    let pool = if lacking.is_empty() {
+                        auras.clone()
+                    } else {
+                        lacking
+                    };
+                    if pool.is_empty() {
+                        continue;
+                    }
+                    let pick = io.roll(caster, RANDOM_STREAM) * pool.len() as f64;
+                    let aura = pool[(pick as usize).min(pool.len() - 1)];
+                    io.apply_aura(AuraApplication {
+                        aura: aura_on(t, aura),
+                        stacks: 1,
+                        duration: None,
+                    });
                 }
             }
             Effect::RandomOf(branches) => {
@@ -475,6 +672,11 @@ impl Interpreter {
                 }
                 if let Some((_, last)) = branches.last() {
                     self.run_one(io, ctx, last);
+                }
+            }
+            Effect::Chance { chance, then } => {
+                if io.roll(caster, RANDOM_STREAM) < *chance {
+                    self.run(io, ctx, then);
                 }
             }
             Effect::If {
@@ -535,8 +737,18 @@ fn listens(on: ListenFor, what: Happening) -> bool {
         | (ListenFor::AuraApplied(a), Happening::AuraApplied(b))
         | (ListenFor::AuraExpired(a), Happening::AuraExpired(b)) => a == b,
         (ListenFor::ResourceSpent(a), Happening::ResourceSpent(b)) => a == b,
+        (ListenFor::PetExpired(a), Happening::PetExpired(b)) => a == b,
+        (ListenFor::Departed, Happening::Departed) => true,
         _ => false,
     }
+}
+
+fn engaged_enemies(view: &dyn StateView) -> Vec<ActorId> {
+    view.enemies()
+        .iter()
+        .copied()
+        .filter(|&e| view.actor(e).is_some_and(|a| a.engaged && a.alive))
+        .collect()
 }
 
 /// A listener's own stream, from its aura and index (FNV-1a).

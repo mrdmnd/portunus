@@ -242,6 +242,15 @@ fn hits_follow_the_formulas() {
         assert_eq!(amount, whole_points(want), "{want}");
     }
     assert!(bolts.iter().any(|h| h.0), "some bolts should crit");
+
+    // Lava Burst grows with crit chance, its Flame Shock crit aside.
+    let lava = hits(&trace, LAVA_BURST);
+    assert!(!lava.is_empty());
+    let normal = 1.08 * SPELL_POWER * (1.0 + CRIT_PCT / 100.0);
+    for &(crit, amount) in &lava {
+        let want = if crit { normal * CRIT_MULT } else { normal };
+        assert_eq!(amount, whole_points(want), "{want}");
+    }
 }
 
 #[test]

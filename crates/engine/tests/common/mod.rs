@@ -9,7 +9,7 @@ use std::sync::Arc;
 use portunus_core::{ActorId, AuraId, Dist, Seat, Seed, SimDuration, SpellId};
 use portunus_engine::mechanics::{
     whole_points, AuraApplication, AuraChange, AuraEvent, CastEvent, DamageEvent, DeathEvent,
-    EnemyHit, SwingEvent, TickEvent, TimerEvent,
+    EnemyHit, PetEvent, RolledHit, SwingEvent, TickEvent, TimerEvent,
 };
 use portunus_engine::state::Projectile;
 use portunus_engine::{
@@ -45,7 +45,9 @@ pub fn fixture() -> Fixture {
     let data: GameData = GameDataSource::load(&RonFile::new(dir.join("game.ron"))).unwrap();
     let enemies: EnemyData = EnemyDataSource::load(&RonFile::new(dir.join("enemies.ron"))).unwrap();
     let loadout: Loadout = read_ron(&dir.join("loadouts/elemental.ron")).unwrap();
-    let template = Compiler.compile(&data, &loadout).unwrap();
+    let mut template = Compiler.compile(&data, &loadout).unwrap();
+    // The tests start at the pull: nothing may be castable before it.
+    template.abilities.retain(|s| data.spells[s].hostile);
     let spec: ScenarioSpec = read_ron(&dir.join("scenarios/target_dummy.ron")).unwrap();
     let enemies = Arc::new(enemies);
     let sampler = Sampler::new(spec, Arc::clone(&enemies)).unwrap();
@@ -138,6 +140,7 @@ fn run(
                 aura,
                 target: t,
                 stacks,
+                duration,
             } => {
                 if let Some(holder) = pick(*t, caster, target) {
                     io.apply_aura(AuraApplication {
@@ -147,7 +150,7 @@ fn run(
                             source: caster,
                         },
                         stacks: *stacks,
-                        duration: None,
+                        duration: *duration,
                     });
                 }
             }
@@ -175,7 +178,13 @@ impl Mechanics for Stub {
         }
     }
     fn channel_tick(&self, _io: &mut dyn EngineIo, _cast: &CastEvent, _tick: u8) {}
-    fn projectile_landed(&self, io: &mut dyn EngineIo, cast: &CastEvent, _flight: &Projectile) {
+    fn projectile_landed(
+        &self,
+        io: &mut dyn EngineIo,
+        cast: &CastEvent,
+        _flight: &Projectile,
+        _hits: &[RolledHit],
+    ) {
         land(io, cast);
     }
     fn swing(&self, _io: &mut dyn EngineIo, _swing: &SwingEvent) {}
@@ -196,6 +205,7 @@ impl Mechanics for Stub {
     fn aura_changed(&self, _io: &mut dyn EngineIo, _ev: &AuraChange) {}
     fn aura_removed(&self, _io: &mut dyn EngineIo, _ev: &AuraEvent) {}
     fn actor_died(&self, _io: &mut dyn EngineIo, _ev: &DeathEvent) {}
+    fn pet_expired(&self, _io: &mut dyn EngineIo, _ev: &PetEvent) {}
     fn enemy_hit(&self, _io: &mut dyn EngineIo, _hit: &EnemyHit) {}
     fn timer(&self, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
 }

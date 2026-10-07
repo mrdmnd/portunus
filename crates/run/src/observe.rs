@@ -22,6 +22,23 @@ pub struct CooldownObs {
     pub charges: u8,
     /// Until a charge is available; zero while one is.
     pub remaining: SimDuration,
+    /// Until the next charge returns, even with one available; zero when
+    /// full.
+    pub next_charge: SimDuration,
+    /// Full recharge time at the current rate.
+    pub recharge: SimDuration,
+}
+
+impl CooldownObs {
+    /// Charges plus the recovered part of the next one: SimC's
+    /// `charges_fractional`.
+    pub fn fractional(&self) -> f64 {
+        if self.next_charge == SimDuration::ZERO || self.recharge == SimDuration::ZERO {
+            return f64::from(self.charges);
+        }
+        let left = f64::from(self.next_charge.millis()) / f64::from(self.recharge.millis());
+        f64::from(self.charges) + (1.0 - left).clamp(0.0, 1.0)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -45,6 +62,7 @@ pub struct SeatObs {
     pub gcd_remaining: SimDuration,
     pub casting: Option<SpellId>,
     pub resources: BTreeMap<ResourceKind, f64>,
+    pub resource_max: BTreeMap<ResourceKind, f64>,
     /// Auras the seat holds, from any source.
     pub buffs: BTreeMap<AuraId, AuraObs>,
     /// One entry per ability with a cooldown.
@@ -95,6 +113,11 @@ impl SeatObs {
         self.resources.get(&kind).copied().unwrap_or(0.0)
     }
 
+    /// How far below its maximum a resource is.
+    pub fn resource_deficit(&self, kind: ResourceKind) -> f64 {
+        self.resource_max.get(&kind).copied().unwrap_or(0.0) - self.resource(kind)
+    }
+
     pub fn has_buff(&self, aura: AuraId) -> bool {
         self.buffs.contains_key(&aura)
     }
@@ -130,6 +153,13 @@ impl SeatObs {
 
     pub fn charges(&self, ability: SpellId) -> u8 {
         self.cooldowns.get(&ability).map_or(0, |c| c.charges)
+    }
+
+    /// SimC's `charges_fractional`; zero for abilities without a cooldown.
+    pub fn charges_fractional(&self, ability: SpellId) -> f64 {
+        self.cooldowns
+            .get(&ability)
+            .map_or(0.0, CooldownObs::fractional)
     }
 }
 
@@ -185,11 +215,13 @@ impl Observer for ScriptObserver {
         let template = ctx.party.get(usize::from(seat.0));
         let actor = state.actor(me);
 
-        let resources = template
+        let views: Vec<_> = template
             .into_iter()
             .flat_map(|t| &t.resources)
-            .filter_map(|r| Some((r.kind, state.resource(me, r.kind)?.value)))
+            .filter_map(|r| Some((r.kind, state.resource(me, r.kind)?)))
             .collect();
+        let resources = views.iter().map(|(k, v)| (*k, v.value)).collect();
+        let resource_max = views.iter().map(|(k, v)| (*k, v.max)).collect();
         let buffs = state
             .auras(me)
             .iter()
@@ -202,14 +234,22 @@ impl Observer for ScriptObserver {
                 CooldownObs {
                     charges: 0,
                     remaining: SimDuration::ZERO,
+                    next_charge: SimDuration::ZERO,
+                    recharge: cd.recharge,
                 }
             } else {
+                let next_charge = cd
+                    .next_charge_at
+                    .map_or(SimDuration::ZERO, |t| t.saturating_since(now));
                 CooldownObs {
                     charges: cd.charges,
-                    remaining: match (cd.charges, cd.next_charge_at) {
-                        (0, Some(t)) => t.saturating_since(now),
-                        _ => SimDuration::ZERO,
+                    remaining: if cd.charges == 0 {
+                        next_charge
+                    } else {
+                        SimDuration::ZERO
                     },
+                    next_charge,
+                    recharge: cd.recharge,
                 }
             };
             Some((s, obs))
@@ -292,6 +332,7 @@ impl Observer for ScriptObserver {
                 CastWhat::EnemyRule(_) => None,
             }),
             resources,
+            resource_max,
             buffs,
             cooldowns,
             target,

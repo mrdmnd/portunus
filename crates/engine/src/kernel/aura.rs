@@ -26,6 +26,18 @@ fn full_deck(chance: ProcChance) -> Option<DeckView> {
     }
 }
 
+/// Derive an independently stacked instance's stacks and expiries from its
+/// per-stack timers. A no-op when it has none.
+fn sync_stacks(inst: &mut AuraInstance, meta: &AuraMeta) {
+    let (Some(&oldest), Some(&newest)) = (meta.stack_expiries.first(), meta.stack_expiries.last())
+    else {
+        return;
+    };
+    inst.stacks = u8::try_from(meta.stack_expiries.len()).unwrap_or(u8::MAX);
+    inst.expires = Some(newest);
+    inst.next_stack_expires = (oldest < newest).then_some(oldest);
+}
+
 fn period(p: &Periodic, haste: f64) -> SimDuration {
     let ms = f64::from(p.period.millis());
     let ms = if p.hasted { ms / haste } else { ms };
@@ -64,12 +76,12 @@ impl World {
         {
             return;
         }
-        if def.refresh == RefreshRule::Ironfur {
-            self.unsupported("Ironfur-style independent stacks");
-            return;
-        }
         let duration = app.duration.or(def.duration);
         let max_stacks = def.max_stacks.max(1);
+        let timed_stacks = |n: u8| match duration {
+            Some(d) if def.refresh == RefreshRule::Ironfur => vec![now + d; usize::from(n)],
+            _ => Vec::new(),
+        };
         let pmultiplier = self.pmultiplier_of(r.source, r.aura);
         let haste = self.source_haste(r);
         match self.find_aura(r) {
@@ -97,7 +109,11 @@ impl World {
                     value: 0.0,
                     pmultiplier,
                 });
-                holder.meta.push(AuraMeta { uid, tick });
+                holder.meta.push(AuraMeta {
+                    uid,
+                    tick,
+                    stack_expiries: timed_stacks(stacks),
+                });
                 for (index, deck) in decks.into_iter().enumerate() {
                     holder.procs.push(ProcView {
                         listener: ListenerRef {
@@ -120,8 +136,22 @@ impl World {
                 let Some(holder) = self.actor_mut(r.holder) else {
                     return;
                 };
+                let previous = holder.auras[i].stacks;
+                let added = timed_stacks(app.stacks);
+                if !added.is_empty() {
+                    // At the cap, each new stack replaces the oldest.
+                    let expiries = &mut holder.meta[i].stack_expiries;
+                    expiries.extend(added);
+                    let excess = expiries.len().saturating_sub(usize::from(max_stacks));
+                    expiries.drain(..excess);
+                    holder.auras[i].pmultiplier = pmultiplier;
+                    sync_stacks(&mut holder.auras[i], &holder.meta[i]);
+                    let stacks = holder.auras[i].stacks;
+                    self.schedule_aura(r);
+                    self.changed(r, previous, stacks);
+                    return;
+                }
                 let inst = &mut holder.auras[i];
-                let previous = inst.stacks;
                 inst.stacks = previous.saturating_add(app.stacks).min(max_stacks);
                 inst.expires = duration.map(|d| {
                     let remaining = inst
@@ -164,6 +194,7 @@ impl World {
             return;
         };
         let expires = a.auras[i].expires;
+        let stack_at = a.auras[i].next_stack_expires;
         let meta = &mut a.meta[i];
         let uid = meta.uid;
         let mut tick_at = None;
@@ -178,6 +209,9 @@ impl World {
         }
         if let Some(e) = expires {
             self.queue.push(e, Event::AuraExpire { aura: r, uid });
+        }
+        if let Some(t) = stack_at {
+            self.queue.push(t, Event::AuraStackExpire { aura: r, uid });
         }
         if let Some(t) = tick_at {
             self.queue.push(t, Event::AuraTick { aura: r, uid });
@@ -228,9 +262,44 @@ impl World {
         } else {
             let previous = inst.stacks;
             inst.stacks -= stacks;
-            let now = inst.stacks;
+            let expiries = &mut a.meta[i].stack_expiries;
+            if !expiries.is_empty() {
+                expiries.drain(..usize::from(stacks).min(expiries.len()));
+                sync_stacks(&mut a.auras[i], &a.meta[i]);
+            }
+            let now = a.auras[i].stacks;
             self.changed(r, previous, now);
         }
+    }
+
+    /// Drop the stacks of an independently stacked aura whose timers are
+    /// up. Its last stack goes with the aura's own expiry.
+    pub(crate) fn expire_stacks(&mut self, r: AuraRef, uid: u32) {
+        let now = self.now;
+        let Some(i) = self.find_aura(r) else { return };
+        let Some(a) = self.actor_mut(r.holder) else {
+            return;
+        };
+        let meta = &mut a.meta[i];
+        if meta.uid != uid {
+            return;
+        }
+        let due = meta
+            .stack_expiries
+            .iter()
+            .take_while(|&&t| t <= now)
+            .count();
+        if due == 0 || due == meta.stack_expiries.len() {
+            return;
+        }
+        meta.stack_expiries.drain(..due);
+        let previous = a.auras[i].stacks;
+        sync_stacks(&mut a.auras[i], &a.meta[i]);
+        let stacks = a.auras[i].stacks;
+        if let Some(t) = a.auras[i].next_stack_expires {
+            self.queue.push(t, Event::AuraStackExpire { aura: r, uid });
+        }
+        self.changed(r, previous, stacks);
     }
 
     pub(crate) fn extend_aura(&mut self, r: AuraRef, by: SimDuration) {
@@ -240,6 +309,10 @@ impl World {
         };
         if let Some(e) = &mut a.auras[i].expires {
             *e += by;
+            for t in &mut a.meta[i].stack_expiries {
+                *t += by;
+            }
+            sync_stacks(&mut a.auras[i], &a.meta[i]);
             self.schedule_aura(r);
         }
     }
@@ -311,17 +384,20 @@ impl World {
     }
 
     /// A holder's deck for one listener: where it left off, or a fresh one.
+    /// None for a listener drawing from another's.
     fn deck_for(&self, holder: ActorId, aura: AuraId, index: u8) -> Option<DeckView> {
-        let chance = self
+        let listener = self
             .s
             .setup
             .data
             .auras
             .get(&aura)?
             .listeners
-            .get(usize::from(index))?
-            .chance;
-        let fresh = full_deck(chance)?;
+            .get(usize::from(index))?;
+        if listener.shared_with.is_some() {
+            return None;
+        }
+        let fresh = full_deck(listener.chance)?;
         Some(
             self.decks
                 .get(&(holder, aura, index))

@@ -329,20 +329,29 @@ pub fn derive(curves: &StatCurves, spec: &SpecDef, stats: &StatBlock) -> Derived
 }
 
 /// Abilities and permanent auras, in a deterministic order with duplicates
-/// dropped.
+/// dropped, except that a talent granting the same aura at several ranks
+/// lists it once per rank, so it holds a stack per rank.
 fn grants(data: &GameData, spec: &SpecDef, loadout: &Loadout) -> (BTreeSet<SpellId>, Vec<AuraId>) {
     let mut abilities: BTreeSet<SpellId> = spec.baseline_spells.iter().copied().collect();
     let mut auras: Vec<AuraId> = spec.baseline_auras.clone();
+    let mut extra_ranks = Vec::new();
     let mut replacements = Vec::new();
 
     for (talent, &rank) in &taken(data, spec, loadout).taken {
         let def = &data.talents[talent];
+        let mut granted = BTreeSet::new();
         for grant in def.ranks.iter().take(usize::from(rank)).flatten() {
             match *grant {
                 Grant::Spell(spell) => {
                     abilities.insert(spell);
                 }
-                Grant::PassiveAura(aura) => auras.push(aura),
+                Grant::PassiveAura(aura) => {
+                    if granted.insert(aura) {
+                        auras.push(aura);
+                    } else {
+                        extra_ranks.push(aura);
+                    }
+                }
                 Grant::ReplaceSpell { from, to } => replacements.push((from, to)),
             }
         }
@@ -382,6 +391,7 @@ fn grants(data: &GameData, spec: &SpecDef, loadout: &Loadout) -> (BTreeSet<Spell
 
     let mut seen = BTreeSet::new();
     auras.retain(|a| seen.insert(*a));
+    auras.extend(extra_ranks);
     (abilities, auras)
 }
 
@@ -618,6 +628,17 @@ mod tests {
             [100, 102, 103, 900, 901].map(SpellId)
         );
         assert_eq!(t.passive_auras, [400, 410, 500, 600].map(AuraId));
+    }
+
+    #[test]
+    fn an_aura_granted_at_each_rank_is_listed_per_rank() {
+        let mut d = data();
+        d.talents.get_mut(&TalentId(1)).unwrap().ranks = vec![
+            vec![Grant::PassiveAura(AuraId(410))],
+            vec![Grant::PassiveAura(AuraId(410))],
+        ];
+        let t = Compiler.compile(&d, &loadout()).unwrap();
+        assert_eq!(t.passive_auras, [400, 410, 500, 600, 410].map(AuraId));
     }
 
     #[test]

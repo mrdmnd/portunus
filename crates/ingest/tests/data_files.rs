@@ -44,7 +44,9 @@ fn elemental_loadout_compiles() {
     let abilities: Vec<SpellId> = template.abilities.iter().copied().collect();
     assert_eq!(
         abilities,
-        [8042, 51505, 188196, 188389].map(SpellId).to_vec()
+        [8042, 51505, 188196, 188389, 188443, 192106, 196840]
+            .map(SpellId)
+            .to_vec()
     );
     assert_eq!(
         template.passive_auras,
@@ -54,6 +56,41 @@ fn elemental_loadout_compiles() {
     let expected_crit = 5.0 + 250.0 / 700.0;
     assert!((template.derived.crit_pct - expected_crit).abs() < 1e-9);
     assert!(template.derived.spell_power > 2000.0);
+}
+
+#[test]
+fn stormbringer_loadout_compiles() {
+    let game = game();
+    let loadout: Loadout =
+        read_ron(&data_dir().join("loadouts/elemental_stormbringer.ron")).expect("loadout");
+    assert_eq!(Compiler.validate(&game, &loadout), vec![]);
+    let template = Compiler.compile(&game, &loadout).expect("compiles");
+    assert_eq!(template.hero_tree, Some(HeroTreeId(54)));
+    assert!(template.abilities.contains(&SpellId(191634)), "Stormkeeper");
+    for aura in [
+        454009, 454391, 454021, 1264762, 455110, 455096, 454026, 1264691, 455129,
+    ] {
+        assert!(template.passive_auras.contains(&AuraId(aura)), "{aura}");
+    }
+}
+
+#[test]
+fn farseer_loadout_compiles() {
+    let game = game();
+    let loadout: Loadout =
+        read_ron(&data_dir().join("loadouts/elemental_farseer.ron")).expect("loadout");
+    assert_eq!(Compiler.validate(&game, &loadout), vec![]);
+    let template = Compiler.compile(&game, &loadout).expect("compiles");
+    assert_eq!(template.hero_tree, Some(HeroTreeId(55)));
+    assert!(
+        template.abilities.contains(&SpellId(443454)),
+        "Ancestral Swiftness"
+    );
+    for aura in [
+        443450, 443423, 443445, 443418, 1270446, 443451, 443448, 1270447, 443447, 443446, 448861,
+    ] {
+        assert!(template.passive_auras.contains(&AuraId(aura)), "{aura}");
+    }
 }
 
 #[test]
@@ -72,7 +109,7 @@ fn dummy_scenario_samples_deterministically() {
         panic!("expected one spawn");
     };
     assert_eq!(dummy.label.0, "target_dummy#1");
-    assert_eq!(dummy.max_health, 400_000);
+    assert_eq!(dummy.max_health, 1_000_000);
 }
 
 #[test]

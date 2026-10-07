@@ -26,8 +26,15 @@ pub trait Mechanics: Clone {
     fn cast_started(&self, io: &mut dyn EngineIo, cast: &CastEvent);
     fn cast_completed(&self, io: &mut dyn EngineIo, cast: &CastEvent);
     fn channel_tick(&self, io: &mut dyn EngineIo, cast: &CastEvent, tick: u8);
-    /// A spell with travel time reached its target.
-    fn projectile_landed(&self, io: &mut dyn EngineIo, cast: &CastEvent, flight: &Projectile);
+    /// A spell with travel time reached its target, carrying the hits
+    /// stashed for it at launch ([`EngineIo::stash_hit`]).
+    fn projectile_landed(
+        &self,
+        io: &mut dyn EngineIo,
+        cast: &CastEvent,
+        flight: &Projectile,
+        hits: &[RolledHit],
+    );
     /// An auto-attack swing resolved.
     fn swing(&self, io: &mut dyn EngineIo, swing: &SwingEvent);
     fn periodic_tick(&self, io: &mut dyn EngineIo, tick: &TickEvent);
@@ -37,6 +44,9 @@ pub trait Mechanics: Clone {
     fn aura_changed(&self, io: &mut dyn EngineIo, ev: &AuraChange);
     fn aura_removed(&self, io: &mut dyn EngineIo, ev: &AuraEvent);
     fn actor_died(&self, io: &mut dyn EngineIo, ev: &DeathEvent);
+    /// A temporary pet reached the end of its lifetime and is already gone;
+    /// dismissals and replacements don't count.
+    fn pet_expired(&self, io: &mut dyn EngineIo, ev: &PetEvent);
     /// An enemy rule hit a player: apply mitigation, then call
     /// [`EngineIo::apply_damage`].
     fn enemy_hit(&self, io: &mut dyn EngineIo, hit: &EnemyHit);
@@ -93,7 +103,17 @@ pub trait EngineIo {
     /// resolves through [`Mechanics::cast_completed`] as a new event at the
     /// current time, never re-entrantly, then through
     /// [`Mechanics::projectile_landed`] after its travel time, if it has one.
-    fn trigger_spell(&mut self, caster: ActorId, spell: SpellId, target: Option<ActorId>);
+    ///
+    /// `rolled` carries a travelling spell's hits rolled now, as SimC
+    /// snapshots an overload when its parent launches: they fly with it and
+    /// the cast arrives with [`CastEvent::prerolled`] set.
+    fn trigger_spell(
+        &mut self,
+        caster: ActorId,
+        spell: SpellId,
+        target: Option<ActorId>,
+        rolled: Option<Vec<RolledHit>>,
+    );
     /// Stop `target`'s cast if it is interruptible. Returns whether one was
     /// stopped.
     fn interrupt(&mut self, target: ActorId) -> bool;
@@ -104,6 +124,11 @@ pub trait EngineIo {
     fn schedule(&mut self, delay: SimDuration, timer: TimerEvent);
     /// Uniform in `[0, 1)` from the actor's named stream.
     fn roll(&mut self, actor: ActorId, stream: StreamKey) -> f64;
+    /// During a travelling spell's [`Mechanics::cast_completed`]: a hit
+    /// rolled now, handed back by [`Mechanics::projectile_landed`] when the
+    /// projectile lands (SimC rolls direct damage at execute). Dropped if
+    /// the spell never launches.
+    fn stash_hit(&mut self, hit: RolledHit);
     fn wake(&mut self, seat: Seat, reason: WakeReason);
 }
 
@@ -126,6 +151,10 @@ pub struct CastEvent {
     /// What the spell's scaling cost actually consumed (see
     /// `SpendScaling`), if it has one.
     pub spent: Option<ResourceAmount>,
+    /// A triggered travelling spell whose direct damage was rolled when it
+    /// was triggered (see [`EngineIo::trigger_spell`]): don't roll it again
+    /// at launch.
+    pub prerolled: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -171,6 +200,13 @@ pub struct DeathEvent {
     pub killer: Option<ActorId>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PetEvent {
+    pub owner: Seat,
+    pub pet: PetId,
+    pub actor: ActorId,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct EnemyHit {
     pub source: ActorId,
@@ -196,6 +232,20 @@ pub fn whole_points(amount: f64) -> u64 {
 pub struct TimerEvent {
     pub owner: ActorId,
     pub token: u32,
+}
+
+/// Direct damage rolled when its spell launched, to land with it.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct RolledHit {
+    pub source: ActorId,
+    pub target: ActorId,
+    /// Crit included, before the target's mitigation.
+    pub amount: f64,
+    pub school: SchoolMask,
+    pub spell: Option<SpellId>,
+    pub crit: bool,
+    /// The listener depth it was rolled at.
+    pub depth: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

@@ -243,8 +243,8 @@ pub struct ProcView {
 /// `successes / cards`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DeckView {
-    pub cards: u8,
-    pub successes: u8,
+    pub cards: u16,
+    pub successes: u16,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

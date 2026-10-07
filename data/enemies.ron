@@ -7,7 +7,7 @@
             key: "target_dummy",
             name: "Target Dummy",
             kind: boss,
-            health: 400000,
+            health: 1000000,
             forces: 0,
             defense: (level_offset: 3, armor: 0.0),
         ),

@@ -5,7 +5,7 @@ use portunus_gamedata::effect::CooldownChange;
 use portunus_gamedata::stats::ResourceKind;
 use portunus_gamedata::GameData;
 
-use crate::mechanics::{AuraApplication, DamageEvent, EngineIo, HealEvent, TimerEvent};
+use crate::mechanics::{AuraApplication, DamageEvent, EngineIo, HealEvent, RolledHit, TimerEvent};
 use crate::state::{AuraRef, ListenerRef, StateView};
 use crate::step::WakeReason;
 
@@ -102,7 +102,17 @@ impl EngineIo for Io<'_> {
         self.w.command_pets(owner, pet, spell, target);
     }
 
-    fn trigger_spell(&mut self, caster: ActorId, spell: SpellId, target: Option<ActorId>) {
+    fn stash_hit(&mut self, hit: RolledHit) {
+        self.w.stashed.push(hit);
+    }
+
+    fn trigger_spell(
+        &mut self,
+        caster: ActorId,
+        spell: SpellId,
+        target: Option<ActorId>,
+        rolled: Option<Vec<RolledHit>>,
+    ) {
         let now = self.w.now;
         self.w.queue.push(
             now,
@@ -110,6 +120,7 @@ impl EngineIo for Io<'_> {
                 caster,
                 spell,
                 target,
+                rolled,
             },
         );
     }

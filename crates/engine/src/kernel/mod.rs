@@ -1,8 +1,9 @@
 //! The kernel: [`Kernel`] implements [`Engine`] for any [`Mechanics`].
 //!
-//! The kernel reads the timing modifiers itself (`CastTimePct`,
-//! `CooldownPct`, `CostPct`), because cast, GCD, and cooldown timing are
-//! its job; every other modifier is left to the mechanics. Mechanics' calls
+//! The kernel reads the timing modifiers itself (`CastTimePct`, `GcdPct`,
+//! `CooldownPct`, `ChargesAdd`, `CostPct`), because cast, GCD, and cooldown
+//! timing are its job, and `ResourceMax` when it builds the seats; every
+//! other modifier is left to the mechanics. Mechanics' calls
 //! into [`EngineIo`] never call back into mechanics directly: the aura
 //! changes and deaths they cause are queued and delivered once the current
 //! callback returns.
@@ -10,8 +11,8 @@
 //! Not implemented yet, and rejected at setup or reported as
 //! [`EngineError::Unsupported`] on first use: players' auto-attacks (pets'
 //! work), channels, empowers, shared cooldown categories, cast lag, enemy
-//! rules, `Fired` and `Delayed` engagement triggers, Ironfur-style stacks,
-//! and aura value caps, thresholds, and absorbs.
+//! rules, `Fired` and `Delayed` engagement triggers, and aura value caps,
+//! thresholds, and absorbs.
 
 mod aura;
 mod cast;
@@ -31,7 +32,7 @@ use portunus_scenario::resolved::{Segment, SpawnSet};
 use crate::choice::{Choice, Wait};
 use crate::error::{EngineError, IllegalChoice};
 use crate::mask::{ActionMask, Readiness};
-use crate::mechanics::{AuraApplication, CastEvent, EngineIo, Mechanics, TickEvent};
+use crate::mechanics::{AuraApplication, CastEvent, EngineIo, Mechanics, RolledHit, TickEvent};
 use crate::order::EventClass;
 use crate::outcome::{Outcome, PullOutcome};
 use crate::setup::RunSetup;
@@ -44,7 +45,7 @@ pub use world::World;
 use cast::Need;
 use io::Io;
 use queue::{Event, Wake};
-use world::{gcd_length, Actor, Batch, Casting, Followup, Seg};
+use world::{Actor, Batch, Casting, Followup, Seg};
 
 /// How many queued reactions one callback may cause before the kernel
 /// gives up with [`EngineError::Runaway`].
@@ -77,6 +78,7 @@ impl<M: Mechanics> Kernel<M> {
                 Followup::Changed(ev) => self.mechanics.aura_changed(io, &ev),
                 Followup::Removed(ev) => self.mechanics.aura_removed(io, &ev),
                 Followup::Died(ev) => self.mechanics.actor_died(io, &ev),
+                Followup::PetExpired(ev) => self.mechanics.pet_expired(io, &ev),
             }
         }
     }
@@ -403,6 +405,8 @@ impl<M: Mechanics> Kernel<M> {
         }
         self.world.projectiles.clear();
         self.world.flights.clear();
+        self.world.settle_departures();
+        self.drain();
         if cleared {
             self.world.seg = Seg::Finished;
             self.start_segment(segment + 1);
@@ -431,9 +435,9 @@ impl<M: Mechanics> Kernel<M> {
         let Some(def) = s.setup.data.spells.get(&spell) else {
             return;
         };
-        let haste = self.world.actor_ref(actor).map_or(1.0, |a| a.haste);
         if let Some(g) = &def.gcd {
-            self.world.seat_mut(seat).gcd_end = Some(now + gcd_length(g, haste));
+            let gcd = self.world.spell_gcd(actor, spell, g);
+            self.world.seat_mut(seat).gcd_end = Some(now + gcd);
         }
         self.begin_cast(CastEvent {
             seat,
@@ -444,6 +448,7 @@ impl<M: Mechanics> Kernel<M> {
             started: now,
             empower: None,
             spent: None,
+            prerolled: false,
         });
     }
 
@@ -515,7 +520,13 @@ impl<M: Mechanics> Kernel<M> {
         }
     }
 
-    fn resolve_triggered(&mut self, caster: ActorId, spell: SpellId, target: Option<ActorId>) {
+    fn resolve_triggered(
+        &mut self,
+        caster: ActorId,
+        spell: SpellId,
+        target: Option<ActorId>,
+        rolled: Option<Vec<RolledHit>>,
+    ) {
         let s = Arc::clone(&self.world.s);
         let Some(def) = s.setup.data.spells.get(&spell) else {
             self.world
@@ -526,7 +537,9 @@ impl<M: Mechanics> Kernel<M> {
             self.world.unsupported("spells triggered for enemies");
             return;
         };
-        if !self.world.actor_ref(caster).is_some_and(|a| a.alive) {
+        if !self.world.actor_ref(caster).is_some_and(|a| a.alive)
+            && !self.world.is_departing(caster)
+        {
             return;
         }
         let ev = CastEvent {
@@ -538,12 +551,16 @@ impl<M: Mechanics> Kernel<M> {
             started: self.world.now,
             empower: None,
             spent: None,
+            prerolled: rolled.is_some(),
         };
         self.world.record(TraceEvent::CastEnd {
             actor: caster,
             spell,
             reason: CastEndReason::Completed,
         });
+        if let Some(hits) = rolled {
+            self.world.stashed = hits;
+        }
         self.call(|m, io| m.cast_completed(io, &ev));
         if let Some(travel) = def.travel {
             self.world.launch(ev, travel);
@@ -553,6 +570,11 @@ impl<M: Mechanics> Kernel<M> {
     // ---- events ----
 
     fn dispatch(&mut self, event: Event) {
+        self.handle(event);
+        self.world.settle_departures();
+    }
+
+    fn handle(&mut self, event: Event) {
         match event {
             Event::PrepullOpen => self.prepull_open(),
             Event::TravelEnd => {
@@ -576,18 +598,21 @@ impl<M: Mechanics> Kernel<M> {
                 }
             }
             Event::ProjectileLand { id } => {
-                let Some(i) = self.world.flights.iter().position(|(f, _)| *f == id) else {
+                let Some(i) = self.world.flights.iter().position(|(f, ..)| *f == id) else {
                     return;
                 };
-                let (_, ev) = self.world.flights.remove(i);
+                let (_, ev, hits) = self.world.flights.remove(i);
                 let flight = self.world.projectiles.remove(i);
-                self.call(|m, io| m.projectile_landed(io, &ev, &flight));
+                self.call(|m, io| m.projectile_landed(io, &ev, &flight, &hits));
+                self.world.settle_departures();
+                self.drain();
             }
             Event::Triggered {
                 caster,
                 spell,
                 target,
-            } => self.resolve_triggered(caster, spell, target),
+                rolled,
+            } => self.resolve_triggered(caster, spell, target, rolled),
             Event::AuraTick { aura, uid } => {
                 let Some(index) = self.world.take_tick(aura, uid) else {
                     return;
@@ -610,6 +635,10 @@ impl<M: Mechanics> Kernel<M> {
                     self.call(|m, io| m.periodic_tick(io, &tick));
                 }
                 self.world.expire(aura, uid);
+                self.drain();
+            }
+            Event::AuraStackExpire { aura, uid } => {
+                self.world.expire_stacks(aura, uid);
                 self.drain();
             }
             Event::Timer { id } => {
@@ -863,10 +892,21 @@ impl<M: Mechanics> Kernel<M> {
     }
 
     /// Re-predict every armed seat's next wake after the world changed.
+    /// For readiness wakes, one already due stands: its recheck is still
+    /// queued at this timestamp and will deliver, and re-predicting now
+    /// would skip past whatever just became ready.
     fn rearm(&mut self) {
+        let now = self.world.now;
         for i in 0..self.world.seats.len() {
             let seat = Seat(i as u8);
             let st = &self.world.seats[i];
+            let readiness_wake = matches!(
+                (st.phase, &st.wait),
+                (SeatPhase::Locked, _) | (SeatPhase::Waiting, Some(Wait::NextEvent))
+            );
+            if readiness_wake && st.armed.is_some_and(|(t, _)| t <= now) {
+                continue;
+            }
             let target = match (st.phase, &st.wait) {
                 (SeatPhase::Locked, _) => self.arm(seat, true),
                 (SeatPhase::Waiting, Some(Wait::NextEvent)) => self.arm(seat, false),

@@ -5,7 +5,9 @@ use std::sync::Arc;
 
 use portunus_core::rng::{self, Purpose};
 use portunus_core::{ActorId, Sample, Seat, SimDuration, SimTime, Trigger, PARTY_SIZE};
+use portunus_gamedata::effect::{ModKind, Modifier};
 use portunus_gamedata::spell::CastKind;
+use portunus_gamedata::stats::ResourceDef;
 use portunus_scenario::resolved::{Segment, SpawnSet};
 
 use crate::error::{EngineError, SetupIssue};
@@ -167,14 +169,31 @@ pub(crate) fn build(setup: RunSetup) -> World {
                 whole_points(t.derived.max_health),
                 1.0 + t.derived.haste_pct / 100.0,
             );
+            let passives: Vec<&Modifier> = t
+                .passive_auras
+                .iter()
+                .filter_map(|a| setup.data.auras.get(a))
+                .flat_map(|a| &a.modifiers)
+                .collect();
             actor.resources = t
                 .resources
                 .iter()
-                .map(|&def| Resource {
-                    def,
-                    value: def.initial,
-                    at: SimTime::ZERO,
-                    regen_mult: 1.0,
+                .map(|&def| {
+                    let extra: f64 = passives
+                        .iter()
+                        .filter(|m| m.kind == ModKind::ResourceMax(def.kind))
+                        .map(|m| m.value)
+                        .sum();
+                    let def = ResourceDef {
+                        max: (def.max + extra).max(0.0),
+                        ..def
+                    };
+                    Resource {
+                        def,
+                        value: def.initial.min(def.max),
+                        at: SimTime::ZERO,
+                        regen_mult: 1.0,
+                    }
                 })
                 .collect();
             actor
@@ -218,6 +237,8 @@ pub(crate) fn build(setup: RunSetup) -> World {
         enemies: Vec::new(),
         projectiles: Vec::new(),
         flights: Vec::new(),
+        stashed: Vec::new(),
+        departing: Vec::new(),
         timers: Vec::new(),
         timer_ids: Vec::new(),
         streams: BTreeMap::new(),

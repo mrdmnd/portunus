@@ -1,10 +1,10 @@
-//! The checked-in run file, end to end.
+//! The checked-in run files, end to end.
 
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use portunus_core::{Seed, SpellId};
+use portunus_core::{HeroTreeId, PetId, Seed, SpellId};
 use portunus_engine::{Choice, Readiness, StateView, Wait, WakeReason};
 use portunus_env::{Decision, Env, Turn};
 use portunus_eval::{Arm, LocalRunner, Metric, Runner, SeedSet};
@@ -88,6 +88,126 @@ fn rollouts_repeat_and_forks_agree() {
     let main = finish(env, turn);
     assert_eq!(fork, main);
     assert_eq!(main, arm.rollout(Seed(9)).unwrap());
+}
+
+/// A hero tree's run file: forks agree, and policies see the tree.
+fn hero_forks_agree(run: &str, tree: HeroTreeId) {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../data/runs")
+        .join(run);
+    let b = Bundle::load(&path).unwrap();
+    let arm = b.arm(false);
+    let policy = &arm.policies[0];
+    let mut env = b.env(false);
+    let mut turn = env.reset(Seed(3)).unwrap();
+    for _ in 0..20 {
+        let Turn::Decide(d) = turn else {
+            panic!("ended early")
+        };
+        assert_eq!(d.obs.hero_tree, Some(tree));
+        turn = env.step(policy.act(&d)).unwrap().next;
+    }
+    let finish = |mut env: portunus_run::SimEnv<_>, mut turn| loop {
+        match turn {
+            Turn::Done(o) => return o,
+            Turn::Decide(d) => turn = env.step(policy.act(&d)).unwrap().next,
+        }
+    };
+    let fork = finish(env.clone(), turn.clone());
+    let main = finish(env, turn);
+    assert_eq!(fork, main);
+    assert_eq!(main, arm.rollout(Seed(3)).unwrap());
+}
+
+#[test]
+fn stormbringer_forks_agree_and_policies_see_the_tree() {
+    hero_forks_agree("elemental_stormbringer_dummy.ron", HeroTreeId(54));
+}
+
+#[test]
+fn farseer_forks_agree_and_policies_see_the_tree() {
+    hero_forks_agree("elemental_farseer_dummy.ron", HeroTreeId(55));
+}
+
+/// The Ancestors' damage is the seat's, and the breakdown credits it to them.
+#[test]
+fn breakdown_credits_the_ancestors() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../data/runs/elemental_farseer_dummy.ron");
+    let b = Bundle::load(&path).unwrap();
+    let seeds = SeedSet { first: 0, count: 4 };
+    let bd = b.breakdown(seeds).unwrap();
+    let arm = b.arm(false);
+    let mean_damage: f64 = seeds
+        .iter()
+        .map(|s| arm.rollout(s).unwrap().seats[0].damage_done as f64)
+        .sum::<f64>()
+        / 4.0;
+    let total: f64 = bd.rows.iter().map(|r| r.damage).sum();
+    assert!((total - mean_damage).abs() < 1e-6 * mean_damage);
+    let ancestors = bd
+        .rows
+        .iter()
+        .find(|r| r.pet == Some(PetId(221177)))
+        .expect("an Ancestor row");
+    assert_eq!(ancestors.name, "Ancestor: Lava Burst");
+    assert!(ancestors.casts > 0.0 && ancestors.crit_rate == 1.0);
+}
+
+/// The full builds' rotations press every button they talent, and their
+/// Elementals come out primal.
+#[test]
+fn full_builds_press_their_whole_kit() {
+    let runs: [(&str, &[&str]); 2] = [
+        (
+            "elemental_stormbringer_dummy",
+            &[
+                "Lightning Shield",
+                "Stormkeeper",
+                "Ascendance",
+                "Voltaic Blaze",
+                "Lava Burst",
+                "Earth Shock",
+                "Lightning Bolt",
+                "Tempest",
+            ],
+        ),
+        (
+            "elemental_farseer_dummy",
+            &[
+                "Lightning Shield",
+                "Stormkeeper",
+                "Ancestral Swiftness",
+                "Ascendance",
+                "Voltaic Blaze",
+                "Lava Burst",
+                "Elemental Blast",
+                "Lightning Bolt",
+            ],
+        ),
+    ];
+    for (run, presses) in runs {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../data/runs/{run}.ron"));
+        let bd = Bundle::load(&path)
+            .unwrap()
+            .breakdown(SeedSet { first: 0, count: 4 })
+            .unwrap();
+        for name in presses {
+            assert!(
+                bd.rows
+                    .iter()
+                    .any(|r| r.pet.is_none() && r.name == *name && r.casts > 0.0),
+                "{run} casts {name}"
+            );
+        }
+        assert!(
+            bd.rows
+                .iter()
+                .any(|r| r.name == "Primal Fire Elemental: Meteor"),
+            "{run}: Call of Fire's Elemental"
+        );
+    }
 }
 
 /// Lava Surge's buff and Lava Burst's reset stay hidden until perceived.

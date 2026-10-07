@@ -9,9 +9,10 @@ use std::sync::Arc;
 use portunus_core::{AuraId, SimDuration, SpellId};
 use portunus_engine::{Choice, Wait};
 use portunus_env::Decision;
+use portunus_gamedata::stats::ResourceKind;
 use portunus_policy::Policy;
 
-use crate::observe::SeatObs;
+use crate::observe::{SeatObs, FOREVER};
 
 type Script = fn(&Decision<SeatObs>) -> Choice;
 
@@ -34,20 +35,140 @@ const LIGHTNING_BOLT: SpellId = SpellId(188196);
 const LAVA_BURST: SpellId = SpellId(51505);
 const FLAME_SHOCK: SpellId = SpellId(188389);
 const EARTH_SHOCK: SpellId = SpellId(8042);
+const ELEMENTAL_BLAST: SpellId = SpellId(117014);
+const FROST_SHOCK: SpellId = SpellId(196840);
+const LIGHTNING_SHIELD: SpellId = SpellId(192106);
+const THUNDERSTRIKE_WARD: SpellId = SpellId(462757);
+const VOLTAIC_BLAZE: SpellId = SpellId(470057);
+const ASCENDANCE: SpellId = SpellId(114050);
+const STORMKEEPER: SpellId = SpellId(191634);
+const ANCESTRAL_SWIFTNESS: SpellId = SpellId(443454);
+
 const FLAME_SHOCK_DOT: AuraId = AuraId(188389);
+const LIGHTNING_SHIELD_BUFF: AuraId = AuraId(192106);
+const THUNDERSTRIKE_WARD_BUFF: AuraId = AuraId(462757);
+const MASTER_OF_THE_ELEMENTS: AuraId = AuraId(260734);
+const LAVA_SURGE: AuraId = AuraId(77762);
+const STORMKEEPER_BUFF: AuraId = AuraId(191634);
+const TEMPEST_BUFF: AuraId = AuraId(454015);
+const ASCENDANCE_BUFF: AuraId = AuraId(1219480);
+const FIRE_ELEMENTAL: AuraId = AuraId(188592);
+const STORM_ELEMENTAL: AuraId = AuraId(157299);
+const WIND_GUST: AuraId = AuraId(263806);
+const CALL_OF_THE_ANCESTORS_BUFF: AuraId = AuraId(447244);
+
+// Talents, read as the passive auras they grant.
+const MASTER_OF_THE_ELEMENTS_TALENT: AuraId = AuraId(16166);
+const EYE_OF_THE_STORM: AuraId = AuraId(381708);
+const MOLTEN_WRATH: AuraId = AuraId(1258843);
+const PURGING_FLAMES: AuraId = AuraId(1259471);
+const CRACKLING_FURY: AuraId = AuraId(1269215);
+const TEMPEST_TALENT: AuraId = AuraId(454009);
+const CALL_OF_THE_ANCESTORS_TALENT: AuraId = AuraId(443450);
 
 /// Flame Shock inside 30% of its 18 s duration.
 const PANDEMIC: SimDuration = SimDuration(5400);
+/// SimC's `gcd`, unhasted.
+const GCD: SimDuration = SimDuration(1500);
 
-/// Trimmed SimulationCraft Elemental single target: keep Flame Shock up,
-/// then Lava Burst, Earth Shock, Lightning Bolt.
+/// SimulationCraft's Elemental single-target list (12.0), without its
+/// set-bonus, trinket, and two-target lines. A cooldown the build lacks
+/// reads as never coming back, so an untalented Ascendance doesn't hold
+/// Flame Shock or Stormkeeper.
 pub fn elemental(d: &Decision<SeatObs>) -> Choice {
     let (obs, legal) = (&d.obs, &d.legal);
-    if legal.is_ready(FLAME_SHOCK) && obs.target_aura_remaining(FLAME_SHOCK_DOT) < PANDEMIC {
-        return Choice::cast(FLAME_SHOCK);
-    }
-    [LAVA_BURST, EARTH_SHOCK, LIGHTNING_BOLT]
-        .into_iter()
-        .find(|&s| legal.is_ready(s))
-        .map_or(Choice::Wait(Wait::NextEvent), Choice::cast)
+    let ready = |s: SpellId| legal.is_ready(s);
+    let talent = |a: AuraId| obs.has_buff(a);
+    let known = |s: SpellId| legal.abilities.contains_key(&s);
+    let cd = |s: SpellId| {
+        if known(s) {
+            obs.cooldown_remaining(s)
+        } else {
+            FOREVER
+        }
+    };
+    let pick = |s: SpellId, when: bool| (when && ready(s)).then_some(s);
+
+    let mote = obs.has_buff(MASTER_OF_THE_ELEMENTS);
+    let mote_talent = talent(MASTER_OF_THE_ELEMENTS_TALENT);
+    let ascended = obs.has_buff(ASCENDANCE_BUFF);
+    let refreshable = obs.target_aura_remaining(FLAME_SHOCK_DOT) < PANDEMIC;
+    let asc_cd = cd(ASCENDANCE);
+    let maelstrom = obs.resource(ResourceKind::Maelstrom);
+    let deficit = obs.resource_deficit(ResourceKind::Maelstrom);
+    let lvb_charges = obs.charges_fractional(LAVA_BURST);
+    let elemental_blast = f64::from(u8::from(known(ELEMENTAL_BLAST)));
+    let eye_of_the_storm = f64::from(u8::from(talent(EYE_OF_THE_STORM)));
+    let gusts_stacked = !obs.has_buff(STORM_ELEMENTAL) || obs.buff_stacks(WIND_GUST) == 4;
+    let empowered_lvb = talent(MOLTEN_WRATH) || talent(PURGING_FLAMES);
+
+    let choice = [
+        pick(LIGHTNING_SHIELD, !obs.has_buff(LIGHTNING_SHIELD_BUFF)),
+        pick(THUNDERSTRIKE_WARD, !obs.has_buff(THUNDERSTRIKE_WARD_BUFF)),
+        pick(STORMKEEPER, asc_cd > SimDuration(10_000) || asc_cd < GCD),
+        pick(ANCESTRAL_SWIFTNESS, true),
+        pick(
+            FLAME_SHOCK,
+            !mote && refreshable && asc_cd > SimDuration(5000),
+        ),
+        pick(
+            FLAME_SHOCK,
+            !mote
+                && !ascended
+                && obs.has_buff(FIRE_ELEMENTAL)
+                && obs.buff_remaining(FIRE_ELEMENTAL) < SimDuration(2000),
+        ),
+        pick(
+            VOLTAIC_BLAZE,
+            !mote && refreshable && asc_cd > SimDuration(5000),
+        ),
+        pick(ASCENDANCE, cd(STORMKEEPER) > SimDuration(15_000)),
+        pick(
+            LAVA_BURST,
+            mote_talent
+                && !mote
+                && deficit > 15.0
+                && lvb_charges > 1.8
+                && (gusts_stacked || talent(CALL_OF_THE_ANCESTORS_TALENT)),
+        ),
+        pick(
+            LAVA_BURST,
+            mote_talent
+                && !mote
+                && deficit > 15.0
+                && maelstrom
+                    > 52.0 - 5.0 * eye_of_the_storm * (1.0 + elemental_blast)
+                        + 30.0 * elemental_blast,
+        ),
+        pick(
+            LAVA_BURST,
+            !mote_talent
+                && deficit > 15.0
+                && gusts_stacked
+                && ((lvb_charges > 1.8 || !obs.has_buff(CALL_OF_THE_ANCESTORS_BUFF))
+                    && empowered_lvb
+                    || obs.has_buff(LAVA_SURGE)),
+        ),
+        // Tempest is cast as Lightning Bolt while its buff is up.
+        pick(
+            LIGHTNING_BOLT,
+            obs.has_buff(TEMPEST_BUFF) && (mote || !mote_talent),
+        ),
+        pick(
+            LIGHTNING_BOLT,
+            obs.has_buff(STORMKEEPER_BUFF) && mote && talent(TEMPEST_TALENT),
+        ),
+        pick(ELEMENTAL_BLAST, mote || deficit < 15.0),
+        pick(EARTH_SHOCK, mote || deficit < 15.0),
+        pick(FLAME_SHOCK, mote && refreshable),
+        pick(VOLTAIC_BLAZE, talent(CRACKLING_FURY) && !ascended),
+        pick(LIGHTNING_BOLT, true),
+        // Moving: Lightning Bolt isn't castable.
+        pick(FLAME_SHOCK, true),
+        pick(FROST_SHOCK, true),
+    ]
+    .into_iter()
+    .flatten()
+    .next();
+    choice.map_or(Choice::Wait(Wait::NextEvent), Choice::cast)
 }

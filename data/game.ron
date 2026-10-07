@@ -4,6 +4,17 @@
 // coefficient, duration, proc rate, and stat curve here is an UNCALIBRATED
 // PLACEHOLDER until this file is regenerated from the SimulationCraft spell
 // dump. Do not read balance conclusions from it.
+//
+// Stormkeeper, Stormbringer, and Farseer take their chances, durations,
+// stacks, and percentages from the 12.0 spell dump. Their spell power
+// coefficients keep their in-game ratio to Lightning Bolt (Tempest 3.88 to
+// Bolt's 1.7) against this file's placeholder Bolt. Talent tree shapes are
+// partial and point budgets unverified.
+//
+// The rest of the Elemental kit (Chain Lightning, Earthquake, Elemental
+// Blast, Voltaic Blaze, Ascendance, the Elementals, and the 12.0 spec tree)
+// takes its mechanics from SimC and its percentages from the 12.0 dump; its
+// coefficients are the dump's scaled by this file's Bolt (1.15 / 1.7).
 (
     build: (version: "placeholder", build: 0),
     specs: {
@@ -19,8 +30,61 @@
             resources: [
                 (kind: maelstrom, max: 100.0, initial: 0.0, regen_per_sec: 0.0, regen_hasted: false),
             ],
-            baseline_spells: [188196, 51505, 188389, 8042],
+            // Chain Lightning, Frost Shock, and Lightning Shield come from
+            // the class tree, which isn't modelled.
+            baseline_spells: [188196, 51505, 188389, 8042, 188443, 196840, 192106],
             baseline_auras: [168534, 77756, 51505, 60188],
+            trees: [
+                // The 12.0 tree as SimC's dump lays it out, each talent
+                // once; Elemental Fury is baseline here. Links between
+                // nodes aren't in the dump.
+                (
+                    name: "Elemental",
+                    points: 34,
+                    nodes: [
+                        (row: 1, choices: [8042, 117014], max_rank: 1),
+                        (row: 2, choices: [61882], max_rank: 1),
+                        (row: 2, choices: [333919], max_rank: 1),
+                        (row: 3, choices: [381936], max_rank: 1),
+                        (row: 3, choices: [1258899, 273221], max_rank: 1),
+                        (row: 3, choices: [1258843, 16166], max_rank: 1),
+                        (row: 4, choices: [462862], max_rank: 1),
+                        (row: 4, choices: [191634], max_rank: 1),
+                        (row: 5, choices: [462695], max_rank: 1),
+                        (row: 5, choices: [381707], max_rank: 1),
+                        (row: 5, choices: [378193], max_rank: 1),
+                        (row: 5, choices: [191717, 468571], max_rank: 1),
+                        (row: 5, choices: [378266], max_rank: 1),
+                        (row: 6, choices: [1269360], max_rank: 1),
+                        (row: 6, choices: [1258895, 462757], max_rank: 1),
+                        (row: 6, choices: [1269364], max_rank: 1),
+                        (row: 6, choices: [462866], max_rank: 1),
+                        (row: 6, choices: [470057], max_rank: 1),
+                        (row: 6, choices: [381782], max_rank: 1),
+                        (row: 7, choices: [191861], max_rank: 1),
+                        (row: 7, choices: [468626], max_rank: 1),
+                        (row: 7, choices: [1258889], max_rank: 1),
+                        (row: 7, choices: [382032], max_rank: 1),
+                        (row: 7, choices: [462867], max_rank: 1),
+                        (row: 7, choices: [170374], max_rank: 1),
+                        (row: 7, choices: [1273485], max_rank: 1),
+                        (row: 8, choices: [462840], max_rank: 1),
+                        (row: 8, choices: [381708], max_rank: 1),
+                        (row: 8, choices: [114050], max_rank: 1),
+                        (row: 8, choices: [1259047], max_rank: 1),
+                        (row: 8, choices: [381784], max_rank: 1),
+                        (row: 9, choices: [210689], max_rank: 1),
+                        (row: 9, choices: [381726], max_rank: 1),
+                        (row: 9, choices: [378255], max_rank: 1),
+                        (row: 10, choices: [468625], max_rank: 1),
+                        (row: 10, choices: [117013], max_rank: 1),
+                        (row: 10, choices: [1269215], max_rank: 2),
+                        (row: 10, choices: [1259471], max_rank: 1),
+                        (row: 11, choices: [1270061, 1270062, 1270064], max_rank: 2),
+                    ],
+                    gates: [(5, 8), (8, 20)],
+                ),
+            ],
         ),
     },
     spells: {
@@ -32,6 +96,8 @@
             gcd: Some((base: 1500, hasted: true, floor: 750)),
             targeting: enemy,
             hostile: true,
+            // 60 yd/s over 20 yards.
+            travel: Some(333),
             effects: [
                 damage(amount: spell_power(1.15), school: 8, target: target),
                 resource((kind: maelstrom, amount: 8.0)),
@@ -45,6 +111,9 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
+            // Overloads go out 400 ms after their spell launches (SimC's
+            // elemental_overload_event_t), then fly: 50 yd/s over 20 yards.
+            travel: Some(800),
             effects: [
                 damage(amount: spell_power(0.86), school: 8, target: target),
                 resource((kind: maelstrom, amount: 3.0)),
@@ -60,6 +129,8 @@
             targeting: enemy,
             hostile: true,
             travel: Some(400),
+            // SimC's Lava Burst damage is a missile that computes on impact.
+            rolls_on_impact: true,
             effects: [
                 damage(amount: spell_power(1.08), school: 4, target: target),
                 resource((kind: maelstrom, amount: 10.0)),
@@ -73,7 +144,9 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
-            travel: Some(400),
+            // 400 ms delay, then 50 yd/s over 20 yards.
+            travel: Some(800),
+            rolls_on_impact: true,
             effects: [
                 damage(amount: spell_power(0.81), school: 4, target: target),
                 resource((kind: maelstrom, amount: 3.0)),
@@ -108,6 +181,468 @@
                 damage(amount: spell_power(2.1), school: 8, target: target),
             ],
         ),
+        // Pressed as Lightning Bolt while the Tempest buff is up.
+        452201: (
+            id: 452201,
+            name: "Tempest",
+            school: 8,
+            cast: cast(time: 2000, hasted: true),
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            targeting: enemy,
+            hostile: true,
+            effects: [
+                damage(
+                    amount: spell_power(2.6256),
+                    school: 8,
+                    target: all_enemies,
+                    aoe: Some((max_targets: None, sqrt_cap: Some(5), secondary: 0.65)),
+                ),
+            ],
+        ),
+        // No soft cap: Blizzard didn't give the overload Tempest's.
+        463351: (
+            id: 463351,
+            name: "Tempest Overload",
+            school: 8,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            // The overload delay; Tempest itself doesn't travel.
+            travel: Some(400),
+            effects: [
+                damage(
+                    amount: spell_power(1.9637),
+                    school: 8,
+                    target: all_enemies,
+                    aoe: Some((max_targets: None, sqrt_cap: None, secondary: 0.65)),
+                ),
+            ],
+        ),
+        191634: (
+            id: 191634,
+            name: "Stormkeeper",
+            school: 8,
+            cast: cast(time: 1500, hasted: true),
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            cooldown: Some((duration: 60000, charges: 1, hasted: false, category: None)),
+            targeting: self_only,
+            hostile: false,
+            effects: [apply_aura(aura: 191634, target: caster, stacks: 2)],
+        ),
+
+        188443: (
+            id: 188443,
+            name: "Chain Lightning",
+            school: 8,
+            cast: cast(time: 2000, hasted: true),
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            targeting: enemy,
+            hostile: true,
+            // SimC gives 2 Maelstrom per target hit; this gives the
+            // single-target amount.
+            effects: [
+                damage(
+                    amount: spell_power(0.79),
+                    school: 8,
+                    target: all_enemies,
+                    aoe: Some((max_targets: Some(5), sqrt_cap: None, secondary: 1.0)),
+                ),
+                resource((kind: maelstrom, amount: 2.0)),
+            ],
+        ),
+        45297: (
+            id: 45297,
+            name: "Chain Lightning Overload",
+            school: 8,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            // The overload delay; Chain Lightning itself doesn't travel.
+            travel: Some(400),
+            effects: [
+                damage(
+                    amount: spell_power(0.59),
+                    school: 8,
+                    target: all_enemies,
+                    aoe: Some((max_targets: Some(5), sqrt_cap: None, secondary: 1.0)),
+                ),
+                resource((kind: maelstrom, amount: 1.0)),
+            ],
+        ),
+        196840: (
+            id: 196840,
+            name: "Frost Shock",
+            school: 16,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            targeting: enemy,
+            hostile: true,
+            castable_while_moving: true,
+            effects: [damage(amount: spell_power(0.49), school: 16, target: target)],
+        ),
+        192106: (
+            id: 192106,
+            name: "Lightning Shield",
+            school: 8,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            targeting: self_only,
+            hostile: false,
+            castable_while_moving: true,
+            effects: [apply_aura(aura: 192106, target: caster)],
+        ),
+        462757: (
+            id: 462757,
+            name: "Thunderstrike Ward",
+            school: 8,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            targeting: self_only,
+            hostile: false,
+            castable_while_moving: true,
+            effects: [apply_aura(aura: 462757, target: caster)],
+        ),
+        462763: (
+            id: 462763,
+            name: "Thunderstrike",
+            school: 8,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            effects: [damage(amount: spell_power(0.48), school: 8, target: target)],
+        ),
+        117014: (
+            id: 117014,
+            name: "Elemental Blast",
+            school: 28,
+            cast: cast(time: 2000, hasted: true),
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            cooldown: Some((duration: 12000, charges: 1, hasted: false, category: None)),
+            costs: [(kind: maelstrom, amount: 90.0, extra: 0.0, scaling: none)],
+            targeting: enemy,
+            hostile: true,
+            // 40 yd/s over 20 yards.
+            travel: Some(500),
+            effects: [
+                damage(amount: spell_power(3.2), school: 28, target: target),
+                apply_one_of(auras: [118522, 173183, 173184], target: caster),
+            ],
+        ),
+        // With Mountains Will Fall only, at 50% of the parent instead of
+        // the usual 75%.
+        120588: (
+            id: 120588,
+            name: "Elemental Blast Overload",
+            school: 28,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            travel: Some(900),
+            effects: [damage(amount: spell_power(1.6), school: 28, target: target)],
+        ),
+        381725: (
+            id: 381725,
+            name: "Earth Shock Overload",
+            school: 8,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            travel: Some(400),
+            effects: [damage(amount: spell_power(1.05), school: 8, target: target)],
+        ),
+        // Fusion of Elements' blast, at 40% as consumed Power of the
+        // Maelstrom fires it.
+        462840: (
+            id: 462840,
+            name: "Elemental Blast (Fusion of Elements)",
+            school: 28,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            travel: Some(500),
+            effects: [damage(amount: spell_power(1.28), school: 28, target: target)],
+        ),
+        // Overlapping casts don't stack: a recast replaces the quake.
+        61882: (
+            id: 61882,
+            name: "Earthquake",
+            school: 8,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            costs: [(kind: maelstrom, amount: 60.0, extra: 0.0, scaling: none)],
+            targeting: enemy,
+            hostile: true,
+            castable_while_moving: true,
+            effects: [apply_aura(aura: 61882, target: caster)],
+        ),
+        // Also applies the target's Flame Shock half a second later. Purging
+        // Flames' extra Lava Burst targets aren't modelled.
+        470057: (
+            id: 470057,
+            name: "Voltaic Blaze",
+            school: 8,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            cooldown: Some((duration: 10000, charges: 1, hasted: false, category: None)),
+            targeting: enemy,
+            hostile: true,
+            castable_while_moving: true,
+            effects: [
+                damage(
+                    amount: spell_power(2.7),
+                    school: 8,
+                    target: all_enemies,
+                    aoe: Some((max_targets: Some(6), sqrt_cap: None, secondary: 1.0)),
+                ),
+                trigger_spell(spell: 470411, target: target),
+            ],
+        ),
+        // Flame Shock applied by another spell: Voltaic Blaze and Ascendance.
+        470411: (
+            id: 470411,
+            name: "Flame Shock (secondary)",
+            school: 4,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            travel: Some(500),
+            effects: [
+                damage(amount: spell_power(0.195), school: 4, target: target),
+                apply_aura(aura: 188389, target: target),
+            ],
+        ),
+        // Its Lava Burst also hits up to 5 more targets; single target
+        // here. Its own overloads aren't modelled.
+        114050: (
+            id: 114050,
+            name: "Ascendance",
+            school: 4,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            cooldown: Some((duration: 180000, charges: 1, hasted: false, category: None)),
+            targeting: enemy,
+            hostile: true,
+            castable_while_moving: true,
+            effects: [
+                apply_aura(aura: 1219480, target: caster),
+                trigger_spell(spell: 470411, target: target),
+                trigger_spell(spell: 285452, target: target),
+            ],
+        ),
+        285452: (
+            id: 285452,
+            name: "Lava Burst (Ascendance)",
+            school: 4,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            travel: Some(400),
+            rolls_on_impact: true,
+            effects: [damage(amount: spell_power(0.54), school: 4, target: target)],
+        ),
+        // Summoning while one is out extends it instead.
+        188592: (
+            id: 188592,
+            name: "Fire Elemental",
+            school: 4,
+            cast: instant,
+            gcd: None,
+            targeting: self_only,
+            hostile: false,
+            effects: [
+                if(
+                    when: caster_has_aura(188592),
+                    then: [
+                        extend_aura(aura: 188592, target: caster, by: 20000),
+                        extend_pets(pet: Some(61029), by: 20000),
+                        extend_pets(pet: Some(95061), by: 20000),
+                    ],
+                    otherwise: [
+                        if(
+                            when: caster_has_aura(117013),
+                            then: [summon(pet: 61029, count: 1, duration: Some(20000))],
+                            otherwise: [summon(pet: 95061, count: 1, duration: Some(20000))],
+                        ),
+                        apply_aura(aura: 188592, target: caster),
+                    ],
+                ),
+            ],
+        ),
+        157299: (
+            id: 157299,
+            name: "Storm Elemental",
+            school: 8,
+            cast: instant,
+            gcd: None,
+            targeting: self_only,
+            hostile: false,
+            effects: [
+                if(
+                    when: caster_has_aura(157299),
+                    then: [
+                        extend_aura(aura: 157299, target: caster, by: 10000),
+                        extend_pets(pet: Some(77942), by: 10000),
+                        extend_pets(pet: Some(77936), by: 10000),
+                    ],
+                    otherwise: [
+                        if(
+                            when: caster_has_aura(117013),
+                            then: [summon(pet: 77942, count: 1, duration: Some(10000))],
+                            otherwise: [summon(pet: 77936, count: 1, duration: Some(10000))],
+                        ),
+                        apply_aura(aura: 157299, target: caster),
+                    ],
+                ),
+            ],
+        ),
+        170379: (
+            id: 170379,
+            name: "Earthen Rage",
+            school: 8,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            effects: [damage(amount: spell_power(0.29), school: 8, target: target)],
+        ),
+        // The Elementals' spells.
+        57984: (
+            id: 57984,
+            name: "Fire Blast",
+            school: 4,
+            cast: cast(time: 3000, hasted: true),
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            effects: [damage(amount: spell_power(3.0), school: 4, target: target)],
+        ),
+        117588: (
+            id: 117588,
+            name: "Meteor",
+            school: 4,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            cooldown: Some((duration: 60000, charges: 1, hasted: false, category: None)),
+            targeting: enemy,
+            hostile: true,
+            travel: Some(1000),
+            effects: [
+                damage(
+                    amount: spell_power(5.2),
+                    school: 4,
+                    target: all_enemies,
+                    aoe: Some((max_targets: Some(8), sqrt_cap: None, secondary: 1.0)),
+                ),
+            ],
+        ),
+        118297: (
+            id: 118297,
+            name: "Immolate",
+            school: 4,
+            cast: cast(time: 2000, hasted: true),
+            gcd: None,
+            cooldown: Some((duration: 10000, charges: 1, hasted: false, category: None)),
+            targeting: enemy,
+            hostile: true,
+            effects: [
+                damage(amount: spell_power(0.89), school: 4, target: target),
+                apply_aura(aura: 118297, target: target),
+            ],
+        ),
+        157331: (
+            id: 157331,
+            name: "Wind Gust",
+            school: 8,
+            cast: cast(time: 2000, hasted: true),
+            gcd: Some((base: 500, hasted: false, floor: 500)),
+            targeting: enemy,
+            hostile: true,
+            // 30 yd/s over 20 yards.
+            travel: Some(667),
+            effects: [damage(amount: spell_power(1.0), school: 8, target: target)],
+        ),
+        157348: (
+            id: 157348,
+            name: "Call Lightning",
+            school: 8,
+            cast: cast(time: 2000, hasted: true),
+            gcd: None,
+            cooldown: Some((duration: 20000, charges: 1, hasted: false, category: None)),
+            targeting: enemy,
+            hostile: true,
+            effects: [
+                damage(amount: spell_power(1.83), school: 8, target: target),
+                apply_aura(aura: 157348, target: caster),
+            ],
+        ),
+
+        // Farseer. Every way of calling an Ancestor triggers this.
+        445624: (
+            id: 445624,
+            name: "Call of the Ancestors",
+            school: 1,
+            cast: instant,
+            gcd: None,
+            targeting: self_only,
+            hostile: false,
+            effects: [
+                if(
+                    when: caster_has_aura(443444),
+                    then: [
+                        summon(pet: 221177, count: 1, duration: Some(12000)),
+                        apply_aura(aura: 447244, target: caster, duration: Some(12000)),
+                    ],
+                    otherwise: [
+                        summon(pet: 221177, count: 1, duration: Some(8000)),
+                        apply_aura(aura: 447244, target: caster),
+                    ],
+                ),
+            ],
+        ),
+        // The Ancestor's echo of Lightning Bolt, Lava Burst, Flame Shock,
+        // and Earth Shock.
+        447419: (
+            id: 447419,
+            name: "Lava Burst",
+            school: 4,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            travel: Some(400),
+            effects: [damage(amount: spell_power(1.1775), school: 4, target: target)],
+        ),
+        // Final Calling's, cast by each Ancestor as it departs.
+        465717: (
+            id: 465717,
+            name: "Elemental Blast",
+            school: 28,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            travel: Some(500),
+            effects: [damage(amount: spell_power(2.0271), school: 28, target: target)],
+        ),
+        443454: (
+            id: 443454,
+            name: "Ancestral Swiftness",
+            school: 28,
+            cast: instant,
+            gcd: None,
+            cooldown: Some((duration: 30000, charges: 1, hasted: false, category: None)),
+            targeting: self_only,
+            hostile: false,
+            effects: [apply_aura(aura: 443454, target: caster)],
+        ),
     },
     auras: {
         188389: (
@@ -135,6 +670,20 @@
                         adjust_cooldown(spell: 51505, change: reset),
                     ],
                 ),
+                // A Lava Burst that spends Ancestral Swiftness leaves the
+                // proc up, as in SimC. Baseline, so this runs before the
+                // talent's listener spends it.
+                (
+                    on: cast_complete(spell: Some(51505), school: None),
+                    chance: always,
+                    effects: [
+                        if(
+                            when: caster_has_aura(443454),
+                            then: [],
+                            otherwise: [remove_aura(aura: 77762, target: caster)],
+                        ),
+                    ],
+                ),
             ],
         ),
         77762: (
@@ -142,20 +691,24 @@
             name: "Lava Surge",
             duration: Some(10000),
             modifiers: [(scope: spell(51505), kind: cast_time_pct, value: -100.0)],
-            listeners: [
-                (
-                    on: cast_complete(spell: Some(51505), school: None),
-                    chance: always,
-                    effects: [remove_aura(aura: 77762, target: caster)],
-                ),
-            ],
         ),
-        // Lava Burst and its overload always crit against your Flame Shock.
+        // Lava Burst and its overload always crit against your Flame Shock,
+        // and deal more damage the higher your crit chance, the Flame Shock
+        // crit aside (SimC's action_multiplier).
         51505: (
             id: 51505,
             name: "Lava Burst (crit rule)",
             duration: None,
             modifiers: [
+                (scope: spell(51505), kind: crit_chance_adds_damage, value: 0.0),
+                (scope: spell(77451), kind: crit_chance_adds_damage, value: 0.0),
+                (scope: spell(285452), kind: crit_chance_adds_damage, value: 0.0),
+                (
+                    scope: spell(285452),
+                    kind: crit_chance_add,
+                    value: 100.0,
+                    condition: Some(target_has_aura(aura: 188389, from_self: true)),
+                ),
                 (
                     scope: spell(51505),
                     kind: crit_chance_add,
@@ -174,16 +727,56 @@
             id: 168534,
             name: "Mastery: Elemental Overload",
             duration: None,
+            // Stormkeeper's Bolts and Chain Lightnings always overload
+            // instead (its own listeners). SimC rolls Chain Lightning per
+            // target hit; this rolls once per cast. Feedback Loop's extra
+            // overload can't chain, so it rolls only here.
             listeners: [
                 (
                     on: cast_complete(spell: Some(188196), school: None),
                     chance: stat_scaled(stat: mastery, coef: 1.0),
-                    effects: [trigger_spell(spell: 45284, target: target)],
+                    condition: Some(caster_lacks_aura(191634)),
+                    effects: [
+                        trigger_spell(spell: 45284, target: target),
+                        if(
+                            when: caster_has_aura(1270064),
+                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 45284, target: target)])],
+                        ),
+                    ],
                 ),
                 (
                     on: cast_complete(spell: Some(51505), school: None),
                     chance: stat_scaled(stat: mastery, coef: 1.0),
-                    effects: [trigger_spell(spell: 77451, target: target)],
+                    effects: [
+                        trigger_spell(spell: 77451, target: target),
+                        if(
+                            when: caster_has_aura(1270064),
+                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 77451, target: target)])],
+                        ),
+                    ],
+                ),
+                (
+                    on: cast_complete(spell: Some(452201), school: None),
+                    chance: stat_scaled(stat: mastery, coef: 1.0),
+                    effects: [
+                        trigger_spell(spell: 463351, target: target),
+                        if(
+                            when: caster_has_aura(1270064),
+                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 463351, target: target)])],
+                        ),
+                    ],
+                ),
+                (
+                    on: cast_complete(spell: Some(188443), school: None),
+                    chance: stat_scaled(stat: mastery, coef: 1.0),
+                    condition: Some(caster_lacks_aura(191634)),
+                    effects: [
+                        trigger_spell(spell: 45297, target: target),
+                        if(
+                            when: caster_has_aura(1270064),
+                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 45297, target: target)])],
+                        ),
+                    ],
                 ),
             ],
         ),
@@ -192,6 +785,1271 @@
             name: "Elemental Fury",
             duration: None,
             modifiers: [(scope: all, kind: crit_damage_pct, value: 15.0)],
+        ),
+        191634: (
+            id: 191634,
+            name: "Stormkeeper",
+            duration: Some(15000),
+            max_stacks: 4,
+            modifiers: [
+                (scope: spell(188196), kind: cast_time_pct, value: -100.0),
+                (scope: spell(188443), kind: cast_time_pct, value: -100.0),
+                (scope: spell(188196), kind: damage_done_pct, value: 150.0),
+                (scope: spell(45284), kind: damage_done_pct, value: 150.0),
+            ],
+            // The overload is rolled before the stack goes, so it keeps
+            // the damage bonus, as in SimC.
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(188196), school: None),
+                    chance: always,
+                    effects: [
+                        trigger_spell(spell: 45284, target: target),
+                        if(
+                            when: caster_has_aura(1270064),
+                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 45284, target: target)])],
+                        ),
+                        remove_stacks(aura: 191634, target: caster, stacks: 1),
+                    ],
+                ),
+                (
+                    on: cast_complete(spell: Some(188443), school: None),
+                    chance: always,
+                    effects: [
+                        trigger_spell(spell: 45297, target: target),
+                        if(
+                            when: caster_has_aura(1270064),
+                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 45297, target: target)])],
+                        ),
+                        remove_stacks(aura: 191634, target: caster, stacks: 1),
+                    ],
+                ),
+            ],
+        ),
+
+        // The rest of the Elemental kit.
+        192106: (
+            id: 192106,
+            name: "Lightning Shield",
+            duration: Some(3600000),
+        ),
+        // Two Thunderstrikes, more often with Storm Infusion.
+        462757: (
+            id: 462757,
+            name: "Thunderstrike Ward",
+            duration: Some(3600000),
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(188196), school: None),
+                    chance: flat(0.3),
+                    condition: Some(caster_lacks_aura(1258889)),
+                    effects: [trigger_spell(spell: 462763, target: target), trigger_spell(spell: 462763, target: target)],
+                ),
+                (
+                    on: cast_complete(spell: Some(188196), school: None),
+                    chance: flat(0.39),
+                    condition: Some(caster_has_aura(1258889)),
+                    effects: [trigger_spell(spell: 462763, target: target), trigger_spell(spell: 462763, target: target)],
+                ),
+                (
+                    on: cast_complete(spell: Some(188443), school: None),
+                    chance: flat(0.3),
+                    condition: Some(caster_lacks_aura(1258889)),
+                    effects: [trigger_spell(spell: 462763, target: target), trigger_spell(spell: 462763, target: target)],
+                ),
+                (
+                    on: cast_complete(spell: Some(188443), school: None),
+                    chance: flat(0.39),
+                    condition: Some(caster_has_aura(1258889)),
+                    effects: [trigger_spell(spell: 462763, target: target), trigger_spell(spell: 462763, target: target)],
+                ),
+                (
+                    on: cast_complete(spell: Some(452201), school: None),
+                    chance: flat(0.3),
+                    condition: Some(caster_lacks_aura(1258889)),
+                    effects: [trigger_spell(spell: 462763, target: target), trigger_spell(spell: 462763, target: target)],
+                ),
+                (
+                    on: cast_complete(spell: Some(452201), school: None),
+                    chance: flat(0.39),
+                    condition: Some(caster_has_aura(1258889)),
+                    effects: [trigger_spell(spell: 462763, target: target), trigger_spell(spell: 462763, target: target)],
+                ),
+            ],
+        ),
+        61882: (
+            id: 61882,
+            name: "Earthquake",
+            duration: Some(6000),
+            refresh: replace,
+            periodic: Some((
+                period: 1000,
+                hasted: true,
+                partial_final_tick: false,
+                effects: [damage(amount: spell_power(0.43), school: 8, target: all_enemies)],
+            )),
+        ),
+        // Spent by the next affected spell the player casts, after its
+        // overloads have rolled with it.
+        260734: (
+            id: 260734,
+            name: "Master of the Elements",
+            duration: Some(15000),
+            modifiers: [
+                (scope: spell(188443), kind: damage_done_pct, value: 15.0),
+                (scope: spell(45297), kind: damage_done_pct, value: 15.0),
+                (scope: spell(188196), kind: damage_done_pct, value: 15.0),
+                (scope: spell(45284), kind: damage_done_pct, value: 15.0),
+                (scope: spell(117014), kind: damage_done_pct, value: 15.0),
+                (scope: spell(120588), kind: damage_done_pct, value: 15.0),
+                (scope: spell(61882), kind: damage_done_pct, value: 15.0),
+                (scope: spell(8042), kind: damage_done_pct, value: 15.0),
+                (scope: spell(381725), kind: damage_done_pct, value: 15.0),
+                (scope: spell(188389), kind: damage_done_pct, value: 15.0),
+                (scope: spell(470411), kind: damage_done_pct, value: 15.0),
+                (scope: spell(196840), kind: damage_done_pct, value: 15.0),
+                (scope: spell(452201), kind: damage_done_pct, value: 15.0),
+                (scope: spell(463351), kind: damage_done_pct, value: 15.0),
+            ],
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(188443), school: None),
+                    chance: always,
+                    effects: [remove_aura(aura: 260734, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(188196), school: None),
+                    chance: always,
+                    effects: [remove_aura(aura: 260734, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(117014), school: None),
+                    chance: always,
+                    effects: [remove_aura(aura: 260734, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(61882), school: None),
+                    chance: always,
+                    effects: [remove_aura(aura: 260734, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(8042), school: None),
+                    chance: always,
+                    effects: [remove_aura(aura: 260734, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(188389), school: None),
+                    chance: always,
+                    effects: [remove_aura(aura: 260734, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(196840), school: None),
+                    chance: always,
+                    effects: [remove_aura(aura: 260734, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(452201), school: None),
+                    chance: always,
+                    effects: [remove_aura(aura: 260734, target: caster)],
+                ),
+            ],
+        ),
+        16166: (
+            id: 16166,
+            name: "Master of the Elements",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(51505), school: None),
+                    chance: always,
+                    effects: [apply_aura(aura: 260734, target: caster)],
+                ),
+            ],
+        ),
+        191861: (
+            id: 191861,
+            name: "Power of the Maelstrom",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(188196), school: None),
+                    chance: flat(0.15),
+                    effects: [apply_aura(aura: 191877, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(188443), school: None),
+                    chance: flat(0.15),
+                    effects: [apply_aura(aura: 191877, target: caster)],
+                ),
+            ],
+        ),
+        // Spent as a Lava Burst lands, which is when SimC's Lava Burst damage
+        // executes.
+        191877: (
+            id: 191877,
+            name: "Power of the Maelstrom",
+            duration: Some(20000),
+            max_stacks: 2,
+            modifiers: [
+                (scope: spell(51505), kind: damage_done_pct, value: 20.0),
+            ],
+            listeners: [
+                (
+                    on: damage_dealt(spell: Some(51505), school: None, crit_only: false),
+                    chance: always,
+                    effects: [remove_stacks(aura: 191877, target: caster, stacks: 1)],
+                ),
+            ],
+        ),
+        // A passive, so it sees Power of the Maelstrom before the buff spends
+        // itself.
+        462840: (
+            id: 462840,
+            name: "Fusion of Elements",
+            duration: None,
+            listeners: [
+                (
+                    on: damage_dealt(spell: Some(51505), school: None, crit_only: false),
+                    chance: always,
+                    condition: Some(caster_has_aura(191877)),
+                    effects: [trigger_spell(spell: 462840, target: target)],
+                ),
+            ],
+        ),
+        // Single target: the rod's share of your damage lands on the target you
+        // hit, so it reads as a damage bonus against your rods.
+        210689: (
+            id: 210689,
+            name: "Lightning Rod",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 197209, from_self: true))),
+            ],
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(8042), school: None),
+                    chance: always,
+                    effects: [
+                        if(
+                            when: caster_has_aura(468625),
+                            then: [apply_aura(aura: 197209, target: target, duration: Some(12000))],
+                            otherwise: [apply_aura(aura: 197209, target: target)],
+                        ),
+                    ],
+                ),
+                (
+                    on: cast_complete(spell: Some(117014), school: None),
+                    chance: always,
+                    effects: [
+                        if(
+                            when: caster_has_aura(468625),
+                            then: [apply_aura(aura: 197209, target: target, duration: Some(12000))],
+                            otherwise: [apply_aura(aura: 197209, target: target)],
+                        ),
+                    ],
+                ),
+                (
+                    on: cast_complete(spell: Some(61882), school: None),
+                    chance: always,
+                    effects: [
+                        if(
+                            when: caster_has_aura(468625),
+                            then: [apply_aura(aura: 197209, target: target, duration: Some(12000))],
+                            otherwise: [apply_aura(aura: 197209, target: target)],
+                        ),
+                    ],
+                ),
+                (
+                    on: cast_complete(spell: Some(452201), school: None),
+                    chance: always,
+                    effects: [
+                        if(
+                            when: caster_has_aura(468625),
+                            then: [apply_aura(aura: 197209, target: target, duration: Some(12000))],
+                            otherwise: [apply_aura(aura: 197209, target: target)],
+                        ),
+                    ],
+                ),
+            ],
+        ),
+        197209: (
+            id: 197209,
+            name: "Lightning Rod",
+            duration: Some(8000),
+        ),
+        468625: (
+            id: 468625,
+            name: "Charged Conduit",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 2.5, condition: Some(target_has_aura(aura: 197209, from_self: true))),
+            ],
+        ),
+        1259047: (
+            id: 1259047,
+            name: "Inferno Arc",
+            duration: None,
+            modifiers: [
+                (scope: spell(188196), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 188389, from_self: true))),
+                (scope: spell(45284), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 188389, from_self: true))),
+                (scope: spell(188443), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 188389, from_self: true))),
+                (scope: spell(45297), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 188389, from_self: true))),
+                (scope: spell(8042), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 188389, from_self: true))),
+                (scope: spell(381725), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 188389, from_self: true))),
+                (scope: spell(117014), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 188389, from_self: true))),
+                (scope: spell(120588), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 188389, from_self: true))),
+                (scope: spell(61882), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 188389, from_self: true))),
+                (scope: spell(452201), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 188389, from_self: true))),
+                (scope: spell(463351), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 188389, from_self: true))),
+            ],
+        ),
+        // Always crits.
+        470057: (
+            id: 470057,
+            name: "Voltaic Blaze",
+            duration: None,
+            modifiers: [
+                (scope: spell(470057), kind: crit_chance_add, value: 100.0),
+            ],
+        ),
+        // Its buff's extra Lava Burst targets aren't modelled; the buff is only
+        // read by the rotation.
+        1259471: (
+            id: 1259471,
+            name: "Purging Flames",
+            duration: None,
+            modifiers: [
+                (scope: spell(51505), kind: damage_done_pct, value: 10.0),
+                (scope: spell(77451), kind: damage_done_pct, value: 10.0),
+                (scope: spell(285452), kind: damage_done_pct, value: 10.0),
+            ],
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(470057), school: None),
+                    chance: always,
+                    effects: [apply_aura(aura: 1259491, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(51505), school: None),
+                    chance: always,
+                    effects: [remove_aura(aura: 1259491, target: caster)],
+                ),
+            ],
+        ),
+        1259491: (
+            id: 1259491,
+            name: "Purging Flames",
+            duration: Some(30000),
+        ),
+        // Each overload-capable spell also overloads once more; Earth Shock
+        // and Elemental Blast only with Mountains Will Fall.
+        1219480: (
+            id: 1219480,
+            name: "Ascendance",
+            duration: Some(15000),
+            modifiers: [
+                (scope: spell(45284), kind: damage_done_pct, value: 30.0),
+                (scope: spell(45297), kind: damage_done_pct, value: 30.0),
+                (scope: spell(77451), kind: damage_done_pct, value: 30.0),
+                (scope: spell(120588), kind: damage_done_pct, value: 30.0),
+                (scope: spell(381725), kind: damage_done_pct, value: 30.0),
+                (scope: spell(463351), kind: damage_done_pct, value: 30.0),
+            ],
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(188196), school: None),
+                    chance: always,
+                    effects: [trigger_spell(spell: 45284, target: target), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 45284, target: target)])]),],
+                ),
+                (
+                    on: cast_complete(spell: Some(188443), school: None),
+                    chance: always,
+                    effects: [trigger_spell(spell: 45297, target: target), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 45297, target: target)])]),],
+                ),
+                (
+                    on: cast_complete(spell: Some(51505), school: None),
+                    chance: always,
+                    effects: [trigger_spell(spell: 77451, target: target), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 77451, target: target)])]),],
+                ),
+                (
+                    on: cast_complete(spell: Some(452201), school: None),
+                    chance: always,
+                    effects: [trigger_spell(spell: 463351, target: target), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 463351, target: target)])]),],
+                ),
+                (
+                    on: cast_complete(spell: Some(8042), school: None),
+                    chance: always,
+                    condition: Some(caster_has_aura(381726)),
+                    effects: [trigger_spell(spell: 381725, target: target), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 381725, target: target)])]),],
+                ),
+                (
+                    on: cast_complete(spell: Some(117014), school: None),
+                    chance: always,
+                    condition: Some(caster_has_aura(381726)),
+                    effects: [trigger_spell(spell: 120588, target: target), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 120588, target: target)])]),],
+                ),
+            ],
+        ),
+        // Earth Shock and Elemental Blast overload. Earthquake's aren't
+        // modelled.
+        381726: (
+            id: 381726,
+            name: "Mountains Will Fall",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(8042), school: None),
+                    chance: stat_scaled(stat: mastery, coef: 1.0),
+                    effects: [trigger_spell(spell: 381725, target: target), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 381725, target: target)])]),],
+                ),
+                (
+                    on: cast_complete(spell: Some(117014), school: None),
+                    chance: stat_scaled(stat: mastery, coef: 1.0),
+                    effects: [trigger_spell(spell: 120588, target: target), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 120588, target: target)])]),],
+                ),
+            ],
+        ),
+        // Refunds the whole spend: the effect scales by the amount spent.
+        273221: (
+            id: 273221,
+            name: "Aftershock",
+            duration: None,
+            listeners: [
+                (
+                    on: resource_spent(maelstrom),
+                    chance: flat(0.25),
+                    effects: [resource((kind: maelstrom, amount: 1.0))],
+                ),
+            ],
+        ),
+        381782: (
+            id: 381782,
+            name: "Searing Flames",
+            duration: None,
+            listeners: [
+                (
+                    on: periodic_tick(188389),
+                    chance: flat(0.25),
+                    effects: [resource((kind: maelstrom, amount: 2.0))],
+                ),
+            ],
+        ),
+        170374: (
+            id: 170374,
+            name: "Earthen Rage",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: None, school: None),
+                    chance: always,
+                    effects: [apply_aura(aura: 170377, target: caster)],
+                ),
+            ],
+        ),
+        // SimC strikes at random intervals averaging 3 s; this ticks every 3 s.
+        170377: (
+            id: 170377,
+            name: "Earthen Rage",
+            duration: Some(6000),
+            refresh: replace,
+            periodic: Some((
+                period: 3000,
+                hasted: true,
+                partial_final_tick: false,
+                effects: [trigger_spell(spell: 170379, target: random_enemy)],
+            )),
+        ),
+        1258843: (
+            id: 1258843,
+            name: "Molten Wrath",
+            duration: None,
+            modifiers: [
+                (scope: spell(51505), kind: damage_done_pct, value: 10.0),
+                (scope: spell(77451), kind: damage_done_pct, value: 10.0),
+                (scope: spell(285452), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
+        1273485: (
+            id: 1273485,
+            name: "Lava Flows",
+            duration: None,
+            modifiers: [
+                (scope: spell(51505), kind: damage_done_pct, value: 5.0),
+                (scope: spell(77451), kind: damage_done_pct, value: 5.0),
+                (scope: spell(285452), kind: damage_done_pct, value: 5.0),
+            ],
+        ),
+        381784: (
+            id: 381784,
+            name: "Flames of the Firelord",
+            duration: None,
+            modifiers: [
+                (scope: spell(188389), kind: damage_done_pct, value: 100.0),
+                (scope: spell(470411), kind: damage_done_pct, value: 100.0),
+            ],
+        ),
+        1258899: (
+            id: 1258899,
+            name: "Tectonic Collapse",
+            duration: None,
+            modifiers: [
+                (scope: spell(8042), kind: damage_done_pct, value: 20.0),
+                (scope: spell(381725), kind: damage_done_pct, value: 20.0),
+                (scope: spell(117014), kind: damage_done_pct, value: 20.0),
+                (scope: spell(120588), kind: damage_done_pct, value: 20.0),
+                (scope: spell(61882), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
+        // Its +25% to Elemental Blast's buffs isn't modelled.
+        468626: (
+            id: 468626,
+            name: "Earthshatter",
+            duration: None,
+            modifiers: [
+                (scope: spell(8042), kind: damage_done_pct, value: 8.0),
+                (scope: spell(381725), kind: damage_done_pct, value: 8.0),
+                (scope: spell(61882), kind: damage_done_pct, value: 8.0),
+            ],
+        ),
+        381707: (
+            id: 381707,
+            name: "Swelling Maelstrom",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: resource_max(maelstrom), value: 50.0),
+                (scope: spell(8042), kind: damage_done_pct, value: 5.0),
+                (scope: spell(381725), kind: damage_done_pct, value: 5.0),
+                (scope: spell(117014), kind: damage_done_pct, value: 5.0),
+                (scope: spell(120588), kind: damage_done_pct, value: 5.0),
+                (scope: spell(61882), kind: damage_done_pct, value: 5.0),
+            ],
+        ),
+        1258895: (
+            id: 1258895,
+            name: "Elemental Resonance",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 3.0),
+            ],
+        ),
+        // Also raises Thunderstrike Ward's chance (read there).
+        1258889: (
+            id: 1258889,
+            name: "Storm Infusion",
+            duration: None,
+            modifiers: [
+                (scope: spell(462763), kind: damage_done_pct, value: 75.0),
+                (scope: all, kind: damage_done_pct, value: 2.0, condition: Some(caster_has_aura(1258895))),
+            ],
+        ),
+        382032: (
+            id: 382032,
+            name: "Echo Chamber",
+            duration: None,
+            modifiers: [
+                (scope: spell(45284), kind: damage_done_pct, value: 25.0),
+                (scope: spell(45297), kind: damage_done_pct, value: 25.0),
+                (scope: spell(77451), kind: damage_done_pct, value: 25.0),
+                (scope: spell(120588), kind: damage_done_pct, value: 25.0),
+                (scope: spell(381725), kind: damage_done_pct, value: 25.0),
+                (scope: spell(463351), kind: damage_done_pct, value: 25.0),
+            ],
+        ),
+        462862: (
+            id: 462862,
+            name: "Lightning Capacitor",
+            duration: None,
+            modifiers: [
+                (scope: school(8), kind: damage_done_pct, value: 8.0, condition: Some(caster_has_aura(192106))),
+            ],
+        ),
+        462866: (
+            id: 462866,
+            name: "Elemental Unity",
+            duration: None,
+            modifiers: [
+                (scope: school(4), kind: damage_done_pct, value: 6.0, condition: Some(caster_has_aura(188592))),
+                (scope: school(8), kind: damage_done_pct, value: 6.0, condition: Some(caster_has_aura(157299))),
+            ],
+        ),
+        381936: (
+            id: 381936,
+            name: "Flash of Lightning",
+            duration: None,
+            modifiers: [
+                (scope: spell(188196), kind: crit_chance_add, value: 10.0),
+                (scope: spell(45284), kind: crit_chance_add, value: 10.0),
+                (scope: spell(188443), kind: crit_chance_add, value: 10.0),
+                (scope: spell(45297), kind: crit_chance_add, value: 10.0),
+                (scope: spell(452201), kind: crit_chance_add, value: 10.0),
+                (scope: spell(463351), kind: crit_chance_add, value: 10.0),
+            ],
+        ),
+        378193: (
+            id: 378193,
+            name: "Primordial Fury",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: crit_damage_pct, value: 12.5),
+            ],
+        ),
+        1270061: (
+            id: 1270061,
+            name: "Feedback Loop",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 10.0),
+                (scope: spell(45284), kind: damage_done_pct, value: 10.0),
+                (scope: spell(45297), kind: damage_done_pct, value: 10.0),
+                (scope: spell(77451), kind: damage_done_pct, value: 10.0),
+                (scope: spell(120588), kind: damage_done_pct, value: 10.0),
+                (scope: spell(381725), kind: damage_done_pct, value: 10.0),
+                (scope: spell(463351), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
+        // One stack per rank.
+        1270062: (
+            id: 1270062,
+            name: "Feedback Loop",
+            duration: None,
+            max_stacks: 2,
+            modifiers: [
+                (scope: all, kind: crit_chance_add, value: 5.0, per_stack: true),
+                (scope: all, kind: crit_damage_pct, value: 7.5, per_stack: true),
+            ],
+        ),
+        // Read at each overload.
+        1270064: (
+            id: 1270064,
+            name: "Feedback Loop",
+            duration: None,
+        ),
+        1269360: (
+            id: 1269360,
+            name: "Amped Up",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: haste_pct, value: 3.0),
+            ],
+        ),
+        1269364: (
+            id: 1269364,
+            name: "Path of the Seer",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: stat_pct(intellect), value: 3.0),
+            ],
+        ),
+        462695: (
+            id: 462695,
+            name: "Storm Frenzy",
+            duration: None,
+            modifiers: [
+                (scope: spell(188196), kind: cast_time_pct, value: -15.0),
+                (scope: spell(188443), kind: cast_time_pct, value: -15.0),
+                (scope: spell(452201), kind: cast_time_pct, value: -15.0),
+                (scope: spell(188196), kind: gcd_pct, value: -15.0),
+                (scope: spell(188443), kind: gcd_pct, value: -15.0),
+                (scope: spell(452201), kind: gcd_pct, value: -15.0),
+            ],
+        ),
+        // 5 off Earth Shock's and Earthquake's 60, 10 off Elemental Blast's 90.
+        381708: (
+            id: 381708,
+            name: "Eye of the Storm",
+            duration: None,
+            modifiers: [
+                (scope: spell(8042), kind: cost_pct, value: -8.333),
+                (scope: spell(61882), kind: cost_pct, value: -8.333),
+                (scope: spell(117014), kind: cost_pct, value: -11.111),
+            ],
+        ),
+        // 15 s off Stormkeeper's 60.
+        468571: (
+            id: 468571,
+            name: "Herald of the Storms",
+            duration: None,
+            modifiers: [
+                (scope: spell(191634), kind: cooldown_pct, value: -25.0),
+            ],
+        ),
+        // 1.5 s off Flame Shock's and Voltaic Blaze's cooldowns. Its faster
+        // Flame Shock ticks have no vocabulary yet.
+        378266: (
+            id: 378266,
+            name: "Flames of the Cauldron",
+            duration: None,
+            modifiers: [
+                (scope: spell(188389), kind: cooldown_pct, value: -25.0),
+                (scope: spell(470057), kind: cooldown_pct, value: -15.0),
+            ],
+        ),
+        333919: (
+            id: 333919,
+            name: "Echo of the Elements",
+            duration: None,
+            modifiers: [
+                (scope: spell(51505), kind: charges_add, value: 1.0),
+            ],
+        ),
+        // One stack per rank: 3 s off Voltaic Blaze's 10 and +50% damage each.
+        1269215: (
+            id: 1269215,
+            name: "Crackling Fury",
+            duration: None,
+            max_stacks: 2,
+            modifiers: [
+                (scope: spell(470057), kind: cooldown_pct, value: -30.0, per_stack: true),
+                (scope: spell(470057), kind: damage_done_pct, value: 50.0, per_stack: true),
+            ],
+        ),
+        191717: (
+            id: 191717,
+            name: "Fury of the Storms",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(191634), school: None),
+                    chance: always,
+                    effects: [trigger_spell(spell: 157299, target: caster)],
+                ),
+            ],
+        ),
+        378255: (
+            id: 378255,
+            name: "Call of Fire",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(114050), school: None),
+                    chance: always,
+                    effects: [trigger_spell(spell: 188592, target: caster)],
+                ),
+            ],
+        ),
+        // 20% longer Elementals, added after each summon or extension.
+        462867: (
+            id: 462867,
+            name: "Everlasting Elements",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(188592), school: None),
+                    chance: always,
+                    effects: [
+                        extend_aura(aura: 188592, target: caster, by: 4000),
+                        extend_pets(pet: Some(61029), by: 4000),
+                        extend_pets(pet: Some(95061), by: 4000),
+                    ],
+                ),
+                (
+                    on: cast_complete(spell: Some(157299), school: None),
+                    chance: always,
+                    effects: [
+                        extend_aura(aura: 157299, target: caster, by: 2000),
+                        extend_pets(pet: Some(77942), by: 2000),
+                        extend_pets(pet: Some(77936), by: 2000),
+                    ],
+                ),
+            ],
+        ),
+        // Read by the Elementals' summons, whose primal pets have 80% more
+        // spell power. Primal Storm Elementals grant Wind Gust as you cast.
+        117013: (
+            id: 117013,
+            name: "Primal Elementalist",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(188196), school: None),
+                    chance: always,
+                    condition: Some(caster_has_aura(157299)),
+                    effects: [apply_aura(aura: 263806, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(188443), school: None),
+                    chance: always,
+                    condition: Some(caster_has_aura(157299)),
+                    effects: [apply_aura(aura: 263806, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(452201), school: None),
+                    chance: always,
+                    condition: Some(caster_has_aura(157299)),
+                    effects: [apply_aura(aura: 263806, target: caster)],
+                ),
+                (
+                    on: aura_expired(157299),
+                    chance: always,
+                    effects: [remove_aura(aura: 263806, target: caster)],
+                ),
+            ],
+        ),
+        263806: (
+            id: 263806,
+            name: "Wind Gust",
+            duration: None,
+            max_stacks: 4,
+            modifiers: [
+                (scope: all, kind: haste_pct, value: 4.0, per_stack: true),
+            ],
+        ),
+        // The owner's markers for an active Elemental.
+        188592: (
+            id: 188592,
+            name: "Fire Elemental",
+            duration: Some(20000),
+        ),
+        157299: (
+            id: 157299,
+            name: "Storm Elemental",
+            duration: Some(10000),
+        ),
+        118297: (
+            id: 118297,
+            name: "Immolate",
+            duration: Some(21000),
+            refresh: pandemic(0.3),
+            periodic: Some((
+                period: 3000,
+                hasted: true,
+                partial_final_tick: true,
+                effects: [damage(amount: spell_power(0.33), school: 4, target: target)],
+            )),
+        ),
+        157348: (
+            id: 157348,
+            name: "Call Lightning",
+            duration: Some(20000),
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 30.0),
+            ],
+        ),
+        // Stormbringer: Ascendance upgrades the next Bolt to Tempest.
+        1264688: (
+            id: 1264688,
+            name: "Descending Skies",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(114050), school: None),
+                    chance: always,
+                    effects: [apply_aura(aura: 454015, target: caster)],
+                ),
+            ],
+        ),
+
+        // Stormbringer.
+        // Each Maelstrom spent has a 0.3% chance: a 2-in-666 deck per point.
+        454009: (
+            id: 454009,
+            name: "Tempest",
+            duration: None,
+            listeners: [
+                (
+                    on: resource_spent(maelstrom),
+                    chance: deck(successes: 2, size: 666),
+                    per_unit: true,
+                    effects: [apply_aura(aura: 454015, target: caster)],
+                ),
+            ],
+        ),
+        454015: (
+            id: 454015,
+            name: "Tempest",
+            duration: Some(30000),
+            max_stacks: 2,
+            overrides: [(188196, 452201)],
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(452201), school: None),
+                    chance: always,
+                    effects: [remove_stacks(aura: 454015, target: caster, stacks: 1)],
+                ),
+            ],
+        ),
+        // Its own deck for the extra 0.3%; SimC folds both into one.
+        455129: (
+            id: 455129,
+            name: "Awakening Storms",
+            duration: None,
+            listeners: [
+                (
+                    on: resource_spent(maelstrom),
+                    chance: deck(successes: 2, size: 666),
+                    per_unit: true,
+                    effects: [apply_aura(aura: 454015, target: caster)],
+                ),
+            ],
+        ),
+        454391: (
+            id: 454391,
+            name: "Unlimited Power",
+            duration: None,
+            listeners: [
+                (
+                    on: resource_spent(maelstrom),
+                    chance: always,
+                    effects: [apply_aura(aura: 454394, target: caster)],
+                ),
+            ],
+        ),
+        454394: (
+            id: 454394,
+            name: "Unlimited Power",
+            duration: Some(15000),
+            max_stacks: 15,
+            refresh: ironfur,
+            modifiers: [(scope: all, kind: haste_pct, value: 1.0, per_stack: true)],
+        ),
+        454021: (
+            id: 454021,
+            name: "Stormcaller",
+            duration: None,
+            modifiers: [
+                (scope: spell(188196), kind: crit_chance_add, value: 5.0),
+                (scope: spell(45284), kind: crit_chance_add, value: 5.0),
+                (scope: spell(8042), kind: crit_chance_add, value: 5.0),
+                (scope: spell(188389), kind: crit_chance_add, value: 5.0),
+                (scope: spell(452201), kind: crit_chance_add, value: 5.0),
+                (scope: spell(463351), kind: crit_chance_add, value: 5.0),
+                (scope: spell(188196), kind: crit_damage_pct, value: 5.0),
+                (scope: spell(45284), kind: crit_damage_pct, value: 5.0),
+                (scope: spell(8042), kind: crit_damage_pct, value: 5.0),
+                (scope: spell(188389), kind: crit_damage_pct, value: 5.0),
+                (scope: spell(452201), kind: crit_damage_pct, value: 5.0),
+                (scope: spell(463351), kind: crit_damage_pct, value: 5.0),
+            ],
+        ),
+        1264762: (
+            id: 1264762,
+            name: "Stormwell",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(191634), school: None),
+                    chance: always,
+                    effects: [resource((kind: maelstrom, amount: 10.0))],
+                ),
+            ],
+        ),
+        455088: (
+            id: 455088,
+            name: "Storm Swell",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(452201), school: None),
+                    chance: always,
+                    effects: [apply_aura(aura: 455089, target: caster)],
+                ),
+            ],
+        ),
+        455089: (
+            id: 455089,
+            name: "Storm Swell",
+            duration: Some(6000),
+            modifiers: [(scope: all, kind: rated_pct(mastery), value: 5.0)],
+        ),
+        455110: (
+            id: 455110,
+            name: "Supercharge",
+            duration: None,
+            modifiers: [
+                (scope: spell(45284), kind: damage_done_pct, value: 10.0),
+                (scope: spell(463351), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
+        455096: (
+            id: 455096,
+            name: "Arc Discharge",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(452201), school: None),
+                    chance: always,
+                    effects: [apply_aura(aura: 191634, target: caster)],
+                ),
+            ],
+        ),
+        // 15 s off Stormkeeper's 60.
+        454026: (
+            id: 454026,
+            name: "Rolling Thunder",
+            duration: None,
+            modifiers: [(scope: spell(191634), kind: cooldown_pct, value: -25.0)],
+        ),
+        1264691: (
+            id: 1264691,
+            name: "Natural Gift",
+            duration: None,
+            modifiers: [
+                (scope: spell(188196), kind: damage_done_pct, value: 2.0),
+                (scope: spell(45284), kind: damage_done_pct, value: 2.0),
+                (scope: spell(8042), kind: damage_done_pct, value: 2.0),
+                (scope: spell(188389), kind: damage_done_pct, value: 2.0),
+                (scope: spell(452201), kind: damage_done_pct, value: 2.0),
+                (scope: spell(463351), kind: damage_done_pct, value: 2.0),
+            ],
+        ),
+
+        // Farseer. Ancestors echo the owner's casts as they land.
+        443450: (
+            id: 443450,
+            name: "Call of the Ancestors",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(191634), school: None),
+                    chance: always,
+                    effects: [trigger_spell(spell: 445624, target: caster)],
+                ),
+                // SimC echoes on impact: as the bolts land, and as the
+                // shocks complete.
+                (
+                    on: damage_dealt(spell: Some(51505), school: None, crit_only: false),
+                    chance: always,
+                    effects: [command_pet(pet: Some(221177), spell: 447419)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(188196), school: None, crit_only: false),
+                    chance: always,
+                    effects: [command_pet(pet: Some(221177), spell: 447419)],
+                ),
+                (
+                    on: cast_complete(spell: Some(188389), school: None),
+                    chance: always,
+                    effects: [command_pet(pet: Some(221177), spell: 447419)],
+                ),
+                (
+                    on: cast_complete(spell: Some(8042), school: None),
+                    chance: always,
+                    effects: [command_pet(pet: Some(221177), spell: 447419)],
+                ),
+            ],
+        ),
+        // One stack per active Ancestor, each on its own timer. Worth
+        // nothing without Ancestral Influence.
+        447244: (
+            id: 447244,
+            name: "Call of the Ancestors",
+            duration: Some(8000),
+            max_stacks: 10,
+            refresh: ironfur,
+            modifiers: [
+                (
+                    scope: all,
+                    kind: stat_pct(intellect),
+                    value: 1.0,
+                    per_stack: true,
+                    condition: Some(caster_has_aura(1270446)),
+                ),
+            ],
+        ),
+        // Always crits, for 1 + crit chance (SimC's base_crit = 1.0).
+        221177: (
+            id: 221177,
+            name: "Ancestor",
+            duration: None,
+            modifiers: [
+                (scope: spell(447419), kind: crit_chance_add, value: 100.0),
+                (scope: spell(447419), kind: crit_chance_scales_damage, value: 0.0),
+                (scope: spell(447419), kind: crit_damage_pct, value: 15.0),
+                (scope: spell(465717), kind: crit_damage_pct, value: 15.0),
+            ],
+            listeners: [
+                (
+                    on: departed,
+                    chance: always,
+                    effects: [
+                        if(
+                            when: owner_has_aura(443446),
+                            then: [trigger_spell(spell: 465717, target: random_enemy)],
+                        ),
+                    ],
+                ),
+            ],
+        ),
+        443449: (
+            id: 443449,
+            name: "Latent Wisdom",
+            duration: None,
+            modifiers: [
+                (scope: spell(447419), kind: guardian_damage_pct, value: 25.0),
+                (scope: spell(465717), kind: guardian_damage_pct, value: 25.0),
+            ],
+        ),
+        443423: (
+            id: 443423,
+            name: "Ancient Fellowship",
+            duration: None,
+            listeners: [
+                (
+                    on: pet_expired(221177),
+                    chance: deck(successes: 6, size: 30),
+                    effects: [trigger_spell(spell: 445624, target: caster)],
+                ),
+            ],
+        ),
+        // Read by Call of the Ancestors (445624).
+        443444: (id: 443444, name: "Heed My Call", duration: None),
+        // One 4-in-50 deck for all three, as SimC's single shuffled_rng.
+        443445: (
+            id: 443445,
+            name: "Routine Communication",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(188196), school: None),
+                    chance: deck(successes: 4, size: 50),
+                    effects: [trigger_spell(spell: 445624, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(51505), school: None),
+                    chance: deck(successes: 4, size: 50),
+                    shared_with: Some(0),
+                    effects: [trigger_spell(spell: 445624, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(188389), school: None),
+                    chance: deck(successes: 4, size: 50),
+                    shared_with: Some(0),
+                    effects: [trigger_spell(spell: 445624, target: caster)],
+                ),
+            ],
+        ),
+        443418: (
+            id: 443418,
+            name: "Elemental Reverb",
+            duration: None,
+            modifiers: [
+                (scope: spell(51505), kind: charges_add, value: 1.0),
+                (scope: spell(51505), kind: damage_done_pct, value: 10.0),
+                (scope: spell(77451), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
+        // Read by the Ancestors' buff (447244).
+        1270446: (id: 1270446, name: "Ancestral Influence", duration: None),
+        443451: (
+            id: 443451,
+            name: "Offering from Beyond",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(445624), school: None),
+                    chance: always,
+                    effects: [adjust_cooldown(spell: 191634, change: reduce(3000))],
+                ),
+            ],
+        ),
+        443448: (
+            id: 443448,
+            name: "Primordial Capacity",
+            duration: None,
+            modifiers: [(scope: all, kind: resource_max(maelstrom), value: 25.0)],
+        ),
+        1270447: (
+            id: 1270447,
+            name: "Windspeaker",
+            duration: None,
+            modifiers: [
+                (scope: spell(51505), kind: cast_time_pct, value: -10.0),
+                (scope: spell(51505), kind: gcd_pct, value: -10.0),
+            ],
+        ),
+        443447: (
+            id: 443447,
+            name: "Maelstrom Supremacy",
+            duration: None,
+            modifiers: [(scope: spell(8042), kind: damage_done_pct, value: 25.0)],
+        ),
+        443446: (
+            id: 443446,
+            name: "Final Calling",
+            duration: None,
+            // The departing Ancestor casts the blast (its own listener);
+            // the owner gains one of Elemental Blast's buffs.
+            listeners: [
+                (
+                    on: pet_expired(221177),
+                    chance: always,
+                    effects: [apply_one_of(auras: [118522, 173183, 173184], target: caster)],
+                ),
+            ],
+        ),
+        // Elemental Blast's buffs, doubled by the Elemental spec aura.
+        118522: (
+            id: 118522,
+            name: "Elemental Blast: Critical Strike",
+            duration: Some(10000),
+            refresh: pandemic(0.3),
+            modifiers: [(scope: all, kind: crit_chance_add, value: 6.0)],
+        ),
+        173183: (
+            id: 173183,
+            name: "Elemental Blast: Haste",
+            duration: Some(10000),
+            refresh: pandemic(0.3),
+            modifiers: [(scope: all, kind: haste_pct, value: 6.0)],
+        ),
+        173184: (
+            id: 173184,
+            name: "Elemental Blast: Mastery",
+            duration: Some(10000),
+            refresh: pandemic(0.3),
+            modifiers: [(scope: all, kind: rated_pct(mastery), value: 6.0)],
+        ),
+        443454: (
+            id: 443454,
+            name: "Ancestral Swiftness",
+            duration: None,
+            modifiers: [
+                (scope: spell(51505), kind: cast_time_pct, value: -100.0),
+                (scope: spell(188196), kind: cast_time_pct, value: -100.0),
+            ],
+        ),
+        // The talent's passive spends the buff and only then starts the
+        // spell's cooldown ("cooldown on event"). A passive comes before
+        // any Stormkeeper, so a Bolt cast with Stormkeeper up always sees
+        // it and leaves the buff, as in SimC.
+        448861: (
+            id: 448861,
+            name: "Ancestral Swiftness",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(51505), school: None),
+                    chance: always,
+                    effects: [
+                        if(
+                            when: caster_has_aura(443454),
+                            then: [
+                                remove_aura(aura: 443454, target: caster),
+                                adjust_cooldown(spell: 443454, change: restart),
+                            ],
+                        ),
+                    ],
+                ),
+                (
+                    on: cast_complete(spell: Some(188196), school: None),
+                    chance: always,
+                    effects: [
+                        if(
+                            when: caster_has_aura(191634),
+                            then: [],
+                            otherwise: [
+                                if(
+                                    when: caster_has_aura(443454),
+                                    then: [
+                                        remove_aura(aura: 443454, target: caster),
+                                        adjust_cooldown(spell: 443454, change: restart),
+                                    ],
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
+            ],
         ),
     },
     items: {
@@ -203,8 +2061,200 @@
         ),
     },
     item_sets: {},
-    talents: {},
-    pets: {},
+    // Talents that grant nothing don't affect a single-target dummy fight.
+    talents: {
+        191634: (id: 191634, name: "Stormkeeper", ranks: [[spell(191634)]]),
+        454009: (id: 454009, name: "Tempest", ranks: [[passive_aura(454009)]]),
+        454391: (id: 454391, name: "Unlimited Power", ranks: [[passive_aura(454391)]]),
+        454021: (id: 454021, name: "Stormcaller", ranks: [[passive_aura(454021)]]),
+        467778: (id: 467778, name: "Lightning Conduit", ranks: [[]]),
+        454022: (id: 454022, name: "Electroshock", ranks: [[]]),
+        1264762: (id: 1264762, name: "Stormwell", ranks: [[passive_aura(1264762)]]),
+        455088: (id: 455088, name: "Storm Swell", ranks: [[passive_aura(455088)]]),
+        455110: (id: 455110, name: "Supercharge", ranks: [[passive_aura(455110)]]),
+        455096: (id: 455096, name: "Arc Discharge", ranks: [[passive_aura(455096)]]),
+        454026: (id: 454026, name: "Rolling Thunder", ranks: [[passive_aura(454026)]]),
+        1264691: (id: 1264691, name: "Natural Gift", ranks: [[passive_aura(1264691)]]),
+        454919: (id: 454919, name: "Voltaic Surge", ranks: [[]]),
+        455123: (id: 455123, name: "Conductive Energy", ranks: [[]]),
+        454027: (id: 454027, name: "Nature's Protection", ranks: [[]]),
+        454372: (id: 454372, name: "Surging Currents", ranks: [[]]),
+        1264688: (id: 1264688, name: "Descending Skies", ranks: [[passive_aura(1264688)]]),
+        455129: (id: 455129, name: "Awakening Storms", ranks: [[passive_aura(455129)]]),
+        443450: (id: 443450, name: "Call of the Ancestors", ranks: [[passive_aura(443450)]]),
+        443449: (id: 443449, name: "Latent Wisdom", ranks: [[passive_aura(443449)]]),
+        443423: (id: 443423, name: "Ancient Fellowship", ranks: [[passive_aura(443423)]]),
+        443444: (id: 443444, name: "Heed My Call", ranks: [[passive_aura(443444)]]),
+        443445: (id: 443445, name: "Routine Communication", ranks: [[passive_aura(443445)]]),
+        443418: (id: 443418, name: "Elemental Reverb", ranks: [[passive_aura(443418)]]),
+        1270446: (id: 1270446, name: "Ancestral Influence", ranks: [[passive_aura(1270446)]]),
+        443451: (id: 443451, name: "Offering from Beyond", ranks: [[passive_aura(443451)]]),
+        443448: (id: 443448, name: "Primordial Capacity", ranks: [[passive_aura(443448)]]),
+        443425: (id: 443425, name: "Spiritwalker's Momentum", ranks: [[]]),
+        1270447: (id: 1270447, name: "Windspeaker", ranks: [[passive_aura(1270447)]]),
+        443442: (id: 443442, name: "Natural Harmony", ranks: [[]]),
+        443441: (id: 443441, name: "Earthen Communion", ranks: [[]]),
+        443447: (id: 443447, name: "Maelstrom Supremacy", ranks: [[passive_aura(443447)]]),
+        443446: (id: 443446, name: "Final Calling", ranks: [[passive_aura(443446)]]),
+        1270450: (id: 1270450, name: "Mystic Knowledge", ranks: [[]]),
+        // The Elemental spec tree.
+        8042: (id: 8042, name: "Earth Shock", ranks: [[]]),
+        117014: (
+            id: 117014,
+            name: "Elemental Blast",
+            ranks: [[replace_spell(from: 8042, to: 117014)]],
+        ),
+        61882: (id: 61882, name: "Earthquake", ranks: [[spell(61882)]]),
+        333919: (id: 333919, name: "Echo of the Elements", ranks: [[passive_aura(333919)]]),
+        381936: (id: 381936, name: "Flash of Lightning", ranks: [[passive_aura(381936)]]),
+        1258899: (id: 1258899, name: "Tectonic Collapse", ranks: [[passive_aura(1258899)]]),
+        273221: (id: 273221, name: "Aftershock", ranks: [[passive_aura(273221)]]),
+        1258843: (id: 1258843, name: "Molten Wrath", ranks: [[passive_aura(1258843)]]),
+        16166: (id: 16166, name: "Master of the Elements", ranks: [[passive_aura(16166)]]),
+        462862: (id: 462862, name: "Lightning Capacitor", ranks: [[passive_aura(462862)]]),
+        462695: (id: 462695, name: "Storm Frenzy", ranks: [[passive_aura(462695)]]),
+        381707: (id: 381707, name: "Swelling Maelstrom", ranks: [[passive_aura(381707)]]),
+        378193: (id: 378193, name: "Primordial Fury", ranks: [[passive_aura(378193)]]),
+        191717: (id: 191717, name: "Fury of the Storms", ranks: [[passive_aura(191717)]]),
+        468571: (id: 468571, name: "Herald of the Storms", ranks: [[passive_aura(468571)]]),
+        378266: (id: 378266, name: "Flames of the Cauldron", ranks: [[passive_aura(378266)]]),
+        1269360: (id: 1269360, name: "Amped Up", ranks: [[passive_aura(1269360)]]),
+        1258895: (id: 1258895, name: "Elemental Resonance", ranks: [[passive_aura(1258895)]]),
+        462757: (id: 462757, name: "Thunderstrike Ward", ranks: [[spell(462757)]]),
+        1269364: (id: 1269364, name: "Path of the Seer", ranks: [[passive_aura(1269364)]]),
+        462866: (id: 462866, name: "Elemental Unity", ranks: [[passive_aura(462866)]]),
+        470057: (id: 470057, name: "Voltaic Blaze", ranks: [[spell(470057), passive_aura(470057)]]),
+        381782: (id: 381782, name: "Searing Flames", ranks: [[passive_aura(381782)]]),
+        191861: (id: 191861, name: "Power of the Maelstrom", ranks: [[passive_aura(191861)]]),
+        468626: (id: 468626, name: "Earthshatter", ranks: [[passive_aura(468626)]]),
+        1258889: (id: 1258889, name: "Storm Infusion", ranks: [[passive_aura(1258889)]]),
+        382032: (id: 382032, name: "Echo Chamber", ranks: [[passive_aura(382032)]]),
+        462867: (id: 462867, name: "Everlasting Elements", ranks: [[passive_aura(462867)]]),
+        170374: (id: 170374, name: "Earthen Rage", ranks: [[passive_aura(170374)]]),
+        1273485: (id: 1273485, name: "Lava Flows", ranks: [[passive_aura(1273485)]]),
+        462840: (id: 462840, name: "Fusion of Elements", ranks: [[passive_aura(462840)]]),
+        381708: (id: 381708, name: "Eye of the Storm", ranks: [[passive_aura(381708)]]),
+        114050: (id: 114050, name: "Ascendance", ranks: [[spell(114050)]]),
+        1259047: (id: 1259047, name: "Inferno Arc", ranks: [[passive_aura(1259047)]]),
+        381784: (id: 381784, name: "Flames of the Firelord", ranks: [[passive_aura(381784)]]),
+        210689: (id: 210689, name: "Lightning Rod", ranks: [[passive_aura(210689)]]),
+        381726: (id: 381726, name: "Mountains Will Fall", ranks: [[passive_aura(381726)]]),
+        378255: (id: 378255, name: "Call of Fire", ranks: [[passive_aura(378255)]]),
+        468625: (id: 468625, name: "Charged Conduit", ranks: [[passive_aura(468625)]]),
+        117013: (id: 117013, name: "Primal Elementalist", ranks: [[passive_aura(117013)]]),
+        1269215: (
+            id: 1269215,
+            name: "Crackling Fury",
+            ranks: [[passive_aura(1269215)], [passive_aura(1269215)]],
+        ),
+        1259471: (id: 1259471, name: "Purging Flames", ranks: [[passive_aura(1259471)]]),
+        1270061: (id: 1270061, name: "Feedback Loop", ranks: [[passive_aura(1270061)]]),
+        1270062: (
+            id: 1270062,
+            name: "Feedback Loop",
+            ranks: [[passive_aura(1270062)], [passive_aura(1270062)]],
+        ),
+        1270064: (id: 1270064, name: "Feedback Loop", ranks: [[passive_aura(1270064)]]),
+        448861: (
+            id: 448861,
+            name: "Ancestral Swiftness",
+            ranks: [[spell(443454), passive_aura(448861)]],
+        ),
+    },
+    // Rows and choice nodes follow the 12.0 tree; the links between nodes
+    // aren't in the spell dump, so none are required yet.
+    hero_trees: {
+        54: (
+            id: 54,
+            name: "Stormbringer",
+            specs: [262],
+            keystone: 454009,
+            tree: (
+                name: "Stormbringer",
+                points: 13,
+                nodes: [
+                    (row: 0, choices: [454009], max_rank: 1),
+                    (row: 1, choices: [454391], max_rank: 1),
+                    (row: 1, choices: [454021], max_rank: 1),
+                    (row: 1, choices: [467778, 454022], max_rank: 1),
+                    (row: 1, choices: [1264762], max_rank: 1),
+                    (row: 2, choices: [455088, 455110], max_rank: 1),
+                    (row: 2, choices: [455096], max_rank: 1),
+                    (row: 2, choices: [454026], max_rank: 1),
+                    (row: 2, choices: [1264691], max_rank: 1),
+                    (row: 3, choices: [454919], max_rank: 1),
+                    (row: 3, choices: [455123], max_rank: 1),
+                    (row: 3, choices: [454027, 454372], max_rank: 1),
+                    (row: 3, choices: [1264688], max_rank: 1),
+                    (row: 4, choices: [455129], max_rank: 1),
+                ],
+            ),
+        ),
+        55: (
+            id: 55,
+            name: "Farseer",
+            specs: [262],
+            keystone: 443450,
+            tree: (
+                name: "Farseer",
+                points: 13,
+                nodes: [
+                    (row: 0, choices: [443450], max_rank: 1),
+                    (row: 1, choices: [443449, 443423], max_rank: 1),
+                    (row: 1, choices: [443444, 443445], max_rank: 1),
+                    (row: 1, choices: [443418], max_rank: 1),
+                    (row: 1, choices: [1270446], max_rank: 1),
+                    (row: 2, choices: [443451], max_rank: 1),
+                    (row: 2, choices: [443448], max_rank: 1),
+                    (row: 2, choices: [443425], max_rank: 1),
+                    (row: 2, choices: [1270447], max_rank: 1),
+                    (row: 3, choices: [443442, 443441], max_rank: 1),
+                    (row: 3, choices: [443447], max_rank: 1),
+                    (row: 3, choices: [443446], max_rank: 1),
+                    (row: 3, choices: [1270450], max_rank: 1),
+                    (row: 4, choices: [448861], max_rank: 1),
+                ],
+            ),
+        ),
+    },
+    pets: {
+        221177: (
+            id: 221177,
+            name: "Ancestor",
+            kind: guardian,
+            scaling: (sp_from_sp: 1.0),
+            passive_auras: [221177],
+        ),
+        95061: (
+            id: 95061,
+            name: "Greater Fire Elemental",
+            kind: guardian,
+            scaling: (sp_from_sp: 1.0),
+            autocast: [57984],
+        ),
+        // Primal Elementalist's: 80% more spell power, and more spells.
+        61029: (
+            id: 61029,
+            name: "Primal Fire Elemental",
+            kind: guardian,
+            scaling: (sp_from_sp: 1.8),
+            autocast: [117588, 118297, 57984],
+        ),
+        77936: (
+            id: 77936,
+            name: "Greater Storm Elemental",
+            kind: guardian,
+            scaling: (sp_from_sp: 1.0),
+            autocast: [157331],
+        ),
+        77942: (
+            id: 77942,
+            name: "Primal Storm Elemental",
+            kind: guardian,
+            scaling: (sp_from_sp: 1.8),
+            autocast: [157348, 157331],
+        ),
+    },
     curves: (
         ratings: {
             crit_rating: (rating_per_pct: 700.0, diminishing: [(30.0, 0.9), (39.0, 0.8), (47.0, 0.7), (54.0, 0.6), (66.0, 0.5)]),

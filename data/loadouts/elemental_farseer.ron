@@ -1,0 +1,26 @@
+// The Elemental loadout with Stormkeeper and every Farseer node, taking
+// Ancient Fellowship, Routine Communication, and Natural Harmony at the
+// choices.
+(
+    spec: 262,
+    gear: {
+        chest: (item: 1, item_level: 600),
+    },
+    hero_tree: Some(55),
+    talents: {
+        191634: 1,
+        443423: 1,
+        443445: 1,
+        443418: 1,
+        1270446: 1,
+        443451: 1,
+        443448: 1,
+        443425: 1,
+        1270447: 1,
+        443442: 1,
+        443447: 1,
+        443446: 1,
+        1270450: 1,
+        448861: 1,
+    },
+)
