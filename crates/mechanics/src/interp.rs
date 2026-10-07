@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use portunus_core::{ActorId, AuraId, PetId, SimTime, SpellId, StreamKey};
+use portunus_core::{ActorId, AuraId, PetId, SimDuration, SimTime, SpellId, StreamKey};
 use portunus_engine::mechanics::{
     whole_points, AuraApplication, DamageEvent, HealEvent, RolledHit,
 };
@@ -440,18 +440,19 @@ impl Interpreter {
         hits
     }
 
-    /// A triggered spell that rolls at launch, rolled at once: an overload
-    /// snapshots its parent's buffs before the parent's own listeners spend
-    /// them.
+    /// A triggered spell that travels or goes out later, rolled at once
+    /// unless it rolls on impact: an overload snapshots its parent's buffs
+    /// before the parent's own listeners spend them.
     fn roll_ahead(
         &self,
         io: &mut dyn EngineIo,
         caster: ActorId,
         spell: SpellId,
         target: Option<ActorId>,
+        delay: SimDuration,
     ) -> Option<Vec<RolledHit>> {
         let def = self.math.data().spells.get(&spell)?;
-        if def.travel.is_none() || def.rolls_on_impact {
+        if !(def.travels() || delay > SimDuration::ZERO) || def.rolls_on_impact {
             return None;
         }
         let ctx = EffectCtx {
@@ -626,10 +627,14 @@ impl Interpreter {
                 }
             }
             &Effect::AdjustCooldown { spell, change } => io.adjust_cooldown(caster, spell, change),
-            &Effect::TriggerSpell { spell, target } => {
+            &Effect::TriggerSpell {
+                spell,
+                target,
+                delay,
+            } => {
                 let target = self.targets(io, ctx, target).first().copied();
-                let rolled = self.roll_ahead(io, caster, spell, target);
-                io.trigger_spell(caster, spell, target, rolled);
+                let rolled = self.roll_ahead(io, caster, spell, target, delay);
+                io.trigger_spell(caster, spell, target, delay, rolled);
             }
             &Effect::Interrupt { target } => {
                 for t in self.targets(io, ctx, target) {

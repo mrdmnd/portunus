@@ -21,6 +21,7 @@ struct Spawn {
     label: SpawnLabel,
     enemy: EnemyKey,
     engage: Trigger<SpawnSet>,
+    distance: f64,
 }
 
 impl ScenarioSampler for Sampler {
@@ -86,6 +87,7 @@ impl ScenarioSampler for Sampler {
                         max_health: def.health,
                         forces: def.forces,
                         engage: s.engage.clone(),
+                        distance: s.distance,
                     }
                 })
                 .collect();
@@ -175,6 +177,12 @@ fn resolve_pull(
 
     for (wave_index, wave) in pull.waves.iter().enumerate() {
         check_wave_trigger(pull, wave_index, &wave.engage, &by_label, enemies, issues);
+        if !(wave.distance >= 0.0 && wave.distance.is_finite()) {
+            issues.push(ScenarioIssue::InvalidDistance {
+                pull: pull.name.clone(),
+                wave: wave_index,
+            });
+        }
     }
 
     placed
@@ -193,6 +201,7 @@ fn resolve_pull(
                 label,
                 enemy: key.clone(),
                 engage,
+                distance: pull.waves[wave_index].distance,
             }
         })
         .collect()
@@ -270,7 +279,7 @@ mod tests {
     use portunus_gamedata::stats::SchoolMask;
     use portunus_gamedata::GameBuild;
 
-    use crate::spec::WaveSpec;
+    use crate::spec::{WaveSpec, DEFAULT_DISTANCE};
 
     fn enemies() -> Arc<EnemyData> {
         let grunt = EnemyDef {
@@ -322,6 +331,7 @@ mod tests {
         WaveSpec {
             mobs: vec![(EnemyKey("grunt".into()), count)],
             engage,
+            distance: DEFAULT_DISTANCE,
         }
     }
 
@@ -407,6 +417,7 @@ mod tests {
                 WaveSpec {
                     mobs: vec![(EnemyKey("ghost".into()), 1)],
                     engage: Trigger::Now,
+                    distance: -1.0,
                 },
                 wave(
                     1,
@@ -444,6 +455,10 @@ mod tests {
                 wave: 3,
             },
             ScenarioIssue::NeverEngages {
+                pull: a.clone(),
+                wave: 0,
+            },
+            ScenarioIssue::InvalidDistance {
                 pull: a.clone(),
                 wave: 0,
             },

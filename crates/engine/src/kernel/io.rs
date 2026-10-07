@@ -111,11 +111,12 @@ impl EngineIo for Io<'_> {
         caster: ActorId,
         spell: SpellId,
         target: Option<ActorId>,
+        delay: SimDuration,
         rolled: Option<Vec<RolledHit>>,
     ) {
-        let now = self.w.now;
+        let at = self.w.now + delay;
         self.w.queue.push(
-            now,
+            at,
             Event::Triggered {
                 caster,
                 spell,

@@ -5,13 +5,13 @@ mod common;
 
 use std::collections::BTreeMap;
 
-use common::{fixture, holds, play_until, priority, Fixture, LIGHTNING_BOLT};
+use common::{completed, fixture, holds, play_until, priority, Fixture, LIGHTNING_BOLT};
 use portunus_core::{ActorId, AuraId, PetId, Seat, SimDuration, SimTime, SpellId, TalentId};
 use portunus_engine::trace::{CastEndReason, TraceEvent};
 use portunus_engine::{
     CastOpts, Choice, Engine, Kernel, Readiness, StateView, Step, TargetSel, TraceRecord,
 };
-use portunus_gamedata::effect::{Effect, Predicate};
+use portunus_gamedata::effect::{Effect, Listener, Predicate, ProcChance};
 use portunus_ingest::{check_game_data, DataIssue, Owner};
 use portunus_mechanics::PartyMechanics;
 
@@ -19,6 +19,8 @@ const VOLTAIC_BLAZE: SpellId = SpellId(470057);
 const THUNDERSTRIKE_WARD: SpellId = SpellId(462757);
 const THUNDERSTRIKE: SpellId = SpellId(462763);
 const TEMPEST: SpellId = SpellId(452201);
+const LIGHTNING_BOLT_OVERLOAD: SpellId = SpellId(45284);
+const TEMPEST_OVERLOAD: SpellId = SpellId(463351);
 const CRACKLING_FURY: AuraId = AuraId(1269215);
 const THUNDERSTRIKE_WARD_BUFF: AuraId = AuraId(462757);
 const WIND_GUST: AuraId = AuraId(263806);
@@ -174,4 +176,57 @@ fn chances_and_listener_conditions_are_checked() {
         aura: AuraId(900_001),
     }));
     assert!(issues.contains(&DataIssue::InvalidChance(Owner::Aura(MASTERY))));
+}
+
+#[test]
+fn missiles_fly_by_distance_and_overloads_wait_for_their_spell() {
+    let mut f = stormbringer();
+    f.scenario.pulls[0].waves[0].distance = 40.0;
+    let tempest_overloads = |l: &Listener| {
+        l.effects
+            .iter()
+            .any(|e| matches!(e, Effect::TriggerSpell { spell, .. } if *spell == TEMPEST_OVERLOAD))
+    };
+    let mastery = f.data.auras.get_mut(&MASTERY).unwrap();
+    for l in mastery
+        .listeners
+        .iter_mut()
+        .filter(|l| tempest_overloads(l))
+    {
+        l.chance = ProcChance::Always;
+    }
+    let mut flights: BTreeMap<SpellId, Vec<u32>> = BTreeMap::new();
+    let mut overloaded = 0;
+    for seed in 0..5 {
+        let trace = f.rollout(seed);
+        for r in &trace {
+            if let TraceEvent::ProjectileLaunched { spell, lands, .. } = r.event {
+                flights
+                    .entry(spell)
+                    .or_default()
+                    .push(lands.saturating_since(r.time).millis());
+            }
+        }
+        let bolts = completed(&trace, LIGHTNING_BOLT);
+        for at in completed(&trace, LIGHTNING_BOLT_OVERLOAD) {
+            assert!(
+                bolts.contains(&(at - SimDuration(400))),
+                "overload at {at:?} without a Bolt 400 ms before"
+            );
+            overloaded += 1;
+        }
+    }
+    assert!(overloaded > 0);
+    let only = |spell: SpellId| {
+        let mut times = flights.get(&spell).cloned().unwrap_or_default();
+        times.sort_unstable();
+        times.dedup();
+        times
+    };
+    // 40 yards at 60 and 50 yd/s.
+    assert_eq!(only(LIGHTNING_BOLT), vec![667]);
+    assert_eq!(only(LIGHTNING_BOLT_OVERLOAD), vec![800]);
+    // Tempest's overload doesn't travel: its pre-rolled hits land as it
+    // goes out.
+    assert_eq!(only(TEMPEST_OVERLOAD), vec![0]);
 }

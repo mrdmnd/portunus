@@ -87,6 +87,8 @@ pub enum DataIssue {
     EmptyChoice(Owner),
     /// A `Chance` outside `[0, 1]`.
     InvalidChance(Owner),
+    /// A missile speed that isn't a positive number.
+    InvalidSpeed(SpellId),
 }
 
 pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
@@ -160,6 +162,9 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
     for spell in data.spells.values() {
         let owner = Owner::Spell(spell.id);
         c.effects(&owner, &spell.effects);
+        if spell.speed.is_some_and(|s| !(s > 0.0 && s.is_finite())) {
+            c.issues.push(DataIssue::InvalidSpeed(spell.id));
+        }
         if let CastKind::Empower { stage_effects, .. } = &spell.cast {
             stage_effects.iter().for_each(|e| c.effects(&owner, e));
         }
@@ -452,7 +457,7 @@ impl Checker<'_> {
                     }
                 }
                 Effect::AdjustCooldown { spell, .. } => self.spell(owner, *spell),
-                Effect::TriggerSpell { spell, target } => {
+                Effect::TriggerSpell { spell, target, .. } => {
                     self.spell(owner, *spell);
                     self.target(owner, target);
                 }

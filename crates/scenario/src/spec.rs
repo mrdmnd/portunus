@@ -34,6 +34,16 @@ pub struct WaveSpec {
     /// Instances are labeled `key#n`, counting across waves within the pull.
     pub mobs: Vec<(EnemyKey, u32)>,
     pub engage: Trigger<WaveSubject>,
+    /// Yards from the party, for missile flight times.
+    #[serde(default = "default_distance")]
+    pub distance: f64,
+}
+
+/// Where a ranged caster usually stands.
+pub const DEFAULT_DISTANCE: f64 = 20.0;
+
+fn default_distance() -> f64 {
+    DEFAULT_DISTANCE
 }
 
 /// What a wave's engagement trigger may refer to.

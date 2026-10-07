@@ -82,6 +82,9 @@ pub(crate) struct Actor {
     pub pet: Option<PetLife>,
     /// Auto-attack timers: `[main hand, off hand]`.
     pub swings: [Option<Swing>; 2],
+    /// Yards from the party, for missile flight times; 0 for the party's
+    /// own actors.
+    pub distance: f64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -140,6 +143,7 @@ impl Actor {
             phase: None,
             pet: None,
             swings: [None, None],
+            distance: 0.0,
         }
     }
 
@@ -921,7 +925,19 @@ impl World {
         self.queue_triggers();
     }
 
-    pub(crate) fn launch(&mut self, ev: CastEvent, travel: SimDuration) {
+    /// Sends a completed cast on its way if it travels, or if it carries
+    /// hits rolled ahead, which land at once.
+    pub(crate) fn launch(&mut self, ev: CastEvent, def: &SpellDef) {
+        let distance = ev
+            .target
+            .and_then(|t| self.actor_ref(t))
+            .map_or(0.0, |a| a.distance);
+        let Some(travel) = def
+            .flight_time(distance)
+            .or(ev.prerolled.then_some(SimDuration::ZERO))
+        else {
+            return;
+        };
         let hits = std::mem::take(&mut self.stashed);
         let Some(target) = ev.target else { return };
         let id = self.fresh_id();

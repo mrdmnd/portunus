@@ -261,6 +261,7 @@ impl<M: Mechanics> Kernel<M> {
                 1.0,
             );
             enemy.phase = phase;
+            enemy.distance = spawn.distance;
             self.world.actors.push(enemy);
         }
         self.world.enemies = (first..self.world.actors.len())
@@ -505,9 +506,7 @@ impl<M: Mechanics> Kernel<M> {
             reason: CastEndReason::Completed,
         });
         self.call(|m, io| m.cast_completed(io, &ev));
-        if let Some(travel) = def.travel {
-            self.world.launch(ev, travel);
-        }
+        self.world.launch(ev, def);
         if by_pet {
             self.world.schedule_pet_act(ev.actor, now);
         } else if hard {
@@ -562,9 +561,7 @@ impl<M: Mechanics> Kernel<M> {
             self.world.stashed = hits;
         }
         self.call(|m, io| m.cast_completed(io, &ev));
-        if let Some(travel) = def.travel {
-            self.world.launch(ev, travel);
-        }
+        self.world.launch(ev, def);
     }
 
     // ---- events ----

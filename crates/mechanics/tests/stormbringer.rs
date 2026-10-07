@@ -191,7 +191,10 @@ fn stormkeeper_bolts_are_instant_and_hit_harder() {
         // Bolts in flight, by whether Stormkeeper charged them as they went.
         let mut flying: std::collections::VecDeque<bool> = std::collections::VecDeque::new();
         let mut overloads: std::collections::VecDeque<bool> = std::collections::VecDeque::new();
-        let mut last_bolt_charged = false;
+        // Bolt completions, by whether they were charged: an overload goes
+        // out 400 ms after its Bolt.
+        let mut bolts_at: std::collections::BTreeMap<SimTime, bool> =
+            std::collections::BTreeMap::new();
         for r in &trace {
             match r.event {
                 TraceEvent::CastStart { actor, spell, .. } if spell == LIGHTNING_BOLT => {
@@ -205,16 +208,17 @@ fn stormkeeper_bolts_are_instant_and_hit_harder() {
                     let (at, keeper) = started.take().expect("a started Bolt");
                     assert_eq!(at == r.time, keeper, "instant exactly when charged");
                     flying.push_back(keeper);
-                    last_bolt_charged = keeper;
-                    charged_bolts += usize::from(keeper);
+                    bolts_at.insert(r.time, keeper);
                 }
                 TraceEvent::CastEnd {
                     spell,
                     reason: CastEndReason::Completed,
                     ..
                 } if spell == LIGHTNING_BOLT_OVERLOAD => {
-                    overloads.push_back(last_bolt_charged);
-                    overloads_of_charged += usize::from(last_bolt_charged);
+                    let parent = r.time - SimDuration::from_millis(400);
+                    let keeper = bolts_at.get(&parent).copied().unwrap_or(false);
+                    overloads.push_back(keeper);
+                    overloads_of_charged += usize::from(keeper);
                 }
                 TraceEvent::Damage(ref d) if d.spell == Some(LIGHTNING_BOLT_OVERLOAD) => {
                     let keeper = overloads.pop_front().expect("an overload in flight");
@@ -247,6 +251,15 @@ fn stormkeeper_bolts_are_instant_and_hit_harder() {
             }
             stacks.apply(&r.event);
         }
+        // A Bolt that ends the fight leaves its overload unsent.
+        let end = trace
+            .iter()
+            .find(|r| matches!(r.event, TraceEvent::CombatEnd { .. }))
+            .map_or(SimTime::ZERO, |r| r.time);
+        charged_bolts += bolts_at
+            .iter()
+            .filter(|&(&at, &keeper)| keeper && at + SimDuration::from_millis(400) <= end)
+            .count();
     }
     hard.sort_unstable();
     hard.dedup();

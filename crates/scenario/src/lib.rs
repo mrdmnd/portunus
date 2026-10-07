@@ -63,6 +63,11 @@ pub enum ScenarioIssue {
     PrepullExceedsTravel(PullName),
     /// The travel time's bounds are reversed.
     InvalidTravel(PullName),
+    /// A wave's distance is negative or not a number.
+    InvalidDistance {
+        pull: PullName,
+        wave: usize,
+    },
     NotEnoughForces {
         required: u32,
         available: u32,

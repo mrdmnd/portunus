@@ -148,11 +148,13 @@ impl Mechanics for PartyMechanics {
             return;
         };
         let ctx = self.spell_ctx(cast);
-        if def.travel.is_none() {
-            self.interp.run(io, &ctx, &def.effects);
-        } else if !def.rolls_on_impact && !cast.prerolled {
-            for hit in self.interp.roll_direct(io, &ctx, &def.effects) {
-                io.stash_hit(hit);
+        if !cast.prerolled {
+            if !def.travels() {
+                self.interp.run(io, &ctx, &def.effects);
+            } else if !def.rolls_on_impact {
+                for hit in self.interp.roll_direct(io, &ctx, &def.effects) {
+                    io.stash_hit(hit);
+                }
             }
         }
         let done = Occurrence {

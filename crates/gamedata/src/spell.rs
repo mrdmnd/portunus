@@ -23,11 +23,16 @@ pub struct SpellDef {
     /// Harms enemies or starts combat. Only non-hostile spells are usable
     /// before a pull begins.
     pub hostile: bool,
-    /// Projectile flight time: effects resolve on impact, and the spell is
-    /// "in flight" until then. Direct damage is rolled at launch, as SimC
-    /// snapshots at execute, unless `rolls_on_impact`.
+    /// Missile speed in yards per second. A spell travels if it has a speed
+    /// or a `min_travel`: effects resolve on impact, and it is "in flight"
+    /// until then. Direct damage is rolled at launch, as SimC snapshots at
+    /// execute, unless `rolls_on_impact`.
     #[serde(default)]
-    pub travel: Option<SimDuration>,
+    pub speed: Option<f64>,
+    /// The shortest flight, however close the target. Alone, a fixed delay
+    /// (spell data's "missile speed is delay", e.g. Meteor).
+    #[serde(default)]
+    pub min_travel: SimDuration,
     /// Roll direct damage as the projectile lands instead (Lava Burst,
     /// whose Flame Shock crit is checked on impact).
     #[serde(default)]
@@ -40,6 +45,26 @@ pub struct SpellDef {
     pub usable_while_casting: bool,
     #[serde(default)]
     pub effects: Vec<Effect>,
+}
+
+impl SpellDef {
+    pub fn travels(&self) -> bool {
+        self.speed.is_some() || self.min_travel > SimDuration::ZERO
+    }
+
+    /// Flight time to a target `distance` yards away; `None` if it doesn't
+    /// travel.
+    pub fn flight_time(&self, distance: f64) -> Option<SimDuration> {
+        if !self.travels() {
+            return None;
+        }
+        let flying = self.speed.filter(|s| *s > 0.0).map_or(0.0, |s| {
+            (distance.max(0.0) / s * 1000.0)
+                .round()
+                .min(f64::from(u32::MAX / 2))
+        });
+        Some(SimDuration(flying as u32).max(self.min_travel))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -92,4 +117,54 @@ pub enum Targeting {
     SelfOnly,
     Enemy,
     Ally,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn missile(speed: Option<f64>, min_travel: u32) -> SpellDef {
+        SpellDef {
+            id: SpellId(1),
+            name: "missile".into(),
+            school: SchoolMask(1),
+            cast: CastKind::Instant,
+            gcd: None,
+            cooldown: None,
+            costs: Vec::new(),
+            targeting: Targeting::Enemy,
+            hostile: true,
+            speed,
+            min_travel: SimDuration(min_travel),
+            rolls_on_impact: false,
+            castable_while_moving: false,
+            usable_while_casting: false,
+            effects: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn flight_time_is_distance_over_speed_with_a_floor() {
+        assert_eq!(missile(None, 0).flight_time(20.0), None);
+        assert_eq!(
+            missile(Some(60.0), 0).flight_time(20.0),
+            Some(SimDuration(333))
+        );
+        assert_eq!(
+            missile(Some(60.0), 500).flight_time(20.0),
+            Some(SimDuration(500))
+        );
+        assert_eq!(
+            missile(Some(60.0), 500).flight_time(60.0),
+            Some(SimDuration(1000))
+        );
+        assert_eq!(
+            missile(None, 1000).flight_time(40.0),
+            Some(SimDuration(1000))
+        );
+        assert_eq!(
+            missile(Some(50.0), 0).flight_time(-5.0),
+            Some(SimDuration::ZERO)
+        );
+    }
 }

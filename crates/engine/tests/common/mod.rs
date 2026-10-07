@@ -173,7 +173,7 @@ impl Mechanics for Stub {
     fn combat_ended(&self, _io: &mut dyn EngineIo, _combat: u16, _cleared: bool) {}
     fn cast_started(&self, _io: &mut dyn EngineIo, _cast: &CastEvent) {}
     fn cast_completed(&self, io: &mut dyn EngineIo, cast: &CastEvent) {
-        if io.data().spells[&cast.spell].travel.is_none() {
+        if !io.data().spells[&cast.spell].travels() {
             land(io, cast);
         }
     }

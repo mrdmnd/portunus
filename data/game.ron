@@ -96,8 +96,7 @@
             gcd: Some((base: 1500, hasted: true, floor: 750)),
             targeting: enemy,
             hostile: true,
-            // 60 yd/s over 20 yards.
-            travel: Some(333),
+            speed: Some(60.0),
             effects: [
                 damage(amount: spell_power(1.15), school: 8, target: target),
                 resource((kind: maelstrom, amount: 8.0)),
@@ -111,9 +110,9 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
-            // Overloads go out 400 ms after their spell launches (SimC's
-            // elemental_overload_event_t), then fly: 50 yd/s over 20 yards.
-            travel: Some(800),
+            // Overloads are triggered 400 ms after their spell launches
+            // (SimC's elemental_overload_event_t), then fly.
+            speed: Some(50.0),
             effects: [
                 damage(amount: spell_power(0.86), school: 8, target: target),
                 resource((kind: maelstrom, amount: 3.0)),
@@ -128,7 +127,7 @@
             cooldown: Some((duration: 8000, charges: 1, hasted: true, category: None)),
             targeting: enemy,
             hostile: true,
-            travel: Some(400),
+            speed: Some(50.0),
             // SimC's Lava Burst damage is a missile that computes on impact.
             rolls_on_impact: true,
             effects: [
@@ -144,8 +143,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
-            // 400 ms delay, then 50 yd/s over 20 yards.
-            travel: Some(800),
+            speed: Some(50.0),
             rolls_on_impact: true,
             effects: [
                 damage(amount: spell_power(0.81), school: 4, target: target),
@@ -208,8 +206,6 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
-            // The overload delay; Tempest itself doesn't travel.
-            travel: Some(400),
             effects: [
                 damage(
                     amount: spell_power(1.9637),
@@ -259,8 +255,6 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
-            // The overload delay; Chain Lightning itself doesn't travel.
-            travel: Some(400),
             effects: [
                 damage(
                     amount: spell_power(0.59),
@@ -324,8 +318,7 @@
             costs: [(kind: maelstrom, amount: 90.0, extra: 0.0, scaling: none)],
             targeting: enemy,
             hostile: true,
-            // 40 yd/s over 20 yards.
-            travel: Some(500),
+            speed: Some(40.0),
             effects: [
                 damage(amount: spell_power(3.2), school: 28, target: target),
                 apply_one_of(auras: [118522, 173183, 173184], target: caster),
@@ -341,7 +334,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
-            travel: Some(900),
+            speed: Some(40.0),
             effects: [damage(amount: spell_power(1.6), school: 28, target: target)],
         ),
         381725: (
@@ -352,7 +345,6 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
-            travel: Some(400),
             effects: [damage(amount: spell_power(1.05), school: 8, target: target)],
         ),
         // Fusion of Elements' blast, at 40% as consumed Power of the
@@ -365,7 +357,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
-            travel: Some(500),
+            speed: Some(40.0),
             effects: [damage(amount: spell_power(1.28), school: 28, target: target)],
         ),
         // Overlapping casts don't stack: a recast replaces the quake.
@@ -412,7 +404,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
-            travel: Some(500),
+            speed: Some(40.0),
             effects: [
                 damage(amount: spell_power(0.195), school: 4, target: target),
                 apply_aura(aura: 188389, target: target),
@@ -444,7 +436,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
-            travel: Some(400),
+            speed: Some(50.0),
             rolls_on_impact: true,
             effects: [damage(amount: spell_power(0.54), school: 4, target: target)],
         ),
@@ -533,7 +525,7 @@
             cooldown: Some((duration: 60000, charges: 1, hasted: false, category: None)),
             targeting: enemy,
             hostile: true,
-            travel: Some(1000),
+            min_travel: 1000,
             effects: [
                 damage(
                     amount: spell_power(5.2),
@@ -565,8 +557,7 @@
             gcd: Some((base: 500, hasted: false, floor: 500)),
             targeting: enemy,
             hostile: true,
-            // 30 yd/s over 20 yards.
-            travel: Some(667),
+            speed: Some(30.0),
             effects: [damage(amount: spell_power(1.0), school: 8, target: target)],
         ),
         157348: (
@@ -617,7 +608,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
-            travel: Some(400),
+            speed: Some(50.0),
             effects: [damage(amount: spell_power(1.1775), school: 4, target: target)],
         ),
         // Final Calling's, cast by each Ancestor as it departs.
@@ -629,7 +620,7 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
-            travel: Some(500),
+            speed: Some(40.0),
             effects: [damage(amount: spell_power(2.0271), school: 28, target: target)],
         ),
         443454: (
@@ -737,10 +728,10 @@
                     chance: stat_scaled(stat: mastery, coef: 1.0),
                     condition: Some(caster_lacks_aura(191634)),
                     effects: [
-                        trigger_spell(spell: 45284, target: target),
+                        trigger_spell(spell: 45284, target: target, delay: 400),
                         if(
                             when: caster_has_aura(1270064),
-                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 45284, target: target)])],
+                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 45284, target: target, delay: 400)])],
                         ),
                     ],
                 ),
@@ -748,10 +739,10 @@
                     on: cast_complete(spell: Some(51505), school: None),
                     chance: stat_scaled(stat: mastery, coef: 1.0),
                     effects: [
-                        trigger_spell(spell: 77451, target: target),
+                        trigger_spell(spell: 77451, target: target, delay: 400),
                         if(
                             when: caster_has_aura(1270064),
-                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 77451, target: target)])],
+                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 77451, target: target, delay: 400)])],
                         ),
                     ],
                 ),
@@ -759,10 +750,10 @@
                     on: cast_complete(spell: Some(452201), school: None),
                     chance: stat_scaled(stat: mastery, coef: 1.0),
                     effects: [
-                        trigger_spell(spell: 463351, target: target),
+                        trigger_spell(spell: 463351, target: target, delay: 400),
                         if(
                             when: caster_has_aura(1270064),
-                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 463351, target: target)])],
+                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 463351, target: target, delay: 400)])],
                         ),
                     ],
                 ),
@@ -771,10 +762,10 @@
                     chance: stat_scaled(stat: mastery, coef: 1.0),
                     condition: Some(caster_lacks_aura(191634)),
                     effects: [
-                        trigger_spell(spell: 45297, target: target),
+                        trigger_spell(spell: 45297, target: target, delay: 400),
                         if(
                             when: caster_has_aura(1270064),
-                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 45297, target: target)])],
+                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 45297, target: target, delay: 400)])],
                         ),
                     ],
                 ),
@@ -804,10 +795,10 @@
                     on: cast_complete(spell: Some(188196), school: None),
                     chance: always,
                     effects: [
-                        trigger_spell(spell: 45284, target: target),
+                        trigger_spell(spell: 45284, target: target, delay: 400),
                         if(
                             when: caster_has_aura(1270064),
-                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 45284, target: target)])],
+                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 45284, target: target, delay: 400)])],
                         ),
                         remove_stacks(aura: 191634, target: caster, stacks: 1),
                     ],
@@ -816,10 +807,10 @@
                     on: cast_complete(spell: Some(188443), school: None),
                     chance: always,
                     effects: [
-                        trigger_spell(spell: 45297, target: target),
+                        trigger_spell(spell: 45297, target: target, delay: 400),
                         if(
                             when: caster_has_aura(1270064),
-                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 45297, target: target)])],
+                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 45297, target: target, delay: 400)])],
                         ),
                         remove_stacks(aura: 191634, target: caster, stacks: 1),
                     ],
@@ -1159,34 +1150,34 @@
                 (
                     on: cast_complete(spell: Some(188196), school: None),
                     chance: always,
-                    effects: [trigger_spell(spell: 45284, target: target), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 45284, target: target)])]),],
+                    effects: [trigger_spell(spell: 45284, target: target, delay: 400), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 45284, target: target, delay: 400)])]),],
                 ),
                 (
                     on: cast_complete(spell: Some(188443), school: None),
                     chance: always,
-                    effects: [trigger_spell(spell: 45297, target: target), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 45297, target: target)])]),],
+                    effects: [trigger_spell(spell: 45297, target: target, delay: 400), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 45297, target: target, delay: 400)])]),],
                 ),
                 (
                     on: cast_complete(spell: Some(51505), school: None),
                     chance: always,
-                    effects: [trigger_spell(spell: 77451, target: target), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 77451, target: target)])]),],
+                    effects: [trigger_spell(spell: 77451, target: target, delay: 400), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 77451, target: target, delay: 400)])]),],
                 ),
                 (
                     on: cast_complete(spell: Some(452201), school: None),
                     chance: always,
-                    effects: [trigger_spell(spell: 463351, target: target), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 463351, target: target)])]),],
+                    effects: [trigger_spell(spell: 463351, target: target, delay: 400), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 463351, target: target, delay: 400)])]),],
                 ),
                 (
                     on: cast_complete(spell: Some(8042), school: None),
                     chance: always,
                     condition: Some(caster_has_aura(381726)),
-                    effects: [trigger_spell(spell: 381725, target: target), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 381725, target: target)])]),],
+                    effects: [trigger_spell(spell: 381725, target: target, delay: 400), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 381725, target: target, delay: 400)])]),],
                 ),
                 (
                     on: cast_complete(spell: Some(117014), school: None),
                     chance: always,
                     condition: Some(caster_has_aura(381726)),
-                    effects: [trigger_spell(spell: 120588, target: target), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 120588, target: target)])]),],
+                    effects: [trigger_spell(spell: 120588, target: target, delay: 400), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 120588, target: target, delay: 400)])]),],
                 ),
             ],
         ),
@@ -1200,12 +1191,12 @@
                 (
                     on: cast_complete(spell: Some(8042), school: None),
                     chance: stat_scaled(stat: mastery, coef: 1.0),
-                    effects: [trigger_spell(spell: 381725, target: target), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 381725, target: target)])]),],
+                    effects: [trigger_spell(spell: 381725, target: target, delay: 400), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 381725, target: target, delay: 400)])]),],
                 ),
                 (
                     on: cast_complete(spell: Some(117014), school: None),
                     chance: stat_scaled(stat: mastery, coef: 1.0),
-                    effects: [trigger_spell(spell: 120588, target: target), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 120588, target: target)])]),],
+                    effects: [trigger_spell(spell: 120588, target: target, delay: 400), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 120588, target: target, delay: 400)])]),],
                 ),
             ],
         ),

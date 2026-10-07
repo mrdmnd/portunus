@@ -100,18 +100,20 @@ pub trait EngineIo {
     /// priority (`pet: None` commands every type).
     fn command_pets(&mut self, owner: Seat, pet: Option<PetId>, spell: SpellId, target: ActorId);
     /// Cast `spell` for free: no gates, costs, cast time, or cooldown. It
-    /// resolves through [`Mechanics::cast_completed`] as a new event at the
-    /// current time, never re-entrantly, then through
+    /// resolves through [`Mechanics::cast_completed`] as a new event `delay`
+    /// from now, never re-entrantly, then through
     /// [`Mechanics::projectile_landed`] after its travel time, if it has one.
     ///
-    /// `rolled` carries a travelling spell's hits rolled now, as SimC
-    /// snapshots an overload when its parent launches: they fly with it and
-    /// the cast arrives with [`CastEvent::prerolled`] set.
+    /// `rolled` carries hits rolled now, as SimC snapshots an overload when
+    /// its parent launches: they are delivered through
+    /// [`Mechanics::projectile_landed`] (at once if the spell doesn't
+    /// travel), and the cast arrives with [`CastEvent::prerolled`] set.
     fn trigger_spell(
         &mut self,
         caster: ActorId,
         spell: SpellId,
         target: Option<ActorId>,
+        delay: SimDuration,
         rolled: Option<Vec<RolledHit>>,
     );
     /// Stop `target`'s cast if it is interruptible. Returns whether one was
@@ -151,9 +153,9 @@ pub struct CastEvent {
     /// What the spell's scaling cost actually consumed (see
     /// `SpendScaling`), if it has one.
     pub spent: Option<ResourceAmount>,
-    /// A triggered travelling spell whose direct damage was rolled when it
-    /// was triggered (see [`EngineIo::trigger_spell`]): don't roll it again
-    /// at launch.
+    /// A triggered spell whose direct damage was rolled when it was
+    /// triggered (see [`EngineIo::trigger_spell`]): don't roll it again;
+    /// the hits arrive with its landing.
     pub prerolled: bool,
 }
 

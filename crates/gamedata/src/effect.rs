@@ -92,9 +92,13 @@ pub enum Effect {
         change: CooldownChange,
     },
     /// Cast another spell for free (no gates), e.g. a proc's payload.
+    /// After a `delay` it goes out then, with damage rolled now unless it
+    /// `rolls_on_impact` (an overload, 400 ms after its parent).
     TriggerSpell {
         spell: SpellId,
         target: EffectTarget,
+        #[serde(default)]
+        delay: SimDuration,
     },
     /// Stop the target's cast if it is interruptible; its payload never
     /// lands.

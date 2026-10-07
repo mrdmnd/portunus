@@ -53,4 +53,6 @@ pub struct ResolvedSpawn {
     pub max_health: u64,
     pub forces: u32,
     pub engage: Trigger<SpawnSet>,
+    /// Yards from the party.
+    pub distance: f64,
 }
