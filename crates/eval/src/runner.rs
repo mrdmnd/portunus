@@ -145,7 +145,7 @@ pub fn metric_value(metric: &Metric, o: &Outcome) -> Option<f64> {
         Metric::TotalTime => Some(secs(o.end_time)),
         Metric::CompletionRate => Some(if o.completed { 1.0 } else { 0.0 }),
         Metric::Deaths => Some(o.seats.iter().map(|s| f64::from(s.deaths)).sum()),
-        Metric::SeatDamage(s) => seat(*s).map(|s| s.damage_done),
+        Metric::SeatDamage(s) => seat(*s).map(|s| s.damage_done as f64),
         Metric::SeatDps(s) => {
             let combat: f64 = o
                 .pulls
@@ -154,7 +154,7 @@ pub fn metric_value(metric: &Metric, o: &Outcome) -> Option<f64> {
                 .sum();
             seat(*s).map(|s| {
                 if combat > 0.0 {
-                    s.damage_done / combat
+                    s.damage_done as f64 / combat
                 } else {
                     0.0
                 }
@@ -209,7 +209,7 @@ mod tests {
     /// Damage is the seed plus a fixed bonus; seed 3 fails.
     struct Fake {
         name: &'static str,
-        bonus: f64,
+        bonus: u64,
     }
 
     impl Arm for Fake {
@@ -234,7 +234,7 @@ mod tests {
                 }],
                 seats: vec![SeatOutcome {
                     seat: Seat(0),
-                    damage_done: seed.0 as f64 * 10.0 + self.bonus,
+                    damage_done: seed.0 * 10 + self.bonus,
                     casts: 1,
                     deaths: 0,
                 }],
@@ -257,11 +257,11 @@ mod tests {
             arms: vec![
                 Arc::new(Fake {
                     name: "base",
-                    bonus: 0.0,
+                    bonus: 0,
                 }),
                 Arc::new(Fake {
                     name: "better",
-                    bonus: 50.0,
+                    bonus: 50,
                 }),
             ],
             baseline: 0,

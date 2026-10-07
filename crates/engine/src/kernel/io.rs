@@ -25,7 +25,7 @@ impl EngineIo for Io<'_> {
         &self.w.s.setup.data
     }
 
-    fn apply_damage(&mut self, d: DamageEvent) -> f64 {
+    fn apply_damage(&mut self, d: DamageEvent) -> u64 {
         self.w.damage(d)
     }
 
@@ -70,9 +70,7 @@ impl EngineIo for Io<'_> {
     }
 
     fn set_attack_speed(&mut self, actor: ActorId, mult: f64) {
-        if let Some(a) = self.w.actor_mut(actor) {
-            a.attack_speed = mult;
-        }
+        self.w.set_attack_speed(actor, mult);
     }
 
     fn adjust_cooldown(&mut self, actor: ActorId, spell: SpellId, change: CooldownChange) {
@@ -81,31 +79,27 @@ impl EngineIo for Io<'_> {
 
     fn summon(
         &mut self,
-        _owner: Seat,
-        _pet: PetId,
-        _count: u8,
-        _duration: Option<SimDuration>,
+        owner: Seat,
+        pet: PetId,
+        count: u8,
+        duration: Option<SimDuration>,
     ) -> Vec<ActorId> {
-        self.w.unsupported("pets");
-        Vec::new()
+        if self.w.seat_ref(owner).is_none() {
+            return Vec::new();
+        }
+        self.w.summon(owner, pet, count, duration)
     }
 
-    fn dismiss(&mut self, _owner: Seat, _pet: PetId, _count: Option<u8>) {
-        self.w.unsupported("pets");
+    fn dismiss(&mut self, owner: Seat, pet: PetId, count: Option<u8>) {
+        self.w.dismiss(owner, pet, count);
     }
 
-    fn extend_pets(&mut self, _owner: Seat, _pet: Option<PetId>, _by: SimDuration) {
-        self.w.unsupported("pets");
+    fn extend_pets(&mut self, owner: Seat, pet: Option<PetId>, by: SimDuration) {
+        self.w.extend_pets(owner, pet, by);
     }
 
-    fn command_pets(
-        &mut self,
-        _owner: Seat,
-        _pet: Option<PetId>,
-        _spell: SpellId,
-        _target: ActorId,
-    ) {
-        self.w.unsupported("pets");
+    fn command_pets(&mut self, owner: Seat, pet: Option<PetId>, spell: SpellId, target: ActorId) {
+        self.w.command_pets(owner, pet, spell, target);
     }
 
     fn trigger_spell(&mut self, caster: ActorId, spell: SpellId, target: Option<ActorId>) {

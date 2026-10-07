@@ -8,8 +8,8 @@ use std::sync::Arc;
 
 use portunus_core::{ActorId, AuraId, Dist, Seat, Seed, SimDuration, SpellId};
 use portunus_engine::mechanics::{
-    AuraApplication, AuraChange, AuraEvent, CastEvent, DamageEvent, DeathEvent, EnemyHit,
-    SwingEvent, TickEvent, TimerEvent,
+    whole_points, AuraApplication, AuraChange, AuraEvent, CastEvent, DamageEvent, DeathEvent,
+    EnemyHit, SwingEvent, TickEvent, TimerEvent,
 };
 use portunus_engine::state::Projectile;
 use portunus_engine::{
@@ -127,7 +127,7 @@ fn run(
                     io.apply_damage(DamageEvent {
                         source: caster,
                         target,
-                        amount: c * SPELL_POWER * scale,
+                        amount: whole_points(c * SPELL_POWER * scale),
                         school: *school,
                         spell,
                         crit: false,

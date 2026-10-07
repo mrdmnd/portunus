@@ -11,7 +11,7 @@ use crate::mask::Readiness;
 use crate::step::WakeReason;
 
 use super::queue::Event;
-use super::world::{millis_ceil, Cooldown, Seg, World};
+use super::world::{millis_ceil, Actor, Cooldown, Seg, World};
 
 /// The latest of several "not before" constraints.
 pub(crate) struct Need {
@@ -150,6 +150,7 @@ impl World {
             (cd.progress - cd.base).max(0.0)
         };
         self.schedule_cooldown(actor, spell);
+        self.schedule_pet_act(actor, now);
     }
 
     pub(crate) fn adjust_cooldown(
@@ -195,6 +196,7 @@ impl World {
         }
         let regained = before == 0 && cd.charges > 0;
         self.schedule_cooldown(actor, spell);
+        self.schedule_pet_act(actor, now);
         if regained {
             if let Some(seat) = self.player_seat(actor) {
                 self.notify(seat, WakeReason::CooldownReady(spell), false, None, now);
@@ -285,10 +287,29 @@ impl World {
                 need.until(g, WakeReason::GcdEnd);
             }
         }
+        self.spend_gates(actor, spell, def, a.target, ability, &mut need);
+        need.finish(ability)
+    }
+
+    /// Charges and costs, for a seat's actor or a pet.
+    fn spend_gates(
+        &self,
+        actor: ActorId,
+        spell: SpellId,
+        def: &SpellDef,
+        target: Option<ActorId>,
+        ability: SpellId,
+        need: &mut Need,
+    ) {
+        let now = self.now;
+        let Some(a) = self.actor_ref(actor) else {
+            need.block();
+            return;
+        };
         if let Some(t) = self.empty_until(actor, spell) {
             need.until(t, WakeReason::CooldownReady(ability));
         }
-        let mult = self.cost_mult(actor, spell, a.target);
+        let mult = self.cost_mult(actor, spell, target);
         for cost in &def.costs {
             let Some(r) = a.resources.iter().find(|r| r.def.kind == cost.kind) else {
                 need.block();
@@ -308,7 +329,55 @@ impl World {
                 }
             }
         }
-        need.finish(ability)
+    }
+
+    /// Whether a pet could start `spell` from its autocast list, and when.
+    pub(crate) fn pet_readiness(
+        &self,
+        pet: ActorId,
+        spell: SpellId,
+        def: &SpellDef,
+        target: Option<ActorId>,
+    ) -> Readiness {
+        let mut need = Need::new(self.now);
+        let Some(a) = self.actor_ref(pet) else {
+            return Readiness::Blocked;
+        };
+        if !a.alive || (def.hostile && !self.in_combat()) {
+            return Readiness::Blocked;
+        }
+        if let Some(c) = &a.casting {
+            if !def.usable_while_casting {
+                need.until(c.ends, WakeReason::CastEnd);
+            }
+        }
+        if def.gcd.is_some() {
+            if let Some(g) = a.pet.and_then(|p| p.gcd_end) {
+                need.until(g, WakeReason::GcdEnd);
+            }
+        }
+        self.spend_gates(pet, spell, def, target, spell, &mut need);
+        need.finish(spell).0
+    }
+
+    /// Who a pet's autocast lands on: enemy spells go to the owner's
+    /// target, ally spells to the owner. `None` if there is no valid one.
+    pub(crate) fn pet_target(
+        &self,
+        pet: ActorId,
+        owner: Seat,
+        def: &SpellDef,
+    ) -> Option<Option<ActorId>> {
+        match def.targeting {
+            Targeting::None => Some(None),
+            Targeting::SelfOnly => Some(Some(pet)),
+            Targeting::Ally => Some(Some(self.seat_actor(owner))),
+            Targeting::Enemy => self
+                .actor_ref(self.seat_actor(owner))
+                .and_then(|a| a.target)
+                .filter(|&t| self.is_live_target(t))
+                .map(Some),
+        }
     }
 
     /// Who a cast would land on.
@@ -320,10 +389,7 @@ impl World {
     ) -> Result<Option<ActorId>, IllegalChoice> {
         let me = self.seat_actor(seat);
         let pick = |pool: Vec<ActorId>, lowest: bool| -> Result<Option<ActorId>, IllegalChoice> {
-            let frac = |id: &ActorId| {
-                self.actor_ref(*id)
-                    .map_or(0.0, |a| a.health / a.max_health.max(f64::MIN_POSITIVE))
-            };
+            let frac = |id: &ActorId| self.actor_ref(*id).map_or(0.0, Actor::health_frac);
             let best = if lowest {
                 pool.into_iter().min_by(|a, b| frac(a).total_cmp(&frac(b)))
             } else {

@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use portunus_core::{AuraId, Dist, HookKey, Seat, Seed, SimDuration, SpecId, SpellId};
+use portunus_engine::mechanics::whole_points;
 use portunus_engine::trace::TraceEvent;
 use portunus_engine::{
     CastOpts, Choice, Engine, Externals, Kernel, Latency, Outcome, Readiness, RunSetup, SeatSetup,
@@ -141,7 +142,7 @@ fn rollout(f: &Fixture, seed: u64) -> (Outcome, Vec<TraceRecord>) {
 }
 
 /// `(crit, amount)` for every hit by `spell`.
-fn hits(trace: &[TraceRecord], spell: SpellId) -> Vec<(bool, f64)> {
+fn hits(trace: &[TraceRecord], spell: SpellId) -> Vec<(bool, u64)> {
     trace
         .iter()
         .filter_map(|r| match &r.event {
@@ -238,7 +239,7 @@ fn hits_follow_the_formulas() {
     let normal = 1.15 * SPELL_POWER;
     for &(crit, amount) in &bolts {
         let want = if crit { normal * CRIT_MULT } else { normal };
-        assert!(close(amount, want), "{amount} vs {want}");
+        assert_eq!(amount, whole_points(want), "{want}");
     }
     assert!(bolts.iter().any(|h| h.0), "some bolts should crit");
 }
@@ -257,7 +258,11 @@ fn rollout_clears_the_dummy() {
             portunus_scenario::resolved::Segment::Combat(c) => Some(c.spawns[0].max_health),
             portunus_scenario::resolved::Segment::Travel { .. } => None,
         });
-    assert!(outcome.seats[0].damage_done >= health.unwrap());
+    assert_eq!(
+        outcome.seats[0].damage_done,
+        health.unwrap(),
+        "overkill excluded"
+    );
     assert!(!hits(&trace, LIGHTNING_BOLT_OVERLOAD).is_empty());
     assert!(!hits(&trace, LAVA_BURST_OVERLOAD).is_empty());
     assert!(!hits(&trace, FLAME_SHOCK).is_empty());

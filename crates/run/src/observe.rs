@@ -2,10 +2,11 @@
 
 use std::collections::BTreeMap;
 
-use portunus_core::{ActorId, AuraId, Seat, SimDuration, SimTime, SpellId};
-use portunus_engine::state::{AuraInstance, CastWhat};
+use portunus_core::{ActorId, AuraId, PetId, Seat, SimDuration, SimTime, SpellId};
+use portunus_engine::state::{ActorKind, AuraInstance, CastWhat};
 use portunus_engine::{ActionMask, Readiness, SegmentView, WakeReason};
 use portunus_env::{InfoSet, ObsContext, Observer};
+use portunus_gamedata::pet::PetKind;
 use portunus_gamedata::stats::ResourceKind;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -46,6 +47,35 @@ pub struct SeatObs {
     /// One entry per ability with a cooldown.
     pub cooldowns: BTreeMap<SpellId, CooldownObs>,
     pub target: Option<TargetObs>,
+    /// The controlled pet, if one is out.
+    pub pet: Option<PetObs>,
+    /// Remaining lifetime of each active guardian and totem, by type,
+    /// oldest first (`None`: no time limit).
+    pub guardians: BTreeMap<PetId, Vec<Option<SimDuration>>>,
+}
+
+/// A controlled pet, as its owner sees it on the pet frame.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PetObs {
+    pub actor: ActorId,
+    pub pet: PetId,
+    pub casting: Option<SpellId>,
+    pub resources: BTreeMap<ResourceKind, f64>,
+    pub buffs: BTreeMap<AuraId, AuraObs>,
+    /// Autocast spells with a cooldown.
+    pub cooldowns: BTreeMap<SpellId, CooldownObs>,
+}
+
+impl PetObs {
+    pub fn resource(&self, kind: ResourceKind) -> f64 {
+        self.resources.get(&kind).copied().unwrap_or(0.0)
+    }
+
+    pub fn cooldown_remaining(&self, spell: SpellId) -> SimDuration {
+        self.cooldowns
+            .get(&spell)
+            .map_or(SimDuration::ZERO, |c| c.remaining)
+    }
 }
 
 /// Read by permanent auras' remaining-time queries.
@@ -163,28 +193,70 @@ impl Observer for ScriptObserver {
             .filter(|i| !hide.auras.contains(&i.aura))
             .map(|i| (i.aura, aura_obs(i, now)))
             .collect();
+        let cooldown = |actor: ActorId, s: SpellId| {
+            let cd = state.cooldown(actor, s)?;
+            let obs = if hide.cooldowns.contains(&s) {
+                CooldownObs {
+                    charges: 0,
+                    remaining: SimDuration::ZERO,
+                }
+            } else {
+                CooldownObs {
+                    charges: cd.charges,
+                    remaining: match (cd.charges, cd.next_charge_at) {
+                        (0, Some(t)) => t.saturating_since(now),
+                        _ => SimDuration::ZERO,
+                    },
+                }
+            };
+            Some((s, obs))
+        };
         let cooldowns = template
             .into_iter()
             .flat_map(|t| &t.abilities)
-            .filter_map(|&s| {
-                let cd = state.cooldown(me, s)?;
-                let obs = if hide.cooldowns.contains(&s) {
-                    CooldownObs {
-                        charges: 0,
-                        remaining: SimDuration::ZERO,
-                    }
-                } else {
-                    CooldownObs {
-                        charges: cd.charges,
-                        remaining: match (cd.charges, cd.next_charge_at) {
-                            (0, Some(t)) => t.saturating_since(now),
-                            _ => SimDuration::ZERO,
-                        },
-                    }
-                };
-                Some((s, obs))
-            })
+            .filter_map(|&s| cooldown(me, s))
             .collect();
+        let mut pet = None;
+        let mut guardians: BTreeMap<PetId, Vec<Option<SimDuration>>> = BTreeMap::new();
+        for &id in state.pets(seat) {
+            let Some(a) = state.actor(id) else { continue };
+            let ActorKind::Pet { pet: kind, .. } = a.kind else {
+                continue;
+            };
+            let Some(def) = ctx.data.pets.get(&kind) else {
+                continue;
+            };
+            if def.kind != PetKind::Pet {
+                guardians
+                    .entry(kind)
+                    .or_default()
+                    .push(a.expires.map(|e| e.saturating_since(now)));
+                continue;
+            }
+            pet = Some(PetObs {
+                actor: id,
+                pet: kind,
+                casting: a.casting.and_then(|c| match c.what {
+                    CastWhat::Spell(s) => Some(s),
+                    CastWhat::EnemyRule(_) => None,
+                }),
+                resources: def
+                    .resources
+                    .iter()
+                    .filter_map(|r| Some((r.kind, state.resource(id, r.kind)?.value)))
+                    .collect(),
+                buffs: state
+                    .auras(id)
+                    .iter()
+                    .map(|i| (i.aura, aura_obs(i, now)))
+                    .collect(),
+                cooldowns: def
+                    .autocast
+                    .iter()
+                    .filter_map(|&s| cooldown(id, s))
+                    .collect(),
+            });
+        }
         let target = state
             .target(me)
             .filter(|t| !hide.enemies.contains(t))
@@ -192,11 +264,7 @@ impl Observer for ScriptObserver {
                 let a = state.actor(t)?;
                 Some(TargetObs {
                     actor: t,
-                    health_pct: if a.max_health > 0.0 {
-                        100.0 * a.health / a.max_health
-                    } else {
-                        0.0
-                    },
+                    health_pct: 100.0 * a.health_frac(),
                     mine: state
                         .auras(t)
                         .iter()
@@ -223,6 +291,8 @@ impl Observer for ScriptObserver {
             buffs,
             cooldowns,
             target,
+            pet,
+            guardians,
         }
     }
 

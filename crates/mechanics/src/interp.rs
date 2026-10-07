@@ -3,15 +3,16 @@
 use std::sync::Arc;
 
 use portunus_core::{ActorId, AuraId, SimTime, SpellId, StreamKey};
-use portunus_engine::mechanics::{AuraApplication, DamageEvent, HealEvent};
+use portunus_engine::mechanics::{whole_points, AuraApplication, DamageEvent, HealEvent};
 use portunus_engine::state::ActorKind;
 use portunus_engine::{AuraRef, EngineIo, ListenerRef, ProcView, SegmentView, StateView};
 use portunus_gamedata::effect::{
     AoeRule, Coefficient, Effect, EffectTarget, ListenFor, ProcChance,
 };
+use portunus_gamedata::item::WeaponHand;
 use portunus_gamedata::stats::{ResourceKind, SchoolMask};
 
-use crate::math::{instance, player_seat, predicate, Formulas};
+use crate::math::{instance, owner_seat, predicate, Formulas};
 use crate::{CombatMath, EffectCtx, EffectInterpreter, KitTools, Outgoing, SpecRegistry};
 
 /// Crit rolls, per caster.
@@ -47,6 +48,7 @@ pub(crate) enum Happening {
         crit: bool,
     },
     DamageTaken,
+    Swing(WeaponHand),
     PeriodicTick(AuraId),
     ResourceSpent(ResourceKind),
     AuraApplied(AuraId),
@@ -192,6 +194,18 @@ impl Interpreter {
                 let bad_luck = (1.0 + (dry / (60.0 / rate) - 1.5) * 3.0).max(1.0);
                 rate * haste * gap / 60.0 * bad_luck
             }
+            ProcChance::Deck { successes, size } => {
+                let left = proc
+                    .and_then(|p| p.deck)
+                    .map_or((f64::from(successes), f64::from(size)), |d| {
+                        (f64::from(d.successes), f64::from(d.cards))
+                    });
+                if left.1 > 0.0 {
+                    left.0 / left.1
+                } else {
+                    0.0
+                }
+            }
         }
     }
 
@@ -207,7 +221,7 @@ impl Interpreter {
                 .filter(|&e| view.actor(e).is_some_and(|a| a.engaged))
                 .collect(),
             EffectTarget::Party => view.seats().to_vec(),
-            EffectTarget::Pets(kind) => player_seat(view, ctx.caster)
+            EffectTarget::Pets(kind) => owner_seat(view, ctx.caster)
                 .map(|seat| {
                     view.pets(seat)
                         .iter()
@@ -237,7 +251,7 @@ impl Interpreter {
         out
     }
 
-    fn damage(
+    pub(crate) fn damage(
         &self,
         io: &mut dyn EngineIo,
         ctx: &EffectCtx,
@@ -283,12 +297,12 @@ impl Interpreter {
             let landed = io.apply_damage(DamageEvent {
                 source: ctx.caster,
                 target: t,
-                amount: hit,
+                amount: whole_points(hit),
                 school,
                 spell: ctx.spell,
                 crit,
             });
-            if landed > 0.0 {
+            if landed > 0 {
                 let dealt = Occurrence {
                     what: Happening::DamageDealt {
                         spell: ctx.spell,
@@ -296,7 +310,7 @@ impl Interpreter {
                         crit,
                     },
                     target: Some(t),
-                    amount: Some(landed),
+                    amount: Some(landed as f64),
                     depth: ctx.depth,
                 };
                 self.fire(io, ctx.caster, dealt);
@@ -330,7 +344,7 @@ impl Interpreter {
             io.apply_heal(HealEvent {
                 source: ctx.caster,
                 target: t,
-                amount: if crit { raw * mult } else { raw },
+                amount: whole_points(if crit { raw * mult } else { raw }),
                 spell: ctx.spell,
             });
         }
@@ -415,24 +429,24 @@ impl Interpreter {
                 count,
                 duration,
             } => {
-                if let Some(seat) = player_seat(io.view(), caster) {
+                if let Some(seat) = owner_seat(io.view(), caster) {
                     io.summon(seat, pet, count, duration);
                 }
             }
             &Effect::Dismiss { pet, count } => {
-                if let Some(seat) = player_seat(io.view(), caster) {
+                if let Some(seat) = owner_seat(io.view(), caster) {
                     io.dismiss(seat, pet, count);
                 }
             }
             &Effect::CommandPet { pet, spell } => {
                 let view = io.view();
                 let target = ctx.target.or_else(|| view.target(caster));
-                if let (Some(seat), Some(target)) = (player_seat(view, caster), target) {
+                if let (Some(seat), Some(target)) = (owner_seat(view, caster), target) {
                     io.command_pets(seat, pet, spell, target);
                 }
             }
             &Effect::ExtendPets { pet, by } => {
-                if let Some(seat) = player_seat(io.view(), caster) {
+                if let Some(seat) = owner_seat(io.view(), caster) {
                     io.extend_pets(seat, pet, by);
                 }
             }
@@ -516,6 +530,7 @@ fn listens(on: ListenFor, what: Happening) -> bool {
                 && (crit || !crit_only)
         }
         (ListenFor::DamageTaken, Happening::DamageTaken) => true,
+        (ListenFor::Swing { hand }, Happening::Swing(got)) => hand.is_none_or(|h| h == got),
         (ListenFor::PeriodicTick(a), Happening::PeriodicTick(b))
         | (ListenFor::AuraApplied(a), Happening::AuraApplied(b))
         | (ListenFor::AuraExpired(a), Happening::AuraExpired(b)) => a == b,

@@ -1,6 +1,8 @@
 mod common;
 
-use portunus_core::{SimDuration, SimTime};
+use std::sync::Arc;
+
+use portunus_core::{Dist, SimDuration, SimTime};
 use portunus_engine::choice::{CmpOp, Condition, Scalar};
 use portunus_engine::trace::TraceEvent;
 use portunus_engine::{
@@ -8,6 +10,7 @@ use portunus_engine::{
     Wait, WakeReason,
 };
 use portunus_scenario::resolved::Segment;
+use portunus_scenario::{Sampler, ScenarioSampler};
 
 use common::*;
 
@@ -55,8 +58,7 @@ fn dummy_dies_and_gates_hold() {
 
     assert!(outcome.completed, "{outcome:?}");
     assert!(outcome.pulls[0].cleared.is_some());
-    let done = outcome.seats[0].damage_done;
-    assert!((done - health).abs() < 1e-6 * health, "{done} vs {health}");
+    assert_eq!(outcome.seats[0].damage_done, health, "overkill excluded");
 
     let trace = k.drain_trace();
     let starts: Vec<(SimTime, portunus_core::SpellId)> = trace
@@ -90,7 +92,13 @@ fn dummy_dies_and_gates_hold() {
 
 #[test]
 fn same_seed_same_rollout() {
-    let f = fixture();
+    let mut f = fixture();
+    let mut spec = f.sampler.spec().clone();
+    spec.pulls[0].travel_in = Dist::Uniform {
+        lo: SimDuration(5_000),
+        hi: SimDuration(15_000),
+    };
+    f.sampler = Sampler::new(spec, Arc::clone(&f.enemies)).unwrap();
     let mut a = kernel(&f, 11, 1, human());
     let mut b = kernel(&f, 11, 1, human());
     let mut c = kernel(&f, 12, 1, human());

@@ -87,8 +87,8 @@ impl ProgressMeter for PartyMeter {
                     }
                 }
             } else if a.engaged {
-                enemy_health += a.health;
-                priority_health = priority_health.max(a.health);
+                enemy_health += a.health as f64;
+                priority_health = priority_health.max(a.health as f64);
             }
         }
         let deaths = state

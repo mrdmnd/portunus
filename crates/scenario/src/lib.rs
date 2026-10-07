@@ -3,7 +3,7 @@
 //! - [`spec`]: the authored route. References enemies by key only; what they
 //!   do lives in [`portunus_gamedata::EnemyData`].
 //! - [`resolved`]: one concrete run, with every *static* random value drawn
-//!   (travel times, enemy health). Dynamic values (rule timings, targets)
+//!   (travel times). Dynamic values (rule timings, targets)
 //!   are drawn by the engine under the same seed, in domains keyed by pull
 //!   and spawn label, so rollouts stay reproducible and paired.
 //! - [`ScenarioSampler`]: validates once, then samples per seed;

@@ -86,7 +86,7 @@ struct Tally {
     casts: u64,
     hits: u64,
     crits: u64,
-    damage: f64,
+    damage: u64,
 }
 
 /// Play every seed and total player damage by spell, without overkill (as
@@ -105,13 +105,13 @@ pub fn breakdown(arm: &SimArm, data: &GameData, seeds: SeedSet) -> Result<Breakd
         let trace = env.drain_trace();
         let Some(state) = env.state() else { continue };
         let players: Vec<_> = state.seats().to_vec();
-        let mut health: BTreeMap<ActorId, f64> = BTreeMap::new();
+        let mut health: BTreeMap<ActorId, u64> = BTreeMap::new();
         for r in trace {
             match r.event {
                 TraceEvent::Damage(d) => {
                     let left = health
                         .entry(d.target)
-                        .or_insert_with(|| state.actor(d.target).map_or(0.0, |a| a.max_health));
+                        .or_insert_with(|| state.actor(d.target).map_or(0, |a| a.max_health));
                     let landed = d.amount.min(*left);
                     *left -= landed;
                     if players.contains(&d.source) {
@@ -123,7 +123,8 @@ pub fn breakdown(arm: &SimArm, data: &GameData, seeds: SeedSet) -> Result<Breakd
                 }
                 TraceEvent::Heal(h) => {
                     if let Some(left) = health.get_mut(&h.target) {
-                        *left += h.amount;
+                        let max = state.actor(h.target).map_or(0, |a| a.max_health);
+                        *left = left.saturating_add(h.amount).min(max);
                     }
                 }
                 TraceEvent::CastEnd {
@@ -140,11 +141,11 @@ pub fn breakdown(arm: &SimArm, data: &GameData, seeds: SeedSet) -> Result<Breakd
     let runs = seeds.count.max(1);
     let n = f64::from(runs);
     let combat_secs = combat_ms / 1000.0 / n;
-    let total: f64 = tallies.values().map(|t| t.damage).sum();
+    let total = tallies.values().map(|t| t.damage).sum::<u64>() as f64;
     let mut rows: Vec<AbilityRow> = tallies
         .into_iter()
         .map(|(spell, t)| {
-            let damage = t.damage / n;
+            let damage = t.damage as f64 / n;
             AbilityRow {
                 spell,
                 name: match spell {
@@ -167,7 +168,11 @@ pub fn breakdown(arm: &SimArm, data: &GameData, seeds: SeedSet) -> Result<Breakd
                 } else {
                     0.0
                 },
-                share: if total > 0.0 { t.damage / total } else { 0.0 },
+                share: if total > 0.0 {
+                    t.damage as f64 / total
+                } else {
+                    0.0
+                },
             }
         })
         .collect();

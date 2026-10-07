@@ -80,11 +80,10 @@ impl ScenarioSampler for Sampler {
                 .iter()
                 .map(|s| {
                     let def = self.enemy(&s.enemy);
-                    let domain = rng::domain(Purpose::EnemyHealth, &[name, &s.label.0]);
                     ResolvedSpawn {
                         label: s.label.clone(),
                         enemy: s.enemy.clone(),
-                        max_health: def.health.sample(seed, domain, 0),
+                        max_health: def.health,
                         forces: def.forces,
                         engage: s.engage.clone(),
                     }
@@ -278,10 +277,7 @@ mod tests {
             key: EnemyKey("grunt".into()),
             name: "Grunt".into(),
             kind: EnemyKind::Trash,
-            health: Dist::Jitter {
-                base: 1000.0,
-                jitter: 100.0,
-            },
+            health: 1000,
             forces: 3,
             defense: EnemyDefense {
                 level_offset: 2,
@@ -384,7 +380,7 @@ mod tests {
             panic!("expected combat");
         };
         for spawn in &combat.spawns {
-            assert!((900.0..=1100.0).contains(&spawn.max_health));
+            assert_eq!(spawn.max_health, 1000);
         }
     }
 

@@ -8,6 +8,7 @@ use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
 
 use portunus_core::{ActorId, Seat, SimTime, SpellId};
+use portunus_gamedata::item::WeaponHand;
 
 use crate::order::EventClass;
 use crate::state::AuraRef;
@@ -56,6 +57,20 @@ pub(crate) enum Event {
         spell: SpellId,
         gen: u32,
     },
+    /// A pet may be able to cast from its autocast list.
+    PetAct {
+        actor: ActorId,
+        gen: u32,
+    },
+    /// A guardian's or totem's lifetime may be up.
+    PetExpire {
+        actor: ActorId,
+    },
+    Swing {
+        actor: ActorId,
+        hand: WeaponHand,
+        gen: u32,
+    },
     /// An armed seat's predicted wake time arrived; check it still holds.
     Recheck {
         seat: Seat,
@@ -73,7 +88,10 @@ impl Event {
             | Event::Triggered { .. }
             | Event::AuraTick { .. }
             | Event::AuraExpire { .. }
-            | Event::Timer { .. } => EventClass::World,
+            | Event::Timer { .. }
+            | Event::PetAct { .. }
+            | Event::PetExpire { .. }
+            | Event::Swing { .. } => EventClass::World,
             Event::EvalTriggers => EventClass::Triggers,
             Event::PrepullOpen | Event::CombatTimeout { .. } | Event::CooldownReady { .. } => {
                 EventClass::Legality

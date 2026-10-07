@@ -5,15 +5,26 @@ use std::sync::Arc;
 
 use portunus_core::{ActorId, AuraId, SimDuration};
 use portunus_gamedata::aura::{Periodic, RefreshRule};
+use portunus_gamedata::effect::ProcChance;
 
 use crate::mechanics::{AuraApplication, AuraChange, AuraEvent, AuraRemoval};
-use crate::state::{AuraInstance, AuraRef, ListenerRef, ProcView};
+use crate::state::{AuraInstance, AuraRef, DeckView, ListenerRef, ProcView};
 
 use crate::step::WakeReason;
 use crate::trace::TraceEvent;
 
 use super::queue::Event;
 use super::world::{millis_round, AuraMeta, Followup, Tick, World};
+
+fn full_deck(chance: ProcChance) -> Option<DeckView> {
+    match chance {
+        ProcChance::Deck { successes, size } => Some(DeckView {
+            cards: size,
+            successes: successes.min(size),
+        }),
+        _ => None,
+    }
+}
 
 fn period(p: &Periodic, haste: f64) -> SimDuration {
     let ms = f64::from(p.period.millis());
@@ -71,6 +82,9 @@ impl World {
                     next_at: None,
                     index: 0,
                 });
+                let decks: Vec<Option<DeckView>> = (0..def.listeners.len())
+                    .map(|index| self.deck_for(r.holder, r.aura, index as u8))
+                    .collect();
                 let Some(holder) = self.actor_mut(r.holder) else {
                     return;
                 };
@@ -84,7 +98,7 @@ impl World {
                     pmultiplier,
                 });
                 holder.meta.push(AuraMeta { uid, tick });
-                for index in 0..def.listeners.len() {
+                for (index, deck) in decks.into_iter().enumerate() {
                     holder.procs.push(ProcView {
                         listener: ListenerRef {
                             aura: r,
@@ -93,6 +107,7 @@ impl World {
                         last_attempt: None,
                         last_proc: None,
                         icd_ready_at: None,
+                        deck,
                     });
                 }
                 self.schedule_aura(r);
@@ -259,25 +274,60 @@ impl World {
     }
 
     pub(crate) fn record_proc(&mut self, listener: ListenerRef, procced: bool) {
-        let icd = self
-            .s
+        let s = Arc::clone(&self.s);
+        let Some(def) = s
             .setup
             .data
             .auras
             .get(&listener.aura.aura)
             .and_then(|d| d.listeners.get(usize::from(listener.index)))
-            .and_then(|l| l.internal_cooldown);
+        else {
+            return;
+        };
         let now = self.now;
         let Some(a) = self.actor_mut(listener.aura.holder) else {
             return;
         };
-        if let Some(p) = a.procs.iter_mut().find(|p| p.listener == listener) {
-            p.last_attempt = Some(now);
-            if procced {
-                p.last_proc = Some(now);
-                p.icd_ready_at = icd.map(|d| now + d);
-            }
+        let Some(p) = a.procs.iter_mut().find(|p| p.listener == listener) else {
+            return;
+        };
+        p.last_attempt = Some(now);
+        if procced {
+            p.last_proc = Some(now);
+            p.icd_ready_at = def.internal_cooldown.map(|d| now + d);
         }
+        let Some(deck) = &mut p.deck else { return };
+        deck.cards = deck.cards.saturating_sub(1);
+        if procced {
+            deck.successes = deck.successes.saturating_sub(1);
+        }
+        if deck.cards == 0 {
+            p.deck = full_deck(def.chance);
+        }
+        if let Some(deck) = p.deck {
+            let key = (listener.aura.holder, listener.aura.aura, listener.index);
+            self.decks.insert(key, deck);
+        }
+    }
+
+    /// A holder's deck for one listener: where it left off, or a fresh one.
+    fn deck_for(&self, holder: ActorId, aura: AuraId, index: u8) -> Option<DeckView> {
+        let chance = self
+            .s
+            .setup
+            .data
+            .auras
+            .get(&aura)?
+            .listeners
+            .get(usize::from(index))?
+            .chance;
+        let fresh = full_deck(chance)?;
+        Some(
+            self.decks
+                .get(&(holder, aura, index))
+                .copied()
+                .unwrap_or(fresh),
+        )
     }
 
     /// Advance a tick's bookkeeping for one that is landing now.

@@ -50,7 +50,7 @@ pub enum SpawnSet {
 pub struct ResolvedSpawn {
     pub label: SpawnLabel,
     pub enemy: EnemyKey,
-    pub max_health: f64,
+    pub max_health: u64,
     pub forces: u32,
     pub engage: Trigger<SpawnSet>,
 }

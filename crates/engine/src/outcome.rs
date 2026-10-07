@@ -24,7 +24,8 @@ pub struct PullOutcome {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SeatOutcome {
     pub seat: Seat,
-    pub damage_done: f64,
+    /// Excludes overkill.
+    pub damage_done: u64,
     pub casts: u32,
     pub deaths: u32,
 }

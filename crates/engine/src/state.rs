@@ -48,7 +48,7 @@ pub trait StateView {
     /// snapshot if `source` applied it now; compare with the instance's
     /// `pmultiplier` to decide whether a refresh is worth it.
     fn pmultiplier(&self, source: ActorId, aura: AuraId) -> f64;
-    /// This seat's live pets and guardians, oldest first.
+    /// This seat's live pets, guardians, and totems, oldest first.
     fn pets(&self, owner: Seat) -> &[ActorId];
     /// Primary target of a seat or pet (pets follow their owner's).
     fn target(&self, id: ActorId) -> Option<ActorId>;
@@ -123,14 +123,27 @@ pub enum SeatPhase {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ActorView {
     pub kind: ActorKind,
-    pub health: f64,
-    pub max_health: f64,
+    /// Whole points, as in the game; hits are rounded before they land.
+    pub health: u64,
+    pub max_health: u64,
     pub alive: bool,
     pub engaged: bool,
     pub casting: Option<CastView>,
     pub moving_until: Option<SimTime>,
-    /// When a guardian despawns; `None` for everything else.
+    /// When a guardian or totem despawns; `None` for everything else.
     pub expires: Option<SimTime>,
+}
+
+impl ActorView {
+    /// Health left as a fraction of maximum, in `[0, 1]`; 0 with no
+    /// maximum.
+    pub fn health_frac(&self) -> f64 {
+        if self.max_health == 0 {
+            0.0
+        } else {
+            self.health as f64 / self.max_health as f64
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -140,7 +153,8 @@ pub enum ActorKind {
         combat: u16,
         spawn: SpawnIndex,
     },
-    /// Pets never get decision points; they act on their own definitions.
+    /// A pet, guardian, or totem. None get decision points: they act on
+    /// their autocast and on what their owner's effects command.
     Pet {
         owner: Seat,
         pet: PetId,
@@ -219,6 +233,18 @@ pub struct ProcView {
     pub last_proc: Option<SimTime>,
     /// When the internal cooldown ends, if one is running.
     pub icd_ready_at: Option<SimTime>,
+    /// What is left in a deck-of-cards listener's current deck. Unlike the
+    /// rest, the deck outlives the instance: it carries over to the holder's
+    /// next instance of the aura for the rest of the run.
+    pub deck: Option<DeckView>,
+}
+
+/// The undrawn part of a shuffled deck: the next draw procs with chance
+/// `successes / cards`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DeckView {
+    pub cards: u8,
+    pub successes: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

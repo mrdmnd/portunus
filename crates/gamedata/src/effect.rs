@@ -59,7 +59,8 @@ pub enum Effect {
     },
     /// Positive grants, negative drains (costs are gates, not effects).
     Resource(ResourceAmount),
-    /// `duration` is ignored for permanent pets.
+    /// `duration` (or the pet's own, if `None`) is ignored for
+    /// [`crate::pet::PetKind::Pet`].
     Summon {
         pet: PetId,
         count: u8,
@@ -72,8 +73,8 @@ pub enum Effect {
         count: Option<u8>,
     },
     /// The caster's pets of this type (`None`: all of them) cast a spell at
-    /// the cast's target (e.g. Kill Command), outside their autocast
-    /// priority.
+    /// the cast's target for free, outside their autocast priority (Kill
+    /// Command, or Ancestors echoing the owner's casts).
     CommandPet {
         pet: Option<PetId>,
         spell: SpellId,
@@ -209,11 +210,18 @@ pub enum ModScope {
 #[serde(rename_all = "snake_case")]
 pub enum ModKind {
     DamageDonePct,
+    /// On an owner's aura: damage done by its [`crate::pet::PetKind::Pet`]s,
+    /// scoped by the pet's spell (SimC's pet damage multiplier).
+    PetDamagePct,
+    /// On an owner's aura: damage done by its guardians, scoped by the
+    /// guardian's spell. Totems use the owner's `DamageDonePct` instead.
+    GuardianDamagePct,
     DamageTakenPct,
     CritChanceAdd,
     CritDamagePct,
+    /// On a pet's own aura, stacks with the owner's haste it inherits.
     HastePct,
-    /// Auto-attack speed only.
+    /// Auto-attack speed only, on top of haste.
     AttackSpeedPct,
     /// Periodic damage multiplier captured when an aura is applied and kept
     /// for its whole duration (a DoT's `pmultiplier`, e.g. Tiger's Fury on
@@ -286,5 +294,13 @@ pub enum ProcChance {
     StatScaled {
         stat: RatedStat,
         coef: f64,
+    },
+    /// A shuffled deck, as SimC's `shuffled_rng`: exactly `successes` of
+    /// every `size` attempts proc, in random order, and the deck reshuffles
+    /// once every card is drawn. Each holder keeps its deck for the whole
+    /// run (in game, until logout), even across reapplications of the aura.
+    Deck {
+        successes: u8,
+        size: u8,
     },
 }

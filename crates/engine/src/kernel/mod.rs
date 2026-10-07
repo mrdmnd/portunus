@@ -8,17 +8,19 @@
 //! callback returns.
 //!
 //! Not implemented yet, and rejected at setup or reported as
-//! [`EngineError::Unsupported`] on first use: pets, auto-attacks, channels,
-//! empowers, shared cooldown categories, cast lag, enemy rules, `Fired` and
-//! `Delayed` engagement triggers, Ironfur-style stacks, and aura value
-//! caps, thresholds, and absorbs.
+//! [`EngineError::Unsupported`] on first use: players' auto-attacks (pets'
+//! work), channels, empowers, shared cooldown categories, cast lag, enemy
+//! rules, `Fired` and `Delayed` engagement triggers, Ironfur-style stacks,
+//! and aura value caps, thresholds, and absorbs.
 
 mod aura;
 mod cast;
 mod condition;
 mod io;
+mod pet;
 mod queue;
 mod setup;
+mod swing;
 mod world;
 
 use std::sync::Arc;
@@ -37,7 +39,6 @@ use crate::state::{ActorKind, AuraRef, LastCast, SeatPhase};
 use crate::step::{DecisionRequest, Step, WakeReason};
 use crate::trace::{CastEndReason, TraceEvent, TraceRecord};
 use crate::Engine;
-
 pub use world::World;
 
 use cast::Need;
@@ -248,28 +249,17 @@ impl<M: Mechanics> Kernel<M> {
                 .enemies
                 .get(&spawn.enemy)
                 .and_then(|e| e.initial_phase.clone());
-            self.world.actors.push(Actor {
-                kind: ActorKind::Enemy {
+            let mut enemy = Actor::new(
+                ActorKind::Enemy {
                     combat,
                     spawn: portunus_scenario::resolved::SpawnIndex(index as u16),
                 },
-                name: Arc::from(format!("{}/{}", c.pull.0, spawn.label.0).as_str()),
-                health: spawn.max_health,
-                max_health: spawn.max_health,
-                alive: true,
-                engaged: false,
-                casting: None,
-                cast_seq: 0,
-                target: None,
-                haste: 1.0,
-                attack_speed: 1.0,
-                resources: Vec::new(),
-                cooldowns: Default::default(),
-                auras: Vec::new(),
-                meta: Vec::new(),
-                procs: Vec::new(),
-                phase,
-            });
+                Arc::from(format!("{}/{}", c.pull.0, spawn.label.0).as_str()),
+                spawn.max_health,
+                1.0,
+            );
+            enemy.phase = phase;
+            self.world.actors.push(enemy);
         }
         self.world.enemies = (first..self.world.actors.len())
             .map(|i| ActorId(i as u16))
@@ -407,6 +397,10 @@ impl<M: Mechanics> Kernel<M> {
             st.armed = None;
             st.gen += 1;
         }
+        for pet in self.world.all_pets() {
+            self.world.cancel_cast(pet, CastEndReason::Interrupted);
+            self.world.stop_swings(pet);
+        }
         self.world.projectiles.clear();
         self.world.flights.clear();
         if cleared {
@@ -441,8 +435,7 @@ impl<M: Mechanics> Kernel<M> {
         if let Some(g) = &def.gcd {
             self.world.seat_mut(seat).gcd_end = Some(now + gcd_length(g, haste));
         }
-        let cast_time = self.world.cast_time_of(actor, spell, target);
-        let ev = CastEvent {
+        self.begin_cast(CastEvent {
             seat,
             actor,
             ability: Some(ability),
@@ -451,7 +444,15 @@ impl<M: Mechanics> Kernel<M> {
             started: now,
             empower: None,
             spent: None,
-        };
+        });
+    }
+
+    /// Start a seat's or pet's cast once its GCD is set: hard casts wait
+    /// for their cast time, instants complete now.
+    fn begin_cast(&mut self, ev: CastEvent) {
+        let now = self.world.now;
+        let (actor, spell, target) = (ev.actor, ev.spell, ev.target);
+        let cast_time = self.world.cast_time_of(actor, spell, target);
         self.world.record(TraceEvent::CastStart {
             actor,
             spell,
@@ -484,12 +485,15 @@ impl<M: Mechanics> Kernel<M> {
         if let Some(cd) = &def.cooldown {
             self.world.consume_charge(ev.actor, ev.spell, cd);
         }
-        let st = self.world.seat_mut(ev.seat);
-        st.last_cast = Some(LastCast {
-            spell: ev.spell,
-            at: now,
-        });
-        st.outcome.casts += 1;
+        let by_pet = self.world.is_pet(ev.actor);
+        if !by_pet {
+            let st = self.world.seat_mut(ev.seat);
+            st.last_cast = Some(LastCast {
+                spell: ev.spell,
+                at: now,
+            });
+            st.outcome.casts += 1;
+        }
         self.world.record(TraceEvent::CastEnd {
             actor: ev.actor,
             spell: ev.spell,
@@ -499,7 +503,9 @@ impl<M: Mechanics> Kernel<M> {
         if let Some(travel) = def.travel {
             self.world.launch(ev, travel);
         }
-        if hard {
+        if by_pet {
+            self.world.schedule_pet_act(ev.actor, now);
+        } else if hard {
             let st = self.world.seat_mut(ev.seat);
             if st.phase == SeatPhase::Committed {
                 st.phase = SeatPhase::Locked;
@@ -617,6 +623,12 @@ impl<M: Mechanics> Kernel<M> {
             Event::EvalTriggers => self.eval_triggers(),
             Event::CooldownReady { actor, spell, gen } => {
                 self.world.cooldown_ready(actor, spell, gen);
+            }
+            Event::PetAct { actor, gen } => self.pet_act(actor, gen),
+            Event::Swing { actor, hand, gen } => self.swing(actor, hand, gen),
+            Event::PetExpire { actor } => {
+                self.world.pet_expire(actor);
+                self.drain();
             }
             Event::Recheck { .. } | Event::Deliver(_) => {
                 let mut ignored = Vec::new();
@@ -813,6 +825,9 @@ impl<M: Mechanics> Kernel<M> {
                 if let Some(a) = self.world.actor_mut(me) {
                     a.target = Some(id);
                 }
+                for pet in self.world.pets[usize::from(seat.0)].clone() {
+                    self.world.wake_pet(pet);
+                }
                 self.world.deliver_now(seat, WakeReason::FreeAction);
             }
             Choice::CancelAura(aura) => {
@@ -924,9 +939,9 @@ impl World {
             Trigger::Elapsed(d) => self.now >= started + *d,
             Trigger::HpFracBelow { who, frac } => {
                 let group = actors(who);
-                let max: f64 = group.iter().map(|a| a.max_health).sum();
-                let hp: f64 = group.iter().map(|a| a.health).sum();
-                max > 0.0 && hp / max < *frac
+                let max: u64 = group.iter().map(|a| a.max_health).sum();
+                let hp: u64 = group.iter().map(|a| a.health).sum();
+                max > 0 && (hp as f64) < *frac * max as f64
             }
             Trigger::AliveAtMost { who, count } => {
                 actors(who).iter().filter(|a| a.alive).count() <= *count as usize
@@ -967,6 +982,12 @@ impl<M: Mechanics> Engine for Kernel<M> {
                     stacks: 1,
                     duration: None,
                 });
+            }
+        }
+        kernel.drain();
+        for (i, seat) in s.setup.seats.iter().enumerate() {
+            if let Some(pet) = seat.template.permanent_pet {
+                kernel.world.summon(Seat(i as u8), pet, 1, None);
             }
         }
         kernel.drain();

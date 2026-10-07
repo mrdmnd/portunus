@@ -9,6 +9,7 @@ use portunus_gamedata::spell::CastKind;
 use portunus_scenario::resolved::{Segment, SpawnSet};
 
 use crate::error::{EngineError, SetupIssue};
+use crate::mechanics::whole_points;
 use crate::outcome::SeatOutcome;
 use crate::setup::RunSetup;
 use crate::state::{ActorKind, SeatPhase};
@@ -79,9 +80,6 @@ fn unsupported(setup: &RunSetup) -> Option<&'static str> {
     let data = &setup.data;
     for seat in &setup.seats {
         let t = &seat.template;
-        if t.permanent_pet.is_some() {
-            return Some("pets");
-        }
         if t.main_hand.is_some() || t.off_hand.is_some() {
             return Some("auto-attacks");
         }
@@ -140,18 +138,21 @@ pub(crate) fn build(setup: RunSetup) -> World {
             ]
         })
         .collect();
+    let gcd = setup
+        .seats
+        .iter()
+        .map(|s| {
+            s.template
+                .abilities
+                .iter()
+                .filter_map(|s| setup.data.spells.get(s)?.gcd)
+                .max_by_key(|g| g.base)
+        })
+        .collect();
     let abilities: Vec<Vec<_>> = setup
         .seats
         .iter()
         .map(|s| s.template.abilities.iter().copied().collect())
-        .collect();
-    let gcd = abilities
-        .iter()
-        .map(|list: &Vec<_>| {
-            list.iter()
-                .filter_map(|s| setup.data.spells.get(s)?.gcd)
-                .max_by_key(|g| g.base)
-        })
         .collect();
     let actors = setup
         .seats
@@ -160,34 +161,23 @@ pub(crate) fn build(setup: RunSetup) -> World {
         .enumerate()
         .map(|(i, (seat, name))| {
             let t = &seat.template;
-            Actor {
-                kind: ActorKind::Player(Seat(i as u8)),
-                name: Arc::from(name.as_str()),
-                health: t.derived.max_health,
-                max_health: t.derived.max_health,
-                alive: true,
-                engaged: false,
-                casting: None,
-                cast_seq: 0,
-                target: None,
-                haste: 1.0 + t.derived.haste_pct / 100.0,
-                attack_speed: 1.0,
-                resources: t
-                    .resources
-                    .iter()
-                    .map(|&def| Resource {
-                        def,
-                        value: def.initial,
-                        at: SimTime::ZERO,
-                        regen_mult: 1.0,
-                    })
-                    .collect(),
-                cooldowns: BTreeMap::new(),
-                auras: Vec::new(),
-                meta: Vec::new(),
-                procs: Vec::new(),
-                phase: None,
-            }
+            let mut actor = Actor::new(
+                ActorKind::Player(Seat(i as u8)),
+                Arc::from(name.as_str()),
+                whole_points(t.derived.max_health),
+                1.0 + t.derived.haste_pct / 100.0,
+            );
+            actor.resources = t
+                .resources
+                .iter()
+                .map(|&def| Resource {
+                    def,
+                    value: def.initial,
+                    at: SimTime::ZERO,
+                    regen_mult: 1.0,
+                })
+                .collect();
+            actor
         })
         .collect();
     let seats = (0..n)
@@ -202,9 +192,10 @@ pub(crate) fn build(setup: RunSetup) -> World {
             perception_ids: Vec::new(),
             waited: None,
             draws: [0, 0],
+            summons: 0,
             outcome: SeatOutcome {
                 seat: Seat(i as u8),
-                damage_done: 0.0,
+                damage_done: 0,
                 casts: 0,
                 deaths: 0,
             },
@@ -223,12 +214,14 @@ pub(crate) fn build(setup: RunSetup) -> World {
         actors,
         seat_actors: (0..n).map(|i| ActorId(i as u16)).collect(),
         seats,
+        pets: vec![Vec::new(); n],
         enemies: Vec::new(),
         projectiles: Vec::new(),
         flights: Vec::new(),
         timers: Vec::new(),
         timer_ids: Vec::new(),
         streams: BTreeMap::new(),
+        decks: BTreeMap::new(),
         queue: Queue::default(),
         followups: VecDeque::new(),
         batch: None,

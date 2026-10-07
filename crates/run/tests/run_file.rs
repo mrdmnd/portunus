@@ -50,7 +50,7 @@ fn breakdown_accounts_for_all_damage() {
     let arm = b.arm(false);
     let mean_damage: f64 = seeds
         .iter()
-        .map(|s| arm.rollout(s).unwrap().seats[0].damage_done)
+        .map(|s| arm.rollout(s).unwrap().seats[0].damage_done as f64)
         .sum::<f64>()
         / 4.0;
     let total: f64 = bd.rows.iter().map(|r| r.damage).sum();

@@ -24,7 +24,6 @@ pub struct Domain(pub u64);
 #[repr(u16)]
 pub enum Purpose {
     TravelTime = 1,
-    EnemyHealth = 2,
     EnemyRuleTiming = 3,
     EnemyTarget = 4,
     EnemyDamage = 5,

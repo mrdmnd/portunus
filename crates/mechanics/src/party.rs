@@ -4,18 +4,18 @@ use std::sync::Arc;
 
 use portunus_core::{ActorId, Seat, SpellId};
 use portunus_engine::mechanics::{
-    AuraChange, AuraEvent, AuraRemoval, CastEvent, DamageEvent, DeathEvent, EnemyHit, SwingEvent,
-    TickEvent, TimerEvent,
+    whole_points, AuraChange, AuraEvent, AuraRemoval, CastEvent, DamageEvent, DeathEvent, EnemyHit,
+    SwingEvent, TickEvent, TimerEvent,
 };
 use portunus_engine::state::Projectile;
 use portunus_engine::{EngineIo, Mechanics, Readiness, RunSetup, StateView};
 use portunus_gamedata::aura::AuraDef;
-use portunus_gamedata::effect::ModKind;
+use portunus_gamedata::effect::{Coefficient, EffectTarget, ModKind};
 use portunus_gamedata::spell::SpellDef;
-use portunus_gamedata::stats::{SpendScaling, Stat};
+use portunus_gamedata::stats::{SchoolMask, SpendScaling, Stat};
 
 use crate::interp::{Happening, Interpreter, Occurrence};
-use crate::math::{player_seat, Formulas};
+use crate::math::{owner_seat, player_seat, Formulas};
 use crate::{CombatMath, EffectCtx, EffectInterpreter, KitIssue, SpecRegistry};
 
 /// Game semantics for a whole party: data effects through the
@@ -89,8 +89,9 @@ impl PartyMechanics {
         }
     }
 
-    /// Re-push haste to the kernel if this aura can change it.
-    fn refresh_haste(&self, io: &mut dyn EngineIo, holder: ActorId, def: &AuraDef) {
+    /// Re-push haste and attack speed to the kernel if this aura can change
+    /// them. A seat's haste reaches its pets too.
+    fn refresh_speed(&self, io: &mut dyn EngineIo, holder: ActorId, def: &AuraDef) {
         let touches_haste = def.modifiers.iter().any(|m| {
             matches!(
                 m.kind,
@@ -99,9 +100,31 @@ impl PartyMechanics {
                     | ModKind::StatPct(Stat::HasteRating)
             )
         });
-        if touches_haste && player_seat(io.view(), holder).is_some() {
-            let mult = self.math().haste_mult(io.view(), holder);
-            io.set_haste(holder, mult);
+        let touches_attack_speed = def
+            .modifiers
+            .iter()
+            .any(|m| m.kind == ModKind::AttackSpeedPct);
+        let view = io.view();
+        let mut hasted = Vec::new();
+        if touches_haste {
+            if let Some(seat) = player_seat(view, holder) {
+                hasted.push(holder);
+                hasted.extend_from_slice(view.pets(seat));
+            } else if owner_seat(view, holder).is_some() {
+                hasted.push(holder);
+            }
+        }
+        let hasted: Vec<(ActorId, f64)> = hasted
+            .into_iter()
+            .map(|a| (a, self.math().haste_mult(view, a)))
+            .collect();
+        let attack_speed = (touches_attack_speed && owner_seat(view, holder).is_some())
+            .then(|| self.math().attack_speed_mult(view, holder));
+        for (actor, mult) in hasted {
+            io.set_haste(actor, mult);
+        }
+        if let Some(mult) = attack_speed {
+            io.set_attack_speed(holder, mult);
         }
     }
 }
@@ -161,7 +184,36 @@ impl Mechanics for PartyMechanics {
         }
     }
 
-    fn swing(&self, _io: &mut dyn EngineIo, _swing: &SwingEvent) {}
+    /// A white hit at the swing's target, then `Swing` listeners.
+    fn swing(&self, io: &mut dyn EngineIo, swing: &SwingEvent) {
+        let raw = self
+            .math()
+            .weapon_damage(io.view(), swing.actor, swing.hand);
+        let ctx = EffectCtx {
+            caster: swing.actor,
+            target: Some(swing.target),
+            spell: None,
+            aura: None,
+            event_amount: None,
+            scale: 1.0,
+            depth: 0,
+        };
+        self.interp.damage(
+            io,
+            &ctx,
+            Coefficient::Flat(raw),
+            SchoolMask::PHYSICAL,
+            EffectTarget::Target,
+            None,
+        );
+        let swung = Occurrence {
+            what: Happening::Swing(swing.hand),
+            target: Some(swing.target),
+            amount: None,
+            depth: 0,
+        };
+        self.interp.fire(io, swing.actor, swung);
+    }
 
     fn periodic_tick(&self, io: &mut dyn EngineIo, tick: &TickEvent) {
         let r = tick.aura;
@@ -201,7 +253,7 @@ impl Mechanics for PartyMechanics {
             };
             self.interp.fire(io, ev.aura.holder, applied);
         }
-        self.refresh_haste(io, ev.aura.holder, def);
+        self.refresh_speed(io, ev.aura.holder, def);
     }
 
     fn aura_removed(&self, io: &mut dyn EngineIo, ev: &AuraEvent) {
@@ -230,7 +282,7 @@ impl Mechanics for PartyMechanics {
             };
             self.interp.fire(io, r.holder, expired);
         }
-        self.refresh_haste(io, r.holder, def);
+        self.refresh_speed(io, r.holder, def);
     }
 
     fn actor_died(&self, _io: &mut dyn EngineIo, _ev: &DeathEvent) {}
@@ -242,16 +294,16 @@ impl Mechanics for PartyMechanics {
         let landed = io.apply_damage(DamageEvent {
             source: hit.source,
             target: hit.target,
-            amount,
+            amount: whole_points(amount),
             school: hit.school,
             spell: None,
             crit: false,
         });
-        if landed > 0.0 {
+        if landed > 0 {
             let taken = Occurrence {
                 what: Happening::DamageTaken,
                 target: Some(hit.source),
-                amount: Some(landed),
+                amount: Some(landed as f64),
                 depth: 0,
             };
             self.interp.fire(io, hit.target, taken);

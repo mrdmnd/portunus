@@ -8,7 +8,8 @@ use portunus_core::rng::{self, Domain, Purpose};
 use portunus_core::{ActorId, AuraId, Sample, Seat, SimDuration, SimTime, SpellId, StreamKey};
 use portunus_gamedata::effect::{ModKind, ModScope, Predicate};
 use portunus_gamedata::enemy::{PhaseName, RuleIndex};
-use portunus_gamedata::item::WeaponHand;
+use portunus_gamedata::item::{WeaponDef, WeaponHand};
+use portunus_gamedata::pet::PetKind;
 use portunus_gamedata::spell::{CastKind, GcdDef, SpellDef};
 use portunus_gamedata::stats::{ResourceDef, ResourceKind};
 
@@ -18,9 +19,9 @@ use crate::mechanics::{AuraChange, AuraEvent, CastEvent, DeathEvent};
 use crate::outcome::{Outcome, PullOutcome, SeatOutcome};
 use crate::setup::RunSetup;
 use crate::state::{
-    ActorKind, ActorView, AuraInstance, CastView, CastWhat, CombatView, CooldownView, LastCast,
-    PendingPerception, PendingTimer, ProcView, Projectile, ResourceView, RuleView, SeatPhase,
-    SegmentView, StateView, SwingView,
+    ActorKind, ActorView, AuraInstance, CastView, CastWhat, CombatView, CooldownView, DeckView,
+    LastCast, PendingPerception, PendingTimer, ProcView, Projectile, ResourceView, RuleView,
+    SeatPhase, SegmentView, StateView, SwingView,
 };
 use crate::step::{DecisionRequest, WakeReason};
 use crate::trace::{TraceEvent, TraceRecord};
@@ -60,8 +61,8 @@ pub(crate) struct Actor {
     pub kind: ActorKind,
     /// Stable name for random-stream domains.
     pub name: Arc<str>,
-    pub health: f64,
-    pub max_health: f64,
+    pub health: u64,
+    pub max_health: u64,
     pub alive: bool,
     pub engaged: bool,
     pub casting: Option<Casting>,
@@ -77,6 +78,85 @@ pub(crate) struct Actor {
     pub meta: Vec<AuraMeta>,
     pub procs: Vec<ProcView>,
     pub phase: Option<PhaseName>,
+    /// Set for pets, guardians, and totems.
+    pub pet: Option<PetLife>,
+    /// Auto-attack timers: `[main hand, off hand]`.
+    pub swings: [Option<Swing>; 2],
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Swing {
+    pub weapon: WeaponDef,
+    /// `None` while not swinging (out of combat, or nothing to hit).
+    pub next_at: Option<SimTime>,
+    pub gen: u32,
+}
+
+impl Swing {
+    pub fn new(weapon: WeaponDef) -> Self {
+        Self {
+            weapon,
+            next_at: None,
+            gen: 0,
+        }
+    }
+
+    /// The hasted interval at a combined speed multiplier.
+    pub fn interval(&self, speed: f64) -> SimDuration {
+        millis_round(f64::from(self.weapon.speed.millis()) / speed.max(f64::MIN_POSITIVE))
+            .max(SimDuration(1))
+    }
+}
+
+impl Actor {
+    /// Health left as a fraction of maximum; 0 with no maximum.
+    pub fn health_frac(&self) -> f64 {
+        if self.max_health == 0 {
+            0.0
+        } else {
+            self.health as f64 / self.max_health as f64
+        }
+    }
+
+    /// A fresh actor with no resources, auras, or target.
+    pub fn new(kind: ActorKind, name: Arc<str>, max_health: u64, haste: f64) -> Self {
+        Self {
+            kind,
+            name,
+            health: max_health,
+            max_health,
+            alive: true,
+            engaged: false,
+            casting: None,
+            cast_seq: 0,
+            target: None,
+            haste,
+            attack_speed: 1.0,
+            resources: Vec::new(),
+            cooldowns: BTreeMap::new(),
+            auras: Vec::new(),
+            meta: Vec::new(),
+            procs: Vec::new(),
+            phase: None,
+            pet: None,
+            swings: [None, None],
+        }
+    }
+
+    /// Haste times attack speed, which is what swing intervals divide by.
+    pub fn swing_speed(&self) -> f64 {
+        self.haste * self.attack_speed
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PetLife {
+    pub kind: PetKind,
+    pub expires: Option<SimTime>,
+    /// Pets keep their own GCD.
+    pub gcd_end: Option<SimTime>,
+    /// Bumped whenever a pending autocast check becomes obsolete.
+    pub gen: u32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -178,6 +258,8 @@ pub(crate) struct SeatState {
     pub waited: Option<(Wait, SimTime)>,
     /// Latency draws so far: `[anticipated, reaction]`.
     pub draws: [u64; 2],
+    /// Pets summoned so far, for naming their random streams.
+    pub summons: u32,
     pub outcome: SeatOutcome,
 }
 
@@ -235,6 +317,8 @@ pub struct World {
     pub(crate) actors: Vec<Actor>,
     pub(crate) seat_actors: Vec<ActorId>,
     pub(crate) seats: Vec<SeatState>,
+    /// Per seat: live pets, oldest first.
+    pub(crate) pets: Vec<Vec<ActorId>>,
     pub(crate) enemies: Vec<ActorId>,
     pub(crate) projectiles: Vec<Projectile>,
     /// Parallel to `projectiles`.
@@ -243,6 +327,9 @@ pub struct World {
     /// Parallel to `timers`.
     pub(crate) timer_ids: Vec<u32>,
     pub(crate) streams: BTreeMap<(ActorId, StreamKey), (Domain, u64)>,
+    /// Deck-of-cards draws by `(holder, aura, listener index)`, kept across
+    /// reapplications.
+    pub(crate) decks: BTreeMap<(ActorId, AuraId, u8), DeckView>,
     pub(crate) queue: Queue,
     pub(crate) followups: VecDeque<Followup>,
     pub(crate) batch: Option<Batch>,
@@ -256,6 +343,13 @@ pub struct World {
 
 pub(crate) fn millis_ceil(ms: f64) -> SimDuration {
     SimDuration(ms.ceil().clamp(0.0, f64::from(u32::MAX / 2)) as u32)
+}
+
+pub(crate) fn hand_index(hand: WeaponHand) -> usize {
+    match hand {
+        WeaponHand::MainHand => 0,
+        WeaponHand::OffHand => 1,
+    }
 }
 
 pub(crate) fn millis_round(ms: f64) -> SimDuration {
@@ -491,7 +585,7 @@ impl World {
                 .is_some_and(|a| a.auras.iter().any(|i| i.aura == aura)),
             Predicate::TargetHpBelow(frac) => target
                 .and_then(|t| self.actor_ref(t))
-                .is_some_and(|t| t.max_health > 0.0 && t.health / t.max_health < frac),
+                .is_some_and(|t| t.max_health > 0 && t.health_frac() < frac),
             Predicate::DiffersFromLastCast => self
                 .player_seat(caster)
                 .and_then(|s| self.seat_ref(s))
@@ -626,6 +720,7 @@ impl World {
             return;
         };
         let old = a.haste;
+        let old_speed = a.swing_speed();
         for r in &mut a.resources {
             r.settle(now, old);
         }
@@ -637,22 +732,30 @@ impl World {
         for spell in spells {
             self.schedule_cooldown(actor, spell);
         }
+        self.rescale_swings(actor, old_speed);
+        self.schedule_pet_act(actor, now);
+    }
+
+    pub(crate) fn set_attack_speed(&mut self, actor: ActorId, mult: f64) {
+        let Some(a) = self.actor_mut(actor) else {
+            return;
+        };
+        let old_speed = a.swing_speed();
+        a.attack_speed = mult.max(f64::MIN_POSITIVE);
+        self.rescale_swings(actor, old_speed);
     }
 
     /// Returns the amount that landed, overkill included.
-    pub(crate) fn damage(&mut self, d: crate::mechanics::DamageEvent) -> f64 {
+    pub(crate) fn damage(&mut self, d: crate::mechanics::DamageEvent) -> u64 {
         let Some(t) = self.actor_mut(d.target) else {
-            return 0.0;
+            return 0;
         };
-        if !t.alive || d.amount <= 0.0 {
-            return 0.0;
+        if !t.alive || d.amount == 0 {
+            return 0;
         }
         let before = t.health;
-        t.health -= d.amount;
-        let died = t.health <= 0.0;
-        if died {
-            t.health = 0.0;
-        }
+        t.health = t.health.saturating_sub(d.amount);
+        let died = t.health == 0;
         if let Some(seat) = self.owner_seat(d.source) {
             self.seat_mut(seat).outcome.damage_done += d.amount.min(before);
         }
@@ -671,7 +774,7 @@ impl World {
         if !t.alive {
             return;
         }
-        t.health = (t.health + h.amount.max(0.0)).min(t.max_health);
+        t.health = t.health.saturating_add(h.amount).min(t.max_health);
         self.record(TraceEvent::Heal(h));
         self.queue_triggers();
     }
@@ -714,15 +817,20 @@ impl World {
             }
             return;
         }
+        if self.is_pet(actor) {
+            self.forget_pet(actor);
+            return;
+        }
         let next = self.live_targets().first().copied();
+        let casting_at_it = |w: &World, id: ActorId| {
+            w.actor_ref(id)
+                .and_then(|a| a.casting)
+                .is_some_and(|c| c.ev.target == Some(actor))
+        };
         for i in 0..self.seats.len() {
             let seat = Seat(i as u8);
             let me = self.seat_actor(seat);
-            let casting_at_it = self
-                .actor_ref(me)
-                .and_then(|a| a.casting)
-                .is_some_and(|c| c.ev.target == Some(actor));
-            if casting_at_it {
+            if casting_at_it(self, me) {
                 self.cancel_cast(me, CastEndReason::Interrupted);
                 let st = self.seat_mut(seat);
                 if st.phase == SeatPhase::Committed {
@@ -736,6 +844,12 @@ impl World {
             }
             let now = self.now;
             self.notify(seat, WakeReason::EnemyDied(actor), false, None, now);
+        }
+        for pet in self.all_pets() {
+            if casting_at_it(self, pet) {
+                self.cancel_cast(pet, CastEndReason::Interrupted);
+            }
+            self.wake_pet(pet);
         }
     }
 
@@ -773,6 +887,9 @@ impl World {
             }
             let now = self.now;
             self.notify(seat, WakeReason::EnemyEngaged(enemy), false, None, now);
+        }
+        for pet in self.all_pets() {
+            self.wake_pet(pet);
         }
         self.queue_triggers();
     }
@@ -872,7 +989,7 @@ impl StateView for World {
                 next_stage_at: None,
             }),
             moving_until: None,
-            expires: None,
+            expires: a.pet.and_then(|p| p.expires),
         })
     }
 
@@ -952,16 +1069,27 @@ impl StateView for World {
         self.pmultiplier_of(source, aura)
     }
 
-    fn pets(&self, _owner: Seat) -> &[ActorId] {
-        &[]
+    fn pets(&self, owner: Seat) -> &[ActorId] {
+        self.pets
+            .get(usize::from(owner.0))
+            .map_or(&[], Vec::as_slice)
     }
 
     fn target(&self, id: ActorId) -> Option<ActorId> {
-        self.actor_ref(id)?.target
+        let a = self.actor_ref(id)?;
+        match a.kind {
+            ActorKind::Pet { owner, .. } => self.actor_ref(self.seat_actor(owner))?.target,
+            ActorKind::Player(_) | ActorKind::Enemy { .. } => a.target,
+        }
     }
 
-    fn swing(&self, _id: ActorId, _hand: WeaponHand) -> Option<SwingView> {
-        None
+    fn swing(&self, id: ActorId, hand: WeaponHand) -> Option<SwingView> {
+        let a = self.actor_ref(id)?;
+        let s = a.swings[hand_index(hand)]?;
+        Some(SwingView {
+            next_at: s.next_at?,
+            interval: s.interval(a.swing_speed()),
+        })
     }
 
     fn projectiles(&self) -> &[Projectile] {

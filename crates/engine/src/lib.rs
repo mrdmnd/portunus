@@ -98,7 +98,9 @@ pub use mechanics::{EngineIo, Mechanics};
 pub use order::EventClass;
 pub use outcome::Outcome;
 pub use setup::{Externals, Latency, RunSetup, SeatSetup};
-pub use state::{AuraRef, ListenerRef, PendingTimer, ProcView, SeatPhase, SegmentView, StateView};
+pub use state::{
+    AuraRef, DeckView, ListenerRef, PendingTimer, ProcView, SeatPhase, SegmentView, StateView,
+};
 pub use step::{DecisionRequest, Step, WakeReason};
 pub use trace::TraceRecord;
 

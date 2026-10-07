@@ -1,10 +1,10 @@
 //! Reference checks for loaded tables: every id points at something, and
 //! every table entry sits under its own id.
 
-use portunus_core::{
-    AuraId, EnemyKey, ItemId, ItemSetId, PetId, Sample, SpecId, SpellId, TalentId,
+use portunus_core::{AuraId, EnemyKey, ItemId, ItemSetId, PetId, SpecId, SpellId, TalentId};
+use portunus_gamedata::effect::{
+    Effect, EffectTarget, ListenFor, Listener, ModScope, Predicate, ProcChance,
 };
-use portunus_gamedata::effect::{Effect, EffectTarget, ListenFor, Listener, ModScope, Predicate};
 use portunus_gamedata::enemy::EnemyAction;
 use portunus_gamedata::spell::CastKind;
 use portunus_gamedata::stats::Stat;
@@ -55,8 +55,10 @@ pub enum DataIssue {
     /// Non-positive rating per percent, or thresholds out of order or
     /// fractions outside `[0, 1]`.
     InvalidRatingCurve(Stat),
-    /// An enemy's health bounds are reversed or not positive.
+    /// An enemy has zero health.
     InvalidHealth(EnemyKey),
+    /// A deck-of-cards proc with no cards, or more successes than cards.
+    InvalidDeck(Owner),
 }
 
 pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
@@ -171,8 +173,7 @@ pub fn check_enemy_data(enemies: &EnemyData, data: &GameData) -> Vec<DataIssue> 
         if &enemy.key != key {
             c.issues.push(DataIssue::KeyMismatch(owner.clone()));
         }
-        let (lo, hi) = enemy.health.bounds();
-        if lo <= 0.0 || lo > hi {
+        if enemy.health == 0 {
             c.issues.push(DataIssue::InvalidHealth(key.clone()));
         }
         for rule in &enemy.rules {
@@ -296,6 +297,11 @@ impl Checker<'_> {
                 self.aura(owner, a);
             }
             ListenFor::DamageTaken | ListenFor::Swing { .. } | ListenFor::ResourceSpent(_) => {}
+        }
+        if let ProcChance::Deck { successes, size } = l.chance {
+            if size == 0 || successes > size {
+                self.issues.push(DataIssue::InvalidDeck(owner.clone()));
+            }
         }
         self.effects(owner, &l.effects);
     }

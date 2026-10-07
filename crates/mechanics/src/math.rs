@@ -3,21 +3,40 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use portunus_core::{ActorId, Seat, SpecId, SpellId};
+use portunus_core::{ActorId, PetId, Seat, SpecId, SpellId};
 use portunus_engine::state::{ActorKind, AuraInstance};
 use portunus_engine::{AuraRef, RunSetup, StateView};
 use portunus_gamedata::effect::{Coefficient, ModKind, ModScope, Modifier, Predicate};
+use portunus_gamedata::item::{WeaponDef, WeaponHand};
+use portunus_gamedata::pet::PetKind;
 use portunus_gamedata::stats::{DerivedStats, RatedStat, SchoolMask, Stat, StatBlock};
 use portunus_gamedata::GameData;
 use portunus_scenario::resolved::Segment;
 
 use crate::{CombatMath, EffectCtx, Outgoing};
 
+/// Attack power per point of weapon DPS.
+const WEAPON_AP_DIVISOR: f64 = 6.0;
+const OFF_HAND_MULT: f64 = 0.5;
+
 #[derive(Debug)]
 struct SeatStats {
     spec: SpecId,
     /// The template's stats, before any aura.
     stats: StatBlock,
+    weapons: [Option<WeaponDef>; 2],
+}
+
+/// Whose stats and modifiers an actor's actions use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Role {
+    /// Players and enemies: their own.
+    Own,
+    /// Totems act as their owner.
+    Totem { owner: ActorId },
+    /// Pets and guardians inherit some of the owner's and take the owner's
+    /// pet or guardian damage modifiers.
+    Pet { owner: ActorId, guardian: bool },
 }
 
 #[derive(Debug)]
@@ -36,6 +55,11 @@ struct Statics {
 /// (multiplicative with each other), then versatility, then the aura's
 /// snapshotted persistent multiplier. Crit chance and crit damage bonuses
 /// add up within their kind.
+///
+/// Pets and guardians use their own auras, plus the owner's
+/// `PetDamagePct` or `GuardianDamagePct` and unscoped `CritChanceAdd`
+/// modifiers; totems use the owner's stats and auras outright (see
+/// [`PetScaling`](portunus_gamedata::pet::PetScaling)).
 #[derive(Debug, Clone)]
 pub struct Formulas {
     s: Arc<Statics>,
@@ -70,6 +94,7 @@ impl Formulas {
             .map(|s| SeatStats {
                 spec: s.template.spec,
                 stats: s.template.stats.clone(),
+                weapons: [s.template.main_hand, s.template.off_hand],
             })
             .collect();
         let enemy_armor = setup
@@ -106,6 +131,74 @@ impl Formulas {
         &self.s.data
     }
 
+    fn role(&self, view: &dyn StateView, actor: ActorId) -> Role {
+        let Some(ActorKind::Pet { owner, pet }) = view.actor(actor).map(|a| a.kind) else {
+            return Role::Own;
+        };
+        let Some(&owner) = view.seats().get(usize::from(owner.0)) else {
+            return Role::Own;
+        };
+        match self.s.data.pets.get(&pet).map(|d| d.kind) {
+            Some(PetKind::Totem) => Role::Totem { owner },
+            Some(PetKind::Pet) => Role::Pet {
+                owner,
+                guardian: false,
+            },
+            Some(PetKind::Guardian) | None => Role::Pet {
+                owner,
+                guardian: true,
+            },
+        }
+    }
+
+    /// Whose auras modify `actor`'s actions: a totem's owner's, else its
+    /// own.
+    fn modifier_holder(&self, view: &dyn StateView, actor: ActorId) -> ActorId {
+        match self.role(view, actor) {
+            Role::Totem { owner } => owner,
+            Role::Own | Role::Pet { .. } => actor,
+        }
+    }
+
+    /// An equipped weapon: a seat's from its template, a pet's from its
+    /// definition (main hand only).
+    pub fn weapon(
+        &self,
+        view: &dyn StateView,
+        actor: ActorId,
+        hand: WeaponHand,
+    ) -> Option<WeaponDef> {
+        let i = match hand {
+            WeaponHand::MainHand => 0,
+            WeaponHand::OffHand => 1,
+        };
+        match view.actor(actor)?.kind {
+            ActorKind::Player(seat) => self.s.seats.get(usize::from(seat.0))?.weapons[i],
+            ActorKind::Pet { pet, .. } if i == 0 => self.s.data.pets.get(&pet)?.melee,
+            ActorKind::Pet { .. } | ActorKind::Enemy { .. } => None,
+        }
+    }
+
+    /// A white hit before modifiers: average weapon damage plus attack
+    /// power over 6 per second of weapon speed, halved for the off hand.
+    pub fn weapon_damage(&self, view: &dyn StateView, actor: ActorId, hand: WeaponHand) -> f64 {
+        let Some(w) = self.weapon(view, actor, hand) else {
+            return 0.0;
+        };
+        let speed = f64::from(w.speed.millis()) / 1000.0;
+        let ap = self.derived(view, actor).attack_power;
+        let hit = (w.min_damage + w.max_damage) / 2.0 + ap / WEAPON_AP_DIVISOR * speed;
+        match hand {
+            WeaponHand::MainHand => hit,
+            WeaponHand::OffHand => hit * OFF_HAND_MULT,
+        }
+    }
+
+    /// The product of `AttackSpeedPct` modifiers on the actor's own auras.
+    pub fn attack_speed_mult(&self, view: &dyn StateView, actor: ActorId) -> f64 {
+        self.mod_product(view, &Query::holder(actor), ModKind::AttackSpeedPct)
+    }
+
     /// The spec of a seat, if the setup had one there.
     pub(crate) fn seat_spec(&self, seat: Seat) -> Option<SpecId> {
         self.s.seats.get(usize::from(seat.0)).map(|s| s.spec)
@@ -131,18 +224,60 @@ impl Formulas {
         Some((base.spec, stats))
     }
 
-    /// Percentages and derived values with every active aura applied. Non-player
-    /// actors have no stats beyond their health.
+    /// Percentages and derived values with every active aura applied. Pets
+    /// take theirs from their owner's (see [`PetScaling`]); enemies have no
+    /// stats beyond their health.
+    ///
+    /// [`PetScaling`]: portunus_gamedata::pet::PetScaling
     pub fn derived(&self, view: &dyn StateView, actor: ActorId) -> DerivedStats {
+        if let Some(ActorKind::Pet { owner, pet }) = view.actor(actor).map(|a| a.kind) {
+            if let Role::Totem { owner } = self.role(view, actor) {
+                return DerivedStats {
+                    max_health: view.actor(actor).map_or(0.0, |a| a.max_health as f64),
+                    ..self.derived(view, owner)
+                };
+            }
+            return self.pet_derived(view, actor, owner, pet);
+        }
         let spec = self
             .stat_block(view, actor)
             .and_then(|(spec, stats)| Some((self.s.data.specs.get(&spec)?, stats)));
         match spec {
             Some((spec, stats)) => portunus_loadout::derive(&self.s.data.curves, spec, &stats),
             None => DerivedStats {
-                max_health: view.actor(actor).map_or(0.0, |a| a.max_health),
+                max_health: view.actor(actor).map_or(0.0, |a| a.max_health as f64),
                 ..DerivedStats::default()
             },
+        }
+    }
+
+    fn pet_derived(
+        &self,
+        view: &dyn StateView,
+        actor: ActorId,
+        owner: Seat,
+        pet: PetId,
+    ) -> DerivedStats {
+        let k = self
+            .s
+            .data
+            .pets
+            .get(&pet)
+            .map(|d| d.scaling)
+            .unwrap_or_default();
+        let o = view
+            .seats()
+            .get(usize::from(owner.0))
+            .map(|&id| self.derived(view, id))
+            .unwrap_or_default();
+        DerivedStats {
+            crit_pct: o.crit_pct,
+            haste_pct: o.haste_pct,
+            mastery_pct: 0.0,
+            versatility_pct: o.versatility_pct,
+            attack_power: o.attack_power * k.ap_from_ap + o.spell_power * k.ap_from_sp,
+            spell_power: o.spell_power * k.sp_from_sp + o.attack_power * k.sp_from_ap,
+            max_health: view.actor(actor).map_or(0.0, |a| a.max_health as f64),
         }
     }
 
@@ -239,12 +374,45 @@ impl Formulas {
         any
     }
 
-    fn spell_query(&self, ctx: &EffectCtx, school: Option<SchoolMask>) -> Query {
+    fn spell_query(
+        &self,
+        view: &dyn StateView,
+        ctx: &EffectCtx,
+        school: Option<SchoolMask>,
+    ) -> Query {
         Query {
-            holder: ctx.caster,
+            holder: self.modifier_holder(view, ctx.caster),
             target: ctx.target,
             spell: ctx.spell,
             school: school.or_else(|| self.spell_school(ctx.spell)),
+        }
+    }
+
+    /// The owner's pet or guardian damage multiplier for a pet's action;
+    /// 1 for everyone else.
+    fn owner_pet_mult(&self, view: &dyn StateView, ctx: &EffectCtx, school: SchoolMask) -> f64 {
+        let Role::Pet { owner, guardian } = self.role(view, ctx.caster) else {
+            return 1.0;
+        };
+        let q = Query {
+            holder: owner,
+            ..self.spell_query(view, ctx, Some(school))
+        };
+        let kind = if guardian {
+            ModKind::GuardianDamagePct
+        } else {
+            ModKind::PetDamagePct
+        };
+        self.mod_product(view, &q, kind)
+    }
+
+    /// Crit the owner's unscoped modifiers grant, which pets inherit.
+    fn owner_crit_add(&self, view: &dyn StateView, actor: ActorId) -> f64 {
+        match self.role(view, actor) {
+            Role::Pet { owner, .. } => {
+                self.mod_sum(view, &Query::holder(owner), ModKind::CritChanceAdd)
+            }
+            Role::Own | Role::Totem { .. } => 0.0,
         }
     }
 }
@@ -255,10 +423,12 @@ impl CombatMath for Formulas {
             Coefficient::Flat(x) => x,
             Coefficient::SpellPower(c) => c * self.derived(view, ctx.caster).spell_power,
             Coefficient::AttackPower(c) => c * self.derived(view, ctx.caster).attack_power,
-            Coefficient::WeaponDamage(_) => 0.0,
+            Coefficient::WeaponDamage(c) => {
+                c * self.weapon_damage(view, ctx.caster, WeaponHand::MainHand)
+            }
             Coefficient::PctMaxHealth(pct) => {
                 let who = ctx.target.unwrap_or(ctx.caster);
-                pct / 100.0 * view.actor(who).map_or(0.0, |a| a.max_health)
+                pct / 100.0 * view.actor(who).map_or(0.0, |a| a.max_health as f64)
             }
             Coefficient::EventAmount(f) => f * ctx.event_amount.unwrap_or(0.0),
             Coefficient::AuraValue(f) => {
@@ -280,11 +450,13 @@ impl CombatMath for Formulas {
     ) -> f64 {
         let base = self.base(view, ctx, amount);
         let done = match kind {
-            Outgoing::Damage(school) => self.mod_product(
-                view,
-                &self.spell_query(ctx, Some(school)),
-                ModKind::DamageDonePct,
-            ),
+            Outgoing::Damage(school) => {
+                self.mod_product(
+                    view,
+                    &self.spell_query(view, ctx, Some(school)),
+                    ModKind::DamageDonePct,
+                ) * self.owner_pet_mult(view, ctx, school)
+            }
             Outgoing::Heal => 1.0,
         };
         let vers = 1.0 + self.derived(view, ctx.caster).versatility_pct / 100.0;
@@ -296,12 +468,20 @@ impl CombatMath for Formulas {
     }
 
     fn crit_chance(&self, view: &dyn StateView, ctx: &EffectCtx) -> f64 {
-        let add = self.mod_sum(view, &self.spell_query(ctx, None), ModKind::CritChanceAdd);
+        let add = self.mod_sum(
+            view,
+            &self.spell_query(view, ctx, None),
+            ModKind::CritChanceAdd,
+        ) + self.owner_crit_add(view, ctx.caster);
         ((self.derived(view, ctx.caster).crit_pct + add) / 100.0).clamp(0.0, 1.0)
     }
 
     fn crit_multiplier(&self, view: &dyn StateView, ctx: &EffectCtx) -> f64 {
-        let bonus = self.mod_sum(view, &self.spell_query(ctx, None), ModKind::CritDamagePct);
+        let bonus = self.mod_sum(
+            view,
+            &self.spell_query(view, ctx, None),
+            ModKind::CritDamagePct,
+        );
         2.0 * (1.0 + bonus / 100.0)
     }
 
@@ -332,9 +512,20 @@ impl CombatMath for Formulas {
         out.max(0.0)
     }
 
+    /// Pets and guardians run at their owner's haste times their own
+    /// `HastePct` modifiers; totems at their owner's.
     fn haste_mult(&self, view: &dyn StateView, actor: ActorId) -> f64 {
-        let rating = 1.0 + self.derived(view, actor).haste_pct / 100.0;
-        rating * self.mod_product(view, &Query::holder(actor), ModKind::HastePct)
+        match self.role(view, actor) {
+            Role::Totem { owner } => self.haste_mult(view, owner),
+            Role::Pet { owner, .. } => {
+                self.haste_mult(view, owner)
+                    * self.mod_product(view, &Query::holder(actor), ModKind::HastePct)
+            }
+            Role::Own => {
+                let rating = 1.0 + self.derived(view, actor).haste_pct / 100.0;
+                rating * self.mod_product(view, &Query::holder(actor), ModKind::HastePct)
+            }
+        }
     }
 }
 
@@ -342,6 +533,14 @@ pub(crate) fn player_seat(view: &dyn StateView, actor: ActorId) -> Option<Seat> 
     match view.actor(actor)?.kind {
         ActorKind::Player(seat) => Some(seat),
         ActorKind::Enemy { .. } | ActorKind::Pet { .. } => None,
+    }
+}
+
+/// The seat behind a player or one of its pets.
+pub(crate) fn owner_seat(view: &dyn StateView, actor: ActorId) -> Option<Seat> {
+    match view.actor(actor)?.kind {
+        ActorKind::Player(seat) | ActorKind::Pet { owner: seat, .. } => Some(seat),
+        ActorKind::Enemy { .. } => None,
     }
 }
 
@@ -367,7 +566,7 @@ pub(crate) fn predicate(
         Predicate::CasterHasAura(aura) => view.auras(caster).iter().any(|i| i.aura == aura),
         Predicate::TargetHpBelow(frac) => target
             .and_then(|t| view.actor(t))
-            .is_some_and(|t| t.max_health > 0.0 && t.health / t.max_health < frac),
+            .is_some_and(|t| t.max_health > 0 && t.health_frac() < frac),
         Predicate::DiffersFromLastCast => player_seat(view, caster)
             .and_then(|s| view.last_cast(s))
             .is_none_or(|last| Some(last.spell) != spell),

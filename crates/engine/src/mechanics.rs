@@ -49,7 +49,7 @@ pub trait EngineIo {
     fn view(&self) -> &dyn StateView;
     fn data(&self) -> &GameData;
     /// Returns the amount that landed after absorbs, overkill included.
-    fn apply_damage(&mut self, d: DamageEvent) -> f64;
+    fn apply_damage(&mut self, d: DamageEvent) -> u64;
     fn apply_heal(&mut self, h: HealEvent);
     fn apply_aura(&mut self, a: AuraApplication);
     /// `source: None` removes the aura from every source.
@@ -180,6 +180,16 @@ pub struct EnemyHit {
     pub school: SchoolMask,
 }
 
+/// A computed hit, heal, or health pool as whole points, the way the game
+/// keeps them: the nearest integer, with negatives and NaN as 0.
+pub fn whole_points(amount: f64) -> u64 {
+    if amount.is_nan() || amount <= 0.0 {
+        0
+    } else {
+        amount.round() as u64
+    }
+}
+
 /// A mechanics-owned timer; `token` means whatever the owner's spec kit
 /// says it means.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -192,7 +202,8 @@ pub struct TimerEvent {
 pub struct DamageEvent {
     pub source: ActorId,
     pub target: ActorId,
-    pub amount: f64,
+    /// Whole points: mechanics round each hit (see [`whole_points`]).
+    pub amount: u64,
     pub school: SchoolMask,
     pub spell: Option<SpellId>,
     pub crit: bool,
@@ -202,7 +213,8 @@ pub struct DamageEvent {
 pub struct HealEvent {
     pub source: ActorId,
     pub target: ActorId,
-    pub amount: f64,
+    /// Whole points, like [`DamageEvent::amount`].
+    pub amount: u64,
     pub spell: Option<SpellId>,
 }
 
@@ -212,4 +224,18 @@ pub struct AuraApplication {
     pub stacks: u8,
     /// Override the data duration (e.g. a talent-extended buff).
     pub duration: Option<SimDuration>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::whole_points;
+
+    #[test]
+    fn hits_round_to_the_nearest_point() {
+        assert_eq!(whole_points(1234.49), 1234);
+        assert_eq!(whole_points(1234.5), 1235);
+        assert_eq!(whole_points(0.4), 0);
+        assert_eq!(whole_points(-3.0), 0);
+        assert_eq!(whole_points(f64::NAN), 0);
+    }
 }
