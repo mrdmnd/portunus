@@ -338,6 +338,7 @@ fn moving_releases_an_empower_unless_it_can_be_cast_while_moving() {
             persists_through_death: false,
             unique_per_source: false,
             prevents_death: None,
+            ground: None,
         },
     );
     f.template.passive_auras.push(HOVER);

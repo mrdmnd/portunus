@@ -66,6 +66,23 @@ pub struct AuraDef {
     /// (Cauterize, Cheat Death, Ardent Defender).
     #[serde(default)]
     pub prevents_death: Option<PreventDeath>,
+    /// Placed on the ground (Death and Decay, Consecration, Rain of Fire):
+    /// its ticks and expiry effects reach only enemies inside the area,
+    /// and `Predicate::InOwnGround` asks whether its caster still stands in
+    /// it.
+    #[serde(default)]
+    pub ground: Option<GroundDef>,
+}
+
+/// Where a ground aura reaches. It is centred where its spell's target
+/// stood when cast, or else on the enemy its holder was targeting: seats
+/// have no place of their own, so a self-cast area is taken to be at the
+/// enemy the caster is fighting.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct GroundDef {
+    /// Yards from the centre. As in SimC's ground effects, an enemy's own
+    /// combat reach counts on top.
+    pub radius: f64,
 }
 
 /// What happens instead of the holder's death. As SimC's Ardent Defender

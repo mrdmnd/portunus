@@ -10,7 +10,7 @@ use portunus_gamedata::item::WeaponHand;
 use portunus_gamedata::spell::{Requirement, SpellDef};
 
 use crate::mechanics::{AuraApplication, AuraChange, AuraEvent, AuraRemoval, ValueLimits};
-use crate::state::{AuraInstance, AuraRef, DeckView, ListenerRef, ProcView};
+use crate::state::{AuraInstance, AuraRef, DeckView, GroundView, ListenerRef, ProcView, StateView};
 
 use crate::step::WakeReason;
 use crate::trace::TraceEvent;
@@ -104,6 +104,15 @@ impl World {
             .pmultiplier
             .unwrap_or_else(|| self.pmultiplier_of(r.source, r.aura));
         let haste = self.source_haste(r);
+        let ground = def.ground.map(|g| GroundView {
+            centre: app.anchor.or_else(|| {
+                StateView::target(&*self, r.holder).and_then(|t| self.pack_position(t))
+            }),
+            radius: g.radius,
+            placed_at_yards: self
+                .player_seat(r.holder)
+                .map_or(0.0, |seat| self.yards_travelled(seat)),
+        });
         match self.find_aura(r) {
             None => {
                 if def.unique_per_source {
@@ -144,6 +153,7 @@ impl World {
                     next_stack_expires: None,
                     value: 0.0,
                     pmultiplier,
+                    ground,
                 });
                 holder.meta.push(AuraMeta {
                     uid,
@@ -179,6 +189,9 @@ impl World {
                     return;
                 };
                 let previous = holder.auras[i].stacks;
+                if ground.is_some() {
+                    holder.auras[i].ground = ground;
+                }
                 let added = timed_stacks(app.stacks);
                 if !added.is_empty() {
                     // At the cap, each new stack replaces the oldest.
@@ -283,8 +296,11 @@ impl World {
             source: inst.source,
         };
         a.procs.retain(|p| p.listener.aura != r);
-        self.followups
-            .push_back(Followup::Removed(AuraEvent { aura: r, reason }));
+        self.followups.push_back(Followup::Removed(AuraEvent {
+            aura: r,
+            reason,
+            ground: inst.ground,
+        }));
         self.record(TraceEvent::AuraRemoved {
             holder,
             aura: inst.aura,
@@ -504,6 +520,7 @@ impl World {
                 stacks: 1,
                 duration: None,
                 pmultiplier: None,
+                anchor: None,
             });
         }
         let Some(i) = self.find_aura(r) else { return };

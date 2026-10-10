@@ -67,6 +67,7 @@ pub fn aura(id: AuraId) -> AuraDef {
         persists_through_death: false,
         unique_per_source: false,
         prevents_death: None,
+        ground: None,
     }
 }
 

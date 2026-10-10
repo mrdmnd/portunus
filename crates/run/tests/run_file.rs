@@ -13,14 +13,16 @@ use portunus_engine::{
 };
 use portunus_env::{Decision, Env, EpisodeSource, ProgressMeter, Turn};
 use portunus_eval::{Arm, LocalRunner, Metric, Runner, SeedSet};
-use portunus_gamedata::aura::{AuraDef, AuraValue, AuraValueKind, RefreshRule};
+use portunus_gamedata::aura::{AuraDef, AuraValue, AuraValueKind, GroundDef, RefreshRule};
 use portunus_gamedata::effect::{Coefficient, Effect, EffectTarget};
 use portunus_gamedata::enemy::{EnemyAction, EnemyKind, EnemyRule};
 use portunus_gamedata::spell::CastKind;
 use portunus_gamedata::stats::{
     Cost, RechargeDef, ResourceDef, ResourceKind, SchoolMask, SpendScaling,
 };
-use portunus_run::{Bundle, ChannelObs, EmpowerObs, PartyMeter, RunError, SeatObs, FOREVER};
+use portunus_run::{
+    Bundle, ChannelObs, EmpowerObs, GroundObs, PartyMeter, RunError, SeatObs, FOREVER,
+};
 
 const LIGHTNING_BOLT: SpellId = SpellId(188196);
 
@@ -415,6 +417,7 @@ fn seats_see_shields_as_a_share_of_health() {
         persists_through_death: false,
         unique_per_source: false,
         prevents_death: None,
+        ground: None,
     };
     let apply = |id: u32, target| Effect::ApplyAura {
         aura: AuraId(id),
@@ -614,4 +617,121 @@ fn slain_adds_count_toward_forces_but_despawned_ones_do_not() {
     // wisp leaves with the dummy.
     assert_eq!(seen.iter().max(), Some(&3));
     assert_eq!(PartyMeter.measure(state, &run).forces, 6);
+}
+
+#[test]
+fn seats_see_how_far_the_targets_packmates_stand_from_it() {
+    let mut b = bundle();
+    let enemies = Arc::make_mut(&mut b.enemies);
+    let dummy = EnemyKey("target_dummy".into());
+    for key in ["imp", "wisp"] {
+        let mut def = enemies.enemies[&dummy].clone();
+        def.key = EnemyKey(key.into());
+        def.kind = EnemyKind::Add;
+        def.rules = Vec::new();
+        enemies.enemies.insert(def.key.clone(), def);
+    }
+    // The dummy stands 20 yards out; the wisp 10 yards behind it.
+    let summon = |key: &str, distance: Option<f64>| EnemyRule {
+        name: EventName(format!("summon {key}")),
+        phase: None,
+        when: Trigger::Now,
+        repeat: None,
+        action: EnemyAction::SpawnAdds {
+            adds: vec![(EnemyKey(key.into()), 1)],
+            distance: distance.map(portunus_core::Dist::Fixed),
+            despawn_with_spawner: false,
+        },
+    };
+    enemies.enemies.get_mut(&dummy).unwrap().rules =
+        vec![summon("imp", None), summon("wisp", Some(30.0))];
+    let mut env = b.env(false);
+    let mut turn = env.reset(Seed(1)).unwrap();
+    while let Turn::Decide(d) = turn {
+        if let Some(target) = d.obs.target.as_ref().filter(|t| t.neighbours.len() == 2) {
+            assert_eq!(target.neighbours, vec![0.0, 10.0]);
+            assert_eq!(d.obs.enemies_near_target(8.0), 2);
+            assert_eq!(d.obs.enemies_near_target(10.0), 3);
+            return;
+        }
+        let choice = if d.legal.is_ready(LIGHTNING_BOLT) {
+            Choice::cast(LIGHTNING_BOLT)
+        } else {
+            Choice::Wait(Wait::NextEvent)
+        };
+        turn = env.step(choice).unwrap().next;
+    }
+    panic!("never saw both adds beside the target");
+}
+
+#[test]
+fn seats_see_how_far_they_can_stray_from_their_area_and_who_is_in_it() {
+    let mut b = bundle();
+    let data = Arc::make_mut(&mut b.data);
+    let area = AuraId(900_703);
+    data.auras.insert(
+        area,
+        AuraDef {
+            id: area,
+            name: "area".into(),
+            duration: Some(SimDuration(60_000)),
+            max_stacks: 1,
+            refresh: RefreshRule::Replace,
+            periodic: None,
+            value: None,
+            modifiers: Vec::new(),
+            listeners: Vec::new(),
+            overrides: Vec::new(),
+            on_expire: Vec::new(),
+            cancelable: false,
+            blocked_by: None,
+            form: None,
+            stealth: None,
+            ends_with: None,
+            persists_through_death: false,
+            unique_per_source: false,
+            prevents_death: None,
+            ground: Some(GroundDef { radius: 8.0 }),
+        },
+    );
+    data.spells
+        .get_mut(&LIGHTNING_BOLT)
+        .unwrap()
+        .effects
+        .push(Effect::ApplyAura {
+            aura: area,
+            target: EffectTarget::Caster,
+            stacks: 1,
+            duration: None,
+            per_unit_spent: None,
+        });
+    let mut env = b.env(false);
+    let mut turn = env.reset(Seed(1)).unwrap();
+    let mut walked = false;
+    while let Turn::Decide(d) = turn {
+        let choice = match d.obs.buffs.get(&area).and_then(|a| a.ground) {
+            Some(g) if !walked => {
+                // Placed at the dummy, which stands in it.
+                assert_eq!(
+                    g,
+                    GroundObs {
+                        yards_left: 8.0,
+                        enemies: 1
+                    }
+                );
+                walked = true;
+                Choice::Move(MoveGoal::Yards(3.0))
+            }
+            Some(g) if d.obs.movement.is_none() => {
+                // Movement ends on a whole millisecond, a hair past 3 yards.
+                assert!((g.yards_left - 5.0).abs() < 0.01, "{g:?}");
+                return;
+            }
+            _ if walked => Choice::Wait(Wait::NextEvent),
+            _ if d.legal.is_ready(LIGHTNING_BOLT) => Choice::cast(LIGHTNING_BOLT),
+            _ => Choice::Wait(Wait::NextEvent),
+        };
+        turn = env.step(choice).unwrap().next;
+    }
+    panic!("never saw the area");
 }

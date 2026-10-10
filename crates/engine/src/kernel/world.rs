@@ -123,6 +123,10 @@ pub(crate) struct Actor {
     /// Enemies: yards from each seat, as of that seat's last movement
     /// settle. Empty for the party's own actors.
     pub distances: Vec<f64>,
+    /// Enemies: where it stands in its pack, as yards along the pack and
+    /// yards from the party. Seats moving don't change it; the enemy's own
+    /// repositioning does.
+    pub pack: (f64, f64),
     /// Enemies: when it engaged, which starts its rules' clocks.
     pub engaged_at: Option<SimTime>,
     /// Enemies: one entry per rule of its definition.
@@ -241,6 +245,7 @@ impl Actor {
             pet: None,
             swings: [None, None],
             distances: Vec::new(),
+            pack: (0.0, 0.0),
             engaged_at: None,
             rules: Vec::new(),
             enemy_cast: None,
@@ -587,6 +592,8 @@ pub(crate) struct SeatState {
     pub move_gen: u32,
     /// Whether mechanics last heard that the seat is moving.
     pub moving_told: bool,
+    /// Yards moved so far, settled.
+    pub travelled: f64,
     /// Soonest deadline first.
     pub demands: Vec<Demand>,
 }
@@ -1228,6 +1235,7 @@ impl World {
                     stacks: 1,
                     duration: None,
                     pmultiplier: None,
+                    anchor: None,
                 });
             }
             self.followups.push_back(Followup::DeathPrevented(r));
@@ -1565,6 +1573,7 @@ impl World {
                 stacks: 1,
                 duration: None,
                 pmultiplier: None,
+                anchor: None,
             });
         }
         for i in 0..self.seats.len() {
@@ -1819,6 +1828,17 @@ impl StateView for World {
 
     fn auras_at_death(&self, actor: ActorId) -> &[AuraInstance] {
         self.actor_ref(actor).map_or(&[], |a| &a.died_with)
+    }
+
+    fn yards_travelled(&self, seat: Seat) -> f64 {
+        self.seat_ref(seat)
+            .map_or(0.0, |st| st.travelled + self.unsettled_yards(seat))
+    }
+
+    fn pack_position(&self, enemy: ActorId) -> Option<(f64, f64)> {
+        self.actor_ref(enemy)
+            .filter(|a| matches!(a.kind, ActorKind::Enemy { .. }))
+            .map(|a| a.pack)
     }
 
     fn procs(&self, holder: ActorId) -> &[ProcView] {

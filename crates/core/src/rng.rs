@@ -29,6 +29,8 @@ pub enum Purpose {
     EnemyDamage = 5,
     /// Per-pull enemy health multipliers.
     EnemyHealth = 6,
+    /// Where each spawn stands along its pack.
+    PackOffset = 7,
     Crit = 16,
     Proc = 17,
     /// Streams declared by a spec kit.

@@ -63,4 +63,7 @@ pub struct ResolvedSpawn {
     pub engage: Trigger<SpawnSet>,
     /// Yards from the party.
     pub distance: f64,
+    /// Yards along its pack (see `WaveSpec::spread`).
+    #[serde(default)]
+    pub offset: f64,
 }

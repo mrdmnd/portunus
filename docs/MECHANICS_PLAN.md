@@ -1041,7 +1041,47 @@ already have it.
 
 ### 4.7 Enemy positions within a pack (Tier B)
 
-Today each enemy has one distance per seat. Cleave geometry ("enemies near
+**Done, with a 2-D position instead of 1-D.** Each enemy has a
+`pack: (offset, depth)` in the kernel, exposed as
+`StateView::pack_position`. `ActorView` derives `Eq`, so the position
+can't go there.
+
+- `offset` is drawn per spawn from `WaveSpec.spread` (serde default
+  `None`, meaning 0), on its own RNG purpose, `Purpose::PackOffset`. It
+  becomes `ResolvedSpawn.offset`. The sampler reports a spread that isn't
+  a finite range as `InvalidDistance`.
+- `depth` is the enemy's own distance from the party. It starts at the
+  wave's `distance`. Only the enemy's `Reposition` changes it; seats moving
+  or being knocked back don't. Per-seat distances can't serve as positions:
+  when a seat walks up to one enemy, only that enemy's distance changes,
+  and the enemy would seem to leave its pack.
+- **Change from the plan:** "near" is the straight-line distance between
+  `(offset, depth)` points, not `|offset_a - offset_b|`. `Reposition` sets
+  the depth rather than shifting the offset. Either way a repositioned
+  enemy leaves its pack; this way, adds spawned at a different distance
+  are apart from their spawner too.
+- Adds take their spawner's offset. Their depth is the spawn rule's
+  `distance` if it has one, otherwise the spawner's depth.
+- `EffectTarget::NearTarget { yards: u8 }` (a whole number, since
+  `EffectTarget` derives `Eq`) is the target plus every engaged, alive
+  enemy within `yards` of it, inclusive. SimC
+  (`action_t::check_distance_targeting`, used only when
+  `distance_targeting_enabled` is on) does the same on an x/y plane: the
+  main target always counts, and others count while their distance is at
+  most the radius.
+- **Observation:** `TargetObs.neighbours` lists the yards from the target
+  to each other visible engaged enemy, nearest first, and
+  `SeatObs::enemies_near_target(yards)` counts what an area would hit.
+- No scenario sets `spread` yet, and nothing in the checked-in data uses
+  `NearTarget`, so DPS and trace hashes are unchanged.
+- **Tests:** `areas_reach_the_enemies_near_the_target_by_pack_position`
+  (mechanics `targets.rs`) checks the inclusive radius, adds placed by
+  their spawn distance, the wave's spread, and a `Reposition` bringing an
+  add into range. A sampler test checks that spread draws are
+  deterministic, stay in bounds, and are rejected when reversed. A run test
+  checks the observation.
+
+**Original plan:** Today each enemy has one distance per seat. Cleave geometry ("enemies near
 the target", chains bouncing by proximity, ground-effect radius) needs
 relative positions.
 
@@ -1060,6 +1100,63 @@ relative positions.
 
 Death and Decay, Consecration, Rain of Fire, Sigils, Efflorescence,
 Starfall's placement variants, totems that stay put.
+
+**Done.** None of the checked-in data uses it yet, so DPS and trace
+hashes are unchanged.
+
+- **Data.** `AuraDef.ground: Option<GroundDef { radius }>` (serde
+  default). Ingest reports `InvalidGround` for a radius that isn't a
+  positive number.
+- **Placement.** The kernel records a `GroundView { centre, radius,
+  placed_at_yards }` on the instance (`AuraInstance.ground`).
+  - When an `ApplyAura` effect applies a ground aura, the interpreter
+    passes its context target's pack position as
+    `AuraApplication.anchor`.
+  - Without one (self-only spells, totems' passive auras), the kernel
+    centres it on the enemy the holder is targeting; pets follow their
+    owner's target. This stands in for "the caster's position", which
+    seats don't have: a self-cast area goes where the caster is fighting.
+  - If there is no enemy at all, `centre` is `None` and the area reaches
+    every enemy, as today.
+  - Reapplying the aura places it again.
+- **Who it hits.** Periodic ticks and `on_expire` effects run with
+  `EffectCtx.ground` set. On the removal path this comes from a new
+  `AuraEvent.ground`, since the instance is gone by then. With an area
+  set, `EffectTarget::AllEnemies` keeps only the enemies inside it.
+  Listeners on a ground aura are not limited.
+- **SimC check.** SimC places ground AoE at the target's position when
+  cast (`execute_state` `original_x/y`). Its
+  `action_t::check_distance_targeting` keeps a target while
+  `get_ground_aoe_distance <= radius + combat_reach`, and the default
+  `combat_reach` is 1 yard. `GroundView::reaches` does the same, using
+  `ENEMY_COMBAT_REACH = 1.0`.
+- **Enemies that `Reposition`** leave the area automatically, because
+  their pack depth changes (4.7).
+- **Standing in it.** The kernel keeps a per-seat odometer of yards
+  covered by any movement, counted in `cover` (walking and knockbacks),
+  exposed as `StateView::yards_travelled`. `Predicate::InOwnGround(aura)`
+  holds while the caster has its own instance and has moved no more than
+  the radius since placing it. Pets and totems never leave. Ingest
+  rejects it on an aura that isn't on the ground. A haste modifier
+  conditioned on it won't reschedule timers when the seat walks out; the
+  health predicates have the same limit.
+- **Sigils** need nothing new: a short ground aura whose `on_expire` deals
+  the damage hits only the enemies inside.
+- **Observation.** `AuraObs.ground: Option<GroundObs { yards_left,
+  enemies }>` for ground auras the seat placed on itself: how far it can
+  still move and stay inside, and how many visible engaged enemies the
+  area covers.
+- **Tests.**
+  - `crates/mechanics/tests/ground.rs`:
+    - ticks reach only enemies inside the area, including one inside only
+      by its combat reach, and stop for an enemy that repositioned out;
+    - a sigil's expiry hits only where it was cast;
+    - standing in the area survives a short walk but not a long one, and
+      recasting restores it;
+    - a self-only cast centres on the caster's target.
+  - A run test covers the observation; an ingest test covers both checks.
+
+**Original plan:**
 
 **Today:** ground effects are caster auras whose periodic effects hit
 `AllEnemies`; anything that cares whether you "stand in it" checks the

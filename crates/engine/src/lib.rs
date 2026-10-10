@@ -105,8 +105,8 @@ pub use order::EventClass;
 pub use outcome::Outcome;
 pub use setup::{Externals, Latency, PullAura, RunSetup, SeatSetup};
 pub use state::{
-    AuraRef, DeckView, DemandView, ListenerRef, MovementView, PendingTimer, ProcView, SeatPhase,
-    SegmentView, StateView,
+    AuraRef, DeckView, DemandView, GroundView, ListenerRef, MovementView, PendingTimer, ProcView,
+    SeatPhase, SegmentView, StateView,
 };
 pub use step::{DecisionRequest, Step, WakeReason};
 pub use trace::TraceRecord;

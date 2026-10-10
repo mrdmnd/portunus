@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use portunus_core::rng::{self, Purpose};
-use portunus_core::{EnemyKey, Sample, Seed, SimDuration, SpawnLabel, Trigger};
+use portunus_core::{Dist, EnemyKey, Sample, Seed, SimDuration, SpawnLabel, Trigger};
 use portunus_gamedata::enemy::EnemyDef;
 use portunus_gamedata::EnemyData;
 
@@ -22,6 +22,7 @@ struct Spawn {
     enemy: EnemyKey,
     engage: Trigger<SpawnSet>,
     distance: f64,
+    spread: Option<Dist<f64>>,
 }
 
 impl ScenarioSampler for Sampler {
@@ -95,6 +96,10 @@ impl ScenarioSampler for Sampler {
                         forces: def.forces,
                         engage: s.engage.clone(),
                         distance: s.distance,
+                        offset: s.spread.as_ref().map_or(0.0, |d| {
+                            let domain = rng::domain(Purpose::PackOffset, &[name, &s.label.0]);
+                            d.sample(seed, domain, 0)
+                        }),
                     }
                 })
                 .collect();
@@ -185,7 +190,11 @@ fn resolve_pull(
 
     for (wave_index, wave) in pull.waves.iter().enumerate() {
         check_wave_trigger(pull, wave_index, &wave.engage, &by_label, enemies, issues);
-        if !(wave.distance >= 0.0 && wave.distance.is_finite()) {
+        let spread_ok = wave.spread.as_ref().is_none_or(|d| {
+            let (lo, hi) = d.bounds();
+            lo.is_finite() && hi.is_finite() && lo <= hi
+        });
+        if !(wave.distance >= 0.0 && wave.distance.is_finite() && spread_ok) {
             issues.push(ScenarioIssue::InvalidDistance {
                 pull: pull.name.clone(),
                 wave: wave_index,
@@ -210,6 +219,7 @@ fn resolve_pull(
                 enemy: key.clone(),
                 engage,
                 distance: pull.waves[wave_index].distance,
+                spread: pull.waves[wave_index].spread.clone(),
             }
         })
         .collect()
@@ -341,6 +351,7 @@ mod tests {
             mobs: vec![(EnemyKey("grunt".into()), count)],
             engage,
             distance: DEFAULT_DISTANCE,
+            spread: None,
         }
     }
 
@@ -445,6 +456,40 @@ mod tests {
     }
 
     #[test]
+    fn spread_places_each_spawn_within_bounds_and_must_be_a_range() {
+        let mut spread = wave(3, Trigger::Now);
+        spread.spread = Some(Dist::Uniform { lo: -6.0, hi: 6.0 });
+        let sampler = Sampler::new(
+            spec(vec![pull("a", vec![spread, wave(1, Trigger::Now)])]),
+            enemies(),
+        )
+        .unwrap();
+        assert_eq!(sampler.sample(Seed(3)), sampler.sample(Seed(3)));
+        let mut seen = BTreeSet::new();
+        for seed in 0..20 {
+            let run = sampler.sample(Seed(seed));
+            let Segment::Combat(combat) = &run.segments[1] else {
+                panic!("expected combat");
+            };
+            let offsets: Vec<f64> = combat.spawns.iter().map(|s| s.offset).collect();
+            assert!(offsets[..3].iter().all(|o| (-6.0..=6.0).contains(o)));
+            assert_eq!(offsets[3], 0.0, "no spread, no offset");
+            seen.extend(offsets[..3].iter().map(|o| o.to_bits()));
+        }
+        assert!(seen.len() > 50, "{} distinct", seen.len());
+
+        let mut bad = wave(1, Trigger::Now);
+        bad.spread = Some(Dist::Uniform { lo: 2.0, hi: -2.0 });
+        assert_eq!(
+            issues(spec(vec![pull("a", vec![bad])])),
+            vec![ScenarioIssue::InvalidDistance {
+                pull: PullName("a".into()),
+                wave: 0,
+            }]
+        );
+    }
+
+    #[test]
     fn editing_one_pull_leaves_another_pulls_draws_alone() {
         let a = spec(vec![
             pull("a", vec![wave(1, Trigger::Now)]),
@@ -468,6 +513,7 @@ mod tests {
                     mobs: vec![(EnemyKey("ghost".into()), 1)],
                     engage: Trigger::Now,
                     distance: -1.0,
+                    spread: None,
                 },
                 wave(
                     1,

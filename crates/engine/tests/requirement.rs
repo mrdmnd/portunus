@@ -94,6 +94,7 @@ fn executioner(dummies: u32) -> Fixture {
         persists_through_death: false,
         unique_per_source: false,
         prevents_death: None,
+        ground: None,
     };
     let apply = Effect::ApplyAura {
         aura: BLEED_DOT,

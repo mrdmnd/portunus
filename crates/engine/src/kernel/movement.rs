@@ -192,6 +192,7 @@ impl World {
     /// Count `yards` toward every demand the seat owes; met ones go.
     fn cover(&mut self, seat: Seat, yards: f64) {
         let st = self.seat_mut(seat);
+        st.travelled += yards;
         for d in &mut st.demands {
             d.yards = (d.yards - yards).max(0.0);
         }

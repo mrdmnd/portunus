@@ -160,6 +160,7 @@ fn run(
                         stacks: *stacks,
                         duration: *duration,
                         pmultiplier: None,
+                        anchor: None,
                     });
                 }
             }

@@ -186,6 +186,7 @@ impl World {
                     stacks: 1,
                     duration: None,
                     pmultiplier: None,
+                    anchor: None,
                 });
             }
             if let Some(e) = expires {

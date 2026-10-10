@@ -5,7 +5,9 @@
 
 mod synthetic;
 
-use portunus_core::{ActorId, AuraId, EventName, SimDuration, SimTime, SpellId, Trigger};
+use portunus_core::{
+    ActorId, AuraId, Dist, EnemyKey, EventName, SimDuration, SimTime, SpellId, Trigger,
+};
 use portunus_engine::trace::TraceEvent;
 use portunus_engine::{Engine, StateView, TraceRecord};
 use portunus_gamedata::aura::Periodic;
@@ -13,7 +15,7 @@ use portunus_gamedata::effect::{
     AoeRule, Coefficient, CountScale, Effect, EffectTarget, ListenFor, ModKind, ModScope, Modifier,
     TargetCount,
 };
-use portunus_gamedata::enemy::{EnemyAction, EnemyRule};
+use portunus_gamedata::enemy::{EnemyAction, EnemyKind, EnemyRule};
 use portunus_gamedata::stats::SchoolMask;
 use synthetic::*;
 
@@ -401,4 +403,87 @@ fn a_unique_aura_follows_its_casters_latest_target() {
     // The third add's own mark has another source, so it stays.
     assert_eq!(run(true), vec![false, false, true, true]);
     assert_eq!(run(false), vec![false, true, true, true]);
+}
+
+const NOVA: SpellId = SpellId(900_819);
+const NOVA_FAR: SpellId = SpellId(900_820);
+const NOVA_LATE: SpellId = SpellId(900_821);
+
+#[test]
+fn areas_reach_the_enemies_near_the_target_by_pack_position() {
+    let mut f = fixture(Vec::new());
+    f.spec.pulls[0].waves[0].spread = Some(Dist::Fixed(4.0));
+    let spawn = |key: &str, distance: Option<f64>| EnemyRule {
+        name: EventName(format!("summon {key}")),
+        phase: None,
+        when: Trigger::Now,
+        repeat: None,
+        action: EnemyAction::SpawnAdds {
+            adds: vec![(EnemyKey(key.into()), 1)],
+            distance: distance.map(Dist::Fixed),
+            despawn_with_spawner: false,
+        },
+    };
+    let comes_closer = EnemyRule {
+        name: EventName("close in".into()),
+        phase: None,
+        when: Trigger::Elapsed(SimDuration(2500)),
+        repeat: None,
+        action: EnemyAction::Reposition {
+            distance: Dist::Fixed(26.0),
+        },
+    };
+    for (key, rules) in [
+        ("near", Vec::new()),
+        ("mid", Vec::new()),
+        ("far", vec![comes_closer]),
+    ] {
+        let mut def = f.enemies.enemies[&dummy()].clone();
+        def.key = EnemyKey(key.into());
+        def.kind = EnemyKind::Add;
+        def.rules = rules;
+        f.enemies.enemies.insert(def.key.clone(), def);
+    }
+    // The boss stands 4 yards along its pack and 20 from the party; the
+    // adds share its place in the pack, at 0, 8, and 20 yards from it.
+    f.boss(vec![
+        spawn("near", None),
+        spawn("mid", Some(28.0)),
+        spawn("far", Some(40.0)),
+    ]);
+    for id in [NOVA, NOVA_FAR, NOVA_LATE] {
+        add_spell(
+            &mut f,
+            spell(
+                id,
+                vec![damage(100.0, EffectTarget::NearTarget { yards: 8 })],
+            ),
+        );
+    }
+    let mut k = f.kernel();
+    play(
+        &mut k,
+        &[
+            (NOVA, 0),
+            (NOVA_FAR, 3),
+            (STRIKE, 0),
+            (STRIKE, 0),
+            (NOVA_LATE, 0),
+        ],
+        COMBAT_START + SimDuration(6000),
+    );
+    let trace = k.drain_trace();
+    let state = k.state();
+    let e = state.enemies().to_vec();
+    let at = |i: usize| state.pack_position(e[i]).unwrap();
+    assert_eq!(
+        (0..4).map(at).collect::<Vec<_>>(),
+        vec![(4.0, 20.0), (4.0, 20.0), (4.0, 28.0), (4.0, 26.0)]
+    );
+    assert_eq!(state.pack_position(ActorId(0)), None);
+    let landed =
+        |spell| -> Vec<usize> { (0..4).map(|i| hits(&trace, spell, e[i]).len()).collect() };
+    assert_eq!(landed(NOVA), vec![1, 1, 1, 0], "the radius is inclusive");
+    assert_eq!(landed(NOVA_FAR), vec![0, 0, 0, 1], "the target alone");
+    assert_eq!(landed(NOVA_LATE), vec![1, 1, 1, 1], "the far add came in");
 }

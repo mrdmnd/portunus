@@ -46,6 +46,11 @@ pub struct WaveSpec {
     /// Yards from the party, for missile flight times.
     #[serde(default = "default_distance")]
     pub distance: f64,
+    /// Where each of the wave's enemies stands along its pack, in yards,
+    /// drawn per spawn. With its distance from the party, this places it
+    /// for area effects. `None` puts the whole wave on one spot.
+    #[serde(default)]
+    pub spread: Option<Dist<f64>>,
 }
 
 /// Where a ranged caster usually stands.

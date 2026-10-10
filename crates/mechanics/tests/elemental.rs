@@ -211,6 +211,7 @@ fn crit_chance_follows_flame_shock() {
         depth: 0,
         hand: None,
         hit: HitKind::Direct,
+        ground: None,
     };
     let math = mechanics.math();
     assert!(close(

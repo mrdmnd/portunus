@@ -65,6 +65,10 @@ pub trait StateView {
     /// The auras `actor` held as it last died, before death removed them;
     /// empty if it never died.
     fn auras_at_death(&self, actor: ActorId) -> &[AuraInstance];
+    /// An enemy's place in its pack: yards along the pack, and yards from
+    /// the party (moved only by the enemy repositioning). Enemies are as
+    /// far apart as these points are.
+    fn pack_position(&self, enemy: ActorId) -> Option<(f64, f64)>;
     /// Proc bookkeeping for the listeners on this holder's auras.
     fn procs(&self, holder: ActorId) -> &[ProcView];
     /// The persistent multiplier (`ModKind::PersistentPct`) this aura would
@@ -105,6 +109,8 @@ pub trait StateView {
     /// Yards between the seat and an enemy, as of now; `None` if `enemy`
     /// isn't one.
     fn distance(&self, seat: Seat, enemy: ActorId) -> Option<f64>;
+    /// Yards the seat has moved, by any means, since the run began.
+    fn yards_travelled(&self, seat: Seat) -> f64;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -334,6 +340,38 @@ pub struct AuraInstance {
     pub value: f64,
     /// Persistent multiplier snapshotted at application; 1 if none.
     pub pmultiplier: f64,
+    /// Where a ground aura (`AuraDef::ground`) was placed.
+    pub ground: Option<GroundView>,
+}
+
+/// A ground aura's placement.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct GroundView {
+    /// A pack position (see [`StateView::pack_position`]); `None` if there
+    /// was no enemy to centre it on, in which case it reaches every enemy.
+    pub centre: Option<(f64, f64)>,
+    pub radius: f64,
+    /// The holder's [`StateView::yards_travelled`] when it was placed.
+    pub placed_at_yards: f64,
+}
+
+/// Yards an enemy's body adds to a ground effect's radius: SimC's default
+/// `combat_reach`, which `action_t::check_distance_targeting` adds for
+/// ground AoE.
+pub const ENEMY_COMBAT_REACH: f64 = 1.0;
+
+impl GroundView {
+    /// Whether an enemy at this pack position is inside.
+    pub fn reaches(&self, at: (f64, f64)) -> bool {
+        self.centre
+            .is_none_or(|(x, y)| (at.0 - x).hypot(at.1 - y) <= self.radius + ENEMY_COMBAT_REACH)
+    }
+
+    /// Yards the holder can still move before it is outside, given its
+    /// [`StateView::yards_travelled`] now; negative once it has left.
+    pub fn yards_left(&self, travelled: f64) -> f64 {
+        self.radius - (travelled - self.placed_at_yards)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -436,6 +474,11 @@ pub fn predicate(
                 && recent[..n]
                     .iter()
                     .all(|c| c.is_some_and(|c| c.spell == spell))
+        }),
+        Predicate::InOwnGround(aura) => has(caster, aura, Some(caster), &|i| {
+            i.ground.is_some_and(|g| {
+                seat().is_none_or(|s| g.yards_left(view.yards_travelled(s)) >= 0.0)
+            })
         }),
     }
 }

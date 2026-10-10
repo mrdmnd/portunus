@@ -66,7 +66,8 @@ pub enum ScenarioIssue {
     /// The health multiplier can be zero or less, or its bounds are
     /// reversed.
     InvalidHealth(PullName),
-    /// A wave's distance is negative or not a number.
+    /// A wave's distance is negative or not a number, or its spread
+    /// isn't a finite range.
     InvalidDistance {
         pull: PullName,
         wave: usize,

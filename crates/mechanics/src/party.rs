@@ -117,6 +117,7 @@ impl PartyMechanics {
             depth: 0,
             hand: self.spell(cast.spell).and_then(|d| d.weapon),
             hit: HitKind::Direct,
+            ground: None,
         }
     }
 
@@ -311,6 +312,12 @@ impl Mechanics for PartyMechanics {
             depth: 0,
             hand: None,
             hit: HitKind::Periodic,
+            ground: io
+                .view()
+                .auras(r.holder)
+                .iter()
+                .find(|i| i.aura == r.aura && i.source == r.source)
+                .and_then(|i| i.ground),
         };
         self.interp.run(io, &ctx, &periodic.effects);
         let ticked = Occurrence {
@@ -374,6 +381,7 @@ impl Mechanics for PartyMechanics {
                 depth: 0,
                 hand: None,
                 hit: HitKind::Direct,
+                ground: ev.ground,
             };
             self.interp.run(io, &ctx, &def.on_expire);
         }
@@ -389,6 +397,7 @@ impl Mechanics for PartyMechanics {
                 depth: 0,
                 hand: None,
                 hit: HitKind::Direct,
+                ground: None,
             };
             self.interp.run(io, &ctx, &st.on_break);
         }
@@ -527,6 +536,7 @@ impl Mechanics for PartyMechanics {
             depth: 0,
             hand: None,
             hit: HitKind::Direct,
+            ground: None,
         };
         self.interp.run(io, &ctx, effects);
     }

@@ -418,9 +418,13 @@ impl World {
             return;
         };
         let spawner_name = Arc::clone(&a.name);
-        let distances = match distance {
-            Some(d) => vec![self.rule_amount(spawner, rule, d); self.seats.len()],
-            None => a.distances.clone(),
+        let (offset, depth) = a.pack;
+        let (distances, pack) = match distance {
+            Some(d) => {
+                let d = self.rule_amount(spawner, rule, d);
+                (vec![d; self.seats.len()], (offset, d))
+            }
+            None => (a.distances.clone(), (offset, depth)),
         };
         let scale = combat_def(&s, combat).map_or(1.0, |c| c.health);
         let slot = usize::from(combat);
@@ -449,6 +453,7 @@ impl World {
                 );
                 add.phase = def.initial_phase.clone();
                 add.distances = distances.clone();
+                add.pack = pack;
                 add.rules = vec![RuleState::default(); def.rules.len()];
                 let id = ActorId(raw);
                 self.actors.push(add);
@@ -628,6 +633,9 @@ impl<M: Mechanics> Kernel<M> {
             }
             EnemyAction::Reposition { distance } => {
                 let d = self.world.rule_amount(enemy, rule, distance);
+                if let Some(a) = self.world.actor_mut(enemy) {
+                    a.pack.1 = d;
+                }
                 for i in 0..self.world.seats.len() {
                     self.world.set_distance(Seat(i as u8), enemy, d);
                 }
@@ -653,6 +661,7 @@ impl<M: Mechanics> Kernel<M> {
                     stacks: 1,
                     duration: None,
                     pmultiplier: None,
+                    anchor: None,
                 });
                 self.drain();
             }

@@ -7,10 +7,10 @@ use portunus_core::{
     AuraId, Dist, EnemyKey, EventName, HeroTreeId, Seed, SimDuration, SpecId, SpellId, TalentId,
     Trigger,
 };
-use portunus_gamedata::aura::{AuraValue, AuraValueKind, BankDraw, PreventDeath};
+use portunus_gamedata::aura::{AuraValue, AuraValueKind, BankDraw, GroundDef, PreventDeath};
 use portunus_gamedata::effect::{
-    Coefficient, CountScale, Effect, EffectTarget, ListenFor, Listener, Predicate, ProcChance,
-    TargetCount,
+    Coefficient, CountScale, Effect, EffectTarget, ListenFor, Listener, ModKind, ModScope,
+    Modifier, Predicate, ProcChance, TargetCount,
 };
 use portunus_gamedata::enemy::{EnemyAction, EnemyKind, EnemyRule};
 use portunus_gamedata::spell::{CastKind, CooldownDef, Requirement};
@@ -649,5 +649,30 @@ fn target_sets_and_count_scales_name_auras_that_exist() {
             unknown.clone(),
             unknown
         ]
+    );
+}
+
+#[test]
+fn ground_auras_need_a_radius_and_standing_in_one_needs_one_on_the_ground() {
+    let mut game = game();
+    let holder = AuraId(77756);
+    let def = game.auras.get_mut(&holder).expect("an aura to place");
+    def.ground = Some(GroundDef { radius: 0.0 });
+    def.modifiers.push(Modifier {
+        scope: ModScope::All,
+        kind: ModKind::DamageDonePct,
+        value: 10.0,
+        per_stack: false,
+        condition: Some(Predicate::InOwnGround(holder)),
+    });
+    assert_eq!(
+        check_game_data(&game),
+        vec![DataIssue::InvalidGround(holder)],
+        "a placed aura may be stood in"
+    );
+    game.auras.get_mut(&holder).unwrap().ground = None;
+    assert_eq!(
+        check_game_data(&game),
+        vec![DataIssue::InvalidPredicate(Owner::Aura(holder))]
     );
 }

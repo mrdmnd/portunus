@@ -239,6 +239,7 @@ impl Interpreter {
                         depth: 1,
                         hand,
                         hit: HitKind::Direct,
+                        ground: None,
                     };
                     self.run(io, &ctx, &l.effects);
                 }
@@ -316,7 +317,13 @@ impl Interpreter {
         let mut out: Vec<ActorId> = match target {
             EffectTarget::Caster => vec![ctx.caster],
             EffectTarget::Target => ctx.target.into_iter().collect(),
-            EffectTarget::AllEnemies => engaged_enemies(view),
+            EffectTarget::AllEnemies => {
+                let mut all = engaged_enemies(view);
+                if let Some(g) = ctx.ground {
+                    all.retain(|&e| view.pack_position(e).is_some_and(|at| g.reaches(at)));
+                }
+                all
+            }
             EffectTarget::RandomEnemy => Vec::new(),
             EffectTarget::Party => view.seats().to_vec(),
             EffectTarget::Pets(kind) => owner_seat(view, ctx.caster)
@@ -343,6 +350,19 @@ impl Interpreter {
                 .into_iter()
                 .filter(|&e| Some(e) != ctx.target)
                 .collect(),
+            EffectTarget::NearTarget { yards } => {
+                let Some(centre) = ctx.target.and_then(|t| view.pack_position(t)) else {
+                    return Vec::new();
+                };
+                let reach = f64::from(yards);
+                engaged_enemies(view)
+                    .into_iter()
+                    .filter(|&e| {
+                        view.pack_position(e)
+                            .is_some_and(|(x, y)| (x - centre.0).hypot(y - centre.1) <= reach)
+                    })
+                    .collect()
+            }
             EffectTarget::AlliesWithAura { aura, from_self } => view
                 .seats()
                 .iter()
@@ -405,6 +425,7 @@ impl Interpreter {
             depth: 0,
             hand: None,
             hit: HitKind::Direct,
+            ground: None,
         }
     }
 
@@ -580,6 +601,7 @@ impl Interpreter {
             depth,
             hand: Some(hand),
             hit: HitKind::Direct,
+            ground: None,
         };
         self.damage(
             io,
@@ -773,6 +795,7 @@ impl Interpreter {
             depth: 0,
             hand: def.weapon,
             hit: HitKind::Direct,
+            ground: None,
         };
         Some(self.roll_direct(io, &ctx, &def.effects))
     }
@@ -888,12 +911,22 @@ impl Interpreter {
                         }),
                     None => duration,
                 };
+                let ground = io
+                    .data()
+                    .auras
+                    .get(&aura)
+                    .is_some_and(|a| a.ground.is_some());
+                let anchor = ctx
+                    .target
+                    .filter(|_| ground)
+                    .and_then(|t| io.view().pack_position(t));
                 for t in self.targets(io, ctx, target) {
                     io.apply_aura(AuraApplication {
                         aura: aura_on(t, aura),
                         stacks,
                         duration,
                         pmultiplier: None,
+                        anchor,
                     });
                 }
             }
@@ -1030,6 +1063,7 @@ impl Interpreter {
                         stacks: 1,
                         duration: None,
                         pmultiplier: None,
+                        anchor: None,
                     });
                 }
             }
@@ -1095,6 +1129,7 @@ impl Interpreter {
                         stacks: copy.stacks,
                         duration,
                         pmultiplier: Some(copy.pmultiplier),
+                        anchor: None,
                     });
                 }
             }

@@ -259,6 +259,14 @@ pub enum EffectTarget {
         aura: AuraId,
         from_self: bool,
     },
+    /// The target and every engaged enemy within `yards` of it, by pack
+    /// position: an area centred on the target. As SimC's
+    /// `action_t::check_distance_targeting` does with distance targeting
+    /// on, the target always counts and others count up to and including
+    /// the radius.
+    NearTarget {
+        yards: u8,
+    },
 }
 
 /// Target caps and damage reduction past a soft cap.
@@ -368,6 +376,11 @@ pub enum Predicate {
         spell: SpellId,
         count: u8,
     },
+    /// The caster stands in its own placement of this ground aura ("while
+    /// standing in your Death and Decay"). Movement has no direction, so
+    /// the caster counts as inside until it has moved, in all, more than
+    /// the radius since placing it. Pets and totems never leave.
+    InOwnGround(AuraId),
 }
 
 /// How many of a seat's casts the engine remembers for

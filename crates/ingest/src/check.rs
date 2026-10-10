@@ -120,8 +120,9 @@ pub enum DataIssue {
     /// A dual-wield miss chance outside `[0, 100]` percent.
     InvalidMissChance,
     /// A condition that can't mean anything: a health fraction outside
-    /// `[0, 1]`, a stack count of zero, a value that isn't a number, or a
-    /// recent-cast count outside `1..=RECENT_CASTS`.
+    /// `[0, 1]`, a stack count of zero, a value that isn't a number, a
+    /// recent-cast count outside `1..=RECENT_CASTS`, or standing in an
+    /// aura that isn't placed on the ground.
     InvalidPredicate(Owner),
     /// A spell requirement with a health fraction outside `[0, 1]` or a
     /// stack count of zero.
@@ -141,6 +142,8 @@ pub enum DataIssue {
     InvalidListener(Owner),
     /// A death prevention that heals to a share of health outside `(0, 1]`.
     InvalidDeathPrevention(AuraId),
+    /// A ground aura whose radius isn't a positive number of yards.
+    InvalidGround(AuraId),
 }
 
 fn positive(x: f64) -> bool {
@@ -346,6 +349,9 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
                 c.aura(&owner, l);
             }
             c.effects(&owner, &p.on_prevent);
+        }
+        if aura.ground.is_some_and(|g| !positive(g.radius)) {
+            c.issues.push(DataIssue::InvalidGround(aura.id));
         }
         for m in &aura.modifiers {
             if let ModScope::Spell(s) = m.scope {
@@ -576,6 +582,15 @@ impl Checker<'_> {
             Predicate::RecentCasts { spell, count } => {
                 self.spell(owner, spell);
                 self.valid_predicate(owner, (1..=RECENT_CASTS).contains(&usize::from(count)));
+            }
+            Predicate::InOwnGround(aura) => {
+                self.aura(owner, aura);
+                let ground = self
+                    .data
+                    .auras
+                    .get(&aura)
+                    .is_none_or(|a| a.ground.is_some());
+                self.valid_predicate(owner, ground);
             }
             Predicate::DiffersFromLastCast | Predicate::TargetHpBelowCasterMaxHp => {}
         }

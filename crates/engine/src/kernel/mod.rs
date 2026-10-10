@@ -368,6 +368,7 @@ impl<M: Mechanics> Kernel<M> {
                     stacks: 1,
                     duration: None,
                     pmultiplier: None,
+                    anchor: None,
                 });
             }
         }
@@ -396,6 +397,7 @@ impl<M: Mechanics> Kernel<M> {
                 1.0,
             );
             enemy.phase = phase;
+            enemy.pack = (spawn.offset, spawn.distance);
             enemy.distances = s
                 .setup
                 .seats
@@ -499,6 +501,7 @@ impl<M: Mechanics> Kernel<M> {
                         stacks: 1,
                         duration: None,
                         pmultiplier: None,
+                        anchor: None,
                     });
                 }
             }
@@ -1564,6 +1567,7 @@ impl<M: Mechanics> Engine for Kernel<M> {
                     stacks: 1,
                     duration: None,
                     pmultiplier: None,
+                    anchor: None,
                 });
             }
         }

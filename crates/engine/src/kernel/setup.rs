@@ -260,6 +260,7 @@ pub(crate) fn build(setup: RunSetup) -> World {
             moving: None,
             move_gen: 0,
             moving_told: false,
+            travelled: 0.0,
             demands: Vec::new(),
         })
         .collect();

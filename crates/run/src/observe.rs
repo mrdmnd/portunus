@@ -16,6 +16,18 @@ pub struct AuraObs {
     /// `None` for permanent auras.
     pub remaining: Option<SimDuration>,
     pub value: f64,
+    /// For a ground aura the seat placed on itself.
+    pub ground: Option<GroundObs>,
+}
+
+/// A ground aura the seat placed.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GroundObs {
+    /// Yards the seat can still move before it is outside; zero once it
+    /// has left.
+    pub yards_left: f64,
+    /// Engaged enemies the seat can see inside it.
+    pub enemies: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +63,9 @@ pub struct TargetObs {
     pub absorb_pct: f64,
     /// Yards away.
     pub distance: f64,
+    /// Yards from the target to each other engaged enemy the seat can
+    /// see, nearest first: what an area centred on it would reach.
+    pub neighbours: Vec<f64>,
     /// This seat's own auras on the target.
     pub mine: BTreeMap<AuraId, AuraObs>,
 }
@@ -253,6 +268,14 @@ impl SeatObs {
     pub fn target_distance(&self) -> Option<f64> {
         self.target.as_ref().map(|t| t.distance)
     }
+
+    /// Enemies an area of `yards` centred on the target would hit, the
+    /// target included; zero with no target.
+    pub fn enemies_near_target(&self, yards: f64) -> usize {
+        self.target.as_ref().map_or(0, |t| {
+            1 + t.neighbours.iter().take_while(|&&d| d <= yards).count()
+        })
+    }
 }
 
 /// Builds [`SeatObs`].
@@ -296,6 +319,7 @@ fn aura_obs(i: &AuraInstance, now: SimTime) -> AuraObs {
         stacks: i.stacks,
         remaining: i.expires.map(|e| e.saturating_since(now)),
         value: i.value,
+        ground: None,
     }
 }
 
@@ -356,11 +380,33 @@ impl Observer for ScriptObserver {
                 )
             })
             .collect();
+        let visible_enemies = || {
+            state
+                .enemies()
+                .iter()
+                .copied()
+                .filter(|e| !hide.enemies.contains(e))
+                .filter(|&e| state.actor(e).is_some_and(|a| a.engaged && a.alive))
+        };
         let buffs = state
             .auras(me)
             .iter()
             .filter(|i| !hide.auras.contains(&i.aura))
-            .map(|i| (i.aura, aura_obs(i, now)))
+            .map(|i| {
+                let ground = i.ground.filter(|_| i.source == me).map(|g| GroundObs {
+                    yards_left: g.yards_left(state.yards_travelled(seat)).max(0.0),
+                    enemies: visible_enemies()
+                        .filter(|&e| state.pack_position(e).is_some_and(|at| g.reaches(at)))
+                        .count(),
+                });
+                (
+                    i.aura,
+                    AuraObs {
+                        ground,
+                        ..aura_obs(i, now)
+                    },
+                )
+            })
             .collect();
         let cooldown = |actor: ActorId, s: SpellId| {
             let cd = state.cooldown(actor, s)?;
@@ -439,11 +485,21 @@ impl Observer for ScriptObserver {
             .filter(|t| !hide.enemies.contains(t))
             .and_then(|t| {
                 let a = state.actor(t)?;
+                let mut neighbours: Vec<f64> =
+                    state.pack_position(t).map_or_else(Vec::new, |(x, y)| {
+                        visible_enemies()
+                            .filter(|&e| e != t)
+                            .filter_map(|e| state.pack_position(e))
+                            .map(|(ex, ey)| (ex - x).hypot(ey - y))
+                            .collect()
+                    });
+                neighbours.sort_by(f64::total_cmp);
                 Some(TargetObs {
                     actor: t,
                     health_pct: 100.0 * a.health_frac(),
                     absorb_pct: absorb_pct(ctx, t),
                     distance: state.distance(seat, t).unwrap_or(0.0),
+                    neighbours,
                     mine: state
                         .auras(t)
                         .iter()

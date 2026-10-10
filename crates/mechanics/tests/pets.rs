@@ -141,6 +141,7 @@ fn aura(id: AuraId, duration: Option<SimDuration>) -> AuraDef {
         persists_through_death: false,
         unique_per_source: false,
         prevents_death: None,
+        ground: None,
     }
 }
 
@@ -991,6 +992,7 @@ fn owner_modifiers_follow_the_pet_kind() {
         depth: 0,
         hand: None,
         hit: HitKind::Direct,
+        ground: None,
     };
     let totem_want = m.math().outgoing(
         state,

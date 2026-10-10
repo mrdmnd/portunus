@@ -14,7 +14,7 @@ use portunus_gamedata::GameData;
 use serde::{Deserialize, Serialize};
 
 use crate::mask::Readiness;
-use crate::state::{AuraRef, ListenerRef, Projectile, StateView};
+use crate::state::{AuraRef, GroundView, ListenerRef, Projectile, StateView};
 use crate::step::WakeReason;
 
 pub trait Mechanics: Clone {
@@ -218,10 +218,12 @@ pub struct AuraChange {
     pub stacks: u8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct AuraEvent {
     pub aura: AuraRef,
     pub reason: AuraRemoval,
+    /// A ground aura's placement, for its expiry effects.
+    pub ground: Option<GroundView>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -371,6 +373,9 @@ pub struct AuraApplication {
     /// Override the snapshot taken now, for a new instance copying another
     /// (a spread aura).
     pub pmultiplier: Option<f64>,
+    /// Where a ground aura goes, as a pack position: its spell's target's.
+    /// `None` centres it on the enemy the holder is targeting.
+    pub anchor: Option<(f64, f64)>,
 }
 
 #[cfg(test)]

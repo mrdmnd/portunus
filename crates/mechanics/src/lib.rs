@@ -20,7 +20,7 @@ mod party;
 
 use portunus_core::{ActorId, HookKey, Seat, SpecId, SpellId};
 use portunus_engine::mechanics::{HitKind, RolledHit, TimerEvent};
-use portunus_engine::{AuraRef, EngineIo, Readiness, StateView};
+use portunus_engine::{AuraRef, EngineIo, GroundView, Readiness, StateView};
 use portunus_gamedata::effect::{Coefficient, Effect};
 use portunus_gamedata::item::WeaponHand;
 use portunus_gamedata::stats::SchoolMask;
@@ -59,6 +59,9 @@ pub struct EffectCtx {
     /// What damage dealt from here counts as: `Periodic` for an aura's
     /// ticks, `Direct` for everything else, listeners included.
     pub hit: HitKind,
+    /// A ground aura's ticks and expiry run inside its area: their
+    /// `AllEnemies` is the enemies within it.
+    pub ground: Option<GroundView>,
 }
 
 /// What a target's mitigation needs to know about a hit.
