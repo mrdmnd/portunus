@@ -1,6 +1,7 @@
 //! Auto-attacks and what triggers off them, on a made-up melee kit grafted
 //! onto the checked-in Elemental data: rage from swings, poisons on
-//! weapon hits, dual-wield misses, and Skyfury's extra swings.
+//! weapon hits, dual-wield misses, Skyfury's extra swings, and a made-up
+//! druid's forms and stealth.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -12,12 +13,12 @@ use portunus_engine::{
     CastOpts, Choice, Engine, Externals, Kernel, Latency, Readiness, RunSetup, SeatSetup,
     StateView, Step, TargetSel, TraceRecord, Wait,
 };
-use portunus_gamedata::aura::{AuraDef, RefreshRule};
+use portunus_gamedata::aura::{AuraDef, FormDef, RefreshRule, StealthDef};
 use portunus_gamedata::effect::{
     Coefficient, Effect, EffectTarget, ListenFor, Listener, ModKind, ModScope, Modifier, ProcChance,
 };
 use portunus_gamedata::item::{WeaponDef, WeaponHand};
-use portunus_gamedata::spell::{CastKind, CooldownDef, GcdDef, SpellDef, Targeting};
+use portunus_gamedata::spell::{CastKind, CooldownDef, GcdDef, Requirement, SpellDef, Targeting};
 use portunus_gamedata::stats::{ResourceDef, ResourceKind, SchoolMask, Stat};
 use portunus_gamedata::{EnemyData, GameData};
 use portunus_ingest::{read_ron, EnemyDataSource, GameDataSource, RonFile};
@@ -118,6 +119,9 @@ fn fixture(main_hand: WeaponDef, off_hand: Option<WeaponDef>, kit: Vec<Listener>
             on_expire: Vec::new(),
             cancelable: false,
             blocked_by: None,
+            form: None,
+            stealth: None,
+            ends_with: None,
         },
     );
     template.passive_auras.push(KIT);
@@ -330,6 +334,7 @@ fn weapon_strikes_trigger_weapon_hits_but_not_swings() {
             castable_while_moving: false,
             usable_while_casting: false,
             weapon: Some(WeaponHand::MainHand),
+            requires: Vec::new(),
             effects: vec![damage(5000.0, SchoolMask::PHYSICAL)],
         },
     );
@@ -399,4 +404,379 @@ fn battle_shout_multiplies_attack_power() {
     let after = ap(&f);
     assert!(before > 0.0);
     assert!((after / before - 1.05).abs() < 1e-9, "{before} -> {after}");
+}
+
+const CAT: AuraId = AuraId(900_201);
+const BEAR: AuraId = AuraId(900_202);
+const PROWL: AuraId = AuraId(900_203);
+const SUBTERFUGE: AuraId = AuraId(900_204);
+const CAT_FORM: SpellId = SpellId(900_211);
+const BEAR_FORM: SpellId = SpellId(900_212);
+const SHRED: SpellId = SpellId(900_213);
+const BOLT: SpellId = SpellId(900_214);
+const PROWL_SPELL: SpellId = SpellId(900_215);
+const SAP: SpellId = SpellId(900_216);
+const PRICK: SpellId = SpellId(900_217);
+const PAWS: u32 = 1000;
+
+fn aura(id: AuraId, modifiers: Vec<Modifier>) -> AuraDef {
+    AuraDef {
+        id,
+        name: format!("aura {}", id.0),
+        duration: None,
+        max_stacks: 1,
+        refresh: RefreshRule::Replace,
+        periodic: None,
+        value: None,
+        modifiers,
+        listeners: Vec::new(),
+        overrides: Vec::new(),
+        on_expire: Vec::new(),
+        cancelable: false,
+        blocked_by: None,
+        form: None,
+        stealth: None,
+        ends_with: None,
+    }
+}
+
+fn spell(id: SpellId, cast: CastKind, hostile: bool, effects: Vec<Effect>) -> SpellDef {
+    SpellDef {
+        id,
+        name: format!("spell {}", id.0),
+        school: SchoolMask::PHYSICAL,
+        cast,
+        gcd: hostile.then_some(GcdDef {
+            base: SimDuration(1000),
+            hasted: false,
+            floor: SimDuration(1000),
+        }),
+        cooldown: None,
+        costs: Vec::new(),
+        targeting: if hostile {
+            Targeting::Enemy
+        } else {
+            Targeting::SelfOnly
+        },
+        hostile,
+        range: None,
+        speed: None,
+        min_travel: SimDuration::ZERO,
+        rolls_on_impact: false,
+        castable_while_moving: false,
+        usable_while_casting: false,
+        weapon: None,
+        requires: Vec::new(),
+        effects,
+    }
+}
+
+fn apply_self(aura: AuraId) -> Effect {
+    Effect::ApplyAura {
+        aura,
+        target: EffectTarget::Caster,
+        stacks: 1,
+        duration: None,
+    }
+}
+
+/// A druid of sorts: Cat Form (fast paws) and Bear Form share a group;
+/// Shred needs Cat Form and hits twice as hard from Prowl, which needs Cat
+/// Form, is cast between pulls, keeps Sap, ends with Cat Form, and leaves
+/// Subterfuge when broken. Bolt is a hard cast and Prick hurts the caster;
+/// Sap and Prick are castable in Cat Form.
+fn druid() -> Fixture {
+    let mut f = fixture(weapon(2600, 1000.0), Some(weapon(1300, 100.0)), Vec::new());
+    let mut cat = aura(CAT, Vec::new());
+    cat.form = Some(FormDef {
+        group: 1,
+        allows_all: false,
+        allows: vec![PROWL_SPELL, SAP, PRICK],
+        weapon: Some(weapon(PAWS, 300.0)),
+    });
+    let mut bear = aura(BEAR, Vec::new());
+    bear.form = Some(FormDef {
+        group: 1,
+        allows_all: false,
+        allows: Vec::new(),
+        weapon: None,
+    });
+    let mut prowl = aura(
+        PROWL,
+        vec![Modifier {
+            scope: ModScope::Spell(SHRED),
+            ..modifier(ModKind::DamageDonePct, 100.0)
+        }],
+    );
+    prowl.stealth = Some(StealthDef {
+        keeps: vec![SAP],
+        breaks_on_damage: true,
+        on_break: vec![apply_self(SUBTERFUGE)],
+    });
+    prowl.ends_with = Some(CAT);
+    let mut subterfuge = aura(SUBTERFUGE, Vec::new());
+    subterfuge.duration = Some(SimDuration(3000));
+    for a in [cat, bear, prowl, subterfuge] {
+        f.data.auras.insert(a.id, a);
+    }
+    let mut shred = spell(
+        SHRED,
+        CastKind::Instant,
+        true,
+        vec![damage(1000.0, SchoolMask::PHYSICAL)],
+    );
+    shred.requires = vec![Requirement::AnyAura(vec![CAT])];
+    let mut prowl = spell(
+        PROWL_SPELL,
+        CastKind::Instant,
+        false,
+        vec![apply_self(PROWL)],
+    );
+    prowl.requires = vec![Requirement::AnyAura(vec![CAT]), Requirement::OutOfCombat];
+    let bolt = CastKind::Cast {
+        time: SimDuration(1500),
+        hasted: false,
+    };
+    let prick = Effect::Damage {
+        amount: Coefficient::Flat(1.0),
+        school: SchoolMask::PHYSICAL,
+        target: EffectTarget::Caster,
+        aoe: None,
+    };
+    for s in [
+        spell(CAT_FORM, CastKind::Instant, false, vec![apply_self(CAT)]),
+        spell(BEAR_FORM, CastKind::Instant, false, vec![apply_self(BEAR)]),
+        shred,
+        spell(BOLT, bolt, true, vec![damage(1.0, SchoolMask::NATURE)]),
+        prowl,
+        spell(SAP, CastKind::Instant, true, Vec::new()),
+        spell(PRICK, CastKind::Instant, false, vec![prick]),
+    ] {
+        f.template.abilities.insert(s.id);
+        f.data.spells.insert(s.id, s);
+    }
+    f
+}
+
+/// Answer with `policy`, given the time, until `until`.
+fn script(
+    k: &mut Kernel<PartyMechanics>,
+    until: SimTime,
+    mut policy: impl FnMut(SimTime, &Kernel<PartyMechanics>) -> Choice,
+) {
+    loop {
+        match k.advance().unwrap() {
+            Step::Done(_) => return,
+            Step::Decide(req) => {
+                if req.now >= until {
+                    return;
+                }
+                let choice = policy(req.now, k);
+                k.submit(req.seat, choice).unwrap();
+            }
+        }
+    }
+}
+
+fn readiness(k: &Kernel<PartyMechanics>, ability: SpellId) -> Option<Readiness> {
+    k.legal(Seat(0)).abilities.get(&ability).copied()
+}
+
+fn holds(k: &Kernel<PartyMechanics>, aura: AuraId) -> bool {
+    k.state().auras(ActorId(0)).iter().any(|a| a.aura == aura)
+}
+
+fn cast(ability: SpellId) -> Choice {
+    Choice::Cast {
+        ability,
+        target: TargetSel::Primary,
+        opts: CastOpts::default(),
+    }
+}
+
+/// Cast `ability` once it's ready, or wait for the next event.
+fn cast_when_ready(k: &Kernel<PartyMechanics>, ability: SpellId) -> Choice {
+    if readiness(k, ability) == Some(Readiness::Now) {
+        cast(ability)
+    } else {
+        Choice::Wait(Wait::NextEvent)
+    }
+}
+
+fn applied(trace: &[TraceRecord], aura: AuraId) -> usize {
+    trace
+        .iter()
+        .filter(|r| matches!(r.event, TraceEvent::AuraApplied { aura: a, .. } if a == aura))
+        .count()
+}
+
+#[test]
+fn forms_exclude_each_other_and_swap_weapons() {
+    let f = druid();
+    let mut k = f.kernel(1);
+    let shift = COMBAT_START + SimDuration(10_000);
+    let end = COMBAT_START + SimDuration(30_000);
+    script(&mut k, end, |now, k| {
+        if now < COMBAT_START && !holds(k, CAT) {
+            cast(CAT_FORM)
+        } else if now < shift {
+            Choice::Wait(Wait::Until(shift))
+        } else if !holds(k, BEAR) {
+            cast(BEAR_FORM)
+        } else {
+            Choice::Wait(Wait::Until(end))
+        }
+    });
+    assert!(holds(&k, BEAR) && !holds(&k, CAT));
+    let trace = k.drain_trace();
+    let (cat, bear): (Vec<_>, Vec<_>) = trace.into_iter().partition(|r| r.time < shift);
+    // Paws alone, which never miss.
+    let (paws, none) = white_hits(&cat);
+    assert!(none.is_empty());
+    assert_eq!(interval(&paws), PAWS);
+    assert_eq!(paws.len(), 10);
+    // Out of Cat Form, both weapons again.
+    let (mh, oh) = white_hits(&bear);
+    assert_eq!(interval(&mh), 2600);
+    assert!(!oh.is_empty());
+}
+
+#[test]
+fn spells_need_their_form_and_others_shift_out_of_it() {
+    let f = druid();
+    let mut k = f.kernel(2);
+    let mut seen = Vec::new();
+    let mut shredded = false;
+    script(&mut k, COMBAT_START + SimDuration(10_000), |now, k| {
+        if now < COMBAT_START {
+            seen.push(readiness(k, SHRED));
+            return if holds(k, CAT) {
+                Choice::Wait(Wait::Until(COMBAT_START))
+            } else {
+                cast(CAT_FORM)
+            };
+        }
+        if !shredded {
+            shredded = readiness(k, SHRED) == Some(Readiness::Now);
+            return cast_when_ready(k, SHRED);
+        }
+        if holds(k, CAT) {
+            cast_when_ready(k, BOLT)
+        } else {
+            seen.push(readiness(k, SHRED));
+            Choice::Wait(Wait::Until(COMBAT_START + SimDuration(10_000)))
+        }
+    });
+    assert_eq!(seen.first(), Some(&Some(Readiness::Blocked)));
+    assert_eq!(seen.last(), Some(&Some(Readiness::Blocked)));
+    assert!(!holds(&k, CAT));
+    let trace = k.drain_trace();
+    assert_eq!(dealt(&trace, SchoolMask::NATURE).len(), 1);
+    assert!(dealt(&trace, SchoolMask::PHYSICAL)
+        .iter()
+        .any(|h| h.2 == Some(SHRED)));
+}
+
+#[test]
+fn stealth_holds_swings_and_breaks_after_the_opener() {
+    let f = druid();
+    let mut k = f.kernel(3);
+    let open = COMBAT_START + SimDuration(5_000);
+    let end = COMBAT_START + SimDuration(20_000);
+    let mut in_combat = None;
+    script(&mut k, end, |now, k| {
+        if now < COMBAT_START {
+            return if !holds(k, CAT) {
+                cast(CAT_FORM)
+            } else if !holds(k, PROWL) {
+                cast(PROWL_SPELL)
+            } else {
+                Choice::Wait(Wait::Until(open))
+            };
+        }
+        in_combat.get_or_insert(readiness(k, PROWL_SPELL));
+        if now < open {
+            Choice::Wait(Wait::Until(open))
+        } else {
+            cast_when_ready(k, SHRED)
+        }
+    });
+    assert_eq!(in_combat, Some(Some(Readiness::Blocked)));
+    assert!(holds(&k, CAT) && !holds(&k, PROWL));
+    let trace = k.drain_trace();
+    let (paws, _) = white_hits(&trace);
+    assert!(paws.iter().all(|&t| t >= open), "{paws:?}");
+    assert!(paws.len() >= 10);
+    // The opener kept Prowl's bonus; later Shreds don't get it.
+    let shreds: Vec<u64> = dealt(&trace, SchoolMask::PHYSICAL)
+        .into_iter()
+        .filter(|h| h.2 == Some(SHRED))
+        .map(|h| h.1)
+        .collect();
+    assert!(shreds.len() > 2);
+    let ratio = shreds[0] as f64 / shreds[1] as f64;
+    assert!((ratio - 2.0).abs() < 0.01, "{shreds:?}");
+    assert_eq!(applied(&trace, SUBTERFUGE), 1);
+}
+
+#[test]
+fn stealth_keeps_listed_spells_and_breaks_on_damage_taken() {
+    let f = druid();
+    let mut k = f.kernel(4);
+    let sap = COMBAT_START + SimDuration(2_000);
+    let prick = COMBAT_START + SimDuration(4_000);
+    let end = COMBAT_START + SimDuration(6_000);
+    let mut after_sap = None;
+    script(&mut k, end, |now, k| {
+        if now < COMBAT_START {
+            return if !holds(k, CAT) {
+                cast(CAT_FORM)
+            } else if !holds(k, PROWL) {
+                cast(PROWL_SPELL)
+            } else {
+                Choice::Wait(Wait::Until(sap))
+            };
+        }
+        if now < sap {
+            Choice::Wait(Wait::Until(sap))
+        } else if now < prick {
+            if k.state().last_cast(Seat(0)).is_some_and(|c| c.spell == SAP) {
+                after_sap.get_or_insert(holds(k, PROWL));
+                Choice::Wait(Wait::Until(prick))
+            } else {
+                cast_when_ready(k, SAP)
+            }
+        } else if holds(k, PROWL) {
+            cast_when_ready(k, PRICK)
+        } else {
+            Choice::Wait(Wait::Until(end))
+        }
+    });
+    assert_eq!(after_sap, Some(true));
+    assert!(!holds(&k, PROWL));
+    let trace = k.drain_trace();
+    assert_eq!(applied(&trace, SUBTERFUGE), 1);
+    let (paws, _) = white_hits(&trace);
+    assert!(paws.first().is_some_and(|&t| t >= prick), "{paws:?}");
+}
+
+#[test]
+fn stealth_ends_with_its_form_without_breaking() {
+    let f = druid();
+    let mut k = f.kernel(5);
+    script(&mut k, COMBAT_START, |_, k| {
+        if !holds(k, CAT) && !holds(k, BEAR) {
+            cast(CAT_FORM)
+        } else if holds(k, CAT) && !holds(k, PROWL) {
+            cast(PROWL_SPELL)
+        } else if holds(k, CAT) {
+            cast(BEAR_FORM)
+        } else {
+            Choice::Wait(Wait::Until(COMBAT_START))
+        }
+    });
+    assert!(holds(&k, BEAR) && !holds(&k, CAT) && !holds(&k, PROWL));
+    let trace = k.drain_trace();
+    assert_eq!(applied(&trace, PROWL), 1);
+    assert_eq!(applied(&trace, SUBTERFUGE), 0);
 }

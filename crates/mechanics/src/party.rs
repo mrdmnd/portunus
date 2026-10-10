@@ -267,6 +267,19 @@ impl Mechanics for PartyMechanics {
             };
             self.interp.run(io, &ctx, &def.on_expire);
         }
+        if let (AuraRemoval::Broken, Some(st)) = (ev.reason, &def.stealth) {
+            let ctx = EffectCtx {
+                caster: r.holder,
+                target: Some(r.holder),
+                spell: None,
+                aura: Some(r),
+                event_amount: None,
+                scale: 1.0,
+                depth: 0,
+                hand: None,
+            };
+            self.interp.run(io, &ctx, &st.on_break);
+        }
         if ev.reason != AuraRemoval::HolderDied {
             let expired = Occurrence {
                 what: Happening::AuraExpired(r.aura),

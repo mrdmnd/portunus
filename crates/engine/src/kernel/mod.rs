@@ -569,6 +569,12 @@ impl<M: Mechanics> Kernel<M> {
         let Some(def) = s.setup.data.spells.get(&spell) else {
             return;
         };
+        self.world.leave_forms(actor, def);
+        let instant = self.world.cast_time_of(actor, spell, target).millis() == 0;
+        if def.hostile && !instant {
+            self.world.break_stealth(actor, Some(spell));
+        }
+        self.drain();
         if let Some(g) = &def.gcd {
             let gcd = self.world.spell_gcd(actor, spell, g);
             self.world.seat_mut(seat).gcd_end = Some(now + gcd);
@@ -584,6 +590,10 @@ impl<M: Mechanics> Kernel<M> {
             spent: None,
             prerolled: false,
         });
+        if def.hostile && instant {
+            self.world.break_stealth(actor, Some(spell));
+            self.drain();
+        }
     }
 
     /// Start a seat's or pet's cast once its GCD is set: hard casts wait

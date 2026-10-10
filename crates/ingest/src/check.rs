@@ -11,7 +11,7 @@ use portunus_gamedata::effect::{
     Effect, EffectTarget, ListenFor, Listener, ModScope, Predicate, ProcChance,
 };
 use portunus_gamedata::enemy::EnemyAction;
-use portunus_gamedata::spell::CastKind;
+use portunus_gamedata::spell::{CastKind, Requirement};
 use portunus_gamedata::stats::Stat;
 use portunus_gamedata::talent::Grant;
 use portunus_gamedata::{EnemyData, GameData};
@@ -203,6 +203,11 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
         if let CastKind::Empower { stage_effects, .. } = &spell.cast {
             stage_effects.iter().for_each(|e| c.effects(&owner, e));
         }
+        for r in &spell.requires {
+            if let Requirement::AnyAura(auras) | Requirement::NoAura(auras) = r {
+                auras.iter().for_each(|&a| c.aura(&owner, a));
+            }
+        }
     }
     for aura in data.auras.values() {
         let owner = Owner::Aura(aura.id);
@@ -229,6 +234,16 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
         }
         if let Some(a) = aura.blocked_by {
             c.aura(&owner, a);
+        }
+        if let Some(a) = aura.ends_with {
+            c.aura(&owner, a);
+        }
+        if let Some(f) = &aura.form {
+            f.allows.iter().for_each(|&s| c.spell(&owner, s));
+        }
+        if let Some(st) = &aura.stealth {
+            st.keeps.iter().for_each(|&s| c.spell(&owner, s));
+            c.effects(&owner, &st.on_break);
         }
     }
     for item in data.items.values() {

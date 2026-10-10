@@ -210,5 +210,8 @@ pub fn aura(id: AuraId, duration: Option<SimDuration>) -> AuraDef {
         on_expire: Vec::new(),
         cancelable: false,
         blocked_by: None,
+        form: None,
+        stealth: None,
+        ends_with: None,
     }
 }

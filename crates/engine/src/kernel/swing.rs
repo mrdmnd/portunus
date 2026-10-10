@@ -29,9 +29,13 @@ const HANDS: [WeaponHand; 2] = [WeaponHand::MainHand, WeaponHand::OffHand];
 pub(crate) const AUTO_SHOT_RANGE: f64 = 40.0;
 
 impl World {
-    /// The live target an actor's swings would land on.
+    /// The live target an actor's swings would land on. None while
+    /// stealthed: attacking would break it.
     fn swing_target(&self, actor: ActorId) -> Option<ActorId> {
-        if !self.in_combat() || !self.actor_ref(actor).is_some_and(|a| a.alive) {
+        if !self.in_combat()
+            || !self.actor_ref(actor).is_some_and(|a| a.alive)
+            || self.stealthed(actor)
+        {
             return None;
         }
         self.target(actor).filter(|&t| self.is_live_target(t))
@@ -120,7 +124,7 @@ impl World {
 
     /// Set (or with `None`, stop) a timer's next swing, invalidating any
     /// swing already queued for it.
-    fn put_swing(&mut self, actor: ActorId, hand: WeaponHand, at: Option<SimTime>) {
+    pub(super) fn put_swing(&mut self, actor: ActorId, hand: WeaponHand, at: Option<SimTime>) {
         let Some(s) = self
             .actor_mut(actor)
             .and_then(|a| a.swings[hand_index(hand)].as_mut())

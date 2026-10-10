@@ -8,6 +8,7 @@ use portunus_core::{AuraId, SimDuration, SpellId};
 use serde::{Deserialize, Serialize};
 
 use crate::effect::{Coefficient, Effect, Listener, Modifier};
+use crate::item::WeaponDef;
 use crate::stats::SchoolMask;
 
 /// Fields with defaults may be omitted from authored files; `duration` may
@@ -43,6 +44,56 @@ pub struct AuraDef {
     /// Exhaustion).
     #[serde(default)]
     pub blocked_by: Option<AuraId>,
+    /// A shapeshift or stance.
+    #[serde(default)]
+    pub form: Option<FormDef>,
+    /// Stealth, or something that behaves like it (Vanish, Prowl).
+    #[serde(default)]
+    pub stealth: Option<StealthDef>,
+    /// Removed when the holder loses this aura (Prowl with Cat Form).
+    #[serde(default)]
+    pub ends_with: Option<AuraId>,
+}
+
+/// A shapeshift or stance. Gaining a form removes any other of its group
+/// from the holder. Casting a spell the form doesn't allow leaves it first,
+/// as a druid shifts out to cast Wrath.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FormDef {
+    /// Forms of a group exclude each other (a druid's shapeshifts, a
+    /// warrior's stances).
+    pub group: u8,
+    /// Every spell is castable in it (Moonkin Form, stances); otherwise
+    /// only `allows` and spells whose `requires` name this form are.
+    #[serde(default)]
+    pub allows_all: bool,
+    #[serde(default)]
+    pub allows: Vec<SpellId>,
+    /// Replaces the holder's weapons while held: one main hand and no off
+    /// hand (Cat Form's 1.0 s paws).
+    #[serde(default)]
+    pub weapon: Option<WeaponDef>,
+}
+
+/// While held, the holder doesn't auto-attack. It breaks, running
+/// `on_break`, on a hostile cast (an instant once its effects resolve, so
+/// openers keep their stealth bonus; a cast or channel as it starts) and,
+/// if `breaks_on_damage`, when the holder takes damage.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StealthDef {
+    /// Hostile spells that don't break it (Sap).
+    #[serde(default)]
+    pub keeps: Vec<SpellId>,
+    #[serde(default = "yes")]
+    pub breaks_on_damage: bool,
+    /// Not run when it expires or is cancelled (Subterfuge's lingering
+    /// window).
+    #[serde(default)]
+    pub on_break: Vec<Effect>,
+}
+
+fn yes() -> bool {
+    true
 }
 
 pub(crate) fn one() -> u8 {

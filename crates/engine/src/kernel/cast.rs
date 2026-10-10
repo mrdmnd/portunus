@@ -2,7 +2,7 @@
 
 use portunus_core::{ActorId, Seat, SimTime, SpellId};
 use portunus_gamedata::effect::{CooldownChange, ModKind};
-use portunus_gamedata::spell::{CooldownDef, SpellDef, Targeting};
+use portunus_gamedata::spell::{CooldownDef, Requirement, SpellDef, Targeting};
 use portunus_gamedata::stats::{ResourceAmount, SpendScaling};
 
 use crate::choice::TargetSel;
@@ -248,6 +248,14 @@ impl World {
     }
 
     /// The kernel's gates for one ability; mechanics' gate is added on top.
+    fn requirements_met(&self, actor: ActorId, def: &SpellDef) -> bool {
+        def.requires.iter().all(|r| match r {
+            Requirement::AnyAura(auras) => auras.iter().any(|&x| self.has_aura(actor, x)),
+            Requirement::NoAura(auras) => !auras.iter().any(|&x| self.has_aura(actor, x)),
+            Requirement::OutOfCombat => !self.in_combat(),
+        })
+    }
+
     pub(crate) fn base_readiness(&self, seat: Seat, ability: SpellId) -> (Readiness, WakeReason) {
         let now = self.now;
         let mut need = Need::new(now);
@@ -261,7 +269,7 @@ impl World {
             need.block();
             return need.finish(ability);
         };
-        if !a.alive {
+        if !a.alive || !self.requirements_met(actor, def) {
             need.block();
             return need.finish(ability);
         }

@@ -912,6 +912,8 @@ impl World {
         self.record(TraceEvent::Damage(d));
         if died {
             self.kill(d.target, Some(d.source));
+        } else if self.player_seat(d.target).is_some() {
+            self.break_stealth(d.target, None);
         }
         self.queue_triggers();
         d.amount

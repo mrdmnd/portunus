@@ -110,6 +110,9 @@ fn hooks_in(data: &GameData) -> BTreeSet<HookKey> {
             walk(&l.effects, &mut out);
         }
         walk(&aura.on_expire, &mut out);
+        if let Some(st) = &aura.stealth {
+            walk(&st.on_break, &mut out);
+        }
     }
     out
 }

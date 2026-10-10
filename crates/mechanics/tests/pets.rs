@@ -102,6 +102,7 @@ fn spell(id: SpellId, cast: CastKind, gcd: Option<GcdDef>, effects: Vec<Effect>)
         castable_while_moving: false,
         usable_while_casting: false,
         weapon: None,
+        requires: Vec::new(),
         effects,
     }
 }
@@ -130,6 +131,9 @@ fn aura(id: AuraId, duration: Option<SimDuration>) -> AuraDef {
         on_expire: Vec::new(),
         cancelable: false,
         blocked_by: None,
+        form: None,
+        stealth: None,
+        ends_with: None,
     }
 }
 

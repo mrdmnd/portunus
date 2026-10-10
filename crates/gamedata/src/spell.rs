@@ -1,6 +1,6 @@
 //! Spells: the things players press.
 
-use portunus_core::{SimDuration, SpellId};
+use portunus_core::{AuraId, SimDuration, SpellId};
 use serde::{Deserialize, Serialize};
 
 use crate::effect::Effect;
@@ -51,8 +51,25 @@ pub struct SpellDef {
     /// `WeaponHit` listeners (poisons) react to.
     #[serde(default)]
     pub weapon: Option<WeaponHand>,
+    /// All must hold for the spell to be usable.
+    #[serde(default)]
+    pub requires: Vec<Requirement>,
     #[serde(default)]
     pub effects: Vec<Effect>,
+}
+
+/// A condition on the caster for a spell to be usable.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Requirement {
+    /// The caster holds one of these: a form (Shred in Cat Form), stealth
+    /// or what stands in for it (Ambush in Stealth, Vanish, or Shadow
+    /// Dance). A form listed here keeps the spell castable in it.
+    AnyAura(Vec<AuraId>),
+    /// The caster holds none of these.
+    NoAura(Vec<AuraId>),
+    /// Only between pulls (Stealth, Prowl).
+    OutOfCombat,
 }
 
 impl SpellDef {
@@ -149,6 +166,7 @@ mod tests {
             castable_while_moving: false,
             usable_while_casting: false,
             weapon: None,
+            requires: Vec::new(),
             effects: Vec::new(),
         }
     }

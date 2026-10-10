@@ -206,6 +206,8 @@ pub enum AuraRemoval {
     Expired,
     Removed,
     HolderDied,
+    /// Stealth broken by a cast or damage taken.
+    Broken,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -183,7 +183,16 @@ impl Formulas {
             WeaponHand::OffHand => 1,
         };
         match view.actor(actor)?.kind {
-            ActorKind::Player(seat) => self.s.seats.get(usize::from(seat.0))?.weapons[i],
+            ActorKind::Player(seat) => {
+                let form = view
+                    .auras(actor)
+                    .iter()
+                    .find_map(|x| self.s.data.auras.get(&x.aura)?.form.as_ref()?.weapon);
+                match form {
+                    Some(w) => (i == 0).then_some(w),
+                    None => self.s.seats.get(usize::from(seat.0))?.weapons[i],
+                }
+            }
             ActorKind::Pet { pet, .. } if i == 0 => self.s.data.pets.get(&pet)?.melee,
             ActorKind::Pet { .. } | ActorKind::Enemy { .. } => None,
         }

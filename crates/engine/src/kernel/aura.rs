@@ -3,9 +3,11 @@
 
 use std::sync::Arc;
 
-use portunus_core::{ActorId, AuraId, SimDuration};
-use portunus_gamedata::aura::{Periodic, RefreshRule};
+use portunus_core::{ActorId, AuraId, SimDuration, SpellId};
+use portunus_gamedata::aura::{AuraDef, Periodic, RefreshRule};
 use portunus_gamedata::effect::ProcChance;
+use portunus_gamedata::item::WeaponHand;
+use portunus_gamedata::spell::{Requirement, SpellDef};
 
 use crate::mechanics::{AuraApplication, AuraChange, AuraEvent, AuraRemoval};
 use crate::state::{AuraInstance, AuraRef, DeckView, ListenerRef, ProcView};
@@ -14,7 +16,7 @@ use crate::step::WakeReason;
 use crate::trace::TraceEvent;
 
 use super::queue::Event;
-use super::world::{millis_round, AuraMeta, Followup, Tick, World};
+use super::world::{millis_round, AuraMeta, Followup, Swing, Tick, World};
 
 fn full_deck(chance: ProcChance) -> Option<DeckView> {
     match chance {
@@ -86,6 +88,12 @@ impl World {
         {
             return;
         }
+        if let (Some(f), None) = (&def.form, self.find_aura(r)) {
+            let group = f.group;
+            self.remove_matching(r.holder, AuraRemoval::Removed, |a| {
+                a.id != r.aura && a.form.as_ref().is_some_and(|f| f.group == group)
+            });
+        }
         let duration = app.duration.or(def.duration);
         let max_stacks = def.max_stacks.max(1);
         let timed_stacks = |n: u8| match duration {
@@ -140,6 +148,12 @@ impl World {
                 self.changed(r, 0, stacks);
                 if let Some(seat) = self.player_seat(r.holder) {
                     self.notify(seat, WakeReason::AuraGained(r.aura), false, None, now);
+                }
+                if def.form.is_some() {
+                    self.refresh_weapons(r.holder);
+                }
+                if def.stealth.is_some() {
+                    self.stop_swings(r.holder);
                 }
             }
             Some(i) => {
@@ -260,6 +274,123 @@ impl World {
         if movement {
             self.after_movement_aura(holder);
         }
+        let s = Arc::clone(&self.s);
+        let Some(def) = s.setup.data.auras.get(&aura) else {
+            return;
+        };
+        if def.form.is_some() {
+            self.refresh_weapons(holder);
+        }
+        if def.stealth.is_some() {
+            self.start_swings(holder);
+        }
+        if !self.has_aura(holder, aura) {
+            self.remove_matching(holder, AuraRemoval::Removed, |a| a.ends_with == Some(aura));
+        }
+    }
+
+    /// Remove every aura the holder has whose definition matches.
+    fn remove_matching(
+        &mut self,
+        holder: ActorId,
+        reason: AuraRemoval,
+        matches: impl Fn(&AuraDef) -> bool,
+    ) {
+        let s = Arc::clone(&self.s);
+        while let Some(i) = self.actor_ref(holder).and_then(|a| {
+            a.auras
+                .iter()
+                .position(|x| s.setup.data.auras.get(&x.aura).is_some_and(&matches))
+        }) {
+            self.remove_instance(holder, i, reason);
+        }
+    }
+
+    pub(crate) fn has_aura(&self, actor: ActorId, aura: AuraId) -> bool {
+        self.actor_ref(actor)
+            .is_some_and(|a| a.auras.iter().any(|x| x.aura == aura))
+    }
+
+    pub(crate) fn stealthed(&self, actor: ActorId) -> bool {
+        self.actor_ref(actor).is_some_and(|a| {
+            a.auras.iter().any(|x| {
+                self.s
+                    .setup
+                    .data
+                    .auras
+                    .get(&x.aura)
+                    .is_some_and(|d| d.stealth.is_some())
+            })
+        })
+    }
+
+    /// Leave any form that doesn't allow casting `spell`.
+    pub(crate) fn leave_forms(&mut self, actor: ActorId, spell: &SpellDef) {
+        let kept: Vec<AuraId> = spell
+            .requires
+            .iter()
+            .filter_map(|r| match r {
+                Requirement::AnyAura(auras) => Some(auras),
+                _ => None,
+            })
+            .flatten()
+            .copied()
+            .collect();
+        let id = spell.id;
+        self.remove_matching(actor, AuraRemoval::Removed, |a| {
+            a.form
+                .as_ref()
+                .is_some_and(|f| !f.allows_all && !f.allows.contains(&id) && !kept.contains(&a.id))
+        });
+    }
+
+    /// Break the actor's stealth for casting `spell`, or with `None`, for
+    /// taking damage.
+    pub(crate) fn break_stealth(&mut self, actor: ActorId, spell: Option<SpellId>) {
+        self.remove_matching(actor, AuraRemoval::Broken, |a| {
+            a.stealth.as_ref().is_some_and(|st| match spell {
+                Some(s) => !st.keeps.contains(&s),
+                None => st.breaks_on_damage,
+            })
+        });
+    }
+
+    /// Give a player's swing timers the weapons its form provides, or its
+    /// own, keeping the main hand's timer running.
+    pub(crate) fn refresh_weapons(&mut self, actor: ActorId) {
+        let Some(seat) = self.player_seat(actor) else {
+            return;
+        };
+        let s = Arc::clone(&self.s);
+        let t = &s.setup.seats[usize::from(seat.0)].template;
+        let Some(a) = self.actor_ref(actor) else {
+            return;
+        };
+        let form = a
+            .auras
+            .iter()
+            .find_map(|x| s.setup.data.auras.get(&x.aura)?.form.as_ref()?.weapon);
+        let want = match form {
+            Some(w) => [Some(w), None],
+            None => [t.main_hand, t.off_hand],
+        };
+        if a.swings.iter().map(|s| s.map(|s| s.weapon)).eq(want) {
+            return;
+        }
+        let resume = a.swings[0].and_then(|s| s.next_at);
+        let swings = want.map(|w| {
+            w.map(|weapon| Swing {
+                gen: self.fresh_id(),
+                ..Swing::new(weapon)
+            })
+        });
+        if let Some(a) = self.actor_mut(actor) {
+            a.swings = swings;
+        }
+        if resume.is_some() {
+            self.put_swing(actor, WeaponHand::MainHand, resume);
+        }
+        self.start_swings(actor);
     }
 
     pub(crate) fn remove_aura(&mut self, holder: ActorId, aura: AuraId, source: Option<ActorId>) {
