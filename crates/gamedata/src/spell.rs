@@ -58,8 +58,8 @@ pub struct SpellDef {
     pub effects: Vec<Effect>,
 }
 
-/// A condition on the caster for a spell to be usable.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// A condition on the caster, or its target, for a spell to be usable.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Requirement {
     /// The caster holds one of these: a form (Shred in Cat Form), stealth
@@ -70,6 +70,25 @@ pub enum Requirement {
     NoAura(Vec<AuraId>),
     /// Only between pulls (Stealth, Prowl).
     OutOfCombat,
+    /// The target has at most this fraction of its max health (`0.2` is
+    /// 20%): Execute, Kill Shot. Inclusive, as SimC's `target_ready`
+    /// refuses only above it (`health_percentage() > execute_pct`). Checked
+    /// against the primary target for readiness, and against the chosen
+    /// target when cast; a seat is woken when its primary target crosses
+    /// it.
+    TargetHpAtMost(f64),
+    /// The target has at least this fraction of its max health (Kill
+    /// Shot's upper window with some talents).
+    TargetHpAtLeast(f64),
+    /// The caster holds at least this many stacks of the aura.
+    CasterStacksAtLeast { aura: AuraId, stacks: u8 },
+}
+
+impl Requirement {
+    /// Whether it's about the target rather than the caster.
+    pub fn on_target(&self) -> bool {
+        matches!(self, Self::TargetHpAtMost(_) | Self::TargetHpAtLeast(_))
+    }
 }
 
 impl SpellDef {

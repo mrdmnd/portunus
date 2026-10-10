@@ -115,6 +115,8 @@ fn fire_damage(sp: f64, target: EffectTarget) -> Effect {
         aoe: None,
         ignores_armor: false,
         hand: None,
+        per_count: None,
+        unmodified: false,
     }
 }
 
@@ -137,6 +139,8 @@ fn aura(id: AuraId, duration: Option<SimDuration>) -> AuraDef {
         stealth: None,
         ends_with: None,
         persists_through_death: false,
+        unique_per_source: false,
+        prevents_death: None,
     }
 }
 
@@ -620,6 +624,7 @@ fn decks_proc_exactly_once_per_deck() {
             target: EffectTarget::Caster,
             stacks: 1,
             duration: None,
+            per_unit_spent: None,
         }],
     }];
     f.data.auras.insert(deck.id, deck);
@@ -698,6 +703,7 @@ fn decks_persist_across_reapplication() {
             target: EffectTarget::Caster,
             stacks: 1,
             duration: None,
+            per_unit_spent: None,
         }],
     }];
     f.data.auras.insert(deck.id, deck);
@@ -713,6 +719,7 @@ fn decks_persist_across_reapplication() {
             target: EffectTarget::Caster,
             stacks: 1,
             duration: None,
+            per_unit_spent: None,
         }],
     );
     toggle.targeting = Targeting::SelfOnly;
@@ -765,6 +772,8 @@ fn with_hunter_pet(f: &mut Fixture) {
         initial: 100.0,
         regen_per_sec: 5.0,
         regen_hasted: false,
+        recharge: None,
+        out_of_combat: None,
     }];
     p.autocast = vec![BITE];
     f.data.pets.insert(p.id, p);
@@ -779,6 +788,8 @@ fn with_hunter_pet(f: &mut Fixture) {
             aoe: None,
             ignores_armor: false,
             hand: None,
+            per_count: None,
+            unmodified: false,
         }],
     );
     bite.cooldown = cooldown(3000);
@@ -839,6 +850,7 @@ fn pet_melee_and_haste_follow_owner_and_pet_buffs() {
             target: EffectTarget::Caster,
             stacks: 1,
             duration: None,
+            per_unit_spent: None,
         }],
     }];
     f.data.auras.insert(FRENZY, frenzy);
@@ -860,6 +872,7 @@ fn pet_melee_and_haste_follow_owner_and_pet_buffs() {
             target: EffectTarget::Caster,
             stacks: 1,
             duration: None,
+            per_unit_spent: None,
         }],
     );
     bloodlust.targeting = Targeting::SelfOnly;
@@ -974,6 +987,7 @@ fn owner_modifiers_follow_the_pet_kind() {
         aura: None,
         event_amount: None,
         scale: 1.0,
+        spent: None,
         depth: 0,
         hand: None,
         hit: HitKind::Direct,
@@ -1030,6 +1044,8 @@ fn hunter_pets_autocast_and_answer_command_spells() {
             aoe: None,
             ignores_armor: false,
             hand: None,
+            per_count: None,
+            unmodified: false,
         }],
     ));
     let mut kill_command = spell(

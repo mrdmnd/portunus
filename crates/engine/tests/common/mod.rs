@@ -148,6 +148,7 @@ fn run(
                 target: t,
                 stacks,
                 duration,
+                ..
             } => {
                 if let Some(holder) = pick(*t, caster, target) {
                     io.apply_aura(AuraApplication {
@@ -158,6 +159,7 @@ fn run(
                         },
                         stacks: *stacks,
                         duration: *duration,
+                        pmultiplier: None,
                     });
                 }
             }
@@ -231,6 +233,7 @@ impl Mechanics for Stub {
     fn aura_removed(&self, _io: &mut dyn EngineIo, _ev: &AuraEvent) {}
     fn actor_died(&self, _io: &mut dyn EngineIo, _ev: &DeathEvent) {}
     fn pet_expired(&self, _io: &mut dyn EngineIo, _ev: &PetEvent) {}
+    fn aura_threshold(&self, _io: &mut dyn EngineIo, _aura: AuraRef) {}
     fn enemy_hit(&self, io: &mut dyn EngineIo, hit: &EnemyHit) {
         io.apply_damage(DamageEvent {
             source: hit.source,

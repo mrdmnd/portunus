@@ -49,6 +49,7 @@ fn with_spend_deck(f: &mut Fixture, successes: u16, size: u16) {
             target: EffectTarget::Caster,
             stacks: 1,
             duration: None,
+            per_unit_spent: None,
         }],
     }];
     f.data.auras.insert(counter.id, counter);

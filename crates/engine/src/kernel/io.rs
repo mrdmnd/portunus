@@ -5,7 +5,9 @@ use portunus_gamedata::effect::CooldownChange;
 use portunus_gamedata::stats::ResourceKind;
 use portunus_gamedata::GameData;
 
-use crate::mechanics::{AuraApplication, DamageEvent, EngineIo, HealEvent, RolledHit, TimerEvent};
+use crate::mechanics::{
+    AuraApplication, DamageEvent, EngineIo, HealEvent, Landed, RolledHit, TimerEvent, ValueLimits,
+};
 use crate::state::{AuraRef, ListenerRef, StateView};
 use crate::step::WakeReason;
 
@@ -25,7 +27,7 @@ impl EngineIo for Io<'_> {
         &self.w.s.setup.data
     }
 
-    fn apply_damage(&mut self, d: DamageEvent) -> u64 {
+    fn apply_damage(&mut self, d: DamageEvent) -> Landed {
         self.w.damage(d)
     }
 
@@ -49,8 +51,8 @@ impl EngineIo for Io<'_> {
         self.w.extend_aura(aura, by);
     }
 
-    fn add_aura_value(&mut self, aura: AuraRef, delta: f64) {
-        self.w.add_aura_value(aura, delta);
+    fn add_aura_value(&mut self, aura: AuraRef, delta: f64, limits: ValueLimits) {
+        self.w.add_aura_value(aura, delta, limits);
     }
 
     fn record_proc_attempt(&mut self, listener: ListenerRef, procced: bool) {

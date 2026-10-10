@@ -154,15 +154,11 @@ impl World {
                 whole_points(owner_health as f64 * def.scaling.health),
                 haste,
             );
+            let in_combat = self.in_combat();
             actor.resources = def
                 .resources
                 .iter()
-                .map(|&r| Resource {
-                    def: r,
-                    value: r.initial,
-                    at: self.now,
-                    regen_mult: 1.0,
-                })
+                .map(|&r| Resource::new(r, self.now, in_combat))
                 .collect();
             actor.pet = Some(PetLife {
                 kind: def.kind,
@@ -189,6 +185,7 @@ impl World {
                     },
                     stacks: 1,
                     duration: None,
+                    pmultiplier: None,
                 });
             }
             if let Some(e) = expires {

@@ -60,4 +60,7 @@ pub enum IllegalChoice {
     AlreadyMoving,
     /// No voluntary move to stop.
     NotMoving,
+    /// The chosen target doesn't meet the spell's requirements on it (an
+    /// Execute at a target above 20%).
+    TargetRequirement(ActorId),
 }

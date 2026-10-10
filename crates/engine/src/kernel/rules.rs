@@ -10,11 +10,13 @@
 use std::sync::Arc;
 
 use portunus_core::rng::{self, Purpose};
-use portunus_core::{ActorId, Dist, EventName, Sample, Seat, SimDuration, SimTime, Trigger};
+use portunus_core::{
+    ActorId, Dist, EnemyKey, EventName, Sample, Seat, SimDuration, SimTime, Trigger,
+};
 use portunus_gamedata::effect::Effect;
-use portunus_gamedata::enemy::{EnemyAction, EnemyDef, EnemyTarget, RuleIndex};
+use portunus_gamedata::enemy::{EnemyAction, EnemyDef, EnemySubject, EnemyTarget, RuleIndex};
 use portunus_gamedata::spec::Role;
-use portunus_scenario::resolved::{ResolvedCombat, Segment, SpawnSet};
+use portunus_scenario::resolved::{ResolvedCombat, Segment, SpawnIndex, SpawnSet};
 
 use crate::mechanics::{AuraApplication, EnemyHit, Mechanics};
 use crate::state::{ActorKind, AuraRef};
@@ -22,7 +24,7 @@ use crate::step::WakeReason;
 use crate::trace::{CastEndReason, TraceEvent};
 
 use super::queue::Event;
-use super::world::{EnemyCast, Statics, TriggerOwner, World};
+use super::world::{Actor, EnemyCast, EnemySpawn, RuleState, Statics, TriggerOwner, World};
 use super::Kernel;
 
 /// Random draws per rule, by what they decide.
@@ -58,15 +60,38 @@ pub(super) fn combat_def(s: &Statics, combat: u16) -> Option<&ResolvedCombat> {
 }
 
 /// The definition behind an enemy actor.
-pub(super) fn enemy_def(s: &Statics, kind: ActorKind) -> Option<&EnemyDef> {
+pub(super) fn enemy_def<'a>(
+    s: &'a Statics,
+    spawns: &[Vec<EnemySpawn>],
+    kind: ActorKind,
+) -> Option<&'a EnemyDef> {
     let ActorKind::Enemy { combat, spawn } = kind else {
         return None;
     };
-    let key = &combat_def(s, combat)?
-        .spawns
+    let key = &spawns
+        .get(usize::from(combat))?
         .get(usize::from(spawn.0))?
-        .enemy;
+        .key;
     s.setup.enemies.enemies.get(key)
+}
+
+/// Per rule of `def`: its trigger with its subjects resolved to `me`, the
+/// spawn the rule belongs to.
+pub(super) fn resolve_rules(def: Option<&EnemyDef>, me: SpawnIndex) -> Arc<[Trigger<SpawnSet>]> {
+    def.map_or_else(
+        || Arc::from([]),
+        |def| {
+            def.rules
+                .iter()
+                .map(|r| {
+                    r.when.map(&mut |subject| match subject {
+                        EnemySubject::Itself => SpawnSet::One(me),
+                        EnemySubject::Combat => SpawnSet::Engaged,
+                    })
+                })
+                .collect()
+        },
+    )
 }
 
 impl World {
@@ -98,7 +123,7 @@ impl World {
             .into_iter()
             .filter_map(|e| {
                 let a = self.actor_ref(e)?;
-                let def = enemy_def(&self.s, a.kind)?;
+                let def = enemy_def(&self.s, &self.spawns, a.kind)?;
                 let i = def.rules.iter().position(|r| &r.name == event)?;
                 Some(a.rules.get(i)?.fired)
             })
@@ -180,18 +205,11 @@ impl World {
 
     /// Queue re-evaluations at the moments an enemy's rule triggers name.
     pub(crate) fn schedule_rule_marks(&mut self, enemy: ActorId) {
-        let s = Arc::clone(&self.s);
-        let Some(ActorKind::Enemy { combat, spawn }) = self.actor_ref(enemy).map(|a| a.kind) else {
+        let Some(spawn) = self.actor_ref(enemy).and_then(|a| self.spawn_of(a.kind)) else {
             return;
         };
         let mut marks = Vec::new();
-        for t in s
-            .rule_triggers
-            .get(usize::from(combat))
-            .and_then(|c| c.get(usize::from(spawn.0)))
-            .into_iter()
-            .flatten()
-        {
+        for t in spawn.rules.iter() {
             elapsed_marks(t, &mut marks);
         }
         let now = self.now;
@@ -205,7 +223,7 @@ impl World {
         let Some(a) = self.actor_ref(enemy) else {
             return false;
         };
-        enemy_def(&self.s, a.kind)
+        enemy_def(&self.s, &self.spawns, a.kind)
             .and_then(|d| d.rules.get(usize::from(rule.0)))
             .is_some_and(|r| r.phase.as_ref().is_none_or(|p| a.phase.as_ref() == Some(p)))
     }
@@ -220,12 +238,14 @@ impl World {
         purpose: Purpose,
     ) -> (rng::Domain, u64) {
         let s = Arc::clone(&self.s);
+        let name = self
+            .actor_ref(enemy)
+            .and_then(|a| enemy_def(&s, &self.spawns, a.kind))
+            .and_then(|d| d.rules.get(usize::from(rule.0)))
+            .map_or("", |r| r.name.0.as_str());
         let Some(a) = self.actor_mut(enemy) else {
             return (rng::domain(purpose, &[]), 0);
         };
-        let name = enemy_def(&s, a.kind)
-            .and_then(|d| d.rules.get(usize::from(rule.0)))
-            .map_or("", |r| r.name.0.as_str());
         let domain = rng::domain(purpose, &[&*a.name, name]);
         let index = a.rules.get_mut(usize::from(rule.0)).map_or(0, |st| {
             let i = st.draws[which];
@@ -367,6 +387,87 @@ impl World {
             .is_some_and(|c| c.interruptible);
         interruptible && self.cancel_enemy_cast(target, CastEndReason::Interrupted)
     }
+
+    /// The spawn record behind an enemy actor.
+    pub(crate) fn spawn_of(&self, kind: ActorKind) -> Option<&EnemySpawn> {
+        let ActorKind::Enemy { combat, spawn } = kind else {
+            return None;
+        };
+        self.spawns
+            .get(usize::from(combat))?
+            .get(usize::from(spawn.0))
+    }
+
+    /// New enemies in `spawner`'s combat, engaged at once (which tells the
+    /// seats). Each has the
+    /// pull's health scaling, is named under its spawner, and stands at a
+    /// distance drawn once for the batch, or else where its spawner stands.
+    fn spawn_adds(
+        &mut self,
+        spawner: ActorId,
+        rule: RuleIndex,
+        adds: &[(EnemyKey, u32)],
+        distance: Option<&Dist<f64>>,
+        despawn_with_spawner: bool,
+    ) {
+        let s = Arc::clone(&self.s);
+        let Some(a) = self.actor_ref(spawner) else {
+            return;
+        };
+        let ActorKind::Enemy { combat, .. } = a.kind else {
+            return;
+        };
+        let spawner_name = Arc::clone(&a.name);
+        let distances = match distance {
+            Some(d) => vec![self.rule_amount(spawner, rule, d); self.seats.len()],
+            None => a.distances.clone(),
+        };
+        let scale = combat_def(&s, combat).map_or(1.0, |c| c.health);
+        let slot = usize::from(combat);
+        for (key, count) in adds {
+            let Some(def) = s.setup.enemies.enemies.get(key) else {
+                continue;
+            };
+            for _ in 0..*count {
+                let (Ok(raw), Ok(index)) = (
+                    u16::try_from(self.actors.len()),
+                    u16::try_from(self.enemies.len()),
+                ) else {
+                    self.unsupported("more than 65535 actors in one run");
+                    return;
+                };
+                let serial = 1 + self.spawns[slot]
+                    .iter()
+                    .filter(|sp| sp.spawner == Some(spawner) && &sp.key == key)
+                    .count();
+                let spawn = SpawnIndex(index);
+                let mut add = Actor::new(
+                    ActorKind::Enemy { combat, spawn },
+                    Arc::from(format!("{spawner_name}/{}#{serial}", key.0).as_str()),
+                    (def.health as f64 * scale).round().max(1.0) as u64,
+                    1.0,
+                );
+                add.phase = def.initial_phase.clone();
+                add.distances = distances.clone();
+                add.rules = vec![RuleState::default(); def.rules.len()];
+                let id = ActorId(raw);
+                self.actors.push(add);
+                self.enemies.push(id);
+                self.spawns[slot].push(EnemySpawn {
+                    actor: id,
+                    key: key.clone(),
+                    forces: def.forces,
+                    spawner: Some(spawner),
+                    despawn_with_spawner,
+                    despawned: false,
+                    rules: resolve_rules(Some(def), spawn),
+                });
+                self.record(TraceEvent::Spawn { actor: id, spawner });
+                self.engage(id);
+            }
+        }
+        self.queue_triggers();
+    }
 }
 
 impl<M: Mechanics> Kernel<M> {
@@ -376,9 +477,11 @@ impl<M: Mechanics> Kernel<M> {
         let Some(combat) = self.world.combat_index() else {
             return;
         };
-        let Some(triggers) = s.rule_triggers.get(usize::from(combat)) else {
+        let Some(spawns) = self.world.spawns.get(usize::from(combat)) else {
             return;
         };
+        let triggers: Vec<Arc<[Trigger<SpawnSet>]>> =
+            spawns.iter().map(|sp| Arc::clone(&sp.rules)).collect();
         let now = self.world.now;
         for (spawn, enemy) in self.world.enemies.clone().into_iter().enumerate() {
             let Some(a) = self.world.actor_ref(enemy) else {
@@ -388,10 +491,15 @@ impl<M: Mechanics> Kernel<M> {
                 continue;
             }
             let started = a.engaged_at.unwrap_or(now);
-            let Some(def) = enemy_def(&s, a.kind) else {
+            let Some(def) = enemy_def(&s, &self.world.spawns, a.kind) else {
                 continue;
             };
-            for (r, trigger) in triggers.get(spawn).into_iter().flatten().enumerate() {
+            for (r, trigger) in triggers
+                .get(spawn)
+                .into_iter()
+                .flat_map(|t| t.iter())
+                .enumerate()
+            {
                 let rule = RuleIndex(r as u16);
                 let (Some(st), Some(rdef)) = (
                     self.world
@@ -434,7 +542,8 @@ impl<M: Mechanics> Kernel<M> {
         if !(a.alive && a.engaged) || a.rules.get(r).is_none_or(|st| st.gen != gen) {
             return;
         }
-        let Some(rdef) = enemy_def(&s, a.kind).and_then(|d| d.rules.get(r)) else {
+        let Some(rdef) = enemy_def(&s, &self.world.spawns, a.kind).and_then(|d| d.rules.get(r))
+        else {
             return;
         };
         let active = self.world.in_combat() && self.world.rule_active(enemy, rule);
@@ -543,10 +652,19 @@ impl<M: Mechanics> Kernel<M> {
                     },
                     stacks: 1,
                     duration: None,
+                    pmultiplier: None,
                 });
                 self.drain();
             }
-            EnemyAction::SpawnAdds { .. } => self.world.unsupported("adds"),
+            EnemyAction::SpawnAdds {
+                adds,
+                distance,
+                despawn_with_spawner,
+            } => {
+                self.world
+                    .spawn_adds(enemy, rule, adds, distance.as_ref(), *despawn_with_spawner);
+                self.drain();
+            }
             EnemyAction::EnterPhase(phase) => {
                 if let Some(a) = self.world.actor_mut(enemy) {
                     a.phase = Some(phase.clone());

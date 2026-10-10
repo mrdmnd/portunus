@@ -123,6 +123,28 @@ pub enum TraceEvent {
         target: ActorId,
         lands: SimTime,
     },
+    /// `aura` on `target` soaked `amount` of a hit from `source`, before
+    /// the rest (if any) was recorded as [`TraceEvent::Damage`].
+    Absorbed {
+        source: ActorId,
+        target: ActorId,
+        aura: AuraId,
+        amount: u64,
+    },
+    /// An enemy rule brought `actor` into the combat.
+    Spawn {
+        actor: ActorId,
+        spawner: ActorId,
+    },
+    /// `actor` left the combat without dying: its spawner died.
+    Despawn {
+        actor: ActorId,
+    },
+    /// `aura` kept `actor` alive through a lethal hit.
+    DeathPrevented {
+        actor: ActorId,
+        aura: AuraId,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

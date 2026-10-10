@@ -30,9 +30,17 @@ pub struct ResolvedCombat {
     /// Spawns known before combat. Adds from `SpawnAdds` exist only in
     /// engine state, labeled under their parent, e.g. `boss#1/add#3`.
     pub spawns: Vec<ResolvedSpawn>,
+    /// The pull's health multiplier, which adds get too.
+    #[serde(default = "one")]
+    pub health: f64,
 }
 
-/// Index into [`ResolvedCombat::spawns`].
+fn one() -> f64 {
+    1.0
+}
+
+/// Index into [`ResolvedCombat::spawns`]; adds take the indices after them,
+/// in the order they spawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct SpawnIndex(pub u16);

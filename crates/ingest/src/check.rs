@@ -7,12 +7,14 @@ use portunus_core::{
     AuraId, EnemyKey, HeroTreeId, ItemId, ItemSetId, PetId, Sample, SimDuration, SpecId, SpellId,
     TalentId,
 };
+use portunus_gamedata::aura::{AuraValueKind, BankDraw};
 use portunus_gamedata::effect::{
-    Effect, EffectTarget, ListenFor, Listener, ModScope, Predicate, ProcChance,
+    Coefficient, Effect, EffectTarget, ListenFor, Listener, ModScope, Predicate, ProcChance,
+    TargetCount, RECENT_CASTS,
 };
-use portunus_gamedata::enemy::EnemyAction;
+use portunus_gamedata::enemy::{EnemyAction, EnemyKind};
 use portunus_gamedata::spell::{CastKind, CooldownDef, Requirement};
-use portunus_gamedata::stats::Stat;
+use portunus_gamedata::stats::{ResourceDef, Stat};
 use portunus_gamedata::talent::Grant;
 use portunus_gamedata::{EnemyData, GameData};
 
@@ -71,6 +73,13 @@ pub enum DataIssue {
         owner: Owner,
         enemy: EnemyKey,
     },
+    /// A `per_count` percentage that isn't finite.
+    InvalidCountScale(Owner),
+    /// `SpawnAdds` names an enemy that isn't an `Add`, or spawns none.
+    InvalidAdds {
+        owner: Owner,
+        enemy: EnemyKey,
+    },
     /// Non-positive rating per percent, or thresholds out of order or
     /// fractions outside `[0, 1]`.
     InvalidRatingCurve(Stat),
@@ -101,15 +110,55 @@ pub enum DataIssue {
     /// Spells sharing a cooldown category that disagree on its duration,
     /// charges, or haste.
     CategoryMismatch(u32),
+    /// A valued aura whose initial value, cap, or threshold doesn't scale
+    /// by a positive number, or a bank with no periodic ticks to draw it
+    /// or a draw fraction outside `(0, 1]`.
+    InvalidAuraValue(AuraId),
     /// A distance, displacement, or movement demand that isn't a positive
     /// number, or a demand with no time to meet it.
     InvalidMovement(Owner),
     /// A dual-wield miss chance outside `[0, 100]` percent.
     InvalidMissChance,
+    /// A condition that can't mean anything: a health fraction outside
+    /// `[0, 1]`, a stack count of zero, a value that isn't a number, or a
+    /// recent-cast count outside `1..=RECENT_CASTS`.
+    InvalidPredicate(Owner),
+    /// A spell requirement with a health fraction outside `[0, 1]` or a
+    /// stack count of zero.
+    InvalidRequirement(SpellId),
+    /// A recharging resource with a linear regen too, no units refilling
+    /// at once, no period, or a maximum or start that isn't a whole
+    /// number of units.
+    InvalidRecharge(Owner),
+    /// An aura applied for longer per unit spent with no time per unit, or
+    /// with no duration to add it to.
+    InvalidSpentDuration(Owner),
+    /// An out-of-combat rate that isn't finite, or on a resource that
+    /// recharges a unit at a time.
+    InvalidOutOfCombat(Owner),
+    /// A listener that can never fire: a health line outside `1..=100`
+    /// percent, or a stack count of zero or above the aura's maximum.
+    InvalidListener(Owner),
+    /// A death prevention that heals to a share of health outside `(0, 1]`.
+    InvalidDeathPrevention(AuraId),
 }
 
 fn positive(x: f64) -> bool {
     x > 0.0 && x.is_finite()
+}
+
+/// The number a coefficient scales by.
+fn factor(c: Coefficient) -> f64 {
+    match c {
+        Coefficient::Flat(x)
+        | Coefficient::AttackPower(x)
+        | Coefficient::SpellPower(x)
+        | Coefficient::WeaponDamage(x)
+        | Coefficient::PctMaxHealth(x)
+        | Coefficient::EventAmount(x)
+        | Coefficient::AuraValue(x)
+        | Coefficient::WeaponSpeed(x) => x,
+    }
 }
 
 pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
@@ -120,6 +169,7 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
     c.keys();
     for spec in data.specs.values() {
         let owner = Owner::Spec(spec.id);
+        spec.resources.iter().for_each(|r| c.resource(&owner, r));
         spec.baseline_spells
             .iter()
             .for_each(|&s| c.spell(&owner, s));
@@ -230,8 +280,22 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
             }
         }
         for r in &spell.requires {
-            if let Requirement::AnyAura(auras) | Requirement::NoAura(auras) = r {
-                auras.iter().for_each(|&a| c.aura(&owner, a));
+            let ok = match *r {
+                Requirement::AnyAura(ref auras) | Requirement::NoAura(ref auras) => {
+                    auras.iter().for_each(|&a| c.aura(&owner, a));
+                    true
+                }
+                Requirement::OutOfCombat => true,
+                Requirement::TargetHpAtMost(f) | Requirement::TargetHpAtLeast(f) => {
+                    (0.0..=1.0).contains(&f)
+                }
+                Requirement::CasterStacksAtLeast { aura, stacks } => {
+                    c.aura(&owner, aura);
+                    stacks > 0
+                }
+            };
+            if !ok {
+                c.issues.push(DataIssue::InvalidRequirement(spell.id));
             }
         }
     }
@@ -255,8 +319,34 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
         }
         if let Some(v) = &aura.value {
             c.effects(&owner, &v.on_threshold);
+            let limits_ok = [v.initial, v.cap, v.threshold]
+                .into_iter()
+                .flatten()
+                .all(|l| positive(factor(l)));
+            let bank_ok = match v.kind {
+                AuraValueKind::Bank(draw) => {
+                    aura.periodic.is_some()
+                        && match draw {
+                            BankDraw::Fraction(f) => positive(f) && f <= 1.0,
+                            BankDraw::SpreadOverRemaining => true,
+                        }
+                }
+                AuraValueKind::Absorb { .. } | AuraValueKind::Counter => true,
+            };
+            if !limits_ok || !bank_ok {
+                c.issues.push(DataIssue::InvalidAuraValue(aura.id));
+            }
         }
         c.effects(&owner, &aura.on_expire);
+        if let Some(p) = &aura.prevents_death {
+            if !(positive(p.heal_to_pct) && p.heal_to_pct <= 1.0) {
+                c.issues.push(DataIssue::InvalidDeathPrevention(aura.id));
+            }
+            if let Some(l) = p.lockout {
+                c.aura(&owner, l);
+            }
+            c.effects(&owner, &p.on_prevent);
+        }
         for m in &aura.modifiers {
             if let ModScope::Spell(s) = m.scope {
                 c.spell(&owner, s);
@@ -316,6 +406,7 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
     }
     for pet in data.pets.values() {
         let owner = Owner::Pet(pet.id);
+        pet.resources.iter().for_each(|r| c.resource(&owner, r));
         pet.autocast.iter().for_each(|&s| c.spell(&owner, s));
         pet.passive_auras.iter().for_each(|&a| c.aura(&owner, a));
     }
@@ -451,8 +542,11 @@ impl Checker<'_> {
     }
 
     fn target(&mut self, owner: &Owner, target: &EffectTarget) {
-        if let EffectTarget::Pets(Some(p)) = target {
-            self.pet(owner, *p);
+        match *target {
+            EffectTarget::Pets(Some(p)) => self.pet(owner, p),
+            EffectTarget::EnemiesWithAura { aura, .. }
+            | EffectTarget::AlliesWithAura { aura, .. } => self.aura(owner, aura),
+            _ => {}
         }
     }
 
@@ -464,22 +558,93 @@ impl Checker<'_> {
             | Predicate::OwnerHasAura(aura) => {
                 self.aura(owner, aura);
             }
-            Predicate::TargetHpBelow(_) | Predicate::DiffersFromLastCast => {}
+            Predicate::TargetStacksAtLeast { aura, stacks, .. }
+            | Predicate::CasterStacksAtLeast { aura, stacks } => {
+                self.aura(owner, aura);
+                self.valid_predicate(owner, stacks > 0);
+            }
+            Predicate::AuraValueAtLeast { aura, value } => {
+                self.aura(owner, aura);
+                self.valid_predicate(owner, value.is_finite());
+            }
+            Predicate::TargetHpBelow(f)
+            | Predicate::TargetHpAbove(f)
+            | Predicate::CasterHpBelow(f)
+            | Predicate::CasterHpAbove(f) => {
+                self.valid_predicate(owner, (0.0..=1.0).contains(&f));
+            }
+            Predicate::RecentCasts { spell, count } => {
+                self.spell(owner, spell);
+                self.valid_predicate(owner, (1..=RECENT_CASTS).contains(&usize::from(count)));
+            }
+            Predicate::DiffersFromLastCast | Predicate::TargetHpBelowCasterMaxHp => {}
+        }
+    }
+
+    fn resource(&mut self, owner: &Owner, r: &ResourceDef) {
+        if let Some(rate) = r.out_of_combat {
+            if !rate.is_finite() || r.recharge.is_some() {
+                self.issues
+                    .push(DataIssue::InvalidOutOfCombat(owner.clone()));
+            }
+        }
+        let Some(rc) = r.recharge else { return };
+        let whole = |x: f64| x.is_finite() && x >= 0.0 && x.fract() == 0.0;
+        let ok = r.regen_per_sec == 0.0
+            && rc.concurrent > 0
+            && rc.period > SimDuration::ZERO
+            && whole(r.max)
+            && whole(r.initial)
+            && r.initial <= r.max;
+        if !ok {
+            self.issues.push(DataIssue::InvalidRecharge(owner.clone()));
+        }
+    }
+
+    fn valid_predicate(&mut self, owner: &Owner, ok: bool) {
+        if !ok {
+            self.issues.push(DataIssue::InvalidPredicate(owner.clone()));
         }
     }
 
     fn listener(&mut self, owner: &Owner, l: &Listener) {
         match l.on {
-            ListenFor::CastComplete { spell, .. } | ListenFor::DamageDealt { spell, .. } => {
+            ListenFor::CastComplete { spell, .. }
+            | ListenFor::DamageDealt { spell, .. }
+            | ListenFor::CastStart { spell, .. } => {
                 if let Some(s) = spell {
                     self.spell(owner, s);
                 }
             }
-            ListenFor::PeriodicTick(a) | ListenFor::AuraApplied(a) | ListenFor::AuraExpired(a) => {
+            ListenFor::PeriodicTick(a)
+            | ListenFor::AuraApplied(a)
+            | ListenFor::AuraExpired(a)
+            | ListenFor::Absorbed(a)
+            | ListenFor::AuraRemovedBy { aura: a, .. } => {
                 self.aura(owner, a);
             }
+            ListenFor::AuraStacksReached { aura, stacks } => {
+                self.aura(owner, aura);
+                let max = self.data.auras.get(&aura).map_or(u8::MAX, |a| a.max_stacks);
+                if stacks == 0 || stacks > max.max(1) {
+                    self.issues.push(DataIssue::InvalidListener(owner.clone()));
+                }
+            }
+            ListenFor::HealthBelow { pct } => {
+                if !(1..=100).contains(&pct) {
+                    self.issues.push(DataIssue::InvalidListener(owner.clone()));
+                }
+            }
+            ListenFor::ResourceGained(_)
+            | ListenFor::Interrupted
+            | ListenFor::MoveStart
+            | ListenFor::MoveEnd => {}
             ListenFor::PetExpired(p) => self.pet(owner, p),
-            ListenFor::DamageTaken
+            ListenFor::EnemyDied {
+                had_aura: Some(a), ..
+            } => self.aura(owner, a),
+            ListenFor::EnemyDied { had_aura: None, .. }
+            | ListenFor::DamageTaken
             | ListenFor::Swing { .. }
             | ListenFor::WeaponHit { .. }
             | ListenFor::ResourceSpent(_)
@@ -519,13 +684,47 @@ impl Checker<'_> {
     fn effects(&mut self, owner: &Owner, effects: &[Effect]) {
         for effect in effects {
             match effect {
-                Effect::Damage { target, aoe, .. } => {
+                Effect::Damage {
+                    target,
+                    aoe,
+                    per_count,
+                    ..
+                } => {
                     if aoe.is_some_and(|a| !(0.0..=1.0).contains(&a.secondary)) {
                         self.issues.push(DataIssue::InvalidAoeShare(owner.clone()));
+                    }
+                    if let Some(scale) = per_count {
+                        if !scale.pct.is_finite() {
+                            self.issues
+                                .push(DataIssue::InvalidCountScale(owner.clone()));
+                        }
+                        if let TargetCount::EnemiesWithAura { aura, .. } = scale.count {
+                            self.aura(owner, aura);
+                        }
                     }
                     self.target(owner, target);
                 }
                 Effect::Heal { target, .. } | Effect::Interrupt { target } => {
+                    self.target(owner, target);
+                }
+                Effect::ApplyAura {
+                    aura,
+                    target,
+                    duration,
+                    per_unit_spent: Some(per),
+                    ..
+                } => {
+                    let timed = duration.is_some()
+                        || self
+                            .data
+                            .auras
+                            .get(aura)
+                            .is_some_and(|a| a.duration.is_some());
+                    if *per == SimDuration::ZERO || !timed {
+                        self.issues
+                            .push(DataIssue::InvalidSpentDuration(owner.clone()));
+                    }
+                    self.aura(owner, *aura);
                     self.target(owner, target);
                 }
                 Effect::ApplyAura { aura, target, .. }
@@ -533,7 +732,10 @@ impl Checker<'_> {
                 | Effect::RemoveStacks { aura, target, .. }
                 | Effect::ExtendAura { aura, target, .. }
                 | Effect::AddAuraValue { aura, target, .. }
-                | Effect::ConsumeAuraValue { aura, target, .. } => {
+                | Effect::ConsumeAuraValue { aura, target, .. }
+                | Effect::SpreadAura {
+                    aura, to: target, ..
+                } => {
                     self.aura(owner, *aura);
                     self.target(owner, target);
                 }
@@ -581,6 +783,10 @@ impl Checker<'_> {
                     self.effects(owner, then);
                     self.effects(owner, otherwise);
                 }
+                Effect::ForEach { target, then } => {
+                    self.target(owner, target);
+                    self.effects(owner, then);
+                }
                 Effect::Displace { yards, .. } => {
                     if !positive(*yards) {
                         self.issues.push(DataIssue::InvalidMovement(owner.clone()));
@@ -603,13 +809,26 @@ impl Checker<'_> {
                 }
             }
             EnemyAction::SelfAura(aura) => self.aura(owner, *aura),
-            EnemyAction::SpawnAdds { adds } => {
-                for (enemy, _) in adds {
-                    if !enemies.enemies.contains_key(enemy) {
-                        self.issues.push(DataIssue::UnknownEnemy {
+            EnemyAction::SpawnAdds { adds, distance, .. } => {
+                for (enemy, count) in adds {
+                    match enemies.enemies.get(enemy) {
+                        None => self.issues.push(DataIssue::UnknownEnemy {
                             owner: owner.clone(),
                             enemy: enemy.clone(),
-                        });
+                        }),
+                        Some(def) if def.kind != EnemyKind::Add || *count == 0 => {
+                            self.issues.push(DataIssue::InvalidAdds {
+                                owner: owner.clone(),
+                                enemy: enemy.clone(),
+                            });
+                        }
+                        Some(_) => {}
+                    }
+                }
+                if let Some(d) = distance {
+                    let (lo, hi) = d.bounds();
+                    if !(lo >= 0.0 && lo <= hi && hi.is_finite()) {
+                        self.issues.push(DataIssue::InvalidMovement(owner.clone()));
                     }
                 }
             }

@@ -243,7 +243,8 @@ impl World {
         (1.0 + self.mod_sum(actor, spell, ModKind::CostPct, target) / 100.0).max(0.0)
     }
 
-    /// Spend a completed cast's costs; returns what a scaling cost consumed.
+    /// Spend a completed cast's costs; returns what a scaling cost
+    /// consumed, else what a variable one (with `extra`) did.
     pub(crate) fn pay_costs(
         &mut self,
         actor: ActorId,
@@ -256,32 +257,65 @@ impl World {
         let a = self.actor_mut(actor)?;
         let haste = a.haste;
         let mut spent = None;
+        let mut scaled = false;
         for cost in &def.costs {
             let Some(r) = a.resources.iter_mut().find(|r| r.def.kind == cost.kind) else {
                 continue;
             };
             r.settle(now, haste);
             let base = (cost.amount * mult).min(r.value);
-            r.value -= base;
+            r.change(-base);
             let extra = cost.extra.min(r.value).max(0.0);
-            r.value -= extra;
-            if cost.scaling != SpendScaling::None {
+            r.change(-extra);
+            let scaling = cost.scaling != SpendScaling::None;
+            if scaling || (cost.extra > 0.0 && !scaled) {
                 spent = Some(ResourceAmount {
                     kind: cost.kind,
                     amount: base + extra,
                 });
+                scaled |= scaling;
             }
         }
         spent
     }
 
     /// The kernel's gates for one ability; mechanics' gate is added on top.
-    fn requirements_met(&self, actor: ActorId, def: &SpellDef) -> bool {
-        def.requires.iter().all(|r| match r {
+    fn requirements_met(&self, actor: ActorId, def: &SpellDef, target: Option<ActorId>) -> bool {
+        def.requires
+            .iter()
+            .all(|r| self.requirement_met(actor, r, target))
+    }
+
+    /// The spell's requirements on its target, for a cast at `target`.
+    pub(crate) fn target_requirements_met(
+        &self,
+        actor: ActorId,
+        def: &SpellDef,
+        target: Option<ActorId>,
+    ) -> bool {
+        def.requires
+            .iter()
+            .filter(|r| r.on_target())
+            .all(|r| self.requirement_met(actor, r, target))
+    }
+
+    fn requirement_met(&self, actor: ActorId, r: &Requirement, target: Option<ActorId>) -> bool {
+        let target_frac = || {
+            target
+                .and_then(|t| self.actor_ref(t))
+                .filter(|t| t.max_health > 0)
+                .map(Actor::health_frac)
+        };
+        match r {
             Requirement::AnyAura(auras) => auras.iter().any(|&x| self.has_aura(actor, x)),
             Requirement::NoAura(auras) => !auras.iter().any(|&x| self.has_aura(actor, x)),
             Requirement::OutOfCombat => !self.in_combat(),
-        })
+            &Requirement::TargetHpAtMost(f) => target_frac().is_some_and(|h| h <= f),
+            &Requirement::TargetHpAtLeast(f) => target_frac().is_some_and(|h| h >= f),
+            &Requirement::CasterStacksAtLeast { aura, stacks } => self
+                .actor_ref(actor)
+                .is_some_and(|a| a.auras.iter().any(|i| i.aura == aura && i.stacks >= stacks)),
+        }
     }
 
     pub(crate) fn base_readiness(&self, seat: Seat, ability: SpellId) -> (Readiness, WakeReason) {
@@ -297,7 +331,8 @@ impl World {
             need.block();
             return need.finish(ability);
         };
-        if !a.alive || !self.requirements_met(actor, def) {
+        let primary = a.target.filter(|&t| self.is_live_target(t));
+        if !a.alive || !self.requirements_met(actor, def, primary) {
             need.block();
             return need.finish(ability);
         }
@@ -375,7 +410,13 @@ impl World {
             let have = r.value_at(now, a.haste);
             if have + 1e-9 < want {
                 let rate = r.rate(a.haste);
-                if rate > 0.0 && want <= r.def.max {
+                if r.def.recharge.is_some() {
+                    let short = (want - have - 1e-9).ceil().max(1.0) as usize;
+                    match r.fill_times(now, a.haste).get(short - 1) {
+                        Some(&at) => need.until(at, WakeReason::ConditionMet),
+                        None => need.block(),
+                    }
+                } else if rate > 0.0 && want <= r.def.max {
                     need.until(
                         now + millis_ceil((want - have) / rate * 1000.0),
                         WakeReason::ConditionMet,

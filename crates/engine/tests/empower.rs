@@ -32,6 +32,8 @@ fn flat(amount: u64) -> Effect {
         aoe: None,
         ignores_armor: false,
         hand: None,
+        per_count: None,
+        unmodified: false,
     }
 }
 
@@ -334,6 +336,8 @@ fn moving_releases_an_empower_unless_it_can_be_cast_while_moving() {
             stealth: None,
             ends_with: None,
             persists_through_death: false,
+            unique_per_source: false,
+            prevents_death: None,
         },
     );
     f.template.passive_auras.push(HOVER);

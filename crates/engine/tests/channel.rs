@@ -45,6 +45,8 @@ fn channel_fixture(haste_pct: f64, rules: Vec<EnemyRule>) -> Fixture {
         aoe: None,
         ignores_armor: false,
         hand: None,
+        per_count: None,
+        unmodified: false,
     }];
     f.template.abilities = [LIGHTNING_BOLT].into();
     f.template.derived.haste_pct = haste_pct;

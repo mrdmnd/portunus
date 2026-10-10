@@ -68,4 +68,7 @@ pub enum WakeReason {
     /// A cast the seat chose couldn't start once its cast lag ran out:
     /// it stopped being legal in the meantime.
     CastFailed,
+    /// The seat's primary target fell to the health one of its abilities
+    /// requires (Execute at 20%).
+    TargetHealth(ActorId),
 }

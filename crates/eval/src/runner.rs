@@ -237,6 +237,7 @@ mod tests {
                 seats: vec![SeatOutcome {
                     seat: Seat(0),
                     damage_done: seed.0 * 10 + self.bonus,
+                    damage_absorbed: 0,
                     casts: 1,
                     deaths: 0,
                     damage_taken: 0,

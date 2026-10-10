@@ -4,12 +4,12 @@
 use std::sync::Arc;
 
 use portunus_core::{ActorId, AuraId, SimDuration, SpellId};
-use portunus_gamedata::aura::{AuraDef, Periodic, RefreshRule};
+use portunus_gamedata::aura::{AuraDef, AuraValueKind, Periodic, RefreshRule};
 use portunus_gamedata::effect::ProcChance;
 use portunus_gamedata::item::WeaponHand;
 use portunus_gamedata::spell::{Requirement, SpellDef};
 
-use crate::mechanics::{AuraApplication, AuraChange, AuraEvent, AuraRemoval};
+use crate::mechanics::{AuraApplication, AuraChange, AuraEvent, AuraRemoval, ValueLimits};
 use crate::state::{AuraInstance, AuraRef, DeckView, ListenerRef, ProcView};
 
 use crate::step::WakeReason;
@@ -100,10 +100,28 @@ impl World {
             Some(d) if def.refresh == RefreshRule::Ironfur => vec![now + d; usize::from(n)],
             _ => Vec::new(),
         };
-        let pmultiplier = self.pmultiplier_of(r.source, r.aura);
+        let pmultiplier = app
+            .pmultiplier
+            .unwrap_or_else(|| self.pmultiplier_of(r.source, r.aura));
         let haste = self.source_haste(r);
         match self.find_aura(r) {
             None => {
+                if def.unique_per_source {
+                    let elsewhere: Vec<ActorId> = (0..self.actors.len())
+                        .map(|i| ActorId(i as u16))
+                        .filter(|&id| id != r.holder)
+                        .filter(|&id| {
+                            self.actor_ref(id).is_some_and(|a| {
+                                a.auras
+                                    .iter()
+                                    .any(|i| i.aura == r.aura && i.source == r.source)
+                            })
+                        })
+                        .collect();
+                    for other in elsewhere {
+                        self.remove_aura(other, r.aura, Some(r.source));
+                    }
+                }
                 let uid = self.fresh_id();
                 let stacks = app.stacks.clamp(1, max_stacks);
                 let tick = def.periodic.as_ref().map(|p| Tick {
@@ -469,20 +487,15 @@ impl World {
         }
     }
 
-    pub(crate) fn add_aura_value(&mut self, r: AuraRef, delta: f64) {
+    /// Add `delta`, clamp to the cap, then drop by the threshold once per
+    /// crossing, queueing a [`Followup::Threshold`] for each.
+    pub(crate) fn add_aura_value(&mut self, r: AuraRef, delta: f64, limits: ValueLimits) {
         let s = Arc::clone(&self.s);
         let Some(def) = s.setup.data.auras.get(&r.aura) else {
             return;
         };
-        if def.value.as_ref().is_some_and(|v| {
-            v.cap.is_some()
-                || v.threshold.is_some()
-                || matches!(
-                    v.kind,
-                    portunus_gamedata::aura::AuraValueKind::Absorb { .. }
-                )
-        }) {
-            self.unsupported("aura value caps, thresholds, and absorbs");
+        if limits.threshold.is_some_and(|t| t.is_nan() || t <= 0.0) {
+            self.unsupported("aura value thresholds that aren't positive");
             return;
         }
         if self.find_aura(r).is_none() {
@@ -490,11 +503,35 @@ impl World {
                 aura: r,
                 stacks: 1,
                 duration: None,
+                pmultiplier: None,
             });
         }
         let Some(i) = self.find_aura(r) else { return };
-        if let Some(a) = self.actor_mut(r.holder) {
-            a.auras[i].value += delta;
+        let Some(a) = self.actor_mut(r.holder) else {
+            return;
+        };
+        let inst = &mut a.auras[i];
+        inst.value += delta;
+        if let Some(cap) = limits.cap {
+            inst.value = inst.value.min(cap);
+        }
+        let mut crossed = 0_u32;
+        if let Some(t) = limits.threshold {
+            while inst.value >= t {
+                inst.value -= t;
+                crossed += 1;
+            }
+        }
+        let empty_shield = inst.value <= 0.0
+            && def
+                .value
+                .as_ref()
+                .is_some_and(|v| matches!(v.kind, AuraValueKind::Absorb { .. }));
+        for _ in 0..crossed {
+            self.followups.push_back(Followup::Threshold(r));
+        }
+        if empty_shield {
+            self.remove_instance(r.holder, i, AuraRemoval::Depleted);
         }
     }
 
@@ -575,6 +612,24 @@ impl World {
         tick.last_at = now;
         tick.next_at = None;
         Some(tick.index)
+    }
+
+    /// Ticks still owed counting the one landing now (just taken), a
+    /// partial final tick by its fraction, at the source's current haste:
+    /// SimC's `ticks_left_fractional`. `None` for a permanent aura.
+    pub(crate) fn ticks_left(&self, r: AuraRef) -> Option<f64> {
+        let p = self.s.setup.data.auras.get(&r.aura)?.periodic.as_ref()?;
+        let i = self.find_aura(r)?;
+        let a = self.actor_ref(r.holder)?;
+        let expires = a.auras[i].expires?;
+        let last = a.meta[i].tick?.last_at;
+        let step = f64::from(period(p, self.source_haste(r)).millis());
+        let after = f64::from(expires.saturating_since(last).millis()) / step;
+        Some(if p.partial_final_tick {
+            1.0 + after
+        } else {
+            1.0 + (after + 1e-9).floor()
+        })
     }
 
     /// After a tick resolves: re-derive the period at the source's current

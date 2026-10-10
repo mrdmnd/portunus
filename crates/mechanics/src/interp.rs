@@ -4,12 +4,13 @@ use std::sync::Arc;
 
 use portunus_core::{ActorId, AuraId, PetId, SimDuration, SimTime, SpellId, StreamKey};
 use portunus_engine::mechanics::{
-    whole_points, AuraApplication, DamageEvent, HealEvent, HitKind, RolledHit,
+    whole_points, AuraApplication, DamageEvent, HealEvent, HitKind, RolledHit, ValueLimits,
 };
 use portunus_engine::state::ActorKind;
 use portunus_engine::{AuraRef, EngineIo, ListenerRef, ProcView, SegmentView, StateView};
 use portunus_gamedata::effect::{
-    AoeRule, Coefficient, Effect, EffectTarget, ListenFor, ProcChance,
+    AoeRule, Coefficient, CountScale, Effect, EffectTarget, ListenFor, ProcChance, RemovalReason,
+    TargetCount,
 };
 use portunus_gamedata::item::WeaponHand;
 use portunus_gamedata::stats::{ResourceKind, SchoolMask};
@@ -50,6 +51,8 @@ pub(crate) struct DamageSpec {
     pub aoe: Option<AoeRule>,
     pub ignores_armor: bool,
     pub hand: Option<WeaponHand>,
+    pub per_count: Option<CountScale>,
+    pub unmodified: bool,
 }
 
 /// Something listeners may react to.
@@ -63,6 +66,7 @@ pub(crate) enum Happening {
         spell: Option<SpellId>,
         school: SchoolMask,
         crit: bool,
+        killing_blow: bool,
     },
     DamageTaken,
     Swing(WeaponHand),
@@ -74,6 +78,35 @@ pub(crate) enum Happening {
     PetExpired(PetId),
     /// The holder, a pet, reached the end of its lifetime.
     Departed,
+    /// The occurrence's target, an enemy, died.
+    EnemyDied {
+        /// The listeners' holder dealt the killing blow.
+        by_holder: bool,
+    },
+    CastStart {
+        spell: SpellId,
+        school: SchoolMask,
+    },
+    ResourceGained(ResourceKind),
+    Absorbed(AuraId),
+    Interrupted,
+    MoveStart,
+    MoveEnd,
+    /// The holder's health as fractions of its maximum, before and after
+    /// a hit.
+    HealthDropped {
+        from: f64,
+        to: f64,
+    },
+    AuraStacks {
+        aura: AuraId,
+        from: u8,
+        to: u8,
+    },
+    AuraRemoved {
+        aura: AuraId,
+        reason: RemovalReason,
+    },
 }
 
 /// A happening, as seen by the listeners of one holder.
@@ -128,7 +161,15 @@ impl Interpreter {
                 continue;
             };
             for (index, l) in def.listeners.iter().enumerate() {
-                if !listens(l.on, ev.what) {
+                let died_with = |aura: AuraId| {
+                    ev.target.is_some_and(|t| {
+                        io.view()
+                            .auras_at_death(t)
+                            .iter()
+                            .any(|i| i.aura == aura && i.source == holder)
+                    })
+                };
+                if !listens(l.on, ev.what, died_with) {
                     continue;
                 }
                 // An earlier listener's effects may have removed the aura.
@@ -194,6 +235,7 @@ impl Interpreter {
                         aura: Some(r),
                         event_amount: ev.amount,
                         scale,
+                        spent: None,
                         depth: 1,
                         hand,
                         hit: HitKind::Direct,
@@ -293,6 +335,20 @@ impl Interpreter {
                         .collect()
                 })
                 .unwrap_or_default(),
+            EffectTarget::EnemiesWithAura { aura, from_self } => engaged_enemies(view)
+                .into_iter()
+                .filter(|&e| holds_aura(view, e, aura, from_self.then_some(ctx.caster)))
+                .collect(),
+            EffectTarget::OtherEnemies => engaged_enemies(view)
+                .into_iter()
+                .filter(|&e| Some(e) != ctx.target)
+                .collect(),
+            EffectTarget::AlliesWithAura { aura, from_self } => view
+                .seats()
+                .iter()
+                .copied()
+                .filter(|&s| holds_aura(view, s, aura, from_self.then_some(ctx.caster)))
+                .collect(),
             EffectTarget::Owner => match view.actor(ctx.caster).map(|a| a.kind) {
                 Some(ActorKind::Pet { owner, .. }) => view
                     .seats()
@@ -307,13 +363,69 @@ impl Interpreter {
         out
     }
 
+    /// One context per target of a `ForEach`, each as the event's target.
+    fn each(&self, io: &mut dyn EngineIo, ctx: &EffectCtx, target: EffectTarget) -> Vec<EffectCtx> {
+        self.targets(io, ctx, target)
+            .into_iter()
+            .map(|t| EffectCtx {
+                target: Some(t),
+                ..*ctx
+            })
+            .collect()
+    }
+
     pub(crate) fn damage(&self, io: &mut dyn EngineIo, ctx: &EffectCtx, d: DamageSpec) {
         let Some(ctx) = self.striking(io.view(), ctx, d.hand) else {
             return;
         };
-        for c in self.damage_targets(io, &ctx, d.target, d.aoe) {
+        for c in self.damage_targets(io, &ctx, d) {
             let hit = self.roll_hit(io, &c, d);
             self.deliver(io, hit);
+        }
+    }
+
+    /// Effects run by an aura on its holder, cast by its source: its
+    /// threshold effects and limits. Like its ticks, it counts as the
+    /// spell of the same id, if there is one.
+    pub(crate) fn aura_ctx(&self, r: AuraRef) -> EffectCtx {
+        let spell = SpellId(r.aura.0);
+        EffectCtx {
+            caster: r.source,
+            target: Some(r.holder),
+            spell: self
+                .math
+                .data()
+                .spells
+                .contains_key(&spell)
+                .then_some(spell),
+            aura: Some(r),
+            event_amount: None,
+            scale: 1.0,
+            spent: None,
+            depth: 0,
+            hand: None,
+            hit: HitKind::Direct,
+        }
+    }
+
+    /// A valued aura's cap and threshold, scaled by its source (Seed of
+    /// Corruption's threshold is the warlock's spell power) and, for
+    /// `PctMaxHealth`, its holder.
+    pub(crate) fn value_limits(&self, view: &dyn StateView, r: AuraRef) -> ValueLimits {
+        let Some(v) = self
+            .math
+            .data()
+            .auras
+            .get(&r.aura)
+            .and_then(|d| d.value.as_ref())
+        else {
+            return ValueLimits::default();
+        };
+        let ctx = self.aura_ctx(r);
+        let eval = |c: Option<Coefficient>| c.map(|c| self.math.base(view, &ctx, c));
+        ValueLimits {
+            cap: eval(v.cap),
+            threshold: eval(v.threshold),
         }
     }
 
@@ -335,15 +447,16 @@ impl Interpreter {
         })
     }
 
-    /// One context per target hit, each scaled by its AoE share.
+    /// One context per target hit, each scaled by its AoE share and its
+    /// count scale.
     fn damage_targets(
         &self,
         io: &mut dyn EngineIo,
         ctx: &EffectCtx,
-        target: EffectTarget,
-        aoe: Option<AoeRule>,
+        d: DamageSpec,
     ) -> Vec<EffectCtx> {
-        let mut targets = self.targets(io, ctx, target);
+        let aoe = d.aoe;
+        let mut targets = self.targets(io, ctx, d.target);
         let mut falloff = 1.0;
         let secondary = aoe.map_or(1.0, |rule| rule.secondary);
         if let Some(rule) = aoe {
@@ -363,6 +476,19 @@ impl Interpreter {
                 }
             }
         }
+        if let Some(scale) = d.per_count {
+            let count = match scale.count {
+                TargetCount::TargetsHit => targets.len(),
+                TargetCount::EnemiesWithAura { aura, from_self } => {
+                    let view = io.view();
+                    engaged_enemies(view)
+                        .into_iter()
+                        .filter(|&e| holds_aura(view, e, aura, from_self.then_some(ctx.caster)))
+                        .count()
+                }
+            };
+            falloff *= 1.0 + scale.pct / 100.0 * count as f64;
+        }
         targets
             .into_iter()
             .map(|t| {
@@ -378,6 +504,52 @@ impl Interpreter {
                 }
             })
             .collect()
+    }
+
+    /// Add to the caster's resource; on a gain, fire its `ResourceGained`
+    /// listeners with what it got after the cap.
+    fn gain(&self, io: &mut dyn EngineIo, ctx: &EffectCtx, kind: ResourceKind, amount: f64) {
+        let value = |io: &dyn EngineIo| {
+            io.view()
+                .resource(ctx.caster, kind)
+                .map_or(0.0, |r| r.value)
+        };
+        let before = value(io);
+        io.add_resource(ctx.caster, kind, amount);
+        let gained = value(io) - before;
+        if gained > 0.0 {
+            let ev = Occurrence {
+                what: Happening::ResourceGained(kind),
+                target: ctx.target,
+                amount: Some(gained),
+                depth: ctx.depth,
+            };
+            self.fire(io, ctx.caster, ev);
+        }
+    }
+
+    /// After a hit on `holder` from `attacker`: its `HealthBelow`
+    /// listeners, given its health fractions before and after.
+    pub(crate) fn health_dropped(
+        &self,
+        io: &mut dyn EngineIo,
+        holder: ActorId,
+        (from, to): (Option<f64>, Option<f64>),
+        attacker: ActorId,
+        depth: u8,
+    ) {
+        let (Some(from), Some(to)) = (from, to) else {
+            return;
+        };
+        if to < from {
+            let ev = Occurrence {
+                what: Happening::HealthDropped { from, to },
+                target: Some(attacker),
+                amount: None,
+                depth,
+            };
+            self.fire(io, holder, ev);
+        }
     }
 
     /// An auto-attack by `actor` with `hand` at `target`: miss, else a
@@ -404,6 +576,7 @@ impl Interpreter {
             aura: None,
             event_amount: None,
             scale: 1.0,
+            spent: None,
             depth,
             hand: Some(hand),
             hit: HitKind::Direct,
@@ -418,6 +591,8 @@ impl Interpreter {
                 aoe: None,
                 ignores_armor: false,
                 hand: None,
+                per_count: None,
+                unmodified: false,
             },
         );
         for what in [Happening::Swing(hand), Happening::WeaponHit(hand)] {
@@ -434,10 +609,15 @@ impl Interpreter {
     /// Amount and crit against `c.target`, before its mitigation.
     fn roll_hit(&self, io: &mut dyn EngineIo, c: &EffectCtx, d: DamageSpec) -> RolledHit {
         let view = io.view();
-        let raw = self
-            .math
-            .outgoing(view, c, d.amount, Outgoing::Damage(d.school));
-        let chance = self.math.crit_chance(view, c);
+        let (raw, chance) = if d.unmodified {
+            (self.math.base(view, c, d.amount), 0.0)
+        } else {
+            (
+                self.math
+                    .outgoing(view, c, d.amount, Outgoing::Damage(d.school)),
+                self.math.crit_chance(view, c),
+            )
+        };
         let mult = self.math.crit_multiplier(view, c);
         let crit = io.roll(c.caster, CRIT_STREAM) < chance;
         let weapon = d.hand.or_else(|| {
@@ -462,6 +642,9 @@ impl Interpreter {
     /// Mitigate, apply, and run the listeners for a hit.
     fn deliver(&self, io: &mut dyn EngineIo, hit: RolledHit) {
         let t = hit.target;
+        let alive = |io: &dyn EngineIo| io.view().actor(t).is_some_and(|a| a.alive);
+        let was_alive = alive(io);
+        let health_before = health_fraction(io.view(), t);
         let amount = self
             .math
             .mitigate(io.view(), t, hit.amount, IncomingHit::of(&hit));
@@ -473,15 +656,17 @@ impl Interpreter {
             spell: hit.spell,
             crit: hit.crit,
         });
-        if landed > 0 {
+        let health = (health_before, health_fraction(io.view(), t));
+        if landed.connected() {
             let dealt = Occurrence {
                 what: Happening::DamageDealt {
                     spell: hit.spell,
                     school: hit.school,
                     crit: hit.crit,
+                    killing_blow: was_alive && !alive(io),
                 },
                 target: Some(t),
-                amount: Some(landed as f64),
+                amount: Some(landed.amount as f64),
                 depth: hit.depth,
             };
             self.fire(io, hit.source, dealt);
@@ -491,11 +676,12 @@ impl Interpreter {
                 ..dealt
             };
             self.fire(io, t, taken);
+            self.health_dropped(io, t, health, hit.source, hit.depth);
             if let Some(hand) = hit.weapon {
                 let struck = Occurrence {
                     what: Happening::WeaponHit(hand),
                     target: Some(t),
-                    amount: Some(landed as f64),
+                    amount: Some(landed.amount as f64),
                     depth: hit.depth,
                 };
                 self.fire(io, hit.source, struck);
@@ -522,6 +708,8 @@ impl Interpreter {
                     aoe,
                     ignores_armor,
                     hand,
+                    per_count,
+                    unmodified,
                 } => {
                     let d = DamageSpec {
                         amount,
@@ -530,12 +718,19 @@ impl Interpreter {
                         aoe,
                         ignores_armor,
                         hand,
+                        per_count,
+                        unmodified,
                     };
                     let Some(ctx) = self.striking(io.view(), ctx, hand) else {
                         continue;
                     };
-                    for c in self.damage_targets(io, &ctx, target, aoe) {
+                    for c in self.damage_targets(io, &ctx, d) {
                         hits.push(self.roll_hit(io, &c, d));
+                    }
+                }
+                Effect::ForEach { target, then } => {
+                    for c in self.each(io, ctx, *target) {
+                        hits.extend(self.roll_direct(io, &c, then));
                     }
                 }
                 Effect::If {
@@ -574,6 +769,7 @@ impl Interpreter {
             aura: None,
             event_amount: None,
             scale: 1.0,
+            spent: None,
             depth: 0,
             hand: def.weapon,
             hit: HitKind::Direct,
@@ -607,6 +803,11 @@ impl Interpreter {
                 } => {
                     let holds = predicate(io.view(), *when, ctx.caster, ctx.target, ctx.spell);
                     self.run_besides_damage(io, ctx, if holds { then } else { otherwise });
+                }
+                Effect::ForEach { target, then } => {
+                    for c in self.each(io, ctx, *target) {
+                        self.run_besides_damage(io, &c, then);
+                    }
                 }
                 other => self.run_one(io, ctx, other),
             }
@@ -654,6 +855,8 @@ impl Interpreter {
                 aoe,
                 ignores_armor,
                 hand,
+                per_count,
+                unmodified,
             } => self.damage(
                 io,
                 ctx,
@@ -664,6 +867,8 @@ impl Interpreter {
                     aoe,
                     ignores_armor,
                     hand,
+                    per_count,
+                    unmodified,
                 },
             ),
             &Effect::Heal { amount, target } => self.heal(io, ctx, amount, target),
@@ -672,12 +877,23 @@ impl Interpreter {
                 target,
                 stacks,
                 duration,
+                per_unit_spent,
             } => {
+                let duration = match per_unit_spent {
+                    Some(per) => duration
+                        .or_else(|| io.data().auras.get(&aura).and_then(|a| a.duration))
+                        .map(|base| {
+                            let extra = f64::from(per.millis()) * ctx.spent.unwrap_or(0.0);
+                            SimDuration(base.millis().saturating_add(extra.round() as u32))
+                        }),
+                    None => duration,
+                };
                 for t in self.targets(io, ctx, target) {
                     io.apply_aura(AuraApplication {
                         aura: aura_on(t, aura),
                         stacks,
                         duration,
+                        pmultiplier: None,
                     });
                 }
             }
@@ -711,7 +927,9 @@ impl Interpreter {
                         ..*ctx
                     };
                     let delta = self.math.base(io.view(), &c, amount);
-                    io.add_aura_value(aura_on(t, aura), delta);
+                    let r = own_or(ctx, aura_on(t, aura));
+                    let limits = self.value_limits(io.view(), r);
+                    io.add_aura_value(r, delta, limits);
                 }
             }
             &Effect::ConsumeAuraValue {
@@ -720,16 +938,17 @@ impl Interpreter {
                 fraction,
             } => {
                 for t in self.targets(io, ctx, target) {
-                    let r = aura_on(t, aura);
+                    let r = own_or(ctx, aura_on(t, aura));
                     if let Some(value) = instance(io.view(), r).map(|i| i.value) {
-                        io.add_aura_value(r, -value * fraction);
+                        let limits = self.value_limits(io.view(), r);
+                        io.add_aura_value(r, -value * fraction, limits);
                     }
                 }
             }
-            &Effect::Resource(r) => io.add_resource(caster, r.kind, r.amount * ctx.scale),
+            &Effect::Resource(r) => self.gain(io, ctx, r.kind, r.amount * ctx.scale),
             &Effect::GainResource { kind, amount } => {
                 let gain = self.math.base(io.view(), ctx, amount);
-                io.add_resource(caster, kind, gain);
+                self.gain(io, ctx, kind, gain);
             }
             Effect::ExtraSwing => {
                 let hand = ctx.hand.unwrap_or(WeaponHand::MainHand);
@@ -777,7 +996,15 @@ impl Interpreter {
             }
             &Effect::Interrupt { target } => {
                 for t in self.targets(io, ctx, target) {
-                    io.interrupt(t);
+                    if io.interrupt(t) {
+                        let stopped = Occurrence {
+                            what: Happening::Interrupted,
+                            target: Some(t),
+                            amount: None,
+                            depth: ctx.depth,
+                        };
+                        self.fire(io, caster, stopped);
+                    }
                 }
             }
             &Effect::Displace {
@@ -802,6 +1029,7 @@ impl Interpreter {
                         aura: aura_on(t, aura),
                         stacks: 1,
                         duration: None,
+                        pmultiplier: None,
                     });
                 }
             }
@@ -835,9 +1063,39 @@ impl Interpreter {
                 let holds = predicate(io.view(), *when, caster, ctx.target, ctx.spell);
                 self.run(io, ctx, if holds { then } else { otherwise });
             }
+            Effect::ForEach { target, then } => {
+                for c in self.each(io, ctx, *target) {
+                    self.run(io, &c, then);
+                }
+            }
             Effect::Hook(key) => {
                 if let Some(kit) = self.kits.hook_owner(key) {
                     kit.run_hook(self.tools(), io, ctx, key);
+                }
+            }
+            &Effect::SpreadAura { aura, to, max } => {
+                let Some(from) = ctx.target else { return };
+                let view = io.view();
+                let Some(&copy) = instance(view, aura_on(from, aura)) else {
+                    return;
+                };
+                let duration = copy.expires.map(|e| e.saturating_since(view.now()));
+                if duration == Some(SimDuration::ZERO) {
+                    return;
+                }
+                let lacking: Vec<ActorId> = self
+                    .targets(io, ctx, to)
+                    .into_iter()
+                    .filter(|&t| t != from && !holds_aura(io.view(), t, aura, Some(caster)))
+                    .take(max.map_or(usize::MAX, usize::from))
+                    .collect();
+                for t in lacking {
+                    io.apply_aura(AuraApplication {
+                        aura: aura_on(t, aura),
+                        stacks: copy.stacks,
+                        duration,
+                        pmultiplier: Some(copy.pmultiplier),
+                    });
                 }
             }
         }
@@ -852,7 +1110,19 @@ impl EffectInterpreter for Interpreter {
     }
 }
 
-fn listens(on: ListenFor, what: Happening) -> bool {
+/// The aura running the effect, if `r` names it on its own holder (Seed of
+/// Corruption's debuff counting the damage its holder takes, whoever the
+/// listener runs as), else `r`.
+fn own_or(ctx: &EffectCtx, r: AuraRef) -> AuraRef {
+    match ctx.aura {
+        Some(own) if own.aura == r.aura && own.holder == r.holder => own,
+        _ => r,
+    }
+}
+
+/// Whether `on` hears `what`. `died_with` says whether the dead enemy of
+/// an `EnemyDied` held an aura from the listener's holder.
+fn listens(on: ListenFor, what: Happening, died_with: impl Fn(AuraId) -> bool) -> bool {
     let school_ok =
         |want: Option<SchoolMask>, got: SchoolMask| want.is_none_or(|w| w.0 & got.0 != 0);
     match (on, what) {
@@ -868,16 +1138,19 @@ fn listens(on: ListenFor, what: Happening) -> bool {
                 spell,
                 school,
                 crit_only,
+                killing_blow,
             },
             Happening::DamageDealt {
                 spell: got,
                 school: got_school,
                 crit,
+                killing_blow: fatal,
             },
         ) => {
             spell.is_none_or(|s| got == Some(s))
                 && school_ok(school, got_school)
                 && (crit || !crit_only)
+                && (fatal || !killing_blow)
         }
         (ListenFor::DamageTaken, Happening::DamageTaken) => true,
         (ListenFor::Swing { hand }, Happening::Swing(got))
@@ -890,8 +1163,65 @@ fn listens(on: ListenFor, what: Happening) -> bool {
         (ListenFor::ResourceSpent(a), Happening::ResourceSpent(b)) => a == b,
         (ListenFor::PetExpired(a), Happening::PetExpired(b)) => a == b,
         (ListenFor::Departed, Happening::Departed) => true,
+        (
+            ListenFor::EnemyDied {
+                killed_by_self,
+                had_aura,
+            },
+            Happening::EnemyDied { by_holder },
+        ) => (by_holder || !killed_by_self) && had_aura.is_none_or(died_with),
+        (
+            ListenFor::CastStart { spell, school },
+            Happening::CastStart {
+                spell: got,
+                school: got_school,
+            },
+        ) => spell.is_none_or(|s| s == got) && school_ok(school, got_school),
+        (ListenFor::ResourceGained(a), Happening::ResourceGained(b)) => a == b,
+        (ListenFor::Absorbed(a), Happening::Absorbed(b)) => a == b,
+        (ListenFor::Interrupted, Happening::Interrupted)
+        | (ListenFor::MoveStart, Happening::MoveStart)
+        | (ListenFor::MoveEnd, Happening::MoveEnd) => true,
+        (ListenFor::HealthBelow { pct }, Happening::HealthDropped { from, to }) => {
+            let line = f64::from(pct) / 100.0;
+            from >= line && to < line
+        }
+        (
+            ListenFor::AuraStacksReached { aura, stacks },
+            Happening::AuraStacks {
+                aura: got,
+                from,
+                to,
+            },
+        ) => aura == got && from < stacks && to >= stacks,
+        (
+            ListenFor::AuraRemovedBy { aura, reason },
+            Happening::AuraRemoved {
+                aura: got,
+                reason: why,
+            },
+        ) => aura == got && reason == why,
         _ => false,
     }
+}
+
+/// `holder` has `aura`, from `source` if given.
+fn holds_aura(
+    view: &dyn StateView,
+    holder: ActorId,
+    aura: AuraId,
+    source: Option<ActorId>,
+) -> bool {
+    view.auras(holder)
+        .iter()
+        .any(|i| i.aura == aura && source.is_none_or(|s| i.source == s))
+}
+
+/// Alive, with a health pool: its health over its maximum.
+pub(crate) fn health_fraction(view: &dyn StateView, actor: ActorId) -> Option<f64> {
+    view.actor(actor)
+        .filter(|a| a.alive && a.max_health > 0)
+        .map(|a| a.health as f64 / a.max_health as f64)
 }
 
 fn engaged_enemies(view: &dyn StateView) -> Vec<ActorId> {

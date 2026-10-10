@@ -5,14 +5,14 @@ use std::sync::Arc;
 
 use portunus_core::{ActorId, PetId, Seat, SpecId, SpellId};
 use portunus_engine::mechanics::HitKind;
+pub(crate) use portunus_engine::state::predicate;
 use portunus_engine::state::{ActorKind, AuraInstance};
 use portunus_engine::{AuraRef, RunSetup, StateView};
-use portunus_gamedata::effect::{Coefficient, ModKind, ModScope, Modifier, Predicate};
+use portunus_gamedata::effect::{Coefficient, ModKind, ModScope, Modifier};
 use portunus_gamedata::item::{WeaponDef, WeaponHand};
 use portunus_gamedata::pet::PetKind;
 use portunus_gamedata::stats::{DerivedStats, RatedStat, SchoolMask, Stat, StatBlock};
 use portunus_gamedata::GameData;
-use portunus_scenario::resolved::Segment;
 
 use crate::{CombatMath, EffectCtx, IncomingHit, Outgoing};
 
@@ -54,8 +54,6 @@ enum Role {
 struct Statics {
     data: Arc<GameData>,
     seats: Vec<SeatStats>,
-    /// Armor by combat index, then spawn index.
-    enemy_armor: Vec<Vec<f64>>,
 }
 
 /// The [`CombatMath`] implementation.
@@ -108,32 +106,10 @@ impl Formulas {
                 weapons: [s.template.main_hand, s.template.off_hand],
             })
             .collect();
-        let enemy_armor = setup
-            .run
-            .segments
-            .iter()
-            .filter_map(|seg| match seg {
-                Segment::Combat(c) => Some(&c.spawns),
-                Segment::Travel { .. } => None,
-            })
-            .map(|spawns| {
-                spawns
-                    .iter()
-                    .map(|s| {
-                        setup
-                            .enemies
-                            .enemies
-                            .get(&s.enemy)
-                            .map_or(0.0, |d| d.defense.armor)
-                    })
-                    .collect()
-            })
-            .collect();
         Self {
             s: Arc::new(Statics {
                 data: Arc::clone(&setup.data),
                 seats,
-                enemy_armor,
             }),
         }
     }
@@ -347,13 +323,10 @@ impl Formulas {
 
     fn armor(&self, view: &dyn StateView, target: ActorId) -> f64 {
         match view.actor(target).map(|a| a.kind) {
-            Some(ActorKind::Enemy { combat, spawn }) => self
-                .s
-                .enemy_armor
-                .get(usize::from(combat))
-                .and_then(|c| c.get(usize::from(spawn.0)))
-                .copied()
-                .unwrap_or(0.0),
+            Some(ActorKind::Enemy { .. }) => view
+                .enemy_info(target)
+                .and_then(|e| e.def)
+                .map_or(0.0, |d| d.defense.armor),
             Some(ActorKind::Player(_)) => self
                 .stat_block(view, target)
                 .and_then(|s| s.stats.0.get(&Stat::Armor).copied())
@@ -626,35 +599,4 @@ pub(crate) fn instance(view: &dyn StateView, r: AuraRef) -> Option<&AuraInstance
     view.auras(r.holder)
         .iter()
         .find(|i| i.aura == r.aura && i.source == r.source)
-}
-
-pub(crate) fn predicate(
-    view: &dyn StateView,
-    p: Predicate,
-    caster: ActorId,
-    target: Option<ActorId>,
-    spell: Option<SpellId>,
-) -> bool {
-    match p {
-        Predicate::TargetHasAura { aura, from_self } => target.is_some_and(|t| {
-            view.auras(t)
-                .iter()
-                .any(|i| i.aura == aura && (!from_self || i.source == caster))
-        }),
-        Predicate::CasterHasAura(aura) => view.auras(caster).iter().any(|i| i.aura == aura),
-        Predicate::CasterLacksAura(aura) => !view.auras(caster).iter().any(|i| i.aura == aura),
-        Predicate::OwnerHasAura(aura) => match view.actor(caster).map(|a| a.kind) {
-            Some(ActorKind::Pet { owner, .. }) => view
-                .seats()
-                .get(usize::from(owner.0))
-                .is_some_and(|&o| view.auras(o).iter().any(|i| i.aura == aura)),
-            _ => false,
-        },
-        Predicate::TargetHpBelow(frac) => target
-            .and_then(|t| view.actor(t))
-            .is_some_and(|t| t.max_health > 0 && t.health_frac() < frac),
-        Predicate::DiffersFromLastCast => player_seat(view, caster)
-            .and_then(|s| view.last_cast(s))
-            .is_none_or(|last| Some(last.spell) != spell),
-    }
 }

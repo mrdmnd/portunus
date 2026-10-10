@@ -11,8 +11,10 @@
 //! recharge progress) are exposed directly so observers never re-derive
 //! game formulas.
 
-use portunus_core::{ActorId, AuraId, PetId, Seat, SimDuration, SimTime, SpellId};
-use portunus_gamedata::enemy::{PhaseName, RuleIndex};
+use portunus_core::{ActorId, AuraId, EnemyKey, PetId, Seat, SimDuration, SimTime, SpellId};
+use portunus_gamedata::effect::Predicate;
+pub use portunus_gamedata::effect::RECENT_CASTS;
+use portunus_gamedata::enemy::{EnemyDef, PhaseName, RuleIndex};
 use portunus_gamedata::item::WeaponHand;
 use portunus_gamedata::stats::ResourceKind;
 use portunus_scenario::resolved::SpawnIndex;
@@ -22,6 +24,19 @@ use crate::choice::MoveGoal;
 use crate::mechanics::TimerEvent;
 use crate::step::WakeReason;
 
+/// What an enemy actor is and where it came from.
+#[derive(Debug, Clone, Copy)]
+pub struct EnemyInfo<'a> {
+    pub key: &'a EnemyKey,
+    /// `None` if the enemy data lacks `key`.
+    pub def: Option<&'a EnemyDef>,
+    pub forces: u32,
+    /// The enemy whose rule spawned it; `None` for the pull's own.
+    pub spawner: Option<ActorId>,
+    /// It left with its spawner rather than dying.
+    pub despawned: bool,
+}
+
 pub trait StateView {
     fn now(&self) -> SimTime;
     fn segment(&self) -> SegmentView;
@@ -29,6 +44,10 @@ pub trait StateView {
     fn seats(&self) -> &[ActorId];
     /// Every enemy spawned so far in the current combat, engaged or not.
     fn enemies(&self) -> &[ActorId];
+    /// What an enemy of any combat so far is.
+    fn enemy_info(&self, enemy: ActorId) -> Option<EnemyInfo<'_>>;
+    /// The forces of a combat's adds slain so far (not despawned).
+    fn add_forces(&self, combat: u16) -> u32;
     fn actor(&self, id: ActorId) -> Option<ActorView>;
     fn resource(&self, id: ActorId, kind: ResourceKind) -> Option<ResourceView>;
     /// Any actor's cooldown on a spell: a seat's abilities (teammates'
@@ -43,6 +62,9 @@ pub trait StateView {
     fn cast_time(&self, seat: Seat, ability: SpellId) -> SimDuration;
     fn phase(&self, seat: Seat) -> SeatPhase;
     fn auras(&self, holder: ActorId) -> &[AuraInstance];
+    /// The auras `actor` held as it last died, before death removed them;
+    /// empty if it never died.
+    fn auras_at_death(&self, actor: ActorId) -> &[AuraInstance];
     /// Proc bookkeeping for the listeners on this holder's auras.
     fn procs(&self, holder: ActorId) -> &[ProcView];
     /// The persistent multiplier (`ModKind::PersistentPct`) this aura would
@@ -57,8 +79,14 @@ pub trait StateView {
     fn swing(&self, id: ActorId, hand: WeaponHand) -> Option<SwingView>;
     /// Spells launched and not yet landed.
     fn projectiles(&self) -> &[Projectile];
+    /// The seat's last [`RECENT_CASTS`] completed (or released) casts,
+    /// newest first. A cast joins once its `cast_completed` effects have
+    /// run, so those effects see the casts before it.
+    fn recent_casts(&self, seat: Seat) -> [Option<LastCast>; RECENT_CASTS];
     /// The seat's most recent completed (or released) cast.
-    fn last_cast(&self, seat: Seat) -> Option<LastCast>;
+    fn last_cast(&self, seat: Seat) -> Option<LastCast> {
+        self.recent_casts(seat)[0]
+    }
     fn rule(&self, enemy: ActorId, rule: RuleIndex) -> RuleView;
     /// An enemy's current phase; `None` for enemies without phases.
     fn enemy_phase(&self, enemy: ActorId) -> Option<&PhaseName>;
@@ -224,12 +252,16 @@ pub enum CastWhat {
     EnemyRule(RuleIndex),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResourceView {
     pub value: f64,
     /// Current maximum (talents and auras can change it).
     pub max: f64,
+    /// 0 for a resource that refills a unit at a time.
     pub regen_per_sec: f64,
+    /// For one that refills a unit at a time (runes): when each missing
+    /// unit is back if nothing changes, soonest first.
+    pub next_ready: Vec<SimTime>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -324,6 +356,88 @@ pub struct Projectile {
 pub struct LastCast {
     pub spell: SpellId,
     pub at: SimTime,
+}
+
+/// Whether `p` holds for this caster, target, and spell: the one evaluator
+/// for conditional modifiers, listener conditions, and `Effect::If`.
+pub fn predicate(
+    view: &dyn StateView,
+    p: Predicate,
+    caster: ActorId,
+    target: Option<ActorId>,
+    spell: Option<SpellId>,
+) -> bool {
+    let has = |holder: ActorId,
+               aura: AuraId,
+               from: Option<ActorId>,
+               ok: &dyn Fn(&AuraInstance) -> bool| {
+        view.auras(holder)
+            .iter()
+            .any(|i| i.aura == aura && from.is_none_or(|f| i.source == f) && ok(i))
+    };
+    let target_view = || target.and_then(|t| view.actor(t));
+    let caster_view = || view.actor(caster);
+    let seat = || match caster_view()?.kind {
+        ActorKind::Player(seat) => Some(seat),
+        ActorKind::Enemy { .. } | ActorKind::Pet { .. } => None,
+    };
+    let any = |_: &AuraInstance| true;
+    match p {
+        Predicate::TargetHasAura { aura, from_self } => {
+            target.is_some_and(|t| has(t, aura, from_self.then_some(caster), &any))
+        }
+        Predicate::CasterHasAura(aura) => has(caster, aura, None, &any),
+        Predicate::CasterLacksAura(aura) => !has(caster, aura, None, &any),
+        Predicate::OwnerHasAura(aura) => match caster_view().map(|a| a.kind) {
+            Some(ActorKind::Pet { owner, .. }) => view
+                .seats()
+                .get(usize::from(owner.0))
+                .is_some_and(|&o| has(o, aura, None, &any)),
+            _ => false,
+        },
+        Predicate::TargetHpBelow(frac) => {
+            target_view().is_some_and(|t| t.max_health > 0 && t.health_frac() < frac)
+        }
+        Predicate::TargetHpAbove(frac) => {
+            target_view().is_some_and(|t| t.max_health > 0 && t.health_frac() > frac)
+        }
+        Predicate::CasterHpBelow(frac) => {
+            caster_view().is_some_and(|c| c.max_health > 0 && c.health_frac() < frac)
+        }
+        Predicate::CasterHpAbove(frac) => {
+            caster_view().is_some_and(|c| c.max_health > 0 && c.health_frac() > frac)
+        }
+        Predicate::TargetStacksAtLeast {
+            aura,
+            stacks,
+            from_self,
+        } => target.is_some_and(|t| {
+            has(t, aura, from_self.then_some(caster), &|i| {
+                i.stacks >= stacks
+            })
+        }),
+        Predicate::CasterStacksAtLeast { aura, stacks } => {
+            has(caster, aura, None, &|i| i.stacks >= stacks)
+        }
+        Predicate::AuraValueAtLeast { aura, value } => {
+            has(caster, aura, None, &|i| i.value >= value)
+        }
+        Predicate::TargetHpBelowCasterMaxHp => match (target_view(), caster_view()) {
+            (Some(t), Some(c)) => t.health > 0 && t.health <= c.max_health,
+            _ => false,
+        },
+        Predicate::DiffersFromLastCast => seat()
+            .and_then(|s| view.last_cast(s))
+            .is_none_or(|last| Some(last.spell) != spell),
+        Predicate::RecentCasts { spell, count } => seat().is_some_and(|s| {
+            let n = usize::from(count);
+            let recent = view.recent_casts(s);
+            n <= RECENT_CASTS
+                && recent[..n]
+                    .iter()
+                    .all(|c| c.is_some_and(|c| c.spell == spell))
+        }),
+    }
 }
 
 /// One enemy rule's current status.

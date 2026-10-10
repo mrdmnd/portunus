@@ -102,6 +102,7 @@ impl ScenarioSampler for Sampler {
                 pull: pull.name.clone(),
                 timeout: pull.timeout,
                 spawns,
+                health,
             }));
         }
         ResolvedRun {

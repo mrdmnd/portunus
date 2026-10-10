@@ -52,6 +52,8 @@ fn flat(amount: f64) -> Effect {
         aoe: None,
         ignores_armor: false,
         hand: None,
+        per_count: None,
+        unmodified: false,
     }
 }
 

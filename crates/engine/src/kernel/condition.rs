@@ -1,8 +1,9 @@
 //! Solving `Wait::Condition` exactly.
 //!
 //! Between events every scalar a condition can name is monotone in time:
-//! resources fill toward their cap, remaining times count down, charges
-//! step up when one returns, and the rest are constant. Each comparison is
+//! resources fill toward their cap (recharging ones a unit at a time),
+//! remaining times count down, charges step up when one returns, and the
+//! rest are constant. Each comparison is
 //! therefore true either from some moment on or up to some moment, so the
 //! earliest time the whole condition holds is now or one of the moments a
 //! comparison starts to hold. Those are the only candidates checked. Any
@@ -15,7 +16,7 @@ use crate::choice::{CmpOp, Condition, Scalar};
 use super::world::{millis_ceil, World};
 
 /// A scalar's course from now until the next event.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum Track {
     /// `v0 + slope * (t - now)`, clamped to `[lo, hi]`; slope per ms.
     Linear {
@@ -29,6 +30,8 @@ enum Track {
         after: f64,
         at: SimTime,
     },
+    /// `v0`, plus one at each of `at` (ascending): units refilling.
+    Steps { v0: f64, at: Vec<SimTime> },
 }
 
 impl Track {
@@ -63,12 +66,14 @@ impl Track {
                     before
                 }
             }
+            Track::Steps { v0, ref at } => v0 + at.iter().filter(|&&a| a <= t).count() as f64,
         }
     }
 
     /// Moments after `now` at which `value op rhs` may start to hold.
     fn onsets(&self, now: SimTime, op: CmpOp, rhs: f64, out: &mut Vec<SimTime>) {
         match *self {
+            Track::Steps { ref at, .. } => out.extend(at.iter().filter(|&&a| a > now)),
             Track::Linear { v0, slope, lo, hi } => {
                 let rising = slope > 0.0 && matches!(op, CmpOp::Ge | CmpOp::Gt) && rhs <= hi;
                 let falling = slope < 0.0 && matches!(op, CmpOp::Le | CmpOp::Lt) && rhs >= lo;
@@ -128,6 +133,10 @@ impl World {
         };
         match scalar {
             Scalar::Resource(kind) => match a.resources.iter().find(|r| r.def.kind == kind) {
+                Some(r) if r.def.recharge.is_some() => Track::Steps {
+                    v0: r.value_at(now, a.haste),
+                    at: r.fill_times(now, a.haste),
+                },
                 Some(r) => Track::Linear {
                     v0: r.value_at(now, a.haste),
                     slope: r.rate(a.haste) / 1000.0,

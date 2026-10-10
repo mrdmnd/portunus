@@ -47,6 +47,9 @@ pub struct EffectCtx {
     /// Multiplier on every amount: partial ticks, AoE falloff, and
     /// `SpendScaling`.
     pub scale: f64,
+    /// What the cast being run spent (see `CastEvent::spent`); what
+    /// `per_unit_spent` durations count.
+    pub spent: Option<f64>,
     /// The weapon in play: the swing's or strike's being run or reacted
     /// to. What `Coefficient::WeaponSpeed` and `Effect::ExtraSwing` use.
     pub hand: Option<WeaponHand>,

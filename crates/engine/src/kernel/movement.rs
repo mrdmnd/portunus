@@ -21,7 +21,7 @@ use crate::step::WakeReason;
 use crate::trace::{CastEndReason, TraceEvent};
 
 use super::queue::Event;
-use super::world::{millis_ceil, Demand, Moving, World};
+use super::world::{millis_ceil, Demand, Followup, Moving, World};
 
 /// Yards per second with no speed modifiers.
 pub(crate) const BASE_RUN_SPEED: f64 = 7.0;
@@ -241,6 +241,7 @@ impl World {
         }
         let me = self.seat_actor(seat);
         self.start_swings(me);
+        self.tell_movement(seat);
     }
 
     fn finish_movement(&mut self, seat: Seat) {
@@ -254,6 +255,18 @@ impl World {
         let now = self.now;
         self.notify(seat, WakeReason::MovementEnd, true, None, now);
         self.start_swings(actor);
+        self.tell_movement(seat);
+    }
+
+    /// Queue word for mechanics if the seat started or stopped moving
+    /// since it last heard: a move whose goal is already met never starts.
+    fn tell_movement(&mut self, seat: Seat) {
+        let st = self.seat_mut(seat);
+        let moving = st.moving.is_some();
+        if st.moving_told != moving {
+            st.moving_told = moving;
+            self.followups.push_back(Followup::Moved(seat, moving));
+        }
     }
 
     pub(crate) fn movement_end(&mut self, seat: Seat, gen: u32) {
@@ -324,6 +337,7 @@ impl World {
             let actor = self.seat_actor(seat);
             self.record(TraceEvent::MovementEnd { actor });
         }
+        self.tell_movement(seat);
     }
 
     /// The seat must keep moving until `until`; a hard cast that can't
@@ -371,11 +385,13 @@ impl World {
                 .is_some_and(|a| a.alive)
     }
 
+    /// At death or combat's end; mechanics don't hear of it as a stop.
     pub(crate) fn clear_movement(&mut self, seat: Seat) {
         let st = self.seat_mut(seat);
         st.moving = None;
         st.demands.clear();
         st.move_gen += 1;
+        st.moving_told = false;
     }
 
     pub(crate) fn add_demand(

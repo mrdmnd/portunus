@@ -4,15 +4,23 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use portunus_core::{HeroTreeId, PetId, Seed, SimDuration, SpellId};
+use portunus_core::{
+    AuraId, EnemyKey, EventName, HeroTreeId, PetId, Seed, SimDuration, SpellId, Trigger,
+};
 use portunus_engine::trace::TraceEvent;
 use portunus_engine::{
     CastOpts, Choice, MoveGoal, Readiness, StateView, TargetSel, Wait, WakeReason,
 };
-use portunus_env::{Decision, Env, Turn};
+use portunus_env::{Decision, Env, EpisodeSource, ProgressMeter, Turn};
 use portunus_eval::{Arm, LocalRunner, Metric, Runner, SeedSet};
+use portunus_gamedata::aura::{AuraDef, AuraValue, AuraValueKind, RefreshRule};
+use portunus_gamedata::effect::{Coefficient, Effect, EffectTarget};
+use portunus_gamedata::enemy::{EnemyAction, EnemyKind, EnemyRule};
 use portunus_gamedata::spell::CastKind;
-use portunus_run::{Bundle, ChannelObs, EmpowerObs, RunError, SeatObs};
+use portunus_gamedata::stats::{
+    Cost, RechargeDef, ResourceDef, ResourceKind, SchoolMask, SpendScaling,
+};
+use portunus_run::{Bundle, ChannelObs, EmpowerObs, PartyMeter, RunError, SeatObs, FOREVER};
 
 const LIGHTNING_BOLT: SpellId = SpellId(188196);
 
@@ -376,6 +384,156 @@ fn seats_see_their_empowers_progress() {
 }
 
 #[test]
+fn seats_see_shields_as_a_share_of_health() {
+    let mut b = bundle();
+    let data = Arc::make_mut(&mut b.data);
+    let shield = |id: u32, pct: f64| AuraDef {
+        id: AuraId(id),
+        name: format!("shield {id}"),
+        duration: None,
+        max_stacks: 1,
+        refresh: RefreshRule::Replace,
+        periodic: None,
+        value: Some(AuraValue {
+            kind: AuraValueKind::Absorb {
+                school: SchoolMask(u8::MAX),
+            },
+            initial: Some(Coefficient::PctMaxHealth(pct)),
+            cap: None,
+            threshold: None,
+            on_threshold: Vec::new(),
+        }),
+        modifiers: Vec::new(),
+        listeners: Vec::new(),
+        overrides: Vec::new(),
+        on_expire: Vec::new(),
+        cancelable: false,
+        blocked_by: None,
+        form: None,
+        stealth: None,
+        ends_with: None,
+        persists_through_death: false,
+        unique_per_source: false,
+        prevents_death: None,
+    };
+    let apply = |id: u32, target| Effect::ApplyAura {
+        aura: AuraId(id),
+        target,
+        stacks: 1,
+        duration: None,
+        per_unit_spent: None,
+    };
+    for s in [shield(900_701, 5.0), shield(900_702, 10.0)] {
+        data.auras.insert(s.id, s);
+    }
+    let bolt = data.spells.get_mut(&LIGHTNING_BOLT).unwrap();
+    bolt.speed = None;
+    bolt.effects.push(apply(900_701, EffectTarget::Target));
+    bolt.effects.push(apply(900_702, EffectTarget::Caster));
+    let mut env = b.env(false);
+    let mut turn = env.reset(Seed(1)).unwrap();
+    while let Turn::Decide(d) = turn {
+        if d.obs.absorb_pct > 0.0 {
+            let target = d.obs.target.expect("a target");
+            assert!(
+                (d.obs.absorb_pct - 10.0).abs() < 1e-9,
+                "{}",
+                d.obs.absorb_pct
+            );
+            assert!(
+                (target.absorb_pct - 5.0).abs() < 1e-9,
+                "{}",
+                target.absorb_pct
+            );
+            return;
+        }
+        let choice = if d.legal.is_ready(LIGHTNING_BOLT) {
+            Choice::cast(LIGHTNING_BOLT)
+        } else {
+            Choice::Wait(Wait::NextEvent)
+        };
+        turn = env.step(choice).unwrap().next;
+    }
+    panic!("no shield seen");
+}
+
+#[test]
+fn seats_see_their_last_few_casts() {
+    let b = bundle();
+    let mut env = b.env(false);
+    let mut turn = env.reset(Seed(1)).unwrap();
+    let mut seen = 0;
+    while let Turn::Decide(d) = turn {
+        let recent = &d.obs.recent_casts;
+        assert!(recent.len() >= seen && recent.len() <= 4, "{recent:?}");
+        assert!(recent.iter().all(|&s| s == LIGHTNING_BOLT), "{recent:?}");
+        seen = recent.len();
+        if seen == 4 {
+            return;
+        }
+        let choice = if d.legal.is_ready(LIGHTNING_BOLT) {
+            Choice::cast(LIGHTNING_BOLT)
+        } else {
+            Choice::Wait(Wait::NextEvent)
+        };
+        turn = env.step(choice).unwrap().next;
+    }
+    panic!("never saw four casts");
+}
+
+#[test]
+fn seats_see_when_their_runes_are_back() {
+    let mut b = bundle();
+    b.templates[0].resources.push(ResourceDef {
+        kind: ResourceKind::Runes,
+        max: 6.0,
+        initial: 6.0,
+        regen_per_sec: 0.0,
+        regen_hasted: false,
+        recharge: Some(RechargeDef {
+            concurrent: 3,
+            period: SimDuration(10_000),
+            hasted: true,
+        }),
+        out_of_combat: None,
+    });
+    Arc::make_mut(&mut b.data)
+        .spells
+        .get_mut(&LIGHTNING_BOLT)
+        .unwrap()
+        .costs
+        .push(Cost {
+            kind: ResourceKind::Runes,
+            amount: 2.0,
+            extra: 0.0,
+            scaling: SpendScaling::None,
+        });
+    let mut env = b.env(false);
+    let mut turn = env.reset(Seed(1)).unwrap();
+    while let Turn::Decide(d) = turn {
+        let obs = &d.obs;
+        if obs.resource(ResourceKind::Runes) == 4.0 {
+            let refills = &obs.refills[&ResourceKind::Runes];
+            assert_eq!(refills.len(), 2, "{refills:?}");
+            assert_eq!(refills[0], refills[1]);
+            assert!(refills[0] > SimDuration::ZERO && refills[0] <= SimDuration(10_000));
+            assert_eq!(obs.time_to(ResourceKind::Runes, 4), SimDuration::ZERO);
+            assert_eq!(obs.time_to(ResourceKind::Runes, 6), refills[1]);
+            assert_eq!(obs.time_to(ResourceKind::Runes, 7), FOREVER);
+            assert!(!obs.refills.contains_key(&ResourceKind::Mana));
+            return;
+        }
+        let choice = if d.legal.is_ready(LIGHTNING_BOLT) {
+            Choice::cast(LIGHTNING_BOLT)
+        } else {
+            Choice::Wait(Wait::NextEvent)
+        };
+        turn = env.step(choice).unwrap().next;
+    }
+    panic!("never spent runes");
+}
+
+#[test]
 fn closures_are_policies() {
     let b = bundle();
     let bolt_only = |d: &Decision<SeatObs>| {
@@ -402,4 +560,58 @@ fn unknown_policies_are_rejected() {
         Bundle::from_config(config, &path),
         Err(RunError::UnknownPolicy { seat: 0, .. })
     ));
+}
+
+#[test]
+fn slain_adds_count_toward_forces_but_despawned_ones_do_not() {
+    let mut b = bundle();
+    let enemies = Arc::make_mut(&mut b.enemies);
+    let dummy = EnemyKey("target_dummy".into());
+    let add = |key: &str, forces: u32| {
+        let mut def = enemies.enemies[&dummy].clone();
+        def.key = EnemyKey(key.into());
+        def.kind = EnemyKind::Add;
+        def.health = 20_000;
+        def.forces = forces;
+        def
+    };
+    let (imp, wisp) = (add("imp", 3), add("wisp", 5));
+    enemies.enemies.insert(imp.key.clone(), imp);
+    enemies.enemies.insert(wisp.key.clone(), wisp);
+    let summon = |key: &str, count: u32, despawn_with_spawner: bool| EnemyRule {
+        name: EventName(format!("summon {key}")),
+        phase: None,
+        when: Trigger::Now,
+        repeat: None,
+        action: EnemyAction::SpawnAdds {
+            adds: vec![(EnemyKey(key.into()), count)],
+            distance: None,
+            despawn_with_spawner,
+        },
+    };
+    enemies.enemies.get_mut(&dummy).unwrap().rules =
+        vec![summon("imp", 2, false), summon("wisp", 1, true)];
+    let run = b.source(false).episode(Seed(1)).setup.run;
+    let mut env = b.env(false);
+    let mut turn = env.reset(Seed(1)).unwrap();
+    let mut seen = Vec::new();
+    while let Turn::Decide(d) = turn {
+        let state = env.state().unwrap();
+        seen.push(PartyMeter.measure(state, &run).forces);
+        let choice = if d.legal.is_ready(LIGHTNING_BOLT) {
+            Choice::cast(LIGHTNING_BOLT)
+        } else {
+            Choice::Wait(Wait::NextEvent)
+        };
+        turn = env.step(choice).unwrap().next;
+    }
+    let Turn::Done(outcome) = turn else {
+        unreachable!()
+    };
+    assert!(outcome.completed, "{outcome:?}");
+    let state = env.state().unwrap();
+    // The bolts follow the primary target: the dummy, then the imps; the
+    // wisp leaves with the dummy.
+    assert_eq!(seen.iter().max(), Some(&3));
+    assert_eq!(PartyMeter.measure(state, &run).forces, 6);
 }

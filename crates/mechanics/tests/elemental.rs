@@ -207,6 +207,7 @@ fn crit_chance_follows_flame_shock() {
         aura: None,
         event_amount: None,
         scale: 1.0,
+        spent: None,
         depth: 0,
         hand: None,
         hit: HitKind::Direct,

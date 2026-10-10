@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 
+use portunus_core::SimDuration;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -92,6 +93,11 @@ impl SchoolMask {
     pub const FROST: Self = Self(16);
     pub const SHADOW: Self = Self(32);
     pub const ARCANE: Self = Self(64);
+
+    /// Shares a school with `other`.
+    pub fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -145,7 +151,7 @@ pub enum SpendScaling {
 }
 
 /// A spec's resource pool. Between events it evolves linearly at its regen
-/// rate.
+/// rate, or, with `recharge`, a whole unit at a time.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ResourceDef {
     pub kind: ResourceKind,
@@ -153,4 +159,27 @@ pub struct ResourceDef {
     pub initial: f64,
     pub regen_per_sec: f64,
     pub regen_hasted: bool,
+    /// Whole units that refill on their own timers instead of a linear
+    /// regen (`regen_per_sec` must then be 0): Death Knight runes, Evoker
+    /// Essence.
+    #[serde(default)]
+    pub recharge: Option<RechargeDef>,
+    /// Per second outside combat instead of `regen_per_sec`, unhasted and
+    /// unmultiplied; negative to decay (rage, fury, insanity, runic power
+    /// between pulls). SimC sims never leave combat, so it has no
+    /// counterpart.
+    #[serde(default)]
+    pub out_of_combat: Option<f64>,
+}
+
+/// Units that refill one by one, as SimC's `runes_t`: a spent unit starts
+/// its `period` at once if fewer than `concurrent` are refilling, else
+/// when one of those fills. Six runes, three at once, 10 s, hasted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RechargeDef {
+    pub concurrent: u8,
+    pub period: SimDuration,
+    /// Haste (and the resource's regen multipliers) speed up the units
+    /// refilling, rescaling the time they have left.
+    pub hasted: bool,
 }

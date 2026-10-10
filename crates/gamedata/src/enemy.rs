@@ -129,8 +129,18 @@ pub enum EnemyAction {
     /// Apply an aura from [`crate::GameData::auras`] to this enemy, e.g. an
     /// immunity shield or an enrage.
     SelfAura(AuraId),
+    /// New enemies, engaged at once, with the pull's health scaling. Each
+    /// is named under this enemy and counted per key, e.g.
+    /// `pull/boss/imp#3`.
     SpawnAdds {
         adds: Vec<(EnemyKey, u32)>,
+        /// Yards from every player, drawn once for the batch; this enemy's
+        /// own distances if `None`.
+        #[serde(default)]
+        distance: Option<Dist<f64>>,
+        /// The adds vanish, without dying, when this enemy dies.
+        #[serde(default)]
+        despawn_with_spawner: bool,
     },
     EnterPhase(PhaseName),
     Sequence(Vec<EnemyAction>),

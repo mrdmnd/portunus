@@ -1,23 +1,30 @@
 //! Auto-attacks and what triggers off them, on a made-up melee kit grafted
 //! onto the checked-in Elemental data: rage from swings, poisons on
 //! weapon hits, dual-wield misses, Skyfury's extra swings, and a made-up
-//! druid's forms and stealth.
+//! druid's forms and stealth. Also casting (channels, empowers, shared
+//! cooldowns, strikes with both hands) and aura values (thresholds, caps,
+//! absorbs).
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use portunus_core::{ActorId, AuraId, Dist, Seat, Seed, SimDuration, SimTime, SpellId};
+use portunus_core::{
+    ActorId, AuraId, Dist, EnemyKey, EventName, Seat, Seed, SimDuration, SimTime, SpellId, Trigger,
+};
 use portunus_engine::trace::TraceEvent;
 use portunus_engine::{
     CastOpts, Choice, Engine, Externals, Kernel, Latency, Readiness, RunSetup, SeatSetup,
     StateView, Step, TargetSel, TraceRecord, Wait,
 };
-use portunus_gamedata::aura::{AuraDef, FormDef, Periodic, RefreshRule, StealthDef};
+use portunus_gamedata::aura::{
+    AuraDef, AuraValue, AuraValueKind, BankDraw, FormDef, Periodic, RefreshRule, StealthDef,
+};
 use portunus_gamedata::effect::{
     Coefficient, CooldownChange, Effect, EffectTarget, ListenFor, Listener, ModKind, ModScope,
-    Modifier, ProcChance,
+    Modifier, Predicate, ProcChance,
 };
+use portunus_gamedata::enemy::{EnemyAction, EnemyKind, EnemyRule, EnemySubject};
 use portunus_gamedata::item::{WeaponDef, WeaponHand};
 use portunus_gamedata::spell::{CastKind, CooldownDef, GcdDef, Requirement, SpellDef, Targeting};
 use portunus_gamedata::stats::{Cost, ResourceDef, ResourceKind, SchoolMask, SpendScaling, Stat};
@@ -78,6 +85,8 @@ fn damage(amount: f64, school: SchoolMask) -> Effect {
         aoe: None,
         ignores_armor: false,
         hand: None,
+        per_count: None,
+        unmodified: false,
     }
 }
 
@@ -105,6 +114,8 @@ fn fixture(main_hand: WeaponDef, off_hand: Option<WeaponDef>, kit: Vec<Listener>
         initial: 0.0,
         regen_per_sec: 0.0,
         regen_hasted: false,
+        recharge: None,
+        out_of_combat: None,
     });
     data.auras.insert(
         KIT,
@@ -126,6 +137,8 @@ fn fixture(main_hand: WeaponDef, off_hand: Option<WeaponDef>, kit: Vec<Listener>
             stealth: None,
             ends_with: None,
             persists_through_death: false,
+            unique_per_source: false,
+            prevents_death: None,
         },
     );
     template.passive_auras.push(KIT);
@@ -404,6 +417,8 @@ fn strikes_with_both_hands_hit_with_each_weapon() {
         aoe: None,
         ignores_armor: false,
         hand: Some(hand),
+        per_count: None,
+        unmodified: false,
     };
     let run = |off_hand: Option<WeaponDef>| {
         let mut f = fixture(weapon(2600, 1000.0), off_hand, kit.clone());
@@ -511,6 +526,8 @@ fn aura(id: AuraId, modifiers: Vec<Modifier>) -> AuraDef {
         stealth: None,
         ends_with: None,
         persists_through_death: false,
+        unique_per_source: false,
+        prevents_death: None,
     }
 }
 
@@ -551,6 +568,7 @@ fn apply_self(aura: AuraId) -> Effect {
         target: EffectTarget::Caster,
         stacks: 1,
         duration: None,
+        per_unit_spent: None,
     }
 }
 
@@ -618,6 +636,8 @@ fn druid() -> Fixture {
         aoe: None,
         ignores_armor: false,
         hand: None,
+        per_count: None,
+        unmodified: false,
     };
     for s in [
         spell(CAT_FORM, CastKind::Instant, false, vec![apply_self(CAT)]),
@@ -886,12 +906,15 @@ fn armor_reduces_direct_physical_hits_but_not_bleeds() {
         aoe: None,
         ignores_armor: true,
         hand: None,
+        per_count: None,
+        unmodified: false,
     };
     let apply_bleed = Effect::ApplyAura {
         aura: bleed,
         target: EffectTarget::Target,
         stacks: 1,
         duration: None,
+        per_unit_spent: None,
     };
     for s in [
         spell(
@@ -938,6 +961,79 @@ fn armor_reduces_direct_physical_hits_but_not_bleeds() {
     assert!(
         (strike[0] as f64 - reduced).abs() <= 1.0,
         "{strike:?} vs {reduced}"
+    );
+}
+
+#[test]
+fn an_adds_own_armor_reduces_physical_hits_on_it() {
+    const ARMOR: f64 = 5_000.0;
+    let mut f = fixture(weapon(2600, 1000.0), None, Vec::new());
+    f.template.main_hand = None;
+    let enemies = Arc::make_mut(&mut f.enemies);
+    let dummy = EnemyKey("target_dummy".into());
+    let imp = EnemyKey("imp".into());
+    let mut add = enemies.enemies[&dummy].clone();
+    add.key = imp.clone();
+    add.kind = EnemyKind::Add;
+    add.defense.armor = ARMOR;
+    enemies.enemies.insert(imp.clone(), add);
+    enemies.enemies.get_mut(&dummy).unwrap().rules = vec![EnemyRule {
+        name: EventName("summon".into()),
+        phase: None,
+        when: Trigger::Now,
+        repeat: None,
+        action: EnemyAction::SpawnAdds {
+            adds: vec![(imp, 1)],
+            distance: None,
+            despawn_with_spawner: false,
+        },
+    }];
+    let s = spell(
+        STRIKE,
+        CastKind::Instant,
+        true,
+        vec![damage(1000.0, SchoolMask::PHYSICAL)],
+    );
+    f.template.abilities.insert(s.id);
+    f.data.spells.insert(s.id, s);
+    let mut k = f.kernel(1);
+    let end = COMBAT_START + SimDuration(10_000);
+    let mut struck = 0;
+    script(&mut k, end, |now, k| {
+        let enemies = k.state().enemies().to_vec();
+        if now < COMBAT_START || enemies.len() < 2 {
+            return Choice::Wait(Wait::NextEvent);
+        }
+        if struck == 2 || readiness(k, STRIKE) != Some(Readiness::Now) {
+            return Choice::Wait(Wait::NextEvent);
+        }
+        struck += 1;
+        Choice::Cast {
+            ability: STRIKE,
+            target: TargetSel::Actor(enemies[struck - 1]),
+            opts: CastOpts::default(),
+        }
+    });
+    let trace = k.drain_trace();
+    let state = k.state();
+    let on = |target: ActorId| -> Vec<u64> {
+        trace
+            .iter()
+            .filter_map(|r| match r.event {
+                TraceEvent::Damage(d) if d.target == target && d.spell == Some(STRIKE) => {
+                    Some(d.amount)
+                }
+                _ => None,
+            })
+            .collect()
+    };
+    let (boss, add) = (state.enemies()[0], state.enemies()[1]);
+    let (full, armored) = (on(boss), on(add));
+    assert_eq!((full.len(), armored.len()), (1, 1), "{trace:?}");
+    let reduced = full[0] as f64 * (1.0 - ARMOR / (ARMOR + f.data.curves.armor_constant));
+    assert!(
+        (armored[0] as f64 - reduced).abs() <= 1.0,
+        "{armored:?} vs {reduced}"
     );
 }
 
@@ -1229,4 +1325,693 @@ fn swings_during_a_channel_do_nothing_unless_it_allows_them() {
     );
     let (during, _) = hits(true);
     assert_eq!(during.len(), 2, "{during:?}");
+}
+
+const COUNTER: AuraId = AuraId(900_601);
+const CAPPED: AuraId = AuraId(900_602);
+const FILL: SpellId = SpellId(900_603);
+const SMALL_WARD: AuraId = AuraId(900_611);
+const BIG_WARD: AuraId = AuraId(900_612);
+const WARD: SpellId = SpellId(900_613);
+const FIREBOLT: SpellId = SpellId(900_614);
+const SMASH: SpellId = SpellId(900_615);
+const SEED: AuraId = AuraId(900_621);
+const SOW: SpellId = SpellId(900_622);
+const BOSS_SHIELD: AuraId = AuraId(900_631);
+
+fn valued(id: AuraId, value: AuraValue) -> AuraDef {
+    AuraDef {
+        value: Some(value),
+        ..aura(id, Vec::new())
+    }
+}
+
+fn counter() -> AuraValue {
+    AuraValue {
+        kind: AuraValueKind::Counter,
+        initial: None,
+        cap: None,
+        threshold: None,
+        on_threshold: Vec::new(),
+    }
+}
+
+fn shield(school: SchoolMask, initial: Coefficient) -> AuraValue {
+    AuraValue {
+        kind: AuraValueKind::Absorb { school },
+        initial: Some(initial),
+        ..counter()
+    }
+}
+
+fn add_value(aura: AuraId, target: EffectTarget, amount: Coefficient) -> Effect {
+    Effect::AddAuraValue {
+        aura,
+        target,
+        amount,
+    }
+}
+
+fn hit_all(amount: f64, school: SchoolMask) -> Effect {
+    Effect::Damage {
+        amount: Coefficient::Flat(amount),
+        school,
+        target: EffectTarget::AllEnemies,
+        aoe: None,
+        ignores_armor: false,
+        hand: None,
+        per_count: None,
+        unmodified: false,
+    }
+}
+
+fn apply_to_target(aura: AuraId) -> Effect {
+    Effect::ApplyAura {
+        aura,
+        target: EffectTarget::Target,
+        stacks: 1,
+        duration: None,
+        per_unit_spent: None,
+    }
+}
+
+/// A caster with no auto-attacks, at a dummy without armor.
+fn caster(kit: Vec<Listener>) -> Fixture {
+    let mut f = fixture(weapon(2600, 1000.0), None, kit);
+    f.template.melee = false;
+    for e in Arc::make_mut(&mut f.enemies).enemies.values_mut() {
+        e.defense.armor = 0.0;
+    }
+    f.sampler = Sampler::new(f.sampler.spec().clone(), Arc::clone(&f.enemies)).unwrap();
+    f
+}
+
+fn learn(f: &mut Fixture, s: SpellDef) {
+    f.template.abilities.insert(s.id);
+    f.data.spells.insert(s.id, s);
+}
+
+/// Cast `order` from the pull, each once it's ready.
+fn cast_in_order(
+    f: &Fixture,
+    order: &[SpellId],
+    until: SimTime,
+) -> (Kernel<PartyMechanics>, Vec<TraceRecord>) {
+    let mut k = f.kernel(1);
+    let mut next = order.iter().copied().peekable();
+    script(&mut k, until, |now, k| {
+        if now < COMBAT_START {
+            return Choice::Wait(Wait::Until(COMBAT_START));
+        }
+        match next.peek() {
+            Some(&s) if readiness(k, s) == Some(Readiness::Now) => {
+                next.next();
+                cast(s)
+            }
+            Some(_) => Choice::Wait(Wait::NextEvent),
+            None => Choice::Wait(Wait::Until(until)),
+        }
+    });
+    let trace = k.drain_trace();
+    (k, trace)
+}
+
+fn value_of(k: &Kernel<PartyMechanics>, holder: ActorId, aura: AuraId) -> Option<f64> {
+    k.state()
+        .auras(holder)
+        .iter()
+        .find(|i| i.aura == aura)
+        .map(|i| i.value)
+}
+
+#[test]
+fn thresholds_fire_once_per_crossing_and_caps_clamp() {
+    let mut f = caster(Vec::new());
+    let mut boom = counter();
+    boom.threshold = Some(Coefficient::Flat(100.0));
+    boom.cap = Some(Coefficient::Flat(1000.0));
+    boom.on_threshold = vec![hit_all(1.0, SchoolMask::FIRE)];
+    let mut capped = counter();
+    capped.cap = Some(Coefficient::Flat(120.0));
+    f.data.auras.insert(COUNTER, valued(COUNTER, boom));
+    f.data.auras.insert(CAPPED, valued(CAPPED, capped));
+    let fill = vec![
+        add_value(COUNTER, EffectTarget::Caster, Coefficient::Flat(250.0)),
+        add_value(CAPPED, EffectTarget::Caster, Coefficient::Flat(250.0)),
+    ];
+    learn(&mut f, spell(FILL, CastKind::Instant, true, fill));
+
+    let (k, trace) = cast_in_order(&f, &[FILL], COMBAT_START + SimDuration(2_000));
+    let booms: Vec<SimTime> = dealt(&trace, SchoolMask::FIRE)
+        .iter()
+        .map(|h| h.0)
+        .collect();
+    assert_eq!(booms, vec![COMBAT_START; 2]);
+    assert_eq!(value_of(&k, ActorId(0), COUNTER), Some(50.0));
+    assert_eq!(value_of(&k, ActorId(0), CAPPED), Some(120.0));
+}
+
+#[test]
+fn absorbs_soak_their_school_smallest_first_and_go_when_spent() {
+    let kit = vec![listener(
+        ListenFor::DamageDealt {
+            spell: Some(FIREBOLT),
+            school: None,
+            crit_only: false,
+            killing_blow: false,
+        },
+        ProcChance::Always,
+        vec![damage(1.0, SchoolMask::ARCANE)],
+    )];
+    let mut f = caster(kit);
+    let fire = SchoolMask::FIRE;
+    f.data.auras.insert(
+        SMALL_WARD,
+        valued(SMALL_WARD, shield(fire, Coefficient::Flat(200.0))),
+    );
+    f.data.auras.insert(
+        BIG_WARD,
+        valued(BIG_WARD, shield(fire, Coefficient::Flat(500.0))),
+    );
+    let ward = vec![apply_to_target(BIG_WARD), apply_to_target(SMALL_WARD)];
+    learn(&mut f, spell(WARD, CastKind::Instant, true, ward));
+    learn(
+        &mut f,
+        spell(FIREBOLT, CastKind::Instant, true, vec![damage(300.0, fire)]),
+    );
+    let smash = vec![damage(300.0, SchoolMask::PHYSICAL)];
+    learn(&mut f, spell(SMASH, CastKind::Instant, true, smash));
+    let end = COMBAT_START + SimDuration(10_000);
+
+    let (_, plain) = cast_in_order(&f, &[FIREBOLT], end);
+    let bolt = dealt(&plain, fire)[0].1;
+    assert!((234..700).contains(&bolt), "{bolt}");
+
+    let order = [WARD, FIREBOLT, SMASH, FIREBOLT, FIREBOLT];
+    let (k, trace) = cast_in_order(&f, &order, end);
+    let soaked: Vec<(AuraId, u64)> = trace
+        .iter()
+        .filter_map(|r| match r.event {
+            TraceEvent::Absorbed { aura, amount, .. } => Some((aura, amount)),
+            _ => None,
+        })
+        .collect();
+    // The smaller shield goes first; the physical hit gets past both.
+    assert_eq!(soaked[..2], [(SMALL_WARD, 200), (BIG_WARD, bolt - 200)]);
+    assert_eq!(soaked.iter().map(|s| s.1).sum::<u64>(), 700);
+    let burned: u64 = dealt(&trace, fire).iter().map(|h| h.1).sum();
+    assert_eq!(burned, 3 * bolt - 700);
+    assert_eq!(dealt(&trace, SchoolMask::PHYSICAL).len(), 1);
+    let target = k.state().target(ActorId(0)).unwrap();
+    assert!(value_of(&k, target, SMALL_WARD).is_none());
+    assert!(value_of(&k, target, BIG_WARD).is_none());
+    // A bolt the shields swallowed whole still procs.
+    assert_eq!(dealt(&trace, SchoolMask::ARCANE).len(), 3);
+}
+
+/// Seed of Corruption: the debuff banks the damage its holder takes, and
+/// at the threshold it bursts and goes.
+#[test]
+fn a_seed_bursts_once_its_holder_has_taken_enough() {
+    let mut f = caster(Vec::new());
+    let mut seed = counter();
+    seed.threshold = Some(Coefficient::Flat(1000.0));
+    seed.on_threshold = vec![
+        Effect::RemoveAura {
+            aura: SEED,
+            target: EffectTarget::Target,
+        },
+        hit_all(5000.0, SchoolMask::SHADOW),
+    ];
+    let mut def = valued(SEED, seed);
+    def.listeners = vec![listener(
+        ListenFor::DamageTaken,
+        ProcChance::Always,
+        vec![add_value(
+            SEED,
+            EffectTarget::Caster,
+            Coefficient::EventAmount(1.0),
+        )],
+    )];
+    f.data.auras.insert(SEED, def);
+    learn(
+        &mut f,
+        spell(SOW, CastKind::Instant, true, vec![apply_to_target(SEED)]),
+    );
+    let bolt = vec![damage(300.0, SchoolMask::FIRE)];
+    learn(&mut f, spell(FIREBOLT, CastKind::Instant, true, bolt));
+
+    let order = [SOW, FIREBOLT, FIREBOLT, FIREBOLT, FIREBOLT, FIREBOLT];
+    let (k, trace) = cast_in_order(&f, &order, COMBAT_START + SimDuration(10_000));
+    let bolts = dealt(&trace, SchoolMask::FIRE);
+    let mut taken = 0;
+    let crossed = bolts
+        .iter()
+        .find(|h| {
+            taken += h.1;
+            taken >= 1000
+        })
+        .expect("enough bolts")
+        .0;
+    let bursts: Vec<SimTime> = dealt(&trace, SchoolMask::SHADOW)
+        .iter()
+        .map(|h| h.0)
+        .collect();
+    assert_eq!(bursts, vec![crossed]);
+    let target = k.state().target(ActorId(0)).unwrap();
+    assert!(value_of(&k, target, SEED).is_none());
+}
+
+/// An enemy that shields itself for a tenth of its health takes exactly
+/// that much more damage to kill.
+#[test]
+fn a_boss_shield_lengthens_the_kill_by_its_size() {
+    let run = |shielded: bool| {
+        let mut f = caster(Vec::new());
+        let enemies = Arc::make_mut(&mut f.enemies);
+        for e in enemies.enemies.values_mut() {
+            e.health = 20_000;
+            if shielded {
+                e.rules = vec![EnemyRule {
+                    name: EventName("ward".into()),
+                    phase: None,
+                    when: Trigger::<EnemySubject>::Elapsed(SimDuration::ZERO),
+                    repeat: None,
+                    action: EnemyAction::SelfAura(BOSS_SHIELD),
+                }];
+            }
+        }
+        f.sampler = Sampler::new(f.sampler.spec().clone(), Arc::clone(&f.enemies)).unwrap();
+        let ward = shield(SchoolMask(u8::MAX), Coefficient::PctMaxHealth(10.0));
+        f.data.auras.insert(BOSS_SHIELD, valued(BOSS_SHIELD, ward));
+        let slow = CastKind::Cast {
+            time: SimDuration(1000),
+            hasted: false,
+        };
+        learn(
+            &mut f,
+            spell(FIREBOLT, slow, true, vec![damage(300.0, SchoolMask::FIRE)]),
+        );
+        let mut k = f.kernel(1);
+        for _ in 0..100_000 {
+            match k.advance().unwrap() {
+                Step::Done(o) => return (o, k.drain_trace()),
+                Step::Decide(req) => {
+                    let choice = cast_when_ready(&k, FIREBOLT);
+                    k.submit(req.seat, choice).unwrap();
+                }
+            }
+        }
+        panic!("the dummy should die");
+    };
+    let (plain, plain_trace) = run(false);
+    let (shielded, _) = run(true);
+    let bolt = dealt(&plain_trace, SchoolMask::FIRE)[0].1;
+    let (p, s) = (&plain.seats[0], &shielded.seats[0]);
+    assert_eq!((p.damage_done, p.damage_absorbed), (20_000, 0));
+    assert_eq!((s.damage_done, s.damage_absorbed), (20_000, 2_000));
+    assert_eq!(p.casts, 20_000_u64.div_ceil(bolt) as u32);
+    assert_eq!(s.casts, 22_000_u64.div_ceil(bolt) as u32);
+}
+
+const IGNITE: AuraId = AuraId(900_641);
+const KINDLE: SpellId = SpellId(900_642);
+
+/// A bank that `draw`s each second for `duration` ms, dealing what it
+/// draws to its holder as shadow damage.
+fn bank(draw: BankDraw, duration: u32, partial_final_tick: bool) -> AuraDef {
+    let pay = Effect::Damage {
+        amount: Coefficient::EventAmount(1.0),
+        school: SchoolMask::SHADOW,
+        target: EffectTarget::Target,
+        aoe: None,
+        ignores_armor: false,
+        hand: None,
+        per_count: None,
+        unmodified: false,
+    };
+    let value = AuraValue {
+        kind: AuraValueKind::Bank(draw),
+        ..counter()
+    };
+    AuraDef {
+        duration: Some(SimDuration(duration)),
+        periodic: Some(Periodic {
+            period: SimDuration(1000),
+            hasted: false,
+            partial_final_tick,
+            effects: vec![pay],
+        }),
+        ..valued(IGNITE, value)
+    }
+}
+
+/// A caster whose one spell (re)applies `bank` to its target and adds
+/// `amount` to it.
+fn banker(bank: AuraDef, amount: f64) -> Fixture {
+    let mut f = caster(Vec::new());
+    f.data.auras.insert(IGNITE, bank);
+    let fill = vec![
+        apply_to_target(IGNITE),
+        add_value(IGNITE, EffectTarget::Target, Coefficient::Flat(amount)),
+    ];
+    learn(&mut f, spell(KINDLE, CastKind::Instant, true, fill));
+    f
+}
+
+/// Cast the banker's spell `at` these ms after the pull: the bank's
+/// payouts as `(ms after the pull, amount)`.
+fn payouts(f: &Fixture, at: &[u32]) -> Vec<(u32, u64)> {
+    let until = COMBAT_START + SimDuration(15_000);
+    let mut k = f.kernel(1);
+    let mut next = at
+        .iter()
+        .map(|&ms| COMBAT_START + SimDuration(ms))
+        .peekable();
+    script(&mut k, until, |now, _| match next.peek() {
+        Some(&t) if now >= t => {
+            next.next();
+            cast(KINDLE)
+        }
+        Some(&t) => Choice::Wait(Wait::Until(t)),
+        None => Choice::Wait(Wait::Until(until)),
+    });
+    let target = k.state().target(ActorId(0)).unwrap();
+    assert!(value_of(&k, target, IGNITE).is_none(), "the bank lapses");
+    dealt(&k.drain_trace(), SchoolMask::SHADOW)
+        .iter()
+        .map(|h| (h.0.saturating_since(COMBAT_START).millis(), h.1))
+        .collect()
+}
+
+fn about(amount: u64, expected: f64) -> bool {
+    (amount as f64 - expected).abs() <= 2.0
+}
+
+/// Ignite, as SimC's `residual_action`: the bank pays out evenly over the
+/// ticks left, and a refresh rolls what's left of it, with what was
+/// added, over the new duration.
+#[test]
+fn a_spread_bank_pays_evenly_and_a_refresh_rolls_it_over() {
+    let f = banker(bank(BankDraw::SpreadOverRemaining, 4000, false), 4000.0);
+    let once = payouts(&f, &[0]);
+    let unit = once[0].1;
+    assert!(unit > 100, "{once:?}");
+    assert_eq!(once, [1000, 2000, 3000, 4000].map(|t| (t, unit)));
+
+    // 2000 left at 2.5s plus 4000 new, over the four whole ticks before
+    // the refreshed expiry at 6.5s (no partial final tick).
+    let twice = payouts(&f, &[0, 2500]);
+    let times: Vec<u32> = twice.iter().map(|p| p.0).collect();
+    assert_eq!(times, [1000, 2000, 3000, 4000, 5000, 6000]);
+    assert_eq!(twice[..2], once[..2]);
+    let expected = 1.5 * unit as f64;
+    assert!(twice[2..].iter().all(|p| about(p.1, expected)), "{twice:?}");
+}
+
+/// A partial final tick counts as part of a tick when spreading, and
+/// empties the bank.
+#[test]
+fn a_partial_final_tick_draws_the_rest_of_the_bank() {
+    let f = banker(bank(BankDraw::SpreadOverRemaining, 3500, true), 3500.0);
+    let paid = payouts(&f, &[0]);
+    let unit = paid[0].1;
+    assert_eq!(paid[..3], [1000, 2000, 3000].map(|t| (t, unit)));
+    assert_eq!(paid.len(), 4, "{paid:?}");
+    assert_eq!(paid[3].0, 3500);
+    assert!(about(paid[3].1, unit as f64 / 2.0), "{paid:?}");
+}
+
+/// Stagger-style: each tick takes a fixed share of what's left; whatever
+/// remains at expiry is lost. A cap bounds what the bank can hold.
+#[test]
+fn a_fractional_bank_draws_a_share_of_what_is_left_up_to_its_cap() {
+    let halves = |cap: Option<f64>| {
+        let mut b = bank(BankDraw::Fraction(0.5), 3000, false);
+        if let Some(v) = b.value.as_mut() {
+            v.cap = cap.map(Coefficient::Flat);
+        }
+        payouts(&banker(b, 8000.0), &[0])
+    };
+    let paid = halves(None);
+    let times: Vec<u32> = paid.iter().map(|p| p.0).collect();
+    assert_eq!(times, [1000, 2000, 3000]);
+    let unit = paid[2].1 as f64;
+    assert!(about(paid[0].1, 4.0 * unit), "{paid:?}");
+    assert!(about(paid[1].1, 2.0 * unit), "{paid:?}");
+    let capped = halves(Some(4000.0));
+    assert!(about(capped[0].1, 2.0 * unit), "{capped:?}");
+}
+
+const PROBE: SpellId = SpellId(900_701);
+const STACKER: AuraId = AuraId(900_702);
+const STACK_TARGET: SpellId = SpellId(900_703);
+const STACK_SELF: SpellId = SpellId(900_704);
+const HURT_SELF: SpellId = SpellId(900_705);
+const OTHER: SpellId = SpellId(900_706);
+const CONDITIONAL: AuraId = AuraId(900_707);
+const TALLY: AuraId = AuraId(900_708);
+const TALLY_UP: SpellId = SpellId(900_709);
+
+/// A caster whose probe spell tests `p` two ways: `Effect::If` adds an
+/// arcane hit, and a passive modifier conditioned on `p` doubles its fire
+/// hit (its frost hit is the control). The other spells set up state.
+fn probing(p: Predicate) -> Fixture {
+    let mut f = caster(Vec::new());
+    let doubled = Modifier {
+        scope: ModScope::School(SchoolMask::FIRE),
+        condition: Some(p),
+        ..modifier(ModKind::DamageDonePct, 100.0)
+    };
+    f.data
+        .auras
+        .insert(CONDITIONAL, aura(CONDITIONAL, vec![doubled]));
+    f.template.passive_auras.push(CONDITIONAL);
+    let mut stacker = aura(STACKER, Vec::new());
+    stacker.max_stacks = 3;
+    f.data.auras.insert(STACKER, stacker);
+    f.data.auras.insert(TALLY, valued(TALLY, counter()));
+    let probe = vec![
+        Effect::If {
+            when: p,
+            then: vec![damage(1000.0, SchoolMask::ARCANE)],
+            otherwise: Vec::new(),
+        },
+        damage(1000.0, SchoolMask::FIRE),
+        damage(1000.0, SchoolMask::FROST),
+    ];
+    let stack_self = Effect::ApplyAura {
+        aura: STACKER,
+        target: EffectTarget::Caster,
+        stacks: 1,
+        duration: None,
+        per_unit_spent: None,
+    };
+    let hurt_self = Effect::Damage {
+        amount: Coefficient::Flat(1000.0),
+        school: SchoolMask::HOLY,
+        target: EffectTarget::Caster,
+        aoe: None,
+        ignores_armor: true,
+        hand: None,
+        per_count: None,
+        unmodified: false,
+    };
+    let tally = add_value(TALLY, EffectTarget::Caster, Coefficient::Flat(250.0));
+    for (id, effects) in [
+        (PROBE, probe),
+        (STACK_TARGET, vec![apply_to_target(STACKER)]),
+        (STACK_SELF, vec![stack_self]),
+        (HURT_SELF, vec![hurt_self]),
+        (OTHER, vec![damage(1.0, SchoolMask::NATURE)]),
+        (TALLY_UP, vec![tally]),
+    ] {
+        learn(&mut f, spell(id, CastKind::Instant, true, effects));
+    }
+    f
+}
+
+/// Cast `before`, then the probe: whether the predicate held for the
+/// probe's last cast. The `Effect::If` and the modifier must agree.
+fn probe_holds(f: &Fixture, before: &[SpellId]) -> bool {
+    let order: Vec<SpellId> = before.iter().copied().chain([PROBE]).collect();
+    let (_, trace) = cast_in_order(f, &order, COMBAT_START + SimDuration(30_000));
+    let fire = *dealt(&trace, SchoolMask::FIRE)
+        .last()
+        .expect("the probe went off");
+    let frost = *dealt(&trace, SchoolMask::FROST)
+        .last()
+        .expect("the probe went off");
+    let by_if = dealt(&trace, SchoolMask::ARCANE)
+        .iter()
+        .any(|h| h.0 == fire.0);
+    let by_modifier = if about(fire.1, 2.0 * frost.1 as f64) {
+        true
+    } else {
+        assert!(about(fire.1, frost.1 as f64), "{fire:?} {frost:?}");
+        false
+    };
+    assert_eq!(by_if, by_modifier, "Effect::If and the modifier disagree");
+    by_if
+}
+
+#[test]
+fn health_predicates_compare_fractions_of_max_health() {
+    let check = |p: Predicate, before: &[SpellId], expected: bool| {
+        assert_eq!(
+            probe_holds(&probing(p), before),
+            expected,
+            "{p:?} after {before:?}"
+        );
+    };
+    check(Predicate::TargetHpAbove(0.5), &[], true);
+    check(Predicate::TargetHpAbove(1.0), &[], false);
+    check(Predicate::CasterHpAbove(0.5), &[], true);
+    check(Predicate::CasterHpAbove(1.0), &[], false);
+    check(Predicate::CasterHpBelow(1.0), &[], false);
+    check(Predicate::CasterHpBelow(1.0), &[HURT_SELF], true);
+}
+
+/// Touch of Death: the target has no more health than the caster's max.
+#[test]
+fn touch_of_death_compares_target_health_with_caster_max_health() {
+    let at = |extra: u64| {
+        let mut f = probing(Predicate::TargetHpBelowCasterMaxHp);
+        let k = f.kernel(1);
+        let max = k.state().actor(ActorId(0)).unwrap().max_health;
+        assert!(max > 10_000, "{max}");
+        for e in Arc::make_mut(&mut f.enemies).enemies.values_mut() {
+            e.health = max + extra;
+        }
+        f.sampler = Sampler::new(f.sampler.spec().clone(), Arc::clone(&f.enemies)).unwrap();
+        probe_holds(&f, &[])
+    };
+    assert!(at(0));
+    assert!(!at(1));
+}
+
+#[test]
+fn stack_and_value_predicates_count_the_right_instance() {
+    let check = |p: Predicate, before: &[SpellId], expected: bool| {
+        assert_eq!(
+            probe_holds(&probing(p), before),
+            expected,
+            "{p:?} after {before:?}"
+        );
+    };
+    let on_target = Predicate::TargetStacksAtLeast {
+        aura: STACKER,
+        stacks: 2,
+        from_self: true,
+    };
+    check(on_target, &[STACK_TARGET], false);
+    check(on_target, &[STACK_TARGET, STACK_TARGET], true);
+    check(on_target, &[STACK_SELF, STACK_SELF], false);
+    let on_self = Predicate::CasterStacksAtLeast {
+        aura: STACKER,
+        stacks: 2,
+    };
+    check(on_self, &[STACK_SELF], false);
+    check(on_self, &[STACK_SELF, STACK_SELF], true);
+    check(on_self, &[STACK_TARGET, STACK_TARGET], false);
+    let tally = |value| Predicate::AuraValueAtLeast { aura: TALLY, value };
+    check(tally(250.0), &[], false);
+    check(tally(250.0), &[TALLY_UP], true);
+    check(tally(251.0), &[TALLY_UP], false);
+}
+
+/// History predicates see the casts before the one whose effects are
+/// running, as SimC's combo strikes do.
+#[test]
+fn cast_history_predicates_see_the_casts_before_this_one() {
+    let check = |p: Predicate, before: &[SpellId], expected: bool| {
+        assert_eq!(
+            probe_holds(&probing(p), before),
+            expected,
+            "{p:?} after {before:?}"
+        );
+    };
+    let twice = Predicate::RecentCasts {
+        spell: OTHER,
+        count: 2,
+    };
+    check(twice, &[OTHER, OTHER], true);
+    check(twice, &[OTHER], false);
+    check(twice, &[HURT_SELF, OTHER], false);
+    check(twice, &[OTHER, OTHER, HURT_SELF], false);
+    check(twice, &[HURT_SELF, OTHER, OTHER], true);
+    let again = Predicate::RecentCasts {
+        spell: PROBE,
+        count: 1,
+    };
+    check(again, &[], false);
+    check(again, &[PROBE], true);
+    check(Predicate::DiffersFromLastCast, &[], true);
+    check(Predicate::DiffersFromLastCast, &[OTHER], true);
+    check(Predicate::DiffersFromLastCast, &[PROBE], false);
+}
+
+const RUPTURE: SpellId = SpellId(900_711);
+const RUPTURE_DOT: AuraId = AuraId(900_711);
+
+/// SimC's Rupture: its base duration (4 s) once plus once per combo point.
+/// Its cost spends every point up to five but doesn't scale its damage.
+fn rupture_lasts(combo_points: f64, per_unit: Option<SimDuration>) -> SimDuration {
+    let mut f = caster(Vec::new());
+    f.template.resources.push(ResourceDef {
+        kind: ResourceKind::ComboPoints,
+        max: 5.0,
+        initial: combo_points,
+        regen_per_sec: 0.0,
+        regen_hasted: false,
+        recharge: None,
+        out_of_combat: None,
+    });
+    f.data.auras.insert(
+        RUPTURE_DOT,
+        AuraDef {
+            duration: Some(SimDuration(4000)),
+            ..aura(RUPTURE_DOT, Vec::new())
+        },
+    );
+    let apply = Effect::ApplyAura {
+        aura: RUPTURE_DOT,
+        target: EffectTarget::Target,
+        stacks: 1,
+        duration: None,
+        per_unit_spent: per_unit,
+    };
+    let mut rupture = spell(RUPTURE, CastKind::Instant, true, vec![apply]);
+    rupture.costs = vec![Cost {
+        kind: ResourceKind::ComboPoints,
+        amount: 1.0,
+        extra: 4.0,
+        scaling: SpendScaling::None,
+    }];
+    learn(&mut f, rupture);
+    let (k, trace) = cast_in_order(&f, &[RUPTURE], COMBAT_START + SimDuration(1000));
+    let at = trace
+        .iter()
+        .find(|r| matches!(r.event, TraceEvent::AuraApplied { aura, .. } if aura == RUPTURE_DOT))
+        .expect("Rupture applied")
+        .time;
+    let me = k.state().seats()[0];
+    let target = k.state().target(me).unwrap();
+    let dot = k
+        .state()
+        .auras(target)
+        .iter()
+        .find(|i| i.aura == RUPTURE_DOT)
+        .copied();
+    dot.and_then(|i| i.expires)
+        .expect("Rupture up")
+        .saturating_since(at)
+}
+
+#[test]
+fn durations_grow_with_the_resource_spent() {
+    let four = Some(SimDuration(4000));
+    assert_eq!(rupture_lasts(3.0, four), SimDuration(16_000));
+    assert_eq!(rupture_lasts(5.0, four), SimDuration(24_000));
+    assert_eq!(rupture_lasts(5.0, None), SimDuration(4000));
 }

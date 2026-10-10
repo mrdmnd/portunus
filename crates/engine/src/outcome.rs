@@ -24,8 +24,12 @@ pub struct PullOutcome {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SeatOutcome {
     pub seat: Seat,
-    /// Excludes overkill.
+    /// Health removed, excluding overkill and what shields absorbed (as in
+    /// SimC, whose damage stats record the amount after absorbs).
     pub damage_done: u64,
+    /// Damage dealt into shields: the fight-lengthening cost of absorbs.
+    #[serde(default)]
+    pub damage_absorbed: u64,
     pub casts: u32,
     pub deaths: u32,
     /// After mitigation and absorbs, excluding overkill.

@@ -56,7 +56,7 @@ fn combats(run: &ResolvedRun) -> impl Iterator<Item = &ResolvedCombat> {
 }
 
 /// Progress from the live state. Earlier pulls count as cleared, with all
-/// their forces.
+/// their forces plus those of the adds slain in them.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PartyMeter;
 
@@ -71,19 +71,19 @@ impl ProgressMeter for PartyMeter {
         let mut forces: u32 = all
             .iter()
             .take(cleared)
-            .flat_map(|c| &c.spawns)
-            .map(|s| s.forces)
+            .zip(0u16..)
+            .map(|(c, i)| c.spawns.iter().map(|s| s.forces).sum::<u32>() + state.add_forces(i))
             .sum();
         let (mut enemy_health, mut priority_health) = (0.0, 0.0f64);
         for &e in state.enemies() {
             let Some(a) = state.actor(e) else { continue };
             if !a.alive {
-                if let (ActorKind::Enemy { combat, spawn }, Some(cur)) = (a.kind, current) {
+                if let (ActorKind::Enemy { combat, .. }, Some(cur)) = (a.kind, current) {
                     if combat == cur {
-                        forces += all
-                            .get(usize::from(combat))
-                            .and_then(|c| c.spawns.get(usize::from(spawn.0)))
-                            .map_or(0, |s| s.forces);
+                        forces += state
+                            .enemy_info(e)
+                            .filter(|i| !i.despawned)
+                            .map_or(0, |i| i.forces);
                     }
                 }
             } else if a.engaged {

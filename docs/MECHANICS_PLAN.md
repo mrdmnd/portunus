@@ -148,7 +148,7 @@ Committed together with this plan. Their follow-ups are 1.7 and 1.8.
 
 ### 0.2 Fix the kernel header doc (done)
 `crates/engine/src/kernel/mod.rs` lines 11–14. List what is actually refused
-today: shared cooldown categories (since done, 1.3), enemy adds, spells
+today: shared cooldown categories (since done, 1.3), enemy adds (since done, 4.1), spells
 triggered for enemies, aura value caps, thresholds and absorbs, and pet
 autocast spells with no GCD, cooldown or cast time.
 
@@ -490,6 +490,86 @@ Unblocks Seed of Corruption, Ignite-style caps, "after spending X" counters,
 boss absorb shields (damage dealers must break them), and player absorbs
 (survival in Mythic+).
 
+**Done** (2.1–2.4), as designed below except where noted:
+- `EngineIo::add_aura_value(aura, delta, ValueLimits)`; the interpreter
+  evaluates cap and threshold with the aura's source as caster and its
+  holder as target (`Interpreter::value_limits`/`aura_ctx`). The cap
+  applies first, then the threshold, once per crossing, each a
+  `Followup::Threshold` delivered as the new `Mechanics::aura_threshold`,
+  which runs `on_threshold` as the aura's source at its holder. A
+  non-positive threshold at run time is `unsupported`.
+- **Absorbs, checked against SimC** (`account_absorb_buffs`): ordinary
+  absorbs go smallest first, ties by name (ours: by aura id, then source);
+  SimC's "high priority" absorbs are tank-specific (Tier C). Emptied
+  shields go as `AuraRemoval::Depleted`. `TraceEvent::Absorbed` records
+  each shield's share.
+- **Correction: absorbed damage is not damage done.** SimC runs the
+  target's absorbs (`assessor::TARGET_MITIGATION`) before recording the
+  attacker's stats from the post-absorb amount. So `damage_done` stays
+  health removed, and the new `SeatOutcome::damage_absorbed` counts damage
+  into shields. The reward doesn't read either.
+- **Absorbed hits still proc.** SimC's callbacks fire whatever amount gets
+  through. `EngineIo::apply_damage` now returns `Landed { amount,
+  absorbed }`; listeners run when either is non-zero, seeing the
+  post-absorb amount. No `absorbed` field on occurrences yet (Phase 6's
+  `ListenFor::Absorbed` will need one).
+- **Shield sizes: `AuraValue.initial`** instead of `Effect::Shield`: the
+  value an aura starts with when first applied, evaluated in
+  `aura_changed` from its source (`PctMaxHealth` from its holder). It's
+  what gives an enemy `SelfAura` shield a size. `AddAuraValue` still works
+  for shields applied by effects.
+- **An aura's own instance:** `AddAuraValue`/`ConsumeAuraValue` naming the
+  aura that runs the effect, on its holder, change that instance, though
+  listeners run as the holder. Needed for Seed of Corruption's debuff.
+- Observation: `SeatObs.absorb_pct` and `TargetObs.absorb_pct` (shields in
+  percent of max health, as the health bar shows).
+- `DataIssue::InvalidAuraValue`: initial, cap and threshold must scale by a
+  positive number.
+
+No DPS change: no aura in the data has a value. Tests: four in
+`melee.rs` (thresholds and caps, absorb order and school, Seed of
+Corruption end to end, a boss `SelfAura` shield lengthening the kill by
+exactly its size), `run_file.rs::seats_see_shields_as_a_share_of_health`,
+`data_files.rs::aura_values_with_non_positive_limits_are_reported`.
+
+### 2.5 Banks drawn by ticks
+
+Found while doing 2.1–2.4: `AuraValueKind::Bank` (Ignite, Deep Wounds,
+Stagger) was never implemented. The value filled but no tick drew from
+it, and `Coefficient::EventAmount` on its ticks read zero.
+
+**Done:**
+- `TickEvent.ticks_left`: ticks still owed, counting the current one and a
+  partial final tick by its fraction, at the source's current haste
+  (SimC's `ticks_left_fractional`). `None` for a permanent aura; the final
+  tick at expiry reports its own fraction.
+- **Checked against SimC** (`residual_action.hpp`): the bank is a pool.
+  On each add, SimC refreshes the dot and sets the per-tick amount to pool
+  ÷ `ticks_left_fractional`, so a refresh rolls what's left, with the new
+  amount, over the new duration. Ours recomputes the share each tick:
+  `PartyMechanics::draw_bank` takes value × fraction ÷ `ticks_left`
+  (`SpreadOverRemaining`), or value × f × fraction (`Fraction(f)`),
+  subtracts it through `add_aura_value`, and runs the tick's effects with
+  it as `event_amount` and `scale` 1 (the draw already shrinks for a
+  partial tick). This matches SimC's amounts unless the source's haste
+  changes the tick count mid-bank; then ours still empties the bank and
+  SimC's doesn't. A permanent `SpreadOverRemaining` bank pays it all at
+  once.
+- Filling a bank doesn't refresh its duration; pair `AddAuraValue` with
+  `ApplyAura`, whose refresh keeps the tick schedule.
+- `DataIssue::InvalidAuraValue` also covers a bank with no `periodic`, and
+  a `Fraction` outside `(0, 1]`.
+- Still open for real Ignites: what the tick's damage pipeline applies on
+  top of the draw. SimC's residuals can't crit directly, snapshot
+  versatility and player multipliers, and leave tick crits to the rolling
+  periodic rules; ours run the tick's `Damage` like any periodic. That
+  waits for the specs that use them.
+
+No DPS change: no aura in the data is a bank. Tests (`melee.rs`): even
+payout plus a refresh rolling into the new duration, a partial final tick
+emptying the bank, and fractional draws with a cap.
+`data_files.rs::banks_without_ticks_or_with_bad_fractions_are_reported`.
+
 ### 2.1 Why the kernel can't do this alone today
 
 `AuraValue.cap` and `threshold` are `Coefficient`s (attack power, spell
@@ -554,6 +634,21 @@ power, max health), which only mechanics can evaluate.
 
 ### 3.1 More predicates
 
+**Done.** All eight variants below, as planned. As built:
+- One evaluator, `portunus_engine::state::predicate`, serves both the
+  kernel (`World::predicate`) and mechanics (re-exported in `math.rs`).
+- Health comparisons are strict, like SimC's talent checks.
+  `TargetHpBelowCasterMaxHp` is "alive and at most", as SimC's Touch of
+  Death (`current_health() > 0 && current_health() <= max_health()`).
+- `SeatState.recent_casts: [Option<LastCast>; RECENT_CASTS]` (4) replaces
+  `last_cast`; `StateView::last_cast` is now its first entry. A cast joins
+  the history right after its `cast_completed`, as SimC's
+  `combo_strikes_trigger` checks then pushes, so a cast's own effects see
+  the casts before it. This fixed `DiffersFromLastCast`, which compared a
+  cast with itself and was always false during its own effects.
+- `SeatObs.recent_casts` shows the history, newest first.
+- Validation: `DataIssue::InvalidPredicate`.
+
 `Predicate` (`effect.rs`) is `Copy`; keep it that way (no boxed
 combinators). Add explicit variants:
 
@@ -578,6 +673,18 @@ combinators). Add explicit variants:
 
 ### 3.2 More spell requirements
 
+**Done.** As built:
+- The variants are `TargetHpAtMost(f64)` and `TargetHpAtLeast(f64)`,
+  inclusive: SimC's Execute refuses only above its threshold
+  (`health_percentage() > execute_pct`) and Kill Shot is `<=`.
+  `CasterStacksAtLeast { aura, stacks }` as planned.
+- Readiness checks the seat's primary target; a cast at another target is
+  checked against that target on submission
+  (`IllegalChoice::TargetRequirement`).
+- `WakeReason::TargetHealth` and per-seat thresholds in `Statics` as
+  planned (aura override targets included).
+- Validation: `DataIssue::InvalidRequirement`.
+
 Extend `Requirement` (`spell.rs`), evaluated in
 `World::requirements_met` (`kernel/cast.rs`):
 
@@ -595,6 +702,27 @@ set of thresholds at setup (`Statics`) so this is cheap.
 `Wait::Until(far)` is woken when the target crosses 20%.
 
 ### 3.3 Death Knight runes
+
+**Done.** SimC (`sc_death_knight.cpp`): `MAX_RUNES` 6,
+`MAX_REGENERATING_RUNES` 3, base 10 s scaled by
+`rune_regen_coefficient` (attack haste over regen multipliers such as
+Runic Corruption); `consume` depletes a rune and starts it at once if
+fewer than three regenerate, `fill_rune` starts the next depleted one, a
+haste change rescales the events, and `replenish_rune` fills a depleted
+rune before a regenerating one. As built:
+- `Resource` keeps `refilling: Vec<f64>` (unhasted milliseconds left per
+  refilling unit) instead of `ready_at` times, so haste and regen
+  multiplier changes rescale by settling at the old rate, like cooldowns.
+- A gained unit fills an idle spent one first, else the refilling one
+  with the most left (SimC goes by rune slot order, which isn't modelled).
+- Readiness and `Wait::Condition` use the n-th fill time and the existing
+  `WakeReason::ConditionMet`; no `ResourceReady` reason was needed. The
+  condition solver got a `Track::Steps` for step-valued quantities.
+- `ResourceView.next_ready` and `SeatObs.refills` / `SeatObs::time_to`
+  (SimC's `rune.time_to_N`) expose the fill times.
+- Validation (`DataIssue::InvalidRecharge`): no linear regen, at least one
+  unit refilling at a time, a positive period, whole-unit max and start.
+- Tests: `crates/engine/tests/runes.rs`, `seats_see_when_their_runes_are_back`.
 
 **Game rules (verify in SimC `death_knight.cpp`):** six runes; up to three
 recharge at once; each takes 10 s, hasted; spending takes ready runes;
@@ -626,6 +754,27 @@ shortens to 7.69 s; a haste change halfway rescales the rest; a
 
 ### 3.4 Other resource behaviour
 
+**Done.** As built:
+- `Effect::ApplyAura.per_unit_spent` adds its duration per unit spent to
+  the effect's or aura's duration (SimC's Rupture: `data().duration() *
+  (1 + combo_points)`). `EffectCtx.spent` carries the amount. `pay_costs`
+  now reports a variable cost (one with `extra`) as spent even when it
+  doesn't scale damage, since Rupture's doesn't; no existing data has
+  such a cost. Validation: `DataIssue::InvalidSpentDuration`.
+- `ResourceDef.out_of_combat` replaces the regen rate while travelling.
+  It is unhasted and unmultiplied. Resources start out of combat and
+  switch at each pull and walk; only resources with an `out_of_combat`
+  rate are settled at the switch, so existing float results don't move.
+  SimC sims never leave combat, so there is nothing to match. Validation:
+  `DataIssue::InvalidOutOfCombat`.
+- Mana: no change needed. SimC turns a percent cost into an absolute one
+  once, `floor(pct * resources.base[mana])`, and base mana doesn't change
+  with max-mana talents, so an absolute `Cost.amount` computed from base
+  mana is exact. Mana drained per channel tick (SimC's `cost_per_tick`)
+  isn't modelled.
+- Tests: `crates/engine/tests/resources.rs`,
+  `durations_grow_with_the_resource_spent` in `melee.rs`.
+
 - **Durations scaled by resource spent** (Rupture, Slice and Dice, Kidney
   Shot by combo points): add `#[serde(default)] per_unit_spent:
   Option<SimDuration>` to `Effect::ApplyAura`. Duration = base (or override)
@@ -651,7 +800,47 @@ shortens to 7.69 s; a haste change halfway rescales the rest; a
 
 ### 4.1 Enemy adds (`EnemyAction::SpawnAdds`)
 
-**Today:** refused at setup (`setup.rs::unsupported`, "enemy adds") and at
+**Done.** As built:
+- `World.spawns: Vec<Vec<EnemySpawn>>`, per combat so far and by spawn
+  index: the actor, its `EnemyKey`, forces, spawner, whether it despawns
+  with its spawner, whether it did, and its rule triggers resolved to its
+  own index. It replaces `Statics.rule_triggers`, and is kept for past
+  combats so lookups on their enemies stay valid. `enemy_def` reads keys
+  from it, so adds and the pull's own spawns go through one path.
+- `SpawnAdds { adds, distance, despawn_with_spawner }`: each add takes the
+  next spawn index, has `EnemyDef.health` times the pull's health
+  multiplier (`ResolvedCombat.health`, new, serde default 1), is named
+  `{spawner}/{key}#{n}`, starts in its initial phase, and engages at once
+  (which notifies seats with `EnemyEngaged`, so no new wake reason). With
+  `distance` it is drawn once per batch from the rule's amount stream and
+  not capped for melee (as `Reposition`); without, the add copies its
+  spawner's per-seat distances. New trace events, at the end of the enum:
+  `Spawn { actor, spawner }` and `Despawn { actor }`.
+- When a spawner dies, its `despawn_with_spawner` adds leave: no death
+  event or followup, their auras removed, seats and pets moved off them
+  (the enemy tail of `kill` is now `enemy_gone`, shared). A combat clears
+  when every enemy, adds included, is no longer alive.
+- `StateView::enemy_info(actor) -> Option<EnemyInfo { key, def, forces,
+  spawner, despawned }>` and `StateView::add_forces(combat)` (slain, not
+  despawned). Mechanics armor reads `enemy_info(..).def`, replacing the
+  precomputed `(combat, spawn)` table. `PartyMeter` counts dead current
+  enemies through `enemy_info`, and cleared pulls as their scenario forces
+  plus `add_forces`; without adds both are unchanged.
+- Setup: the refusal is gone; `SetupIssue::UnknownEnemy` now also covers
+  keys an enemy can spawn, followed transitively. Ingest:
+  `DataIssue::InvalidAdds` for a key that isn't `EnemyKind::Add` or a zero
+  count, `InvalidMovement` for a bad distance.
+- Not done: priors cover the spawner's rules (so a seat can expect the
+  wave) but not the adds' own rules, whose labels are dynamic; plan
+  anchors name scenario spawn labels, so adds' rules can't be anchored
+  yet. `ActionSpace` has no implementation, so there is no target cap to
+  check.
+- Tests: `crates/engine/tests/adds.rs`, `an_adds_own_armor_reduces_physical_hits_on_it`
+  in `melee.rs`, `spawned_adds_must_be_adds_at_a_sensible_distance` in
+  `data_files.rs`, `slain_adds_count_toward_forces_but_despawned_ones_do_not`
+  in `run_file.rs`.
+
+**Was:** refused at setup (`setup.rs::unsupported`, "enemy adds") and at
 runtime (`rules.rs`, `SpawnAdds` arm).
 
 **Design:**
@@ -692,6 +881,26 @@ an add's armor reduces physical damage.
 
 ### 4.2 Enemy-death triggers
 
+**Done.** As built:
+- `ListenFor::EnemyDied { killed_by_self, had_aura }`, both serde
+  defaults. `killed_by_self` means the holder itself dealt the killing
+  blow (not its pets). `had_aura` means the enemy died holding that aura
+  *from the holder* ("an enemy with my DoT"). Fired by `actor_died` on
+  every seat's and pet's auras, for enemies only, target = the dead enemy.
+  Adds that leave with their spawner don't die, so they don't fire it.
+- Death removes the enemy's auras before mechanics hears of it, and
+  reordering that could move RNG draws. So `kill` keeps a snapshot
+  (`Actor.died_with`), exposed as `StateView::auras_at_death`, and
+  `listens` takes a callback that answers `had_aura` from it.
+- `ListenFor::DamageDealt.killing_blow` (serde default): only hits whose
+  target was alive before and dead after.
+- Validation: `had_aura` must exist.
+- Tests: `deaths_reach_listeners_by_killer_and_by_what_the_enemy_carried`
+  in `crates/mechanics/tests/targets.rs` (a new file for multi-target
+  semantics, with its own boss-and-adds fixture);
+  `death_listeners_name_auras_that_exist` in `data_files.rs`.
+
+**Original plan:**
 - `ListenFor::EnemyDied { killed_by_self: bool, had_aura: Option<AuraId> }`:
   fires on the listener holder's auras when an enemy dies. Event target =
   the dead enemy, so effects at `Target` do nothing, but effects at
@@ -704,6 +913,28 @@ an add's armor reduces physical damage.
   grants a resource whenever an enemy with my DoT dies.
 
 ### 4.3 Target sets
+
+**Done.** As built:
+- `EffectTarget::EnemiesWithAura { aura, from_self }`, `OtherEnemies`
+  (engaged enemies but the context target) and `AlliesWithAura { aura,
+  from_self }` (seats only). `from_self` means from the effect's caster.
+- `Effect::ForEach { target, then }` runs `then` with each target as the
+  context target. It works in instant effects, in a projectile's rolled
+  damage (`roll_direct`) and in what runs as it lands.
+- `Effect::Damage.per_count: Option<CountScale { count, pct }>` (serde
+  default) multiplies each hit by `1 + pct/100 * count`, with
+  `TargetCount::EnemiesWithAura` or `TargetsHit` (after `max_targets`).
+  It stacks multiplicatively with the AoE falloff and secondary share.
+- `stacks_per_target_hit` isn't built: no spell in the data needs it yet.
+- Validation: aura ids in the new targets and counts exist;
+  `DataIssue::InvalidCountScale` for a non-finite `pct`. `ForEach.then` is
+  walked in `check.rs` and in the kits' hook walk, which also now walks
+  `Chance.then` (it was skipped before, so a hook only reachable through
+  a `Chance` wasn't checked).
+- Tests in `crates/mechanics/tests/targets.rs`;
+  `target_sets_and_count_scales_name_auras_that_exist` in `data_files.rs`.
+
+**Original plan:**
 
 New `EffectTarget` variants (`effect.rs`), resolved in `Interpreter::targets`
 (`interp.rs` around line 243):
@@ -731,7 +962,13 @@ Crane scaling with 0, 1 and 3 marked enemies; `ForEach` runs per target.
 
 ### 4.4 One target per caster
 
-`AuraDef.unique_per_source: bool` (Unstable Affliction in some versions,
+**Done.** `AuraDef.unique_per_source` (serde default). A new instance
+removes the same caster's instance from every other actor, enemies and
+allies alike, before it is pushed (reason `Removed`); refreshing it on the
+same holder does nothing extra. Other casters' instances stay. Test:
+`a_unique_aura_follows_its_casters_latest_target` in `targets.rs`.
+
+**Original plan:** `AuraDef.unique_per_source: bool` (Unstable Affliction in some versions,
 Hunter's Mark): applying it removes the same caster's instance from any
 other holder. Implement in `apply_aura_now` before the new instance is
 pushed (scan enemies for the same `(aura, source)`).
@@ -739,7 +976,37 @@ pushed (scan enemies for the same `(aura, source)`).
 
 ### 4.5 Damage copying (Havoc, Blade Flurry, Sweeping Strikes)
 
-Expressible after 4.3: a `DamageDealt` listener on the buff with
+**Done.** The plan was missing one piece. An `EventAmount` damage effect
+goes through the whole outgoing pipeline, so a copy would get the caster's
+damage-done modifiers, versatility, snapshot and a crit roll a second
+time. SimC's copies avoid this through spell-data flags
+(`SX_DISABLE_PLAYER_MULT`, `SX_CANNOT_CRIT`). I added
+`Effect::Damage.unmodified` (serde default false) to cover both: the amount
+is taken as given and can't crit. The crit roll is still drawn so the
+stream doesn't shift. A copy is then a `DamageDealt` listener running
+`Damage { amount: EventAmount(share), target: OtherEnemies, aoe:
+max_targets, unmodified: true, ignores_armor: true }`.
+
+- **No copies of copies:** this relies on the listener `depth` guard.
+  Effects run by a listener are at depth 1, and `fire` ignores
+  occurrences above depth 0. That matches SimC: `procs_blade_flurry()` is
+  false on `blade_flurry_attack_t` (sc_rogue.cpp `trigger_blade_flurry`).
+  It also means nothing else hears about a copy. SimC's copy does proc
+  poisons (`procs_poison()` is true), so that is a known divergence for
+  Outlaw.
+- **Armor:** SimC copies the unmitigated `result_total` (with the primary
+  target's own damage-taken multipliers taken back out,
+  `trigger_residual_action`) and lets the secondary target's armor apply.
+  Our listeners see the landed amount, so the copy uses `ignores_armor`.
+  The two agree whenever the enemies have the same armor, which is the
+  usual case for a pack.
+- Test: `blade_flurry_copies_a_share_of_each_hit_to_a_few_others_but_never_a_copy`
+  in `targets.rs`. It uses armored enemies and +100% damage done, and
+  expects 35% of the landed hit on exactly 4 of 5 adds and nothing back on
+  the boss. Removing the depth guard, ignoring `unmodified`, dropping the
+  cap, or letting armor apply to the copy each makes it fail.
+
+**Original plan:** Expressible after 4.3: a `DamageDealt` listener on the buff with
 `Coefficient::EventAmount(share)` and target `OtherEnemies` (with an
 `AoeRule.max_targets`), or `EnemiesWithAura(HAVOC)`.
 - Must not copy its own copies: give the copy effect a distinct spell
@@ -751,7 +1018,22 @@ others and never copies a copy.
 
 ### 4.6 Spreading auras
 
-`Effect::SpreadAura { aura, to: EffectTarget, max: Option<u8> }`: copies
+**Done.** `Effect::SpreadAura { aura, to, max }` reads the caster's
+instance on the context target. It applies a copy to up to `max` of `to`
+(not counting the target itself) that don't already have the caster's
+instance. The copy has the same stacks and the same `pmultiplier`, and it
+lasts for the source's remaining time. A spread from an instance with no
+time left does nothing. The copy ticks afresh, which matches SimC's
+default `dot_t::copy` mode (`DOT_COPY_START`: a new dot started for
+`remains()` with the source's copied state). The snapshot is passed
+through a new `AuraApplication.pmultiplier: Option<f64>` override.
+`AuraApplication` no longer derives `Eq`. Ingest checks the aura and the
+target set. Test:
+`spreading_copies_stacks_snapshot_and_time_left_to_enemies_without_it` in
+`targets.rs`. Mutations that drop the snapshot, the stacks, the remaining
+time, the "lacking it" filter or the cap each make it fail.
+
+**Original plan:** `Effect::SpreadAura { aura, to: EffectTarget, max: Option<u8> }`: copies
 the context target's instance (remaining duration, stacks, `pmultiplier`)
 to targets that lack it. Disease spread, Contagion-style spells.
 **Test:** spread copies remaining time and snapshot, and skips targets that
@@ -808,7 +1090,49 @@ area loses its standing-in buff; a repositioned enemy leaves the area.
 
 ## 8. Phase 6: More events to react to (Tier A/B)
 
-Add `ListenFor` variants (`effect.rs`), fire them from the right place, and
+**Done** (except 6.2 and 6.3). New `ListenFor` variants, added at the end
+of the enum:
+
+- **`CastStart { spell, school }`** fires from `cast_started` for hard
+  casts and empowers. It doesn't fire for instants or channels, matching
+  the game's `SPELL_CAST_START`. A proc that makes a hard cast instant
+  still counts.
+- **`ResourceGained(kind)`** fires from the interpreter's
+  `Effect::Resource` and `Effect::GainResource` handling, not from
+  `add_resource`. The event's amount is what actually arrived after the
+  cap. Regeneration and gains a kit grants directly through `EngineIo` are
+  not reported. Gains made by a listener are not reported either, because
+  of the depth guard.
+- **`Absorbed(aura)`** comes from a new kernel followup (`AbsorbEvent`) and
+  a new `Mechanics::aura_absorbed` hook. It fires on the shield's *caster*,
+  with the amount soaked; the event's target is the shielded actor. It
+  arrives before the `Depleted` removal of a shield that ran out.
+- **`Interrupted`** fires on the caster when `EngineIo::interrupt` returns
+  true.
+- **`MoveStart`, `MoveEnd`** come from a new `Moved` followup and the
+  `Mechanics::movement_changed` hook. The kernel keeps a per-seat
+  `moving_told` flag, so mechanics hear only real transitions. Death and
+  combat end clear movement without reporting a stop. The kernel now
+  drains followups after `Move`, `StopMove` and `MovementEnd`; draining an
+  empty queue does nothing, so existing traces are unchanged.
+- **`HealthBelow { pct }`** fires on the holder when a hit takes its health
+  from at least `pct`% to below it. The plan had an `f64`, but `ListenFor`
+  derives `Eq`, so this is a whole percent in `1..=100`. It is fired by
+  mechanics (in `deliver` and `enemy_hit`) from health read just before
+  and just after `apply_damage`.
+- **`AuraStacksReached { aura, stacks }`** fires from `aura_changed` when a
+  change takes the stack count from below `stacks` to at least `stacks`.
+- **`AuraRemovedBy { aura, reason }`** uses a new data-facing enum,
+  `RemovalReason` (`Expired | Removed | Depleted | Broken`), mapped from
+  `AuraRemoval`. Death doesn't fire it, matching `AuraExpired`.
+
+Ingest reports `InvalidListener` for a health line outside `1..=100` or a
+stack count of zero or above the aura's maximum, and checks the auras and
+spells these variants name. Tests are in `crates/mechanics/tests/events.rs`,
+on the synthetic fixture, which now lives in `tests/synthetic/mod.rs` and
+is shared with `targets.rs`.
+
+**Original plan:** Add `ListenFor` variants (`effect.rs`), fire them from the right place, and
 add the matching `Happening` in mechanics:
 
 | Variant | Fired from | Example |
@@ -828,7 +1152,32 @@ add the matching `Happening` in mechanics:
 
 ### 6.1 Cheating death (Tier B; damage dealers die in Mythic+)
 
-Cauterize, Cheat Death, Ardent Defender-style.
+**Done.** `AuraDef.prevents_death: Option<PreventDeath { heal_to_pct,
+lockout, on_prevent }>` (serde default). When I checked SimC, it has no
+generic death prevention: Rogue's Cheat Death is marked "No
+implementation", and Cauterize is only a talent lookup. The one model is
+Ardent Defender (`sc_paladin_protection.cpp`), and I followed it.
+
+- The lethal hit deals nothing beyond setting health *to* `heal_to_pct`
+  of maximum. That can raise health if it was already below that share.
+- In `World::damage`, a hit that would kill a seat is checked against the
+  seat's auras. The first aura with `prevents_death` whose lockout the
+  seat doesn't hold (from anyone) saves it.
+- Damage counts and the trace record only the health actually lost. The
+  kernel records `TraceEvent::DeathPrevented` and applies the lockout
+  (with the seat as its own source).
+- A `DeathPrevented` followup runs `on_prevent` through
+  `Mechanics::death_prevented`, as the aura's own effects.
+- The aura stays unless `on_prevent` removes it. Only seats are saved.
+- `Landed.prevented` makes a saved hit count as connected even if it cost
+  no health.
+- Ingest reports `InvalidDeathPrevention` for a share outside `(0, 1]`. It
+  also checks the lockout aura and walks `on_prevent`, and kits walk it
+  for hooks.
+
+Test: `a_death_save_holds_once_then_its_lockout_lets_the_next_hit_kill`.
+
+**Original plan:** Cauterize, Cheat Death, Ardent Defender-style.
 - `AuraDef.prevents_death: Option<PreventDeath { heal_to_pct: f64,
   lockout: Option<AuraId>, on_prevent: Vec<Effect> }>`.
 - In `World::damage`, when a hit would kill a player holding such an aura
@@ -1053,7 +1402,7 @@ says which phases each needs first.
 
 1. Phase 0 (all four items).
 2. Phase 1.1 channels, 1.2 empowers, 1.3 categories, 1.4 both-hand strikes.
-3. Phase 2 aura values and absorbs.
+3. Phase 2 aura values, absorbs, and banks (2.5).
 4. Phase 3 predicates, requirements, runes, resource behaviour.
 5. Phase 4.1 adds, 4.2 enemy death, 4.3 target sets, 4.4, 4.5, 4.6.
 6. Phase 6 events (except 6.2 and 6.3), then 6.1 cheat death.

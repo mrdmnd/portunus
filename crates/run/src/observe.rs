@@ -6,6 +6,7 @@ use portunus_core::{ActorId, AuraId, HeroTreeId, PetId, Seat, SimDuration, SimTi
 use portunus_engine::state::{ActorKind, AuraInstance, CastWhat};
 use portunus_engine::{ActionMask, Readiness, SegmentView, WakeReason};
 use portunus_env::{InfoSet, ObsContext, Observer};
+use portunus_gamedata::aura::AuraValueKind;
 use portunus_gamedata::pet::PetKind;
 use portunus_gamedata::stats::ResourceKind;
 
@@ -46,6 +47,8 @@ pub struct TargetObs {
     pub actor: ActorId,
     /// Percent of max health, 0 to 100.
     pub health_pct: f64,
+    /// Shields left, in percent of max health (as the health bar shows).
+    pub absorb_pct: f64,
     /// Yards away.
     pub distance: f64,
     /// This seat's own auras on the target.
@@ -98,6 +101,9 @@ pub struct SeatObs {
     pub combat_time: Option<SimDuration>,
     pub gcd_remaining: SimDuration,
     pub casting: Option<SpellId>,
+    /// The seat's last few completed casts, newest first (combo strikes,
+    /// Steady Focus).
+    pub recent_casts: Vec<SpellId>,
     /// Until the current cast completes.
     pub cast_remaining: Option<SimDuration>,
     /// The current channel's progress.
@@ -106,6 +112,8 @@ pub struct SeatObs {
     pub empower: Option<EmpowerObs>,
     /// Percent of max health, 0 to 100.
     pub health_pct: f64,
+    /// Shields left, in percent of max health.
+    pub absorb_pct: f64,
     pub movement: Option<MovementObs>,
     /// Soonest deadline first.
     pub demands: Vec<DemandObs>,
@@ -113,6 +121,9 @@ pub struct SeatObs {
     pub run_speed: f64,
     pub resources: BTreeMap<ResourceKind, f64>,
     pub resource_max: BTreeMap<ResourceKind, f64>,
+    /// For resources that refill a unit at a time (runes): how long until
+    /// each missing unit is back, soonest first.
+    pub refills: BTreeMap<ResourceKind, Vec<SimDuration>>,
     /// Auras the seat holds, from any source.
     pub buffs: BTreeMap<AuraId, AuraObs>,
     /// One entry per ability with a cooldown.
@@ -161,6 +172,21 @@ fn left(a: Option<&AuraObs>) -> SimDuration {
 impl SeatObs {
     pub fn resource(&self, kind: ResourceKind) -> f64 {
         self.resources.get(&kind).copied().unwrap_or(0.0)
+    }
+
+    /// How long until the seat has `units` of a resource that refills a unit
+    /// at a time (SimC's `rune.time_to_N`): zero if it already does,
+    /// [`FOREVER`] if it never will without help.
+    pub fn time_to(&self, kind: ResourceKind, units: u32) -> SimDuration {
+        let short = f64::from(units) - self.resource(kind);
+        if short <= 0.0 {
+            return SimDuration::ZERO;
+        }
+        self.refills
+            .get(&kind)
+            .and_then(|r| r.get(short.ceil() as usize - 1))
+            .copied()
+            .unwrap_or(FOREVER)
     }
 
     /// How far below its maximum a resource is.
@@ -273,6 +299,32 @@ fn aura_obs(i: &AuraInstance, now: SimTime) -> AuraObs {
     }
 }
 
+/// The actor's absorbs left, in percent of its max health.
+fn absorb_pct(ctx: &ObsContext<'_>, actor: ActorId) -> f64 {
+    let Some(max) = ctx
+        .state
+        .actor(actor)
+        .map(|a| a.max_health)
+        .filter(|&m| m > 0)
+    else {
+        return 0.0;
+    };
+    let shields: f64 = ctx
+        .state
+        .auras(actor)
+        .iter()
+        .filter(|i| {
+            ctx.data
+                .auras
+                .get(&i.aura)
+                .and_then(|d| d.value.as_ref())
+                .is_some_and(|v| matches!(v.kind, AuraValueKind::Absorb { .. }))
+        })
+        .map(|i| i.value)
+        .sum();
+    100.0 * shields / max as f64
+}
+
 impl Observer for ScriptObserver {
     type Obs = SeatObs;
 
@@ -291,6 +343,19 @@ impl Observer for ScriptObserver {
             .collect();
         let resources = views.iter().map(|(k, v)| (*k, v.value)).collect();
         let resource_max = views.iter().map(|(k, v)| (*k, v.max)).collect();
+        let refills = views
+            .iter()
+            .filter(|(_, v)| !v.next_ready.is_empty())
+            .map(|(k, v)| {
+                (
+                    *k,
+                    v.next_ready
+                        .iter()
+                        .map(|t| t.saturating_since(now))
+                        .collect(),
+                )
+            })
+            .collect();
         let buffs = state
             .auras(me)
             .iter()
@@ -377,6 +442,7 @@ impl Observer for ScriptObserver {
                 Some(TargetObs {
                     actor: t,
                     health_pct: 100.0 * a.health_frac(),
+                    absorb_pct: absorb_pct(ctx, t),
                     distance: state.distance(seat, t).unwrap_or(0.0),
                     mine: state
                         .auras(t)
@@ -401,6 +467,12 @@ impl Observer for ScriptObserver {
                 CastWhat::Spell(s) => Some(s),
                 CastWhat::EnemyRule(_) => None,
             }),
+            recent_casts: state
+                .recent_casts(seat)
+                .iter()
+                .flatten()
+                .map(|c| c.spell)
+                .collect(),
             cast_remaining: actor
                 .and_then(|a| a.casting)
                 .map(|c| c.ends.saturating_since(now)),
@@ -419,6 +491,7 @@ impl Observer for ScriptObserver {
                 })
             }),
             health_pct: actor.map_or(0.0, |a| 100.0 * a.health_frac()),
+            absorb_pct: absorb_pct(ctx, me),
             movement: state.movement(seat).map(|m| MovementObs {
                 remaining: m.ends.saturating_since(now),
                 forced: m.forced,
@@ -435,6 +508,7 @@ impl Observer for ScriptObserver {
             run_speed: state.run_speed(seat),
             resources,
             resource_max,
+            refills,
             buffs,
             cooldowns,
             target,

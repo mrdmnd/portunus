@@ -52,6 +52,9 @@ pub trait Mechanics: Clone {
     /// A temporary pet reached the end of its lifetime and is already gone;
     /// dismissals and replacements don't count.
     fn pet_expired(&self, io: &mut dyn EngineIo, ev: &PetEvent);
+    /// A valued aura's value reached its threshold and dropped by it (see
+    /// [`ValueLimits::threshold`]); called once per crossing.
+    fn aura_threshold(&self, io: &mut dyn EngineIo, aura: AuraRef);
     /// An enemy rule hit a player: apply mitigation, then call
     /// [`EngineIo::apply_damage`].
     fn enemy_hit(&self, io: &mut dyn EngineIo, hit: &EnemyHit);
@@ -65,6 +68,14 @@ pub trait Mechanics: Clone {
         effects: &[Effect],
     );
     fn timer(&self, io: &mut dyn EngineIo, timer: &TimerEvent);
+    /// An absorb soaked part of a hit, before any removal for running
+    /// out.
+    fn aura_absorbed(&self, _io: &mut dyn EngineIo, _ev: &AbsorbEvent) {}
+    /// A seat started moving from standing still, or stopped.
+    fn movement_changed(&self, _io: &mut dyn EngineIo, _seat: Seat, _moving: bool) {}
+    /// The aura's `prevents_death` saved its holder from a lethal hit:
+    /// health is already set and the lockout applied.
+    fn death_prevented(&self, _io: &mut dyn EngineIo, _aura: AuraRef) {}
 }
 
 /// What mechanics may do to the world. The kernel handles scheduling,
@@ -72,8 +83,9 @@ pub trait Mechanics: Clone {
 pub trait EngineIo {
     fn view(&self) -> &dyn StateView;
     fn data(&self) -> &GameData;
-    /// Returns the amount that landed after absorbs, overkill included.
-    fn apply_damage(&mut self, d: DamageEvent) -> u64;
+    /// Absorbs on the target take their share first, smallest shield first
+    /// (SimC's `account_absorb_buffs`); the rest comes off its health.
+    fn apply_damage(&mut self, d: DamageEvent) -> Landed;
     fn apply_heal(&mut self, h: HealEvent);
     fn apply_aura(&mut self, a: AuraApplication);
     /// `source: None` removes the aura from every source.
@@ -82,9 +94,11 @@ pub trait EngineIo {
     fn remove_stacks(&mut self, aura: AuraRef, stacks: u8);
     /// Push back an existing aura's expiry (no-op if absent).
     fn extend_aura(&mut self, aura: AuraRef, by: SimDuration);
-    /// Change a valued aura's value, applying the aura if absent. The kernel
-    /// enforces the cap and runs threshold effects.
-    fn add_aura_value(&mut self, aura: AuraRef, delta: f64);
+    /// Change a valued aura's value, applying the aura if absent, then
+    /// enforce `limits`, which mechanics evaluate from the aura's
+    /// coefficients. An absorb whose value runs out is removed as
+    /// [`AuraRemoval::Depleted`].
+    fn add_aura_value(&mut self, aura: AuraRef, delta: f64, limits: ValueLimits);
     /// A listener rolled for a proc. The kernel updates its
     /// [`crate::state::ProcView`] and, on success, starts its internal
     /// cooldown.
@@ -169,7 +183,7 @@ pub struct CastEvent {
     /// For empowers, the stage released at.
     pub empower: Option<u8>,
     /// What the spell's scaling cost actually consumed (see
-    /// `SpendScaling`), if it has one.
+    /// `SpendScaling`), else what its variable cost (one with `extra`) did.
     pub spent: Option<ResourceAmount>,
     /// A triggered spell whose direct damage was rolled when it was
     /// triggered (see [`EngineIo::trigger_spell`]): don't roll it again;
@@ -190,6 +204,10 @@ pub struct TickEvent {
     pub index: u32,
     /// `1.0` for a full tick; less for a partial final tick.
     pub fraction: f64,
+    /// Ticks still owed counting this one, a partial final tick by its
+    /// fraction, at the source's current haste (SimC's
+    /// `ticks_left_fractional`); `None` for a permanent aura.
+    pub ticks_left: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -213,6 +231,43 @@ pub enum AuraRemoval {
     HolderDied,
     /// Stealth broken by a cast or damage taken.
     Broken,
+    /// An absorb used up.
+    Depleted,
+}
+
+/// A valued aura's limits, evaluated by mechanics.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub struct ValueLimits {
+    /// Clamp the value to this after adding.
+    pub cap: Option<f64>,
+    /// After the cap, while the value is at least this, drop it by this
+    /// and call [`Mechanics::aura_threshold`]. Must be positive.
+    pub threshold: Option<f64>,
+}
+
+/// What a hit did: health removed (overkill included) and damage that
+/// shields absorbed. A hit that connected has one of them non-zero, or
+/// was a lethal hit an aura's `prevents_death` stopped; one fully absorbed
+/// still counts as a hit for procs, as in SimC.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct Landed {
+    pub amount: u64,
+    pub absorbed: u64,
+    pub prevented: bool,
+}
+
+impl Landed {
+    pub fn connected(self) -> bool {
+        self.amount > 0 || self.absorbed > 0 || self.prevented
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AbsorbEvent {
+    /// The shield: its holder took the hit.
+    pub aura: AuraRef,
+    pub attacker: ActorId,
+    pub amount: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -307,12 +362,15 @@ pub struct HealEvent {
     pub spell: Option<SpellId>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct AuraApplication {
     pub aura: AuraRef,
     pub stacks: u8,
     /// Override the data duration (e.g. a talent-extended buff).
     pub duration: Option<SimDuration>,
+    /// Override the snapshot taken now, for a new instance copying another
+    /// (a spread aura).
+    pub pmultiplier: Option<f64>,
 }
 
 #[cfg(test)]

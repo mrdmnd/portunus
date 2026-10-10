@@ -5,18 +5,18 @@ use std::sync::Arc;
 
 use portunus_core::{ActorId, Seat, SpellId};
 use portunus_engine::mechanics::{
-    whole_points, AuraChange, AuraEvent, AuraRemoval, CastEvent, DamageEvent, DeathEvent, EnemyHit,
-    HitKind, PetEvent, RolledHit, SwingEvent, TickEvent, TimerEvent,
+    whole_points, AbsorbEvent, AuraChange, AuraEvent, AuraRemoval, CastEvent, DamageEvent,
+    DeathEvent, EnemyHit, HitKind, PetEvent, RolledHit, SwingEvent, TickEvent, TimerEvent,
 };
-use portunus_engine::state::Projectile;
-use portunus_engine::{EngineIo, Mechanics, Readiness, RunSetup, StateView};
-use portunus_gamedata::aura::AuraDef;
-use portunus_gamedata::effect::{Effect, ModKind};
+use portunus_engine::state::{ActorKind, Projectile};
+use portunus_engine::{AuraRef, EngineIo, Mechanics, Readiness, RunSetup, StateView};
+use portunus_gamedata::aura::{AuraDef, AuraValueKind, BankDraw};
+use portunus_gamedata::effect::{Effect, ModKind, RemovalReason};
 use portunus_gamedata::spell::{CastKind, SpellDef};
 use portunus_gamedata::stats::{SpendScaling, Stat};
 
-use crate::interp::{Happening, Interpreter, Occurrence};
-use crate::math::{owner_seat, player_seat, Formulas};
+use crate::interp::{health_fraction, Happening, Interpreter, Occurrence};
+use crate::math::{instance, owner_seat, player_seat, Formulas};
 use crate::{CombatMath, EffectCtx, EffectInterpreter, IncomingHit, KitIssue, SpecRegistry};
 
 /// Game semantics for a whole party: data effects through the
@@ -81,6 +81,30 @@ impl PartyMechanics {
         self.math().data().auras.get(&id)
     }
 
+    /// Take a bank tick's share out of its value and return it. Spread
+    /// banks follow SimC's `residual_action`: the pool over the ticks left,
+    /// so a refresh rolls what's left over the new duration and the final
+    /// tick empties it. SimC fixes the per-tick share when the bank is
+    /// added to; recomputing it each tick only differs if the source's
+    /// haste changes the tick count mid-bank, and then still empties it.
+    fn draw_bank(&self, io: &mut dyn EngineIo, tick: &TickEvent, draw: BankDraw) -> f64 {
+        let r = tick.aura;
+        let Some(value) = instance(io.view(), r).map(|i| i.value) else {
+            return 0.0;
+        };
+        let share = match draw {
+            BankDraw::SpreadOverRemaining => match tick.ticks_left {
+                Some(left) if left > tick.fraction => tick.fraction / left,
+                _ => 1.0,
+            },
+            BankDraw::Fraction(f) => f * tick.fraction,
+        };
+        let drawn = value.max(0.0) * share.clamp(0.0, 1.0);
+        let limits = self.interp.value_limits(io.view(), r);
+        io.add_aura_value(r, -drawn, limits);
+        drawn
+    }
+
     fn spell_ctx(&self, cast: &CastEvent) -> EffectCtx {
         EffectCtx {
             caster: cast.actor,
@@ -89,6 +113,7 @@ impl PartyMechanics {
             aura: None,
             event_amount: None,
             scale: self.spend_scale(cast),
+            spent: cast.spent.map(|s| s.amount),
             depth: 0,
             hand: self.spell(cast.spell).and_then(|d| d.weapon),
             hit: HitKind::Direct,
@@ -164,7 +189,24 @@ impl Mechanics for PartyMechanics {
 
     fn combat_ended(&self, _io: &mut dyn EngineIo, _combat: u16, _cleared: bool) {}
 
-    fn cast_started(&self, _io: &mut dyn EngineIo, _cast: &CastEvent) {}
+    fn cast_started(&self, io: &mut dyn EngineIo, cast: &CastEvent) {
+        let Some(def) = self.spell(cast.spell) else {
+            return;
+        };
+        if matches!(def.cast, CastKind::Instant | CastKind::Channel { .. }) {
+            return;
+        }
+        let started = Occurrence {
+            what: Happening::CastStart {
+                spell: cast.spell,
+                school: def.school,
+            },
+            target: cast.target,
+            amount: None,
+            depth: 0,
+        };
+        self.interp.fire(io, cast.actor, started);
+    }
 
     fn cast_completed(&self, io: &mut dyn EngineIo, cast: &CastEvent) {
         let Some(def) = self.spell(cast.spell) else {
@@ -246,8 +288,15 @@ impl Mechanics for PartyMechanics {
 
     fn periodic_tick(&self, io: &mut dyn EngineIo, tick: &TickEvent) {
         let r = tick.aura;
-        let Some(periodic) = self.aura_def(r.aura).and_then(|d| d.periodic.as_ref()) else {
+        let Some(def) = self.aura_def(r.aura) else {
             return;
+        };
+        let Some(periodic) = def.periodic.as_ref() else {
+            return;
+        };
+        let drawn = match def.value.as_ref().map(|v| v.kind) {
+            Some(AuraValueKind::Bank(draw)) => Some(self.draw_bank(io, tick, draw)),
+            _ => None,
         };
         let spell = SpellId(r.aura.0);
         let ctx = EffectCtx {
@@ -255,8 +304,10 @@ impl Mechanics for PartyMechanics {
             target: Some(r.holder),
             spell: self.spell(spell).map(|_| spell),
             aura: Some(r),
-            event_amount: None,
-            scale: tick.fraction,
+            event_amount: drawn,
+            // A bank's draw already shrinks for a partial final tick.
+            scale: if drawn.is_some() { 1.0 } else { tick.fraction },
+            spent: None,
             depth: 0,
             hand: None,
             hit: HitKind::Periodic,
@@ -276,6 +327,12 @@ impl Mechanics for PartyMechanics {
             return;
         };
         if ev.previous_stacks == 0 {
+            if let Some(initial) = def.value.as_ref().and_then(|v| v.initial) {
+                let ctx = self.interp.aura_ctx(ev.aura);
+                let amount = self.math().base(io.view(), &ctx, initial);
+                let limits = self.interp.value_limits(io.view(), ev.aura);
+                io.add_aura_value(ev.aura, amount, limits);
+            }
             let applied = Occurrence {
                 what: Happening::AuraApplied(ev.aura.aura),
                 target: Some(ev.aura.holder),
@@ -283,6 +340,19 @@ impl Mechanics for PartyMechanics {
                 depth: 0,
             };
             self.interp.fire(io, ev.aura.holder, applied);
+        }
+        if ev.stacks > ev.previous_stacks {
+            let stacked = Occurrence {
+                what: Happening::AuraStacks {
+                    aura: ev.aura.aura,
+                    from: ev.previous_stacks,
+                    to: ev.stacks,
+                },
+                target: Some(ev.aura.holder),
+                amount: None,
+                depth: 0,
+            };
+            self.interp.fire(io, ev.aura.holder, stacked);
         }
         self.refresh_speed(io, ev.aura.holder, def);
     }
@@ -300,6 +370,7 @@ impl Mechanics for PartyMechanics {
                 aura: Some(r),
                 event_amount: None,
                 scale: 1.0,
+                spent: None,
                 depth: 0,
                 hand: None,
                 hit: HitKind::Direct,
@@ -314,6 +385,7 @@ impl Mechanics for PartyMechanics {
                 aura: Some(r),
                 event_amount: None,
                 scale: 1.0,
+                spent: None,
                 depth: 0,
                 hand: None,
                 hit: HitKind::Direct,
@@ -329,10 +401,65 @@ impl Mechanics for PartyMechanics {
             };
             self.interp.fire(io, r.holder, expired);
         }
+        let reason = match ev.reason {
+            AuraRemoval::Expired => Some(RemovalReason::Expired),
+            AuraRemoval::Removed => Some(RemovalReason::Removed),
+            AuraRemoval::Depleted => Some(RemovalReason::Depleted),
+            AuraRemoval::Broken => Some(RemovalReason::Broken),
+            AuraRemoval::HolderDied => None,
+        };
+        if let Some(reason) = reason {
+            let removed = Occurrence {
+                what: Happening::AuraRemoved {
+                    aura: r.aura,
+                    reason,
+                },
+                target: Some(r.holder),
+                amount: None,
+                depth: 0,
+            };
+            self.interp.fire(io, r.holder, removed);
+        }
         self.refresh_speed(io, r.holder, def);
     }
 
-    fn actor_died(&self, _io: &mut dyn EngineIo, _ev: &DeathEvent) {}
+    /// An enemy's death reaches every seat's and pet's listeners.
+    fn actor_died(&self, io: &mut dyn EngineIo, ev: &DeathEvent) {
+        let view = io.view();
+        if !matches!(
+            view.actor(ev.actor).map(|a| a.kind),
+            Some(ActorKind::Enemy { .. })
+        ) {
+            return;
+        }
+        let holders: Vec<ActorId> = view
+            .seats()
+            .iter()
+            .enumerate()
+            .flat_map(|(i, &me)| {
+                std::iter::once(me).chain(view.pets(Seat(i as u8)).iter().copied())
+            })
+            .collect();
+        for holder in holders {
+            let died = Occurrence {
+                what: Happening::EnemyDied {
+                    by_holder: ev.killer == Some(holder),
+                },
+                target: Some(ev.actor),
+                amount: None,
+                depth: 0,
+            };
+            self.interp.fire(io, holder, died);
+        }
+    }
+
+    fn aura_threshold(&self, io: &mut dyn EngineIo, aura: AuraRef) {
+        let Some(v) = self.aura_def(aura.aura).and_then(|d| d.value.as_ref()) else {
+            return;
+        };
+        let ctx = self.interp.aura_ctx(aura);
+        self.interp.run(io, &ctx, &v.on_threshold);
+    }
 
     fn pet_expired(&self, io: &mut dyn EngineIo, ev: &PetEvent) {
         let Some(&owner) = io.view().seats().get(usize::from(ev.owner.0)) else {
@@ -359,6 +486,7 @@ impl Mechanics for PartyMechanics {
             hit.amount,
             IncomingHit::direct(hit.school),
         );
+        let before = health_fraction(io.view(), hit.target);
         let landed = io.apply_damage(DamageEvent {
             source: hit.source,
             target: hit.target,
@@ -367,14 +495,17 @@ impl Mechanics for PartyMechanics {
             spell: None,
             crit: false,
         });
-        if landed > 0 {
+        let health = (before, health_fraction(io.view(), hit.target));
+        if landed.connected() {
             let taken = Occurrence {
                 what: Happening::DamageTaken,
                 target: Some(hit.source),
-                amount: Some(landed as f64),
+                amount: Some(landed.amount as f64),
                 depth: 0,
             };
             self.interp.fire(io, hit.target, taken);
+            self.interp
+                .health_dropped(io, hit.target, health, hit.source, 0);
         }
     }
 
@@ -392,6 +523,7 @@ impl Mechanics for PartyMechanics {
             aura: None,
             event_amount: None,
             scale: 1.0,
+            spent: None,
             depth: 0,
             hand: None,
             hit: HitKind::Direct,
@@ -406,5 +538,44 @@ impl Mechanics for PartyMechanics {
         if let Some(kit) = kit {
             kit.timer(self.interp.tools(), io, timer);
         }
+    }
+
+    /// The shield's caster hears of it.
+    fn aura_absorbed(&self, io: &mut dyn EngineIo, ev: &AbsorbEvent) {
+        let soaked = Occurrence {
+            what: Happening::Absorbed(ev.aura.aura),
+            target: Some(ev.aura.holder),
+            amount: Some(ev.amount as f64),
+            depth: 0,
+        };
+        self.interp.fire(io, ev.aura.source, soaked);
+    }
+
+    fn movement_changed(&self, io: &mut dyn EngineIo, seat: Seat, moving: bool) {
+        let Some(&me) = io.view().seats().get(usize::from(seat.0)) else {
+            return;
+        };
+        let moved = Occurrence {
+            what: if moving {
+                Happening::MoveStart
+            } else {
+                Happening::MoveEnd
+            },
+            target: io.view().target(me),
+            amount: None,
+            depth: 0,
+        };
+        self.interp.fire(io, me, moved);
+    }
+
+    fn death_prevented(&self, io: &mut dyn EngineIo, aura: AuraRef) {
+        let Some(p) = self
+            .aura_def(aura.aura)
+            .and_then(|d| d.prevents_death.as_ref())
+        else {
+            return;
+        };
+        let ctx = self.interp.aura_ctx(aura);
+        self.interp.run(io, &ctx, &p.on_prevent);
     }
 }

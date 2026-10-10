@@ -30,6 +30,18 @@ pub enum Effect {
         /// for each.
         #[serde(default)]
         hand: Option<WeaponHand>,
+        /// More damage per something counted when the effect runs (Mark of
+        /// the Crane, Meat Cleaver).
+        #[serde(default)]
+        per_count: Option<CountScale>,
+        /// The amount as given: no caster damage modifiers, versatility or
+        /// snapshot, and no crit. SimC's `SX_DISABLE_PLAYER_MULT` with
+        /// `SX_CANNOT_CRIT`, as on copies of damage already dealt (Blade
+        /// Flurry's `trigger_residual_action`, with an `EventAmount`
+        /// coefficient). The target's mitigation still applies unless
+        /// `ignores_armor`.
+        #[serde(default)]
+        unmodified: bool,
     },
     Heal {
         amount: Coefficient,
@@ -43,6 +55,10 @@ pub enum Effect {
         /// Instead of the aura's own, e.g. a talent-extended buff.
         #[serde(default)]
         duration: Option<SimDuration>,
+        /// Added to the duration for each unit the cast spent (finishers:
+        /// SimC's Rupture lasts its base times one plus its combo points).
+        #[serde(default)]
+        per_unit_spent: Option<SimDuration>,
     },
     RemoveAura {
         aura: AuraId,
@@ -157,7 +173,38 @@ pub enum Effect {
         #[serde(default)]
         otherwise: Vec<Effect>,
     },
+    /// Run `then` once per target, as if each were the event's target.
+    ForEach {
+        target: EffectTarget,
+        then: Vec<Effect>,
+    },
     Hook(HookKey),
+    /// Copy the caster's `aura` on the event's target to up to `max` of
+    /// `to` that don't have the caster's yet: the same stacks and
+    /// snapshot, for the time it has left, ticking afresh. SimC's
+    /// `dot_t::copy` with `DOT_COPY_START` (disease spread, Contagion).
+    SpreadAura {
+        aura: AuraId,
+        to: EffectTarget,
+        #[serde(default)]
+        max: Option<u8>,
+    },
+}
+
+/// Multiplies an amount by `1 + pct / 100 * count`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct CountScale {
+    pub count: TargetCount,
+    pub pct: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TargetCount {
+    /// Engaged enemies holding `aura` (from the caster, if `from_self`).
+    EnemiesWithAura { aura: AuraId, from_self: bool },
+    /// The targets this effect hits.
+    TargetsHit,
 }
 
 /// How an amount scales.
@@ -199,6 +246,19 @@ pub enum EffectTarget {
     /// One engaged enemy, chosen evenly from the caster's random stream
     /// (none out of combat).
     RandomEnemy,
+    /// Engaged enemies holding `aura` (from the caster, if `from_self`):
+    /// Malefic Rapture.
+    EnemiesWithAura {
+        aura: AuraId,
+        from_self: bool,
+    },
+    /// Every engaged enemy but the target: cleave, damage copying.
+    OtherEnemies,
+    /// Seats holding `aura` (from the caster, if `from_self`): Atonement.
+    AlliesWithAura {
+        aura: AuraId,
+        from_self: bool,
+    },
 }
 
 /// Target caps and damage reduction past a soft cap.
@@ -269,9 +329,50 @@ pub enum Predicate {
     /// windows.
     TargetHpBelow(f64),
     /// The spell differs from the caster's previous cast (Windwalker's
-    /// combo strikes).
+    /// combo strikes). A cast's own effects see the casts before it, as in
+    /// SimC's `is_combo_strike`.
     DiffersFromLastCast,
+    /// Above this fraction of max health (Careful Aim, Firestarter).
+    TargetHpAbove(f64),
+    /// The caster is below this fraction of its max health (defensive
+    /// talents like Second Wind).
+    CasterHpBelow(f64),
+    /// The caster is above this fraction of its max health.
+    CasterHpAbove(f64),
+    /// The target has at least this many stacks of the aura; `from_self`
+    /// counts only the caster's instance ("at 5 stacks of Festering
+    /// Wound").
+    TargetStacksAtLeast {
+        aura: AuraId,
+        stacks: u8,
+        from_self: bool,
+    },
+    /// The caster has at least this many stacks of the aura.
+    CasterStacksAtLeast {
+        aura: AuraId,
+        stacks: u8,
+    },
+    /// The caster's instance of the aura carries at least this value
+    /// (counters; see `AuraValue`).
+    AuraValueAtLeast {
+        aura: AuraId,
+        value: f64,
+    },
+    /// The target is alive with no more health than the caster's maximum
+    /// (Touch of Death; SimC compares `current_health() <= max_health()`).
+    TargetHpBelowCasterMaxHp,
+    /// The caster's last `count` casts were all this spell (Steady Focus:
+    /// two Steady Shots in a row). A cast's own effects see the casts
+    /// before it. `count` is from 1 to [`RECENT_CASTS`].
+    RecentCasts {
+        spell: SpellId,
+        count: u8,
+    },
 }
+
+/// How many of a seat's casts the engine remembers for
+/// [`Predicate::RecentCasts`].
+pub const RECENT_CASTS: usize = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -384,6 +485,9 @@ pub enum ListenFor {
         spell: Option<SpellId>,
         school: Option<SchoolMask>,
         crit_only: bool,
+        /// Only hits that kill their target.
+        #[serde(default)]
+        killing_blow: bool,
     },
     DamageTaken,
     /// An auto-attack landed (rage, Windfury). `None` matches both hands.
@@ -411,6 +515,67 @@ pub enum ListenFor {
     /// Elemental Blast); fires before its owner's `PetExpired`. The event's
     /// target is the owner's.
     Departed,
+    /// An enemy died (not one that left with its spawner). Fires on every
+    /// seat's and pet's auras; the event's target is the dead enemy.
+    EnemyDied {
+        /// Only if the listener's holder dealt the killing blow.
+        #[serde(default)]
+        killed_by_self: bool,
+        /// Only if the enemy died with this aura from the holder.
+        #[serde(default)]
+        had_aura: Option<AuraId>,
+    },
+    /// A cast with a cast time began (the game's `SPELL_CAST_START`):
+    /// hard casts and empowers, not instants or channels. A proc that
+    /// makes a hard cast instant still counts.
+    CastStart {
+        spell: Option<SpellId>,
+        school: Option<SchoolMask>,
+    },
+    /// The holder gained some of this resource from an effect, with the
+    /// amount gained (after the cap) as the event's amount. Regeneration
+    /// and gains a spec kit grants directly don't count.
+    ResourceGained(ResourceKind),
+    /// This aura, cast by the holder, absorbed damage on whoever holds
+    /// it: fires on the shield's caster, with the amount absorbed. The
+    /// event's target is the shielded actor.
+    Absorbed(AuraId),
+    /// The holder's effect stopped a cast. The event's target is the
+    /// interrupted actor.
+    Interrupted,
+    /// The holder, a seat, started moving from standing still.
+    MoveStart,
+    /// The holder, a seat, stopped moving.
+    MoveEnd,
+    /// A hit took the holder's health from at least `pct`% of its maximum
+    /// to below it. The event's target is the attacker.
+    HealthBelow {
+        pct: u8,
+    },
+    /// The holder's `aura` (from anyone) reached `stacks` from fewer.
+    AuraStacksReached {
+        aura: AuraId,
+        stacks: u8,
+    },
+    /// The holder lost `aura` this way (never by its own death).
+    AuraRemovedBy {
+        aura: AuraId,
+        reason: RemovalReason,
+    },
+}
+
+/// Why an aura went, for listeners.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RemovalReason {
+    /// It ran out.
+    Expired,
+    /// Something removed or consumed it.
+    Removed,
+    /// An absorb used up.
+    Depleted,
+    /// Stealth broken by a cast or damage taken.
+    Broken,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

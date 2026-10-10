@@ -86,6 +86,7 @@ fn hooks_in(data: &GameData) -> BTreeSet<HookKey> {
                     walk(then, out);
                     walk(otherwise, out);
                 }
+                Effect::Chance { then, .. } | Effect::ForEach { then, .. } => walk(then, out),
                 _ => {}
             }
         }
@@ -112,6 +113,9 @@ fn hooks_in(data: &GameData) -> BTreeSet<HookKey> {
         walk(&aura.on_expire, &mut out);
         if let Some(st) = &aura.stealth {
             walk(&st.on_break, &mut out);
+        }
+        if let Some(p) = &aura.prevents_death {
+            walk(&p.on_prevent, &mut out);
         }
     }
     out

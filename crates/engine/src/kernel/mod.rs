@@ -16,10 +16,30 @@
 //!
 //! Spells in a cooldown category share one cooldown and its charges.
 //!
-//! Not implemented yet. Rejected at setup: enemies whose rules spawn adds.
-//! Reported as [`EngineError::Unsupported`] on first use: enemy adds,
-//! spells triggered for enemies, aura value caps, thresholds, and
-//! absorbs, and pet autocast spells with no GCD, cooldown, or cast time.
+//! Aura values: mechanics evaluate an aura's cap and threshold and pass
+//! them in; the kernel clamps, drops the value by the threshold once per
+//! crossing (each a `Mechanics::aura_threshold` call), and spends absorbs
+//! on incoming damage, smallest first, before health. Ticks report how
+//! many remain, for banks that spread their value over them.
+//!
+//! Health requirements are checked against the seat's primary target for
+//! readiness and against the chosen target on submission; a seat is woken
+//! when its target's health falls to one of its thresholds. A cast joins
+//! the seat's recent casts after its `cast_completed`, so its own effects
+//! see the casts before it.
+//!
+//! Resources regenerate linearly, except ones with a `recharge` (runes):
+//! those move in whole units, a few refilling at once, the next starting
+//! as one fills. Haste changes rescale what's left of each. A resource
+//! with an `out_of_combat` rate switches to it while travelling.
+//!
+//! An enemy rule can spawn adds: new enemies, engaged at once, that run
+//! their own rules and must die for the combat to clear. Adds marked
+//! `despawn_with_spawner` leave, without dying, when their spawner dies.
+//!
+//! Not implemented yet. Reported as [`EngineError::Unsupported`] on first
+//! use: spells triggered for enemies, and pet autocast spells with no GCD,
+//! cooldown, or cast time.
 //!
 //! Between pulls, living seats heal to full and dead ones come back with
 //! full health and their passive auras.
@@ -59,7 +79,9 @@ pub use world::World;
 use cast::Need;
 use io::Io;
 use queue::{Event, Wake};
-use world::{Actor, Batch, Casting, ChannelState, EmpowerState, Followup, RuleState, Seg};
+use world::{
+    Actor, Batch, Casting, ChannelState, EmpowerState, EnemySpawn, Followup, RuleState, Seg,
+};
 
 /// How many queued reactions one callback may cause before the kernel
 /// gives up with [`EngineError::Runaway`].
@@ -97,6 +119,10 @@ impl<M: Mechanics> Kernel<M> {
                 Followup::Removed(ev) => self.mechanics.aura_removed(io, &ev),
                 Followup::Died(ev) => self.mechanics.actor_died(io, &ev),
                 Followup::PetExpired(ev) => self.mechanics.pet_expired(io, &ev),
+                Followup::Threshold(r) => self.mechanics.aura_threshold(io, r),
+                Followup::Absorbed(ev) => self.mechanics.aura_absorbed(io, &ev),
+                Followup::Moved(seat, moving) => self.mechanics.movement_changed(io, seat, moving),
+                Followup::DeathPrevented(r) => self.mechanics.death_prevented(io, r),
                 Followup::Released(_) => {}
             }
         }
@@ -208,6 +234,11 @@ impl<M: Mechanics> Kernel<M> {
                         readiness,
                     });
                 }
+                if let Some(t) = resolved {
+                    if !w.target_requirements_met(me, def, resolved) {
+                        return Err(IllegalChoice::TargetRequirement(t));
+                    }
+                }
                 Ok(())
             }
             Choice::Move(goal) => {
@@ -285,6 +316,7 @@ impl<M: Mechanics> Kernel<M> {
         match seg {
             Segment::Travel { duration, prepull } => {
                 self.recover_seats();
+                self.world.set_combat_regen(false);
                 let combat_starts = now + *duration;
                 let prepull_from = combat_starts - (*prepull).min(*duration);
                 self.world.seg = Seg::Travel {
@@ -335,6 +367,7 @@ impl<M: Mechanics> Kernel<M> {
                     },
                     stacks: 1,
                     duration: None,
+                    pmultiplier: None,
                 });
             }
         }
@@ -381,6 +414,28 @@ impl<M: Mechanics> Kernel<M> {
         self.world.enemies = (first..self.world.actors.len())
             .map(|i| ActorId(i as u16))
             .collect();
+        let spawns = c
+            .spawns
+            .iter()
+            .enumerate()
+            .map(|(index, spawn)| EnemySpawn {
+                actor: ActorId((first + index) as u16),
+                key: spawn.enemy.clone(),
+                forces: spawn.forces,
+                spawner: None,
+                despawn_with_spawner: false,
+                despawned: false,
+                rules: rules::resolve_rules(
+                    s.setup.enemies.enemies.get(&spawn.enemy),
+                    portunus_scenario::resolved::SpawnIndex(index as u16),
+                ),
+            })
+            .collect();
+        let slot = usize::from(combat);
+        if self.world.spawns.len() <= slot {
+            self.world.spawns.resize_with(slot + 1, Vec::new);
+        }
+        self.world.spawns[slot] = spawns;
         let deadline = now + c.timeout;
         self.world.seg = Seg::Combat {
             segment,
@@ -388,6 +443,7 @@ impl<M: Mechanics> Kernel<M> {
             started: now,
             deadline,
         };
+        self.world.set_combat_regen(true);
         self.world
             .queue
             .push(deadline, Event::CombatTimeout { combat });
@@ -442,6 +498,7 @@ impl<M: Mechanics> Kernel<M> {
                         },
                         stacks: 1,
                         duration: None,
+                        pmultiplier: None,
                     });
                 }
             }
@@ -717,6 +774,7 @@ impl<M: Mechanics> Kernel<M> {
             );
         }
         self.call(|m, io| m.cast_completed(io, &ev));
+        self.remember_cast(&ev);
     }
 
     /// An empower pays its costs and starts its cooldown as it starts, as
@@ -836,26 +894,37 @@ impl<M: Mechanics> Kernel<M> {
             }
         }
         self.call(|m, io| m.cast_completed(io, &ev));
+        self.remember_cast(&ev);
         self.world.launch(ev, def);
     }
 
-    /// The cast takes effect: costs, cooldown, and the seat's last cast.
+    /// The cast takes effect: costs, cooldown, and the seat's cast count.
     /// Returns the event with what a scaling cost consumed.
     fn take_effect(&mut self, mut ev: CastEvent, def: &SpellDef) -> CastEvent {
-        let now = self.world.now;
         ev.spent = self.world.pay_costs(ev.actor, ev.spell, def, ev.target);
         if let Some(cd) = &def.cooldown {
             self.world.consume_charge(ev.actor, ev.spell, cd);
         }
         if !self.world.is_pet(ev.actor) {
-            let st = self.world.seat_mut(ev.seat);
-            st.last_cast = Some(LastCast {
-                spell: ev.spell,
-                at: now,
-            });
-            st.outcome.casts += 1;
+            self.world.seat_mut(ev.seat).outcome.casts += 1;
         }
         ev
+    }
+
+    /// `cast_completed` has run: the cast joins the seat's recent casts.
+    /// Its own effects saw the casts before it, as SimC's combo strikes
+    /// do (`combo_strikes_trigger` checks, then pushes).
+    fn remember_cast(&mut self, ev: &CastEvent) {
+        if self.world.is_pet(ev.actor) {
+            return;
+        }
+        let at = self.world.now;
+        let recent = &mut self.world.seat_mut(ev.seat).recent_casts;
+        recent.rotate_right(1);
+        recent[0] = Some(LastCast {
+            spell: ev.spell,
+            at,
+        });
     }
 
     fn complete_cast(&mut self, ev: CastEvent, hard: bool) {
@@ -870,6 +939,7 @@ impl<M: Mechanics> Kernel<M> {
             reason: CastEndReason::Completed,
         });
         self.call(|m, io| m.cast_completed(io, &ev));
+        self.remember_cast(&ev);
         self.world.launch(ev, def);
         self.cast_over(ev, hard);
     }
@@ -1065,6 +1135,7 @@ impl<M: Mechanics> Kernel<M> {
                     aura,
                     index,
                     fraction: 1.0,
+                    ticks_left: self.world.ticks_left(aura),
                 };
                 self.call(|m, io| m.periodic_tick(io, &tick));
                 self.world.continue_ticking(aura, uid);
@@ -1075,6 +1146,7 @@ impl<M: Mechanics> Kernel<M> {
                         aura,
                         index,
                         fraction,
+                        ticks_left: Some(fraction),
                     };
                     self.call(|m, io| m.periodic_tick(io, &tick));
                 }
@@ -1105,7 +1177,10 @@ impl<M: Mechanics> Kernel<M> {
             }
             Event::RuleFire { enemy, rule, gen } => self.fire_rule(enemy, rule, gen),
             Event::EnemyCastEnd { enemy, seq } => self.enemy_cast_end(enemy, seq),
-            Event::MovementEnd { seat, gen } => self.world.movement_end(seat, gen),
+            Event::MovementEnd { seat, gen } => {
+                self.world.movement_end(seat, gen);
+                self.drain();
+            }
             Event::LaggedCast { seat } => self.lagged_cast(seat),
             Event::DemandDeadline { seat, id } => self.demand_deadline(seat, id),
             Event::Recheck { .. } | Event::Deliver(_) => {
@@ -1372,10 +1447,12 @@ impl<M: Mechanics> Kernel<M> {
             }
             Choice::Move(goal) => {
                 self.world.start_move(seat, goal);
+                self.drain();
                 self.free_again(seat);
             }
             Choice::StopMove => {
                 self.world.stop_move(seat);
+                self.drain();
                 self.free_again(seat);
             }
         }
@@ -1486,6 +1563,7 @@ impl<M: Mechanics> Engine for Kernel<M> {
                     },
                     stacks: 1,
                     duration: None,
+                    pmultiplier: None,
                 });
             }
         }

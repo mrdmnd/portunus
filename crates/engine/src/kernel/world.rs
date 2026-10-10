@@ -6,8 +6,9 @@ use std::sync::Arc;
 
 use portunus_core::rng::{self, Domain, Purpose};
 use portunus_core::{
-    ActorId, AuraId, Sample, Seat, SimDuration, SimTime, SpellId, StreamKey, Trigger,
+    ActorId, AuraId, EnemyKey, Sample, Seat, SimDuration, SimTime, SpellId, StreamKey, Trigger,
 };
+use portunus_gamedata::aura::AuraValueKind;
 use portunus_gamedata::effect::{Effect, ModKind, ModScope, Predicate};
 use portunus_gamedata::enemy::{EnemyAction, PhaseName, RuleIndex};
 use portunus_gamedata::item::{WeaponDef, WeaponHand};
@@ -19,13 +20,17 @@ use portunus_scenario::resolved::SpawnSet;
 
 use crate::choice::{Choice, MoveGoal, Wait};
 use crate::error::EngineError;
-use crate::mechanics::{AuraChange, AuraEvent, CastEvent, DeathEvent, PetEvent, RolledHit};
+use crate::mechanics::{
+    AbsorbEvent, AuraApplication, AuraChange, AuraEvent, CastEvent, DeathEvent, Landed, PetEvent,
+    RolledHit,
+};
 use crate::outcome::{Outcome, PullOutcome, SeatOutcome};
 use crate::setup::{Externals, RunSetup};
 use crate::state::{
-    ActorKind, ActorView, AuraInstance, CastView, CastWhat, ChannelProgress, CombatView,
-    CooldownView, DeckView, DemandView, LastCast, MovementView, PendingPerception, PendingTimer,
-    ProcView, Projectile, ResourceView, RuleView, SeatPhase, SegmentView, StateView, SwingView,
+    self, ActorKind, ActorView, AuraInstance, AuraRef, CastView, CastWhat, ChannelProgress,
+    CombatView, CooldownView, DeckView, DemandView, LastCast, MovementView, PendingPerception,
+    PendingTimer, ProcView, Projectile, ResourceView, RuleView, SeatPhase, SegmentView, StateView,
+    SwingView, RECENT_CASTS,
 };
 use crate::step::{DecisionRequest, WakeReason};
 use crate::trace::{TraceEvent, TraceRecord};
@@ -45,8 +50,25 @@ pub(crate) struct Statics {
     pub gcd: Vec<Option<GcdDef>>,
     /// Per seat.
     pub roles: Vec<Role>,
-    /// Per combat, spawn, and rule: the rule's trigger over spawn indices.
-    pub rule_triggers: Vec<Vec<Vec<Trigger<SpawnSet>>>>,
+    /// Per seat: the `Requirement::TargetHpAtMost` fractions among its
+    /// abilities and what they can turn into, ascending.
+    pub hp_thresholds: Vec<Vec<f64>>,
+}
+
+/// One enemy of a combat, by spawn index: the pull's own, then its adds
+/// in the order they spawned.
+#[derive(Debug, Clone)]
+pub(crate) struct EnemySpawn {
+    pub actor: ActorId,
+    pub key: EnemyKey,
+    pub forces: u32,
+    /// The enemy whose rule spawned it; `None` for the pull's own.
+    pub spawner: Option<ActorId>,
+    /// Leaves the combat, without dying, when its spawner dies.
+    pub despawn_with_spawner: bool,
+    pub despawned: bool,
+    /// Per rule: its trigger over spawn indices.
+    pub rules: Arc<[Trigger<SpawnSet>]>,
 }
 
 /// Whose `Delayed` trigger a start time belongs to: an enemy's engagement
@@ -88,6 +110,8 @@ pub(crate) struct Actor {
     pub resources: Vec<Resource>,
     pub cooldowns: BTreeMap<CooldownKey, Cooldown>,
     pub auras: Vec<AuraInstance>,
+    /// `auras` as of its last death.
+    pub died_with: Vec<AuraInstance>,
     /// Parallel to `auras`.
     pub meta: Vec<AuraMeta>,
     pub procs: Vec<ProcView>,
@@ -210,6 +234,7 @@ impl Actor {
             resources: Vec::new(),
             cooldowns: BTreeMap::new(),
             auras: Vec::new(),
+            died_with: Vec::new(),
             meta: Vec::new(),
             procs: Vec::new(),
             phase: None,
@@ -337,29 +362,157 @@ pub(crate) struct Tick {
     pub index: u32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) struct Resource {
     pub def: ResourceDef,
     pub value: f64,
     pub at: SimTime,
     pub regen_mult: f64,
+    /// With `def.recharge`: each refilling unit's unhasted milliseconds
+    /// left, oldest (least left) first.
+    pub refilling: Vec<f64>,
+    /// Whether `def.out_of_combat` applies instead of the regen rate.
+    pub out_of_combat: bool,
 }
 
+/// Unhasted milliseconds a refilling unit may be short of done and count
+/// as full, for rounding in `fill_times`.
+const REFILL_EPSILON: f64 = 1e-6;
+
 impl Resource {
-    /// Per second.
+    pub fn new(def: ResourceDef, at: SimTime, in_combat: bool) -> Self {
+        let mut r = Resource {
+            def,
+            value: def.initial.clamp(0.0, def.max),
+            at,
+            regen_mult: 1.0,
+            refilling: Vec::new(),
+            out_of_combat: !in_combat,
+        };
+        r.start_refilling();
+        r
+    }
+
+    /// Per second; 0 for a resource that refills a unit at a time.
     pub fn rate(&self, haste: f64) -> f64 {
+        if self.def.recharge.is_some() {
+            return 0.0;
+        }
+        if let (true, Some(rate)) = (self.out_of_combat, self.def.out_of_combat) {
+            return rate;
+        }
         let hasted = if self.def.regen_hasted { haste } else { 1.0 };
         self.def.regen_per_sec * self.regen_mult * hasted
     }
 
     pub fn value_at(&self, t: SimTime, haste: f64) -> f64 {
+        if self.def.recharge.is_some() {
+            let mut r = self.clone();
+            r.settle(t, haste);
+            return r.value;
+        }
         let secs = f64::from(t.saturating_since(self.at).millis()) / 1000.0;
         (self.value + self.rate(haste) * secs).clamp(0.0, self.def.max)
     }
 
     pub fn settle(&mut self, now: SimTime, haste: f64) {
-        self.value = self.value_at(now, haste);
+        if self.def.recharge.is_some() {
+            let elapsed = f64::from(now.saturating_since(self.at).millis());
+            self.refill(elapsed * self.refill_rate(haste));
+        } else {
+            self.value = self.value_at(now, haste);
+        }
         self.at = now;
+    }
+
+    /// Add `delta` to a settled resource. A recharging one moves in whole
+    /// units: a spent unit starts refilling if there's room, and a gained
+    /// one fills a spent unit that isn't refilling, else the refilling one
+    /// with the most left (SimC's `replenish_rune` fills a depleted rune
+    /// first).
+    pub fn change(&mut self, delta: f64) {
+        if self.def.recharge.is_none() {
+            self.value = (self.value + delta).clamp(0.0, self.def.max);
+            return;
+        }
+        let units = delta.round();
+        if units > 0.0 {
+            for _ in 0..units as u32 {
+                if self.value >= self.def.max {
+                    break;
+                }
+                if self.idle_spent() == 0 {
+                    self.refilling.pop();
+                }
+                self.value += 1.0;
+            }
+        } else {
+            self.value = (self.value + units).max(0.0);
+        }
+        self.start_refilling();
+    }
+
+    /// When each missing unit of a recharging resource will be back if
+    /// nothing else happens, soonest first; empty for linear ones.
+    pub fn fill_times(&self, now: SimTime, haste: f64) -> Vec<SimTime> {
+        if self.def.recharge.is_none() {
+            return Vec::new();
+        }
+        let mut r = self.clone();
+        r.settle(now, haste);
+        let rate = r.refill_rate(haste);
+        let mut progress = 0.0;
+        let mut times = Vec::new();
+        while let Some(&first) = r.refilling.first() {
+            progress += first;
+            let before = r.value;
+            r.refill(first);
+            let filled = (r.value - before).round() as usize;
+            times.extend(std::iter::repeat_n(
+                now + millis_ceil(progress / rate),
+                filled,
+            ));
+        }
+        times
+    }
+
+    /// Unhasted milliseconds of a refilling unit recovered per real one.
+    fn refill_rate(&self, haste: f64) -> f64 {
+        let hasted = match self.def.recharge {
+            Some(rc) if rc.hasted => haste,
+            _ => 1.0,
+        };
+        (hasted * self.regen_mult).max(f64::MIN_POSITIVE)
+    }
+
+    /// Spent units neither full nor refilling.
+    fn idle_spent(&self) -> usize {
+        let missing = (self.def.max - self.value).max(0.0).round() as usize;
+        missing.saturating_sub(self.refilling.len())
+    }
+
+    /// Start spent units refilling while fewer than `concurrent` are.
+    fn start_refilling(&mut self) {
+        let Some(rc) = self.def.recharge else { return };
+        while self.refilling.len() < usize::from(rc.concurrent) && self.idle_spent() > 0 {
+            self.refilling.push(f64::from(rc.period.millis()));
+        }
+    }
+
+    /// Advance the refilling units by `progress` unhasted milliseconds. A
+    /// unit that fills lets the next spent one start from that moment.
+    fn refill(&mut self, mut progress: f64) {
+        while let Some(&first) = self.refilling.first() {
+            let step = progress.min(first);
+            self.refilling.iter_mut().for_each(|left| *left -= step);
+            progress -= step;
+            if self.refilling[0] > REFILL_EPSILON {
+                break;
+            }
+            self.refilling.remove(0);
+            self.value = (self.value + 1.0).min(self.def.max);
+            self.start_refilling();
+        }
     }
 }
 
@@ -415,7 +568,8 @@ pub(crate) struct SeatState {
     /// Where an armed seat's next wake is predicted.
     pub armed: Option<(SimTime, WakeReason)>,
     pub gcd_end: Option<SimTime>,
-    pub last_cast: Option<LastCast>,
+    /// Newest first.
+    pub recent_casts: [Option<LastCast>; RECENT_CASTS],
     pub unperceived: Vec<PendingPerception>,
     /// Parallel to `unperceived`.
     pub perception_ids: Vec<u32>,
@@ -431,6 +585,8 @@ pub(crate) struct SeatState {
     pub moving: Option<Moving>,
     /// Bumped whenever a queued movement end becomes obsolete.
     pub move_gen: u32,
+    /// Whether mechanics last heard that the seat is moving.
+    pub moving_told: bool,
     /// Soonest deadline first.
     pub demands: Vec<Demand>,
 }
@@ -443,6 +599,12 @@ pub(crate) enum Followup {
     PetExpired(PetEvent),
     /// An empower stopped past its first stage goes off.
     Released(CastEvent),
+    /// A valued aura crossed its threshold once.
+    Threshold(AuraRef),
+    Absorbed(AbsorbEvent),
+    /// A seat started (`true`) or stopped moving.
+    Moved(Seat, bool),
+    DeathPrevented(AuraRef),
 }
 
 #[derive(Debug, Clone)]
@@ -494,7 +656,11 @@ pub struct World {
     pub(crate) seats: Vec<SeatState>,
     /// Per seat: live pets, oldest first.
     pub(crate) pets: Vec<Vec<ActorId>>,
+    /// The current combat's enemies, by spawn index.
     pub(crate) enemies: Vec<ActorId>,
+    /// Per combat so far: its enemies, parallel to `enemies` for the
+    /// current one.
+    pub(crate) spawns: Vec<Vec<EnemySpawn>>,
     pub(crate) projectiles: Vec<Projectile>,
     /// Parallel to `projectiles`.
     pub(crate) flights: Vec<(u32, CastEvent, Vec<RolledHit>)>,
@@ -621,6 +787,23 @@ impl World {
 
     pub(crate) fn in_combat(&self) -> bool {
         matches!(self.seg, Seg::Combat { .. })
+    }
+
+    /// Switch resources with an out-of-combat rate to the in- or
+    /// out-of-combat one, settling them at the old one first.
+    pub(crate) fn set_combat_regen(&mut self, in_combat: bool) {
+        let now = self.now;
+        for a in &mut self.actors {
+            let haste = a.haste;
+            for r in a
+                .resources
+                .iter_mut()
+                .filter(|r| r.def.out_of_combat.is_some())
+            {
+                r.settle(now, haste);
+                r.out_of_combat = !in_combat;
+            }
+        }
     }
 
     pub(crate) fn combat_index(&self) -> Option<u16> {
@@ -769,35 +952,7 @@ impl World {
         target: Option<ActorId>,
         spell: SpellId,
     ) -> bool {
-        match p {
-            Predicate::TargetHasAura { aura, from_self } => {
-                target.and_then(|t| self.actor_ref(t)).is_some_and(|t| {
-                    t.auras
-                        .iter()
-                        .any(|i| i.aura == aura && (!from_self || i.source == caster))
-                })
-            }
-            Predicate::CasterHasAura(aura) => self
-                .actor_ref(caster)
-                .is_some_and(|a| a.auras.iter().any(|i| i.aura == aura)),
-            Predicate::CasterLacksAura(aura) => {
-                !self.predicate(Predicate::CasterHasAura(aura), caster, target, spell)
-            }
-            Predicate::OwnerHasAura(aura) => match self.actor_ref(caster).map(|a| a.kind) {
-                Some(ActorKind::Pet { owner, .. }) => self
-                    .actor_ref(self.seat_actor(owner))
-                    .is_some_and(|a| a.auras.iter().any(|i| i.aura == aura)),
-                _ => false,
-            },
-            Predicate::TargetHpBelow(frac) => target
-                .and_then(|t| self.actor_ref(t))
-                .is_some_and(|t| t.max_health > 0 && t.health_frac() < frac),
-            Predicate::DiffersFromLastCast => self
-                .player_seat(caster)
-                .and_then(|s| self.seat_ref(s))
-                .and_then(|s| s.last_cast)
-                .is_none_or(|last| last.spell != spell),
-        }
+        state::predicate(self, p, caster, target, Some(spell))
     }
 
     /// Sum of the caster's modifiers of one kind that apply to `spell`, in
@@ -947,7 +1102,7 @@ impl World {
         let haste = a.haste;
         if let Some(r) = a.resources.iter_mut().find(|r| r.def.kind == kind) {
             r.settle(now, haste);
-            r.value = (r.value + delta).clamp(0.0, r.def.max);
+            r.change(delta);
         }
     }
 
@@ -994,17 +1149,55 @@ impl World {
         self.rescale_swings(actor, old_speed);
     }
 
-    /// Returns the amount that landed, overkill included.
-    pub(crate) fn damage(&mut self, d: crate::mechanics::DamageEvent) -> u64 {
-        let Some(t) = self.actor_mut(d.target) else {
-            return 0;
-        };
-        if !t.alive || d.amount == 0 {
-            return 0;
+    /// Absorbs take their share, then the rest comes off health.
+    pub(crate) fn damage(&mut self, d: crate::mechanics::DamageEvent) -> Landed {
+        if !self.actor_ref(d.target).is_some_and(|t| t.alive) || d.amount == 0 {
+            return Landed::default();
         }
-        let before = t.health;
-        t.health = t.health.saturating_sub(d.amount);
-        let died = t.health == 0;
+        let absorbed = self.absorb(&d);
+        if absorbed > 0 {
+            if let Some(seat) = self.owner_seat(d.source) {
+                self.seat_mut(seat).outcome.damage_absorbed += absorbed;
+            }
+        }
+        let d = crate::mechanics::DamageEvent {
+            amount: d.amount - absorbed,
+            ..d
+        };
+        if d.amount == 0 {
+            self.queue_triggers();
+            return Landed {
+                amount: 0,
+                absorbed,
+                prevented: false,
+            };
+        }
+        let Some(before) = self.actor_ref(d.target).map(|t| t.health) else {
+            return Landed::default();
+        };
+        let save = if d.amount >= before {
+            self.death_save(d.target)
+        } else {
+            None
+        };
+        let Some(t) = self.actor_mut(d.target) else {
+            return Landed::default();
+        };
+        let max = t.max_health;
+        t.health = match &save {
+            Some((_, pct, _)) => ((max as f64 * pct).round() as u64).clamp(1, max.max(1)),
+            None => before.saturating_sub(d.amount),
+        };
+        let after = t.health;
+        let d = crate::mechanics::DamageEvent {
+            amount: if save.is_some() {
+                before.saturating_sub(after)
+            } else {
+                d.amount
+            },
+            ..d
+        };
+        let died = after == 0;
         if let Some(seat) = self.owner_seat(d.source) {
             self.seat_mut(seat).outcome.damage_done += d.amount.min(before);
         }
@@ -1014,11 +1207,148 @@ impl World {
         self.record(TraceEvent::Damage(d));
         if died {
             self.kill(d.target, Some(d.source));
-        } else if self.player_seat(d.target).is_some() {
-            self.break_stealth(d.target, None);
+        } else {
+            if self.player_seat(d.target).is_some() {
+                self.break_stealth(d.target, None);
+            }
+            self.health_crossed(d.target, before, after, max);
+        }
+        if let Some((r, _, lockout)) = save {
+            self.record(TraceEvent::DeathPrevented {
+                actor: r.holder,
+                aura: r.aura,
+            });
+            if let Some(aura) = lockout {
+                self.apply_aura(AuraApplication {
+                    aura: AuraRef {
+                        holder: r.holder,
+                        aura,
+                        source: r.holder,
+                    },
+                    stacks: 1,
+                    duration: None,
+                    pmultiplier: None,
+                });
+            }
+            self.followups.push_back(Followup::DeathPrevented(r));
         }
         self.queue_triggers();
-        d.amount
+        Landed {
+            amount: d.amount,
+            absorbed,
+            prevented: save.is_some(),
+        }
+    }
+
+    /// A seat's aura that would keep it alive through a lethal hit now:
+    /// the first it holds with `prevents_death` whose lockout it lacks,
+    /// with what it heals to and the lockout.
+    fn death_save(&self, holder: ActorId) -> Option<(AuraRef, f64, Option<AuraId>)> {
+        self.player_seat(holder)?;
+        let a = self.actor_ref(holder)?;
+        let data = &self.s.setup.data;
+        a.auras.iter().find_map(|i| {
+            let p = data.auras.get(&i.aura)?.prevents_death.as_ref()?;
+            let locked = p
+                .lockout
+                .is_some_and(|l| a.auras.iter().any(|j| j.aura == l));
+            let r = AuraRef {
+                holder,
+                aura: i.aura,
+                source: i.source,
+            };
+            (!locked).then_some((r, p.heal_to_pct, p.lockout))
+        })
+    }
+
+    /// Wake each seat whose primary target just fell to the health one of
+    /// its abilities requires; unanticipated, as the player sees the bar.
+    fn health_crossed(&mut self, target: ActorId, before: u64, after: u64, max: u64) {
+        if max == 0 {
+            return;
+        }
+        let frac = |h: u64| h as f64 / max as f64;
+        let (from, to) = (frac(before), frac(after));
+        let now = self.now;
+        let s = Arc::clone(&self.s);
+        for (i, thresholds) in s.hp_thresholds.iter().enumerate() {
+            let crossed = thresholds.iter().any(|&f| from > f && to <= f);
+            if crossed
+                && self
+                    .actor_ref(self.seat_actors[i])
+                    .is_some_and(|a| a.target == Some(target))
+            {
+                let seat = Seat(i as u8);
+                self.notify(seat, WakeReason::TargetHealth(target), false, None, now);
+            }
+        }
+    }
+
+    /// Soak what the target's absorbs of the hit's school can, smallest
+    /// first (ties by aura, then source), as SimC's `account_absorb_buffs`
+    /// orders its ordinary absorbs; emptied ones go as `Depleted`.
+    fn absorb(&mut self, d: &crate::mechanics::DamageEvent) -> u64 {
+        let s = Arc::clone(&self.s);
+        let Some(t) = self.actor_ref(d.target) else {
+            return 0;
+        };
+        let mut shields: Vec<(f64, AuraId, ActorId)> = t
+            .auras
+            .iter()
+            .filter(|i| {
+                s.setup
+                    .data
+                    .auras
+                    .get(&i.aura)
+                    .and_then(|def| def.value.as_ref())
+                    .is_some_and(|v| match v.kind {
+                        AuraValueKind::Absorb { school } => school.intersects(d.school),
+                        _ => false,
+                    })
+            })
+            .map(|i| (i.value, i.aura, i.source))
+            .collect();
+        if shields.is_empty() {
+            return 0;
+        }
+        shields.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+        let mut left = d.amount;
+        for (_, aura, source) in shields {
+            if left == 0 {
+                break;
+            }
+            let r = AuraRef {
+                holder: d.target,
+                aura,
+                source,
+            };
+            let Some(i) = self.find_aura(r) else { continue };
+            let Some(a) = self.actor_mut(d.target) else {
+                break;
+            };
+            let inst = &mut a.auras[i];
+            let take = left.min(inst.value.max(0.0).ceil() as u64);
+            inst.value = (inst.value - take as f64).max(0.0);
+            let empty = inst.value <= 0.0;
+            left -= take;
+            if take > 0 {
+                self.record(TraceEvent::Absorbed {
+                    source: d.source,
+                    target: d.target,
+                    aura,
+                    amount: take,
+                });
+                self.followups.push_back(Followup::Absorbed(AbsorbEvent {
+                    aura: r,
+                    attacker: d.source,
+                    amount: take,
+                }));
+            }
+            if empty {
+                self.remove_instance(d.target, i, crate::mechanics::AuraRemoval::Depleted);
+            }
+        }
+        d.amount - left
     }
 
     pub(crate) fn heal(&mut self, h: crate::mechanics::HealEvent) {
@@ -1089,6 +1419,7 @@ impl World {
             return;
         };
         a.alive = false;
+        a.died_with.clone_from(&a.auras);
         self.cancel_cast(actor, CastEndReason::Interrupted);
         self.stop_swings(actor);
         self.cancel_enemy_cast(actor, CastEndReason::Interrupted);
@@ -1124,6 +1455,60 @@ impl World {
             self.forget_pet(actor);
             return;
         }
+        let combat = match self.actor_ref(actor).map(|a| a.kind) {
+            Some(ActorKind::Enemy { combat, .. }) => usize::from(combat),
+            _ => return,
+        };
+        let followers: Vec<ActorId> = self.spawns.get(combat).map_or_else(Vec::new, |spawns| {
+            spawns
+                .iter()
+                .zip(&self.enemies)
+                .filter(|(sp, _)| sp.spawner == Some(actor) && sp.despawn_with_spawner)
+                .map(|(_, &id)| id)
+                .collect()
+        });
+        for add in followers {
+            self.despawn(add);
+        }
+        self.enemy_gone(actor);
+    }
+
+    /// `enemy` leaves the combat without dying: no death, no killer, its
+    /// auras simply gone.
+    fn despawn(&mut self, enemy: ActorId) {
+        use crate::trace::CastEndReason;
+        let Some(a) = self.actor_mut(enemy) else {
+            return;
+        };
+        if !a.alive {
+            return;
+        }
+        a.alive = false;
+        let ActorKind::Enemy { combat, spawn } = a.kind else {
+            return;
+        };
+        if let Some(sp) = self
+            .spawns
+            .get_mut(usize::from(combat))
+            .and_then(|c| c.get_mut(usize::from(spawn.0)))
+        {
+            sp.despawned = true;
+        }
+        self.stop_swings(enemy);
+        self.cancel_enemy_cast(enemy, CastEndReason::Interrupted);
+        self.record(TraceEvent::Despawn { actor: enemy });
+        while let Some(last) = self
+            .actor_ref(enemy)
+            .and_then(|a| a.auras.len().checked_sub(1))
+        {
+            self.remove_instance(enemy, last, crate::mechanics::AuraRemoval::HolderDied);
+        }
+        self.enemy_gone(enemy);
+    }
+
+    /// Seats and pets move off `actor`, an enemy no longer alive.
+    fn enemy_gone(&mut self, actor: ActorId) {
+        use crate::trace::CastEndReason;
         let next = self.live_targets().first().copied();
         let casting_at_it = |w: &World, id: ActorId| {
             w.actor_ref(id)
@@ -1179,6 +1564,7 @@ impl World {
                 },
                 stacks: 1,
                 duration: None,
+                pmultiplier: None,
             });
         }
         for i in 0..self.seats.len() {
@@ -1289,6 +1675,28 @@ impl StateView for World {
         &self.seat_actors
     }
 
+    fn add_forces(&self, combat: u16) -> u32 {
+        self.spawns.get(usize::from(combat)).map_or(0, |spawns| {
+            spawns
+                .iter()
+                .filter(|sp| sp.spawner.is_some() && !sp.despawned)
+                .filter(|sp| self.actor_ref(sp.actor).is_some_and(|a| !a.alive))
+                .map(|sp| sp.forces)
+                .sum()
+        })
+    }
+
+    fn enemy_info(&self, enemy: ActorId) -> Option<state::EnemyInfo<'_>> {
+        let sp = self.spawn_of(self.actor_ref(enemy)?.kind)?;
+        Some(state::EnemyInfo {
+            key: &sp.key,
+            def: self.s.setup.enemies.enemies.get(&sp.key),
+            forces: sp.forces,
+            spawner: sp.spawner,
+            despawned: sp.despawned,
+        })
+    }
+
     fn enemies(&self) -> &[ActorId] {
         &self.enemies
     }
@@ -1347,6 +1755,7 @@ impl StateView for World {
             value: r.value_at(self.now, a.haste),
             max: r.def.max,
             regen_per_sec: r.rate(a.haste),
+            next_ready: r.fill_times(self.now, a.haste),
         })
     }
 
@@ -1408,6 +1817,10 @@ impl StateView for World {
         self.actor_ref(holder).map_or(&[], |a| &a.auras)
     }
 
+    fn auras_at_death(&self, actor: ActorId) -> &[AuraInstance] {
+        self.actor_ref(actor).map_or(&[], |a| &a.died_with)
+    }
+
     fn procs(&self, holder: ActorId) -> &[ProcView] {
         self.actor_ref(holder).map_or(&[], |a| &a.procs)
     }
@@ -1443,8 +1856,9 @@ impl StateView for World {
         &self.projectiles
     }
 
-    fn last_cast(&self, seat: Seat) -> Option<LastCast> {
-        self.seat_ref(seat)?.last_cast
+    fn recent_casts(&self, seat: Seat) -> [Option<LastCast>; RECENT_CASTS] {
+        self.seat_ref(seat)
+            .map_or([None; RECENT_CASTS], |s| s.recent_casts)
     }
 
     fn rule(&self, enemy: ActorId, rule: RuleIndex) -> RuleView {

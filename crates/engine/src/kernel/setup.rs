@@ -4,17 +4,18 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 
 use portunus_core::rng::{self, Purpose};
-use portunus_core::{ActorId, Seat, SimTime, Trigger, PARTY_SIZE};
+use portunus_core::{ActorId, EnemyKey, Seat, SimTime, SpellId, PARTY_SIZE};
 use portunus_gamedata::effect::{ModKind, Modifier};
-use portunus_gamedata::enemy::{EnemyAction, EnemySubject};
+use portunus_gamedata::enemy::EnemyAction;
+use portunus_gamedata::spell::Requirement;
 use portunus_gamedata::stats::ResourceDef;
-use portunus_scenario::resolved::{Segment, SpawnIndex, SpawnSet};
+use portunus_scenario::resolved::Segment;
 
 use crate::error::{EngineError, SetupIssue};
 use crate::mechanics::whole_points;
 use crate::outcome::SeatOutcome;
 use crate::setup::{Externals, RunSetup};
-use crate::state::{ActorKind, SeatPhase};
+use crate::state::{ActorKind, SeatPhase, RECENT_CASTS};
 
 use super::queue::Queue;
 use super::world::{Actor, Resource, SeatState, Seg, Statics, Swing, Trace, World};
@@ -68,29 +69,42 @@ fn issues(setup: &RunSetup) -> Vec<SetupIssue> {
             out.push(SetupIssue::UnknownAura(a));
         }
     }
-    for seg in &setup.run.segments {
-        if let Segment::Combat(c) = seg {
-            for spawn in &c.spawns {
-                if !setup.enemies.enemies.contains_key(&spawn.enemy) {
-                    out.push(SetupIssue::UnknownEnemy(spawn.enemy.clone()));
-                }
-            }
+    let mut pending: Vec<&EnemyKey> = setup
+        .run
+        .segments
+        .iter()
+        .filter_map(|seg| match seg {
+            Segment::Combat(c) => Some(c),
+            Segment::Travel { .. } => None,
+        })
+        .flat_map(|c| c.spawns.iter().map(|s| &s.enemy))
+        .collect();
+    let mut seen = BTreeSet::new();
+    while let Some(key) = pending.pop() {
+        if !seen.insert(key) {
+            continue;
+        }
+        let Some(def) = setup.enemies.enemies.get(key) else {
+            out.push(SetupIssue::UnknownEnemy(key.clone()));
+            continue;
+        };
+        for rule in &def.rules {
+            spawned(&rule.action, &mut pending);
         }
     }
     out
 }
 
-fn spawns_adds(a: &EnemyAction) -> bool {
-    match a {
-        EnemyAction::SpawnAdds { .. } => true,
-        EnemyAction::Cast { then, .. } => spawns_adds(then),
-        EnemyAction::Sequence(actions) => actions.iter().any(spawns_adds),
-        _ => false,
+/// The enemies `action` can spawn.
+fn spawned<'a>(action: &'a EnemyAction, out: &mut Vec<&'a EnemyKey>) {
+    match action {
+        EnemyAction::SpawnAdds { adds, .. } => out.extend(adds.iter().map(|(key, _)| key)),
+        EnemyAction::Cast { then, .. } => spawned(then, out),
+        EnemyAction::Sequence(actions) => actions.iter().for_each(|a| spawned(a, out)),
+        _ => {}
     }
 }
 
-/// Per combat, spawn, and rule: each rule's trigger with its subjects
-/// resolved to the spawn it belongs to.
 /// The externals plus what each class among the seats brings, in that
 /// order, each aura once.
 fn group(setup: &RunSetup) -> Externals {
@@ -115,68 +129,38 @@ fn group(setup: &RunSetup) -> Externals {
     group
 }
 
-fn rule_triggers(setup: &RunSetup) -> Vec<Vec<Vec<Trigger<SpawnSet>>>> {
-    setup
-        .run
-        .segments
+/// The `TargetHpAtMost` fractions among `abilities` and the spells auras
+/// can turn them into, ascending and deduplicated.
+fn hp_thresholds(setup: &RunSetup, abilities: &[SpellId]) -> Vec<f64> {
+    let data = &setup.data;
+    let overridden = data
+        .auras
+        .values()
+        .flat_map(|a| &a.overrides)
+        .filter(|(from, _)| abilities.contains(from))
+        .map(|&(_, to)| to);
+    let mut found: Vec<f64> = abilities
         .iter()
-        .filter_map(|s| match s {
-            Segment::Combat(c) => Some(c),
-            Segment::Travel { .. } => None,
+        .copied()
+        .chain(overridden)
+        .filter_map(|s| data.spells.get(&s))
+        .flat_map(|d| &d.requires)
+        .filter_map(|r| match *r {
+            Requirement::TargetHpAtMost(f) => Some(f),
+            _ => None,
         })
-        .map(|c| {
-            c.spawns
-                .iter()
-                .enumerate()
-                .map(|(i, spawn)| {
-                    let me = SpawnIndex(i as u16);
-                    setup
-                        .enemies
-                        .enemies
-                        .get(&spawn.enemy)
-                        .map(|def| {
-                            def.rules
-                                .iter()
-                                .map(|r| {
-                                    r.when.map(&mut |subject| match subject {
-                                        EnemySubject::Itself => SpawnSet::One(me),
-                                        EnemySubject::Combat => SpawnSet::Engaged,
-                                    })
-                                })
-                                .collect()
-                        })
-                        .unwrap_or_default()
-                })
-                .collect()
-        })
-        .collect()
-}
-
-fn unsupported(setup: &RunSetup) -> Option<&'static str> {
-    for seg in &setup.run.segments {
-        let Segment::Combat(c) = seg else { continue };
-        for spawn in &c.spawns {
-            if setup
-                .enemies
-                .enemies
-                .get(&spawn.enemy)
-                .is_some_and(|e| e.rules.iter().any(|r| spawns_adds(&r.action)))
-            {
-                return Some("enemy adds");
-            }
-        }
-    }
-    None
+        .collect();
+    found.sort_by(f64::total_cmp);
+    found.dedup();
+    found
 }
 
 pub(crate) fn validate(setup: &RunSetup) -> Result<(), EngineError> {
     let found = issues(setup);
-    if !found.is_empty() {
-        return Err(EngineError::Setup(found));
-    }
-    match unsupported(setup) {
-        Some(what) => Err(EngineError::Unsupported(what.to_owned())),
-        None => Ok(()),
+    if found.is_empty() {
+        Ok(())
+    } else {
+        Err(EngineError::Setup(found))
     }
 }
 
@@ -243,12 +227,7 @@ pub(crate) fn build(setup: RunSetup) -> World {
                         max: (def.max + extra).max(0.0),
                         ..def
                     };
-                    Resource {
-                        def,
-                        value: def.initial.min(def.max),
-                        at: SimTime::ZERO,
-                        regen_mult: 1.0,
-                    }
+                    Resource::new(def, SimTime::ZERO, false)
                 })
                 .collect();
             actor
@@ -261,7 +240,7 @@ pub(crate) fn build(setup: RunSetup) -> World {
             gen: 0,
             armed: None,
             gcd_end: None,
-            last_cast: None,
+            recent_casts: [None; RECENT_CASTS],
             unperceived: Vec::new(),
             perception_ids: Vec::new(),
             waited: None,
@@ -271,6 +250,7 @@ pub(crate) fn build(setup: RunSetup) -> World {
             outcome: SeatOutcome {
                 seat: Seat(i as u8),
                 damage_done: 0,
+                damage_absorbed: 0,
                 casts: 0,
                 deaths: 0,
                 damage_taken: 0,
@@ -279,12 +259,16 @@ pub(crate) fn build(setup: RunSetup) -> World {
             },
             moving: None,
             move_gen: 0,
+            moving_told: false,
             demands: Vec::new(),
         })
         .collect();
     let record = setup.record_trace;
     let roles = setup.seats.iter().map(|s| s.template.role).collect();
-    let rule_triggers = rule_triggers(&setup);
+    let hp_thresholds = abilities
+        .iter()
+        .map(|list| hp_thresholds(&setup, list))
+        .collect();
     let group = group(&setup);
     World {
         s: Arc::new(Statics {
@@ -294,7 +278,7 @@ pub(crate) fn build(setup: RunSetup) -> World {
             abilities,
             gcd,
             roles,
-            rule_triggers,
+            hp_thresholds,
         }),
         now: SimTime::ZERO,
         seg: Seg::Finished,
@@ -303,6 +287,7 @@ pub(crate) fn build(setup: RunSetup) -> World {
         seats,
         pets: vec![Vec::new(); n],
         enemies: Vec::new(),
+        spawns: Vec::new(),
         projectiles: Vec::new(),
         flights: Vec::new(),
         stashed: Vec::new(),

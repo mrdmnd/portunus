@@ -58,6 +58,32 @@ pub struct AuraDef {
     /// let the group lust again early).
     #[serde(default)]
     pub persists_through_death: bool,
+    /// A caster keeps it on one holder at a time: applying it anew takes
+    /// the caster's instance off any other (Hunter's Mark).
+    #[serde(default)]
+    pub unique_per_source: bool,
+    /// A hit that would kill the holder, a seat, leaves it alive instead
+    /// (Cauterize, Cheat Death, Ardent Defender).
+    #[serde(default)]
+    pub prevents_death: Option<PreventDeath>,
+}
+
+/// What happens instead of the holder's death. As SimC's Ardent Defender
+/// (`sc_paladin_protection.cpp`, the only death prevention SimC models):
+/// the lethal hit deals nothing past setting health *to* `heal_to_pct` of
+/// maximum, which can raise it. The aura stays unless `on_prevent` removes
+/// it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PreventDeath {
+    /// In `(0, 1]`.
+    pub heal_to_pct: f64,
+    /// Applied to the holder by itself as it saves it; while the holder
+    /// has it (from anyone) the aura saves nothing.
+    #[serde(default)]
+    pub lockout: Option<AuraId>,
+    /// Run as the aura's effects: its source casts them at the holder.
+    #[serde(default)]
+    pub on_prevent: Vec<Effect>,
 }
 
 /// A shapeshift or stance. Gaining a form removes any other of its group
@@ -135,9 +161,16 @@ pub struct Periodic {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AuraValue {
     pub kind: AuraValueKind,
+    /// The value it starts with when first applied, from its source (and
+    /// for `PctMaxHealth`, its holder): a shield's size, e.g. an enemy's
+    /// `SelfAura` absorb of a share of its own health.
+    #[serde(default)]
+    pub initial: Option<Coefficient>,
+    /// The value never exceeds this (e.g. Ignite-style bank caps).
     pub cap: Option<Coefficient>,
-    /// When the value reaches this, `on_threshold` runs and the value drops
-    /// by the threshold (e.g. a "deal X damage to proc" counter).
+    /// Each time the value reaches this (after the cap), it drops by it
+    /// and `on_threshold` runs, cast by the aura's source at its holder
+    /// (Seed of Corruption, "deal X damage to proc" counters).
     pub threshold: Option<Coefficient>,
     pub on_threshold: Vec<Effect>,
 }
@@ -145,11 +178,15 @@ pub struct AuraValue {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AuraValueKind {
-    /// Absorbs incoming damage of these schools; removed at zero.
+    /// Absorbs incoming damage of these schools before health, smallest
+    /// shield first, and is removed when used up. Damage it soaks doesn't
+    /// count as damage done (as in SimC), but still procs as a hit.
     Absorb { school: SchoolMask },
-    /// Each periodic tick draws from the value; the drawn amount is the
-    /// tick's `Coefficient::EventAmount` (Ignite, Stagger, Deep Wounds
-    /// style banks).
+    /// Each periodic tick draws from the value before its effects run; the
+    /// drawn amount is the tick's `Coefficient::EventAmount`, and isn't
+    /// scaled again for a partial final tick (Ignite, Stagger, Deep Wounds
+    /// style banks). Needs `periodic`. Filling it doesn't refresh the
+    /// duration; pair `AddAuraValue` with `ApplyAura` for that.
     Bank(BankDraw),
     /// Just a number for effects and conditions to read.
     Counter,
@@ -158,8 +195,11 @@ pub enum AuraValueKind {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BankDraw {
-    /// Value divided by the ticks remaining.
+    /// The value over the ticks remaining, this one included and a partial
+    /// final tick counted by its fraction (SimC's `residual_action`), so
+    /// the last tick empties it. A permanent aura draws it all.
     SpreadOverRemaining,
-    /// This fraction of the current value.
+    /// This fraction of the current value, in `(0, 1]`; scaled down on a
+    /// partial final tick.
     Fraction(f64),
 }
