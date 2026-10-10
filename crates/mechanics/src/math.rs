@@ -33,6 +33,8 @@ struct SeatSnapshot {
     stats: StatBlock,
     /// `RatedPct` points by stat, added after rating conversion.
     rated: BTreeMap<RatedStat, f64>,
+    /// The product of `AttackPowerPct` modifiers.
+    ap_mult: f64,
 }
 
 /// Whose stats and modifiers an actor's actions use.
@@ -202,6 +204,18 @@ impl Formulas {
         }
     }
 
+    /// The chance an auto-attack misses: only an actor wielding two weapons
+    /// can miss.
+    pub fn white_miss_chance(&self, view: &dyn StateView, actor: ActorId) -> f64 {
+        let dual = self.weapon(view, actor, WeaponHand::MainHand).is_some()
+            && self.weapon(view, actor, WeaponHand::OffHand).is_some();
+        if dual {
+            self.s.data.curves.dual_wield_miss_pct / 100.0
+        } else {
+            0.0
+        }
+    }
+
     /// The product of `AttackSpeedPct` modifiers on the actor's own auras.
     pub fn attack_speed_mult(&self, view: &dyn StateView, actor: ActorId) -> f64 {
         self.mod_product(view, &Query::holder(actor), ModKind::AttackSpeedPct)
@@ -220,7 +234,9 @@ impl Formulas {
         let mut stats = base.stats.clone();
         let mut pct: BTreeMap<Stat, f64> = BTreeMap::new();
         let mut rated: BTreeMap<RatedStat, f64> = BTreeMap::new();
+        let mut ap_mult = 1.0;
         self.each_mod(view, &Query::holder(actor), |m, value| match m.kind {
+            ModKind::AttackPowerPct => ap_mult *= 1.0 + value / 100.0,
             ModKind::StatFlat(stat) => *stats.0.entry(stat).or_default() += value,
             ModKind::StatPct(stat) => *pct.entry(stat).or_insert(1.0) *= 1.0 + value / 100.0,
             ModKind::RatedPct(stat) => *rated.entry(stat).or_default() += value,
@@ -235,6 +251,7 @@ impl Formulas {
             spec: base.spec,
             stats,
             rated,
+            ap_mult,
         })
     }
 
@@ -259,6 +276,7 @@ impl Formulas {
         match spec {
             Some((spec, s)) => {
                 let mut d = portunus_loadout::derive(&self.s.data.curves, spec, &s.stats);
+                d.attack_power *= s.ap_mult;
                 for (stat, points) in s.rated {
                     match stat {
                         RatedStat::Crit => d.crit_pct += points,
@@ -471,6 +489,11 @@ impl CombatMath for Formulas {
                     .aura
                     .and_then(|r| instance(view, r))
                     .map_or(0.0, |i| i.value)
+            }
+            Coefficient::WeaponSpeed(c) => {
+                let hand = ctx.hand.unwrap_or(WeaponHand::MainHand);
+                self.weapon(view, ctx.caster, hand)
+                    .map_or(0.0, |w| c * f64::from(w.speed.millis()) / 1000.0)
             }
         };
         raw * ctx.scale

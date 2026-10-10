@@ -43,6 +43,7 @@ impl LoadoutCompiler for Compiler {
         Ok(ActorTemplate {
             spec: spec.id,
             role: spec.role,
+            melee: spec.melee,
             hero_tree: loadout.hero_tree,
             stats,
             derived,
@@ -505,6 +506,7 @@ mod tests {
             class: "Test".into(),
             name: "Test".into(),
             role: Role::Damage,
+            melee: false,
             primary_stat: Stat::Intellect,
             base_stats: StatBlock(BTreeMap::from([(Stat::Intellect, 100.0)])),
             base_mastery_pct: 8.0,
@@ -519,6 +521,7 @@ mod tests {
                 version: "test".into(),
                 build: 0,
             },
+            classes: BTreeMap::new(),
             specs: BTreeMap::from([(SPEC, spec)]),
             spells: BTreeMap::new(),
             auras: BTreeMap::new(),
@@ -589,6 +592,7 @@ mod tests {
                 attack_power_per_primary: 1.0,
                 health_per_stamina: 20.0,
                 armor_constant: 7390.0,
+                dual_wield_miss_pct: 19.0,
             },
         }
     }

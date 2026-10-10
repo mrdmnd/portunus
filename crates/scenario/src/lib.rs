@@ -63,6 +63,9 @@ pub enum ScenarioIssue {
     PrepullExceedsTravel(PullName),
     /// The travel time's bounds are reversed.
     InvalidTravel(PullName),
+    /// The health multiplier can be zero or less, or its bounds are
+    /// reversed.
+    InvalidHealth(PullName),
     /// A wave's distance is negative or not a number.
     InvalidDistance {
         pull: PullName,

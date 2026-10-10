@@ -12,8 +12,10 @@
 //! they get no decision points, cast their autocast priority on the owner's
 //! primary target, and can be commanded by the owner's spells. Every actor
 //! with a weapon (or a pet with melee) swings at its primary target on its
-//! own timer while in combat. Hard casts and channels pause melee swings
-//! and resume them when they end.
+//! own timer while in combat. A seat's melee swings need the target within
+//! melee range (seats of melee specs open each pull there), and its hard
+//! casts and channels hold a swing that comes due until they end; pets
+//! swing through theirs.
 //!
 //! # When seats decide
 //!
@@ -46,6 +48,10 @@
 //! it is listed in [`StateView::unperceived`], so realistic observers can
 //! hide it from decisions that happen in the meantime. Wakes for one seat
 //! landing on the same timestamp coalesce into one request.
+//!
+//! A cast chosen at an unanticipated wake also waits out the seat's cast
+//! lag before it starts, and is checked again then; if it is no longer
+//! legal the seat is asked again with [`WakeReason::CastFailed`].
 //!
 //! Between pulls, seats are idle until the pull's pre-pull window opens
 //! ([`WakeReason::PrePull`]); from then on the same rules apply, except that
@@ -97,7 +103,7 @@ pub use mask::{ActionMask, Readiness};
 pub use mechanics::{EngineIo, Mechanics};
 pub use order::EventClass;
 pub use outcome::Outcome;
-pub use setup::{Externals, Latency, RunSetup, SeatSetup};
+pub use setup::{Externals, Latency, PullAura, RunSetup, SeatSetup};
 pub use state::{
     AuraRef, DeckView, DemandView, ListenerRef, MovementView, PendingTimer, ProcView, SeatPhase,
     SegmentView, StateView,

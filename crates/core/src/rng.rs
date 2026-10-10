@@ -27,6 +27,8 @@ pub enum Purpose {
     EnemyRuleTiming = 3,
     EnemyTarget = 4,
     EnemyDamage = 5,
+    /// Per-pull enemy health multipliers.
+    EnemyHealth = 6,
     Crit = 16,
     Proc = 17,
     /// Streams declared by a spec kit.

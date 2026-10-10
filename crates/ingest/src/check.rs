@@ -20,6 +20,7 @@ use portunus_gamedata::{EnemyData, GameData};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Owner {
     Spec(SpecId),
+    Class(String),
     Spell(SpellId),
     Aura(AuraId),
     Item(ItemId),
@@ -95,6 +96,8 @@ pub enum DataIssue {
     /// A distance, displacement, or movement demand that isn't a positive
     /// number, or a demand with no time to meet it.
     InvalidMovement(Owner),
+    /// A dual-wield miss chance outside `[0, 100]` percent.
+    InvalidMissChance,
 }
 
 fn positive(x: f64) -> bool {
@@ -140,6 +143,25 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
                     talent: *talent,
                 });
             }
+        }
+    }
+    for (key, class) in &data.classes {
+        let owner = Owner::Class(key.clone());
+        if *key != class.name {
+            c.issues.push(DataIssue::KeyMismatch(owner.clone()));
+        }
+        let pulled = class
+            .on_pull
+            .iter()
+            .flat_map(|p| std::iter::once(p.aura).chain(p.lockout));
+        for aura in class
+            .group_auras
+            .iter()
+            .chain(&class.enemy_auras)
+            .copied()
+            .chain(pulled)
+        {
+            c.aura(&owner, aura);
         }
     }
     for hero in data.hero_trees.values() {
@@ -252,6 +274,9 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
         if curve.rating_per_pct <= 0.0 || !ordered || !fractions {
             c.issues.push(DataIssue::InvalidRatingCurve(stat));
         }
+    }
+    if !(0.0..=100.0).contains(&data.curves.dual_wield_miss_pct) {
+        c.issues.push(DataIssue::InvalidMissChance);
     }
     c.issues
 }
@@ -402,6 +427,7 @@ impl Checker<'_> {
             ListenFor::PetExpired(p) => self.pet(owner, p),
             ListenFor::DamageTaken
             | ListenFor::Swing { .. }
+            | ListenFor::WeaponHit { .. }
             | ListenFor::ResourceSpent(_)
             | ListenFor::Departed => {}
         }
@@ -506,7 +532,10 @@ impl Checker<'_> {
                         self.issues.push(DataIssue::InvalidMovement(owner.clone()));
                     }
                 }
-                Effect::Resource(_) | Effect::Hook(_) => {}
+                Effect::Resource(_)
+                | Effect::GainResource { .. }
+                | Effect::ExtraSwing
+                | Effect::Hook(_) => {}
             }
         }
     }

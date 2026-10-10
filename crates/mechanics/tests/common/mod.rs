@@ -39,9 +39,12 @@ fn dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data")
 }
 
-/// The game data with a loadout from `data/loadouts`, edited by `edit`.
+/// The game data, minus classes' group buffs, with a loadout from
+/// `data/loadouts`, edited by `edit`.
 pub fn fixture(loadout: &str, edit: impl FnOnce(&mut Loadout)) -> Fixture {
-    let data: GameData = GameDataSource::load(&RonFile::new(dir().join("game.ron"))).unwrap();
+    let mut data: GameData = GameDataSource::load(&RonFile::new(dir().join("game.ron"))).unwrap();
+    // The kits are tested on their own, without the class's group buffs.
+    data.classes.clear();
     let enemies: EnemyData =
         EnemyDataSource::load(&RonFile::new(dir().join("enemies.ron"))).unwrap();
     let mut loadout: Loadout = read_ron(&dir().join("loadouts").join(loadout)).unwrap();

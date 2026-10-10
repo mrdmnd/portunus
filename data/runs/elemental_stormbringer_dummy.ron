@@ -12,7 +12,7 @@
             latency: (
                 anticipated: fixed(0),
                 reaction: jitter(base: 250, jitter: 50),
-                cast_lag: fixed(0),
+                cast_lag: jitter(base: 100, jitter: 10),
             ),
         ),
     ],

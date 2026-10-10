@@ -63,4 +63,7 @@ pub enum WakeReason {
     EnemyMoved(ActorId),
     /// Requested by mechanics (e.g. a proc that changes priorities).
     Mechanics,
+    /// A cast the seat chose couldn't start once its cast lag ran out:
+    /// it stopped being legal in the meantime.
+    CastFailed,
 }

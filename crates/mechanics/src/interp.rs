@@ -21,6 +21,8 @@ use crate::{CombatMath, EffectCtx, EffectInterpreter, KitTools, Outgoing, SpecRe
 const CRIT_STREAM: StreamKey = StreamKey(0);
 /// `Effect::RandomOf` branch choices, per caster.
 const RANDOM_STREAM: StreamKey = StreamKey(1);
+/// Auto-attack miss rolls, per attacker.
+const MISS_STREAM: StreamKey = StreamKey(2);
 /// Listener streams are numbered from here, one per listener.
 const PROC_STREAM_BASE: u16 = 16;
 
@@ -51,6 +53,7 @@ pub(crate) enum Happening {
     },
     DamageTaken,
     Swing(WeaponHand),
+    WeaponHit(WeaponHand),
     PeriodicTick(AuraId),
     ResourceSpent(ResourceKind),
     AuraApplied(AuraId),
@@ -167,6 +170,10 @@ impl Interpreter {
                         Happening::ResourceSpent(_) if !per_unit => ev.amount.unwrap_or(1.0),
                         _ => 1.0,
                     };
+                    let hand = match ev.what {
+                        Happening::Swing(h) | Happening::WeaponHit(h) => Some(h),
+                        _ => None,
+                    };
                     let ctx = EffectCtx {
                         caster: holder,
                         target: ev.target,
@@ -175,6 +182,7 @@ impl Interpreter {
                         event_amount: ev.amount,
                         scale,
                         depth: 1,
+                        hand,
                     };
                     self.run(io, &ctx, &l.effects);
                 }
@@ -345,6 +353,52 @@ impl Interpreter {
             .collect()
     }
 
+    /// An auto-attack by `actor` with `hand` at `target`: miss, else a
+    /// weapon-damage hit, then the attacker's `Swing` and `WeaponHit`
+    /// listeners. The miss roll is drawn whatever the chance, so changing
+    /// it never shifts later rolls.
+    pub(crate) fn white_hit(
+        &self,
+        io: &mut dyn EngineIo,
+        actor: ActorId,
+        hand: WeaponHand,
+        target: ActorId,
+        depth: u8,
+    ) {
+        let miss = self.math.white_miss_chance(io.view(), actor);
+        if io.roll(actor, MISS_STREAM) < miss {
+            return;
+        }
+        let raw = self.math.weapon_damage(io.view(), actor, hand);
+        let ctx = EffectCtx {
+            caster: actor,
+            target: Some(target),
+            spell: None,
+            aura: None,
+            event_amount: None,
+            scale: 1.0,
+            depth,
+            hand: Some(hand),
+        };
+        self.damage(
+            io,
+            &ctx,
+            Coefficient::Flat(raw),
+            SchoolMask::PHYSICAL,
+            EffectTarget::Target,
+            None,
+        );
+        for what in [Happening::Swing(hand), Happening::WeaponHit(hand)] {
+            let ev = Occurrence {
+                what,
+                target: Some(target),
+                amount: None,
+                depth,
+            };
+            self.fire(io, actor, ev);
+        }
+    }
+
     /// Amount and crit against `c.target`, before its mitigation.
     fn roll_hit(
         &self,
@@ -401,6 +455,19 @@ impl Interpreter {
                 ..dealt
             };
             self.fire(io, t, taken);
+            let weapon = hit
+                .spell
+                .and_then(|s| self.math.data().spells.get(&s))
+                .and_then(|d| d.weapon);
+            if let Some(hand) = weapon {
+                let struck = Occurrence {
+                    what: Happening::WeaponHit(hand),
+                    target: Some(t),
+                    amount: Some(landed as f64),
+                    depth: hit.depth,
+                };
+                self.fire(io, hit.source, struck);
+            }
         }
     }
 
@@ -463,6 +530,7 @@ impl Interpreter {
             event_amount: None,
             scale: 1.0,
             depth: 0,
+            hand: None,
         };
         Some(self.roll_direct(io, &ctx, &def.effects))
     }
@@ -600,6 +668,18 @@ impl Interpreter {
                 }
             }
             &Effect::Resource(r) => io.add_resource(caster, r.kind, r.amount * ctx.scale),
+            &Effect::GainResource { kind, amount } => {
+                let gain = self.math.base(io.view(), ctx, amount);
+                io.add_resource(caster, kind, gain);
+            }
+            Effect::ExtraSwing => {
+                let hand = ctx.hand.unwrap_or(WeaponHand::MainHand);
+                let target = ctx.target.or_else(|| io.view().target(caster));
+                let armed = self.math.weapon(io.view(), caster, hand).is_some();
+                if let (true, Some(target)) = (armed, target) {
+                    self.white_hit(io, caster, hand, target, ctx.depth);
+                }
+            }
             &Effect::Summon {
                 pet,
                 count,
@@ -741,7 +821,10 @@ fn listens(on: ListenFor, what: Happening) -> bool {
                 && (crit || !crit_only)
         }
         (ListenFor::DamageTaken, Happening::DamageTaken) => true,
-        (ListenFor::Swing { hand }, Happening::Swing(got)) => hand.is_none_or(|h| h == got),
+        (ListenFor::Swing { hand }, Happening::Swing(got))
+        | (ListenFor::WeaponHit { hand }, Happening::WeaponHit(got)) => {
+            hand.is_none_or(|h| h == got)
+        }
         (ListenFor::PeriodicTick(a), Happening::PeriodicTick(b))
         | (ListenFor::AuraApplied(a), Happening::AuraApplied(b))
         | (ListenFor::AuraExpired(a), Happening::AuraExpired(b)) => a == b,

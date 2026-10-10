@@ -21,7 +21,7 @@ use crate::choice::{Choice, MoveGoal, Wait};
 use crate::error::EngineError;
 use crate::mechanics::{AuraChange, AuraEvent, CastEvent, DeathEvent, PetEvent, RolledHit};
 use crate::outcome::{Outcome, PullOutcome, SeatOutcome};
-use crate::setup::RunSetup;
+use crate::setup::{Externals, RunSetup};
 use crate::state::{
     ActorKind, ActorView, AuraInstance, CastView, CastWhat, CombatView, CooldownView, DeckView,
     DemandView, LastCast, MovementView, PendingPerception, PendingTimer, ProcView, Projectile,
@@ -35,8 +35,10 @@ use super::queue::{Event, Queue, Wake};
 /// What never changes during a rollout, shared by every fork.
 pub(crate) struct Statics {
     pub setup: RunSetup,
-    /// Per seat: `[anticipated, reaction]` latency domains.
-    pub latency: Vec<[Domain; 2]>,
+    /// The externals plus what the seats' classes bring, each aura once.
+    pub group: Externals,
+    /// Per seat: `[anticipated, reaction, cast lag]`.
+    pub latency: Vec<[Domain; 3]>,
     /// Per seat, in a fixed order.
     pub abilities: Vec<Vec<SpellId>>,
     /// Per seat: the longest GCD among its abilities, for `gcd_length`.
@@ -159,6 +161,8 @@ pub(crate) struct Swing {
     pub weapon: WeaponDef,
     /// `None` while not swinging (out of combat, or nothing to hit).
     pub next_at: Option<SimTime>,
+    /// `next_at` is a hard cast's end, which the swing waits for.
+    pub paused: bool,
     pub gen: u32,
 }
 
@@ -167,6 +171,7 @@ impl Swing {
         Self {
             weapon,
             next_at: None,
+            paused: false,
             gen: 0,
         }
     }
@@ -333,8 +338,10 @@ pub(crate) struct SeatState {
     pub perception_ids: Vec<u32>,
     /// The last wait chosen and when, for livelock detection.
     pub waited: Option<(Wait, SimTime)>,
-    /// Latency draws so far: `[anticipated, reaction]`.
-    pub draws: [u64; 2],
+    /// Latency draws so far: `[anticipated, reaction, cast lag]`.
+    pub draws: [u64; 3],
+    /// A cast chosen but not yet started, and when its cast lag runs out.
+    pub lagged: Option<(Choice, SimTime)>,
     /// Pets summoned so far, for naming their random streams.
     pub summons: u32,
     pub outcome: SeatOutcome,
@@ -604,6 +611,18 @@ impl World {
                 perception,
             }),
         );
+    }
+
+    /// The next cast lag from the seat's own stream.
+    pub(crate) fn draw_cast_lag(&mut self, seat: Seat) -> SimDuration {
+        let i = usize::from(seat.0);
+        let index = self.seats[i].draws[2];
+        self.seats[i].draws[2] += 1;
+        self.s.setup.seats[i].latency.cast_lag.sample(
+            self.s.setup.run.seed,
+            self.s.latency[i][2],
+            index,
+        )
     }
 
     /// Ask again at this timestamp, with no latency (free actions).
@@ -925,6 +944,7 @@ impl World {
             spell: c.ev.spell,
             reason,
         });
+        self.resume_swings(actor);
     }
 
     pub(crate) fn kill(&mut self, actor: ActorId, killer: Option<ActorId>) {
@@ -934,6 +954,7 @@ impl World {
         };
         a.alive = false;
         self.cancel_cast(actor, CastEndReason::Interrupted);
+        self.stop_swings(actor);
         self.cancel_enemy_cast(actor, CastEndReason::Interrupted);
         self.record(TraceEvent::Death { actor });
         self.followups
@@ -947,6 +968,7 @@ impl World {
         if let Some(seat) = self.player_seat(actor) {
             self.clear_movement(seat);
             let st = self.seat_mut(seat);
+            st.lagged = None;
             st.phase = SeatPhase::Dead;
             st.gen += 1;
             st.outcome.deaths += 1;
@@ -1004,7 +1026,7 @@ impl World {
         a.engaged_at = Some(now);
         self.record(TraceEvent::Engage { actor: enemy });
         self.schedule_rule_marks(enemy);
-        let auras = self.s.setup.externals.enemy_auras.clone();
+        let auras = self.s.group.enemy_auras.clone();
         for aura in auras {
             self.apply_aura(crate::mechanics::AuraApplication {
                 aura: crate::state::AuraRef {
@@ -1029,6 +1051,7 @@ impl World {
             }
             let now = self.now;
             self.notify(seat, WakeReason::EnemyEngaged(enemy), false, None, now);
+            self.start_swings(me);
         }
         for pet in self.all_pets() {
             self.wake_pet(pet);

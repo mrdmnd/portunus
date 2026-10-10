@@ -1,10 +1,10 @@
 //! Checking a [`RunSetup`] and building the starting [`World`].
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 
 use portunus_core::rng::{self, Purpose};
-use portunus_core::{ActorId, Sample, Seat, SimDuration, SimTime, Trigger, PARTY_SIZE};
+use portunus_core::{ActorId, Seat, SimTime, Trigger, PARTY_SIZE};
 use portunus_gamedata::effect::{ModKind, Modifier};
 use portunus_gamedata::enemy::{EnemyAction, EnemySubject};
 use portunus_gamedata::spell::CastKind;
@@ -14,11 +14,11 @@ use portunus_scenario::resolved::{Segment, SpawnIndex, SpawnSet};
 use crate::error::{EngineError, SetupIssue};
 use crate::mechanics::whole_points;
 use crate::outcome::SeatOutcome;
-use crate::setup::RunSetup;
+use crate::setup::{Externals, RunSetup};
 use crate::state::{ActorKind, SeatPhase};
 
 use super::queue::Queue;
-use super::world::{Actor, Resource, SeatState, Seg, Statics, Trace, World};
+use super::world::{Actor, Resource, SeatState, Seg, Statics, Swing, Trace, World};
 
 fn issues(setup: &RunSetup) -> Vec<SetupIssue> {
     let data = &setup.data;
@@ -54,7 +54,17 @@ fn issues(setup: &RunSetup) -> Vec<SetupIssue> {
         }
     }
     let externals = &setup.externals;
-    for &a in externals.party_auras.iter().chain(&externals.enemy_auras) {
+    let pulled = externals
+        .on_pull
+        .iter()
+        .flat_map(|p| std::iter::once(p.aura).chain(p.lockout));
+    for a in externals
+        .party_auras
+        .iter()
+        .chain(&externals.enemy_auras)
+        .copied()
+        .chain(pulled)
+    {
         if !data.auras.contains_key(&a) {
             out.push(SetupIssue::UnknownAura(a));
         }
@@ -82,6 +92,30 @@ fn spawns_adds(a: &EnemyAction) -> bool {
 
 /// Per combat, spawn, and rule: each rule's trigger with its subjects
 /// resolved to the spawn it belongs to.
+/// The externals plus what each class among the seats brings, in that
+/// order, each aura once.
+fn group(setup: &RunSetup) -> Externals {
+    let data = &setup.data;
+    let classes = setup
+        .seats
+        .iter()
+        .filter_map(|s| data.specs.get(&s.template.spec))
+        .filter_map(|spec| data.classes.get(&spec.class));
+    let mut group = setup.externals.clone();
+    for class in classes {
+        group.party_auras.extend(&class.group_auras);
+        group.enemy_auras.extend(&class.enemy_auras);
+        group.on_pull.extend(&class.on_pull);
+    }
+    let mut seen = BTreeSet::new();
+    group.party_auras.retain(|a| seen.insert(*a));
+    let mut seen = BTreeSet::new();
+    group.enemy_auras.retain(|a| seen.insert(*a));
+    let mut seen = BTreeSet::new();
+    group.on_pull.retain(|p| seen.insert(p.aura));
+    group
+}
+
 fn rule_triggers(setup: &RunSetup) -> Vec<Vec<Vec<Trigger<SpawnSet>>>> {
     setup
         .run
@@ -123,12 +157,6 @@ fn unsupported(setup: &RunSetup) -> Option<&'static str> {
     let data = &setup.data;
     for seat in &setup.seats {
         let t = &seat.template;
-        if t.main_hand.is_some() || t.off_hand.is_some() {
-            return Some("auto-attacks");
-        }
-        if seat.latency.cast_lag.bounds() != (SimDuration::ZERO, SimDuration::ZERO) {
-            return Some("cast lag");
-        }
         for s in t.abilities.iter().filter_map(|s| data.spells.get(s)) {
             if matches!(s.cast, CastKind::Channel { .. } | CastKind::Empower { .. }) {
                 return Some("channels and empowers");
@@ -175,6 +203,7 @@ pub(crate) fn build(setup: RunSetup) -> World {
             [
                 rng::domain(Purpose::Reaction, &[name.as_str(), "anticipated"]),
                 rng::domain(Purpose::Reaction, &[name.as_str(), "reaction"]),
+                rng::domain(Purpose::Reaction, &[name.as_str(), "cast_lag"]),
             ]
         })
         .collect();
@@ -207,6 +236,7 @@ pub(crate) fn build(setup: RunSetup) -> World {
                 whole_points(t.derived.max_health),
                 1.0 + t.derived.haste_pct / 100.0,
             );
+            actor.swings = [t.main_hand.map(Swing::new), t.off_hand.map(Swing::new)];
             let passives: Vec<&Modifier> = t
                 .passive_auras
                 .iter()
@@ -248,7 +278,8 @@ pub(crate) fn build(setup: RunSetup) -> World {
             unperceived: Vec::new(),
             perception_ids: Vec::new(),
             waited: None,
-            draws: [0, 0],
+            draws: [0, 0, 0],
+            lagged: None,
             summons: 0,
             outcome: SeatOutcome {
                 seat: Seat(i as u8),
@@ -267,9 +298,11 @@ pub(crate) fn build(setup: RunSetup) -> World {
     let record = setup.record_trace;
     let roles = setup.seats.iter().map(|s| s.template.role).collect();
     let rule_triggers = rule_triggers(&setup);
+    let group = group(&setup);
     World {
         s: Arc::new(Statics {
             setup,
+            group,
             latency,
             abilities,
             gcd,

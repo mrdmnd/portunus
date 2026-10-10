@@ -101,6 +101,7 @@ fn spell(id: SpellId, cast: CastKind, gcd: Option<GcdDef>, effects: Vec<Effect>)
         rolls_on_impact: false,
         castable_while_moving: false,
         usable_while_casting: false,
+        weapon: None,
         effects,
     }
 }
@@ -160,7 +161,9 @@ struct Fixture {
 
 fn fixture() -> Fixture {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data");
-    let data: GameData = GameDataSource::load(&RonFile::new(dir.join("game.ron"))).unwrap();
+    let mut data: GameData = GameDataSource::load(&RonFile::new(dir.join("game.ron"))).unwrap();
+    // No group buffs: the pet tests' Bloodlust is their own.
+    data.classes.clear();
     let mut enemies: EnemyData =
         EnemyDataSource::load(&RonFile::new(dir.join("enemies.ron"))).unwrap();
     // The fight lengths below assume a 400k dummy.
@@ -169,7 +172,8 @@ fn fixture() -> Fixture {
     }
     let loadout: Loadout = read_ron(&dir.join("loadouts/elemental.ron")).unwrap();
     let template = Compiler.compile(&data, &loadout).unwrap();
-    let spec: ScenarioSpec = read_ron(&dir.join("scenarios/target_dummy.ron")).unwrap();
+    let mut spec: ScenarioSpec = read_ron(&dir.join("scenarios/target_dummy.ron")).unwrap();
+    spec.pulls[0].health = Dist::Fixed(1.0);
     let enemies = Arc::new(enemies);
     let sampler = Sampler::new(spec, Arc::clone(&enemies)).unwrap();
     Fixture {
@@ -962,6 +966,7 @@ fn owner_modifiers_follow_the_pet_kind() {
         event_amount: None,
         scale: 1.0,
         depth: 0,
+        hand: None,
     };
     let totem_want = m.math().outgoing(
         state,

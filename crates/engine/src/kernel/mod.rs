@@ -30,7 +30,8 @@ mod world;
 
 use std::sync::Arc;
 
-use portunus_core::{ActorId, Seat, SimTime, SpellId};
+use portunus_core::{ActorId, Seat, SimDuration, SimTime, SpellId};
+use portunus_gamedata::spec::MELEE_RANGE;
 use portunus_scenario::resolved::Segment;
 
 use crate::choice::{Choice, MoveGoal, Wait};
@@ -307,7 +308,7 @@ impl<M: Mechanics> Kernel<M> {
                 .template
                 .passive_auras
                 .iter()
-                .chain(&s.setup.externals.party_auras);
+                .chain(&s.group.party_auras);
             for &aura in auras {
                 self.world.apply_aura(AuraApplication {
                     aura: AuraRef {
@@ -332,7 +333,6 @@ impl<M: Mechanics> Kernel<M> {
         let s = Arc::clone(&self.world.s);
         let now = self.world.now;
         let first = self.world.actors.len();
-        let seats = self.world.seats.len();
         for (index, spawn) in c.spawns.iter().enumerate() {
             let def = s.setup.enemies.enemies.get(&spawn.enemy);
             let phase = def.and_then(|e| e.initial_phase.clone());
@@ -346,7 +346,18 @@ impl<M: Mechanics> Kernel<M> {
                 1.0,
             );
             enemy.phase = phase;
-            enemy.distances = vec![spawn.distance; seats];
+            enemy.distances = s
+                .setup
+                .seats
+                .iter()
+                .map(|seat| {
+                    if seat.template.melee {
+                        spawn.distance.min(MELEE_RANGE)
+                    } else {
+                        spawn.distance
+                    }
+                })
+                .collect();
             enemy.rules = vec![RuleState::default(); def.map_or(0, |d| d.rules.len())];
             self.world.actors.push(enemy);
         }
@@ -378,6 +389,7 @@ impl<M: Mechanics> Kernel<M> {
         });
         self.world.record(TraceEvent::CombatStart { combat });
         self.call(|m, io| m.combat_started(io, combat));
+        self.pull_auras();
         for i in 0..self.world.seats.len() {
             let seat = Seat(i as u8);
             let st = self.world.seat_mut(seat);
@@ -388,6 +400,36 @@ impl<M: Mechanics> Kernel<M> {
                 .notify(seat, WakeReason::CombatStart, true, None, now);
         }
         self.eval_triggers();
+    }
+
+    /// Grant the group's on-pull auras to every seat not locked out.
+    fn pull_auras(&mut self) {
+        let s = Arc::clone(&self.world.s);
+        for i in 0..s.setup.seats.len() {
+            let me = self.world.seat_actor(Seat(i as u8));
+            for p in &s.group.on_pull {
+                let locked = p.lockout.is_some_and(|l| {
+                    self.world
+                        .actor_ref(me)
+                        .is_some_and(|a| a.auras.iter().any(|x| x.aura == l))
+                });
+                if locked {
+                    continue;
+                }
+                for aura in std::iter::once(p.aura).chain(p.lockout) {
+                    self.world.apply_aura(AuraApplication {
+                        aura: AuraRef {
+                            holder: me,
+                            aura,
+                            source: me,
+                        },
+                        stacks: 1,
+                        duration: None,
+                    });
+                }
+            }
+        }
+        self.drain();
     }
 
     fn prepull_open(&mut self) {
@@ -480,6 +522,7 @@ impl<M: Mechanics> Kernel<M> {
             let seat = Seat(i as u8);
             let me = self.world.seat_actor(seat);
             self.world.cancel_cast(me, CastEndReason::Interrupted);
+            self.world.stop_swings(me);
             self.world.clear_movement(seat);
             let st = self.world.seat_mut(seat);
             if st.phase != SeatPhase::Dead {
@@ -487,6 +530,7 @@ impl<M: Mechanics> Kernel<M> {
             }
             st.wait = None;
             st.armed = None;
+            st.lagged = None;
             st.gen += 1;
         }
         for pet in self.world.all_pets() {
@@ -748,6 +792,7 @@ impl<M: Mechanics> Kernel<M> {
             Event::RuleFire { enemy, rule, gen } => self.fire_rule(enemy, rule, gen),
             Event::EnemyCastEnd { enemy, seq } => self.enemy_cast_end(enemy, seq),
             Event::MovementEnd { seat, gen } => self.world.movement_end(seat, gen),
+            Event::LaggedCast { seat } => self.lagged_cast(seat),
             Event::DemandDeadline { seat, id } => self.demand_deadline(seat, id),
             Event::Recheck { .. } | Event::Deliver(_) => {
                 let mut ignored = Vec::new();
@@ -787,6 +832,10 @@ impl<M: Mechanics> Kernel<M> {
         match event {
             Event::Recheck { seat, gen } => self.recheck(seat, gen),
             Event::Deliver(w) => {
+                if let Some((_, at)) = self.world.seats[usize::from(w.seat.0)].lagged {
+                    self.world.queue.push(at, Event::Deliver(w));
+                    return;
+                }
                 self.world.perceive(w.seat, w.perception);
                 let st = &self.world.seats[usize::from(w.seat.0)];
                 if matches!(st.phase, SeatPhase::Idle | SeatPhase::Dead)
@@ -826,7 +875,10 @@ impl<M: Mechanics> Kernel<M> {
         if wakes.is_empty() {
             return;
         }
-        wakes.sort_by_key(|w| w.seat);
+        // A seat whose lagged cast just failed hears that over anything else;
+        // otherwise a wake it was expecting wins, since it was ready to act
+        // then anyway (Bloodlust landing as the pull starts).
+        wakes.sort_by_key(|w| (w.seat, w.reason != WakeReason::CastFailed, !w.anticipated));
         wakes.dedup_by_key(|w| w.seat);
         for w in &wakes {
             let casting = self
@@ -858,6 +910,66 @@ impl<M: Mechanics> Kernel<M> {
         });
     }
 
+    /// Start a checked cast and settle the seat's phase around it.
+    fn apply_cast(&mut self, seat: Seat, choice: &Choice) {
+        let Choice::Cast {
+            ability, target, ..
+        } = *choice
+        else {
+            return;
+        };
+        let s = Arc::clone(&self.world.s);
+        let me = self.world.seat_actor(seat);
+        let spell = self.world.resolved(seat, ability);
+        let Some(def) = s.setup.data.spells.get(&spell) else {
+            return;
+        };
+        let Ok(target) = self.world.resolve_target(seat, def, target) else {
+            return;
+        };
+        self.start_cast(seat, ability, target);
+        let casting = self
+            .world
+            .actor_ref(me)
+            .is_some_and(|a| a.casting.is_some());
+        let off_gcd = s.abilities[usize::from(seat.0)]
+            .iter()
+            .any(|&a| self.readiness(seat, a).0 == Readiness::Now);
+        let st = self.world.seat_mut(seat);
+        st.phase = if casting {
+            SeatPhase::Committed
+        } else if off_gcd {
+            SeatPhase::Deciding
+        } else {
+            SeatPhase::Locked
+        };
+        if off_gcd {
+            self.world.deliver_now(seat, WakeReason::OffGcdReady);
+        }
+    }
+
+    /// A lagged cast's lag ran out: start it if it is still legal, else
+    /// ask the seat again.
+    fn lagged_cast(&mut self, seat: Seat) {
+        let now = self.world.now;
+        let st = self.world.seat_mut(seat);
+        let Some((choice, _)) = st.lagged.take_if(|(_, at)| *at == now) else {
+            return;
+        };
+        if self.check(seat, &choice).is_ok() {
+            self.apply_cast(seat, &choice);
+        } else {
+            let casting = self
+                .world
+                .actor_ref(self.world.seat_actor(seat))
+                .is_some_and(|a| a.casting.is_some());
+            if !casting {
+                self.world.seat_mut(seat).phase = SeatPhase::Deciding;
+            }
+            self.world.deliver_now(seat, WakeReason::CastFailed);
+        }
+    }
+
     fn apply(&mut self, req: DecisionRequest, choice: Choice) {
         let seat = req.seat;
         if self.check(seat, &choice).is_err() {
@@ -871,35 +983,22 @@ impl<M: Mechanics> Kernel<M> {
             choice: choice.clone(),
         });
         match choice {
-            Choice::Cast {
-                ability, target, ..
-            } => {
-                let s = Arc::clone(&self.world.s);
-                let spell = self.world.resolved(seat, ability);
-                let Some(def) = s.setup.data.spells.get(&spell) else {
-                    return;
-                };
-                let Ok(target) = self.world.resolve_target(seat, def, target) else {
-                    return;
-                };
-                self.start_cast(seat, ability, target);
-                let casting = self
-                    .world
-                    .actor_ref(me)
-                    .is_some_and(|a| a.casting.is_some());
-                let off_gcd = s.abilities[usize::from(seat.0)]
-                    .iter()
-                    .any(|&a| self.readiness(seat, a).0 == Readiness::Now);
-                let st = self.world.seat_mut(seat);
-                st.phase = if casting {
-                    SeatPhase::Committed
-                } else if off_gcd {
-                    SeatPhase::Deciding
+            Choice::Cast { .. } => {
+                let lag = if req.anticipated {
+                    SimDuration::ZERO
                 } else {
-                    SeatPhase::Locked
+                    self.world.draw_cast_lag(seat)
                 };
-                if off_gcd {
-                    self.world.deliver_now(seat, WakeReason::OffGcdReady);
+                if lag == SimDuration::ZERO {
+                    self.apply_cast(seat, &choice);
+                } else {
+                    let at = now + lag;
+                    let st = self.world.seat_mut(seat);
+                    st.lagged = Some((choice, at));
+                    if st.phase != SeatPhase::Committed {
+                        st.phase = SeatPhase::Locked;
+                    }
+                    self.world.queue.push(at, Event::LaggedCast { seat });
                 }
             }
             Choice::Wait(wait) => {
@@ -944,6 +1043,7 @@ impl<M: Mechanics> Kernel<M> {
                 if let Some(a) = self.world.actor_mut(me) {
                     a.target = Some(id);
                 }
+                self.world.start_swings(me);
                 for pet in self.world.pets[usize::from(seat.0)].clone() {
                     self.world.wake_pet(pet);
                 }
@@ -1059,7 +1159,7 @@ impl<M: Mechanics> Engine for Kernel<M> {
                 .template
                 .passive_auras
                 .iter()
-                .chain(&s.setup.externals.party_auras);
+                .chain(&s.group.party_auras);
             for &aura in auras {
                 kernel.world.apply_aura(AuraApplication {
                     aura: AuraRef {

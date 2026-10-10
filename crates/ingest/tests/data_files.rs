@@ -109,7 +109,9 @@ fn dummy_scenario_samples_deterministically() {
         panic!("expected one spawn");
     };
     assert_eq!(dummy.label.0, "target_dummy#1");
-    assert_eq!(dummy.max_health, 1_000_000);
+    // A million, give or take a fifth from run to run.
+    assert!((800_000..=1_200_000).contains(&dummy.max_health));
+    assert_ne!(dummy.max_health, 1_000_000);
 }
 
 #[test]

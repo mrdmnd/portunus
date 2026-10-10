@@ -7,6 +7,8 @@
             travel_in: fixed(10000),
             prepull: 3000,
             timeout: 600000,
+            // Fixed-health fight, +-20% per run (SimC's vary_combat_length).
+            health: jitter(base: 1.0, jitter: 0.2),
             waves: [(mobs: [("mechanics_dummy", 1)], engage: now)],
         ),
     ],

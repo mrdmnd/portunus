@@ -22,6 +22,7 @@ use portunus_core::{ActorId, HookKey, Seat, SpecId, SpellId};
 use portunus_engine::mechanics::TimerEvent;
 use portunus_engine::{AuraRef, EngineIo, Readiness, StateView};
 use portunus_gamedata::effect::{Coefficient, Effect};
+use portunus_gamedata::item::WeaponHand;
 use portunus_gamedata::stats::SchoolMask;
 use portunus_gamedata::GameData;
 
@@ -46,6 +47,9 @@ pub struct EffectCtx {
     /// Multiplier on every amount: partial ticks, AoE falloff, and
     /// `SpendScaling`.
     pub scale: f64,
+    /// The weapon in play: the swing's or strike's being run or reacted
+    /// to. What `Coefficient::WeaponSpeed` and `Effect::ExtraSwing` use.
+    pub hand: Option<WeaponHand>,
     /// How many listeners deep this run is. Effects run by a listener don't
     /// trigger listeners themselves, so procs can't feed each other.
     pub depth: u8,

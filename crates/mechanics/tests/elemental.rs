@@ -208,6 +208,7 @@ fn crit_chance_follows_flame_shock() {
         event_amount: None,
         scale: 1.0,
         depth: 0,
+        hand: None,
     };
     let math = mechanics.math();
     assert!(close(

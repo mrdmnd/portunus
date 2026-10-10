@@ -10,9 +10,9 @@ use portunus_engine::mechanics::{
 use portunus_engine::state::Projectile;
 use portunus_engine::{EngineIo, Mechanics, Readiness, RunSetup, StateView};
 use portunus_gamedata::aura::AuraDef;
-use portunus_gamedata::effect::{Coefficient, Effect, EffectTarget, ModKind};
+use portunus_gamedata::effect::{Effect, ModKind};
 use portunus_gamedata::spell::SpellDef;
-use portunus_gamedata::stats::{SchoolMask, SpendScaling, Stat};
+use portunus_gamedata::stats::{SpendScaling, Stat};
 
 use crate::interp::{Happening, Interpreter, Occurrence};
 use crate::math::{owner_seat, player_seat, Formulas};
@@ -69,6 +69,7 @@ impl PartyMechanics {
             event_amount: None,
             scale: self.spend_scale(cast),
             depth: 0,
+            hand: None,
         }
     }
 
@@ -202,33 +203,8 @@ impl Mechanics for PartyMechanics {
 
     /// A white hit at the swing's target, then `Swing` listeners.
     fn swing(&self, io: &mut dyn EngineIo, swing: &SwingEvent) {
-        let raw = self
-            .math()
-            .weapon_damage(io.view(), swing.actor, swing.hand);
-        let ctx = EffectCtx {
-            caster: swing.actor,
-            target: Some(swing.target),
-            spell: None,
-            aura: None,
-            event_amount: None,
-            scale: 1.0,
-            depth: 0,
-        };
-        self.interp.damage(
-            io,
-            &ctx,
-            Coefficient::Flat(raw),
-            SchoolMask::PHYSICAL,
-            EffectTarget::Target,
-            None,
-        );
-        let swung = Occurrence {
-            what: Happening::Swing(swing.hand),
-            target: Some(swing.target),
-            amount: None,
-            depth: 0,
-        };
-        self.interp.fire(io, swing.actor, swung);
+        self.interp
+            .white_hit(io, swing.actor, swing.hand, swing.target, 0);
     }
 
     fn periodic_tick(&self, io: &mut dyn EngineIo, tick: &TickEvent) {
@@ -245,6 +221,7 @@ impl Mechanics for PartyMechanics {
             event_amount: None,
             scale: tick.fraction,
             depth: 0,
+            hand: None,
         };
         self.interp.run(io, &ctx, &periodic.effects);
         let ticked = Occurrence {
@@ -286,6 +263,7 @@ impl Mechanics for PartyMechanics {
                 event_amount: None,
                 scale: 1.0,
                 depth: 0,
+                hand: None,
             };
             self.interp.run(io, &ctx, &def.on_expire);
         }
@@ -359,6 +337,7 @@ impl Mechanics for PartyMechanics {
             event_amount: None,
             scale: 1.0,
             depth: 0,
+            hand: None,
         };
         self.interp.run(io, &ctx, effects);
     }

@@ -54,6 +54,8 @@ pub struct TalentSelection(pub BTreeMap<TalentId, u8>);
 pub struct ActorTemplate {
     pub spec: SpecId,
     pub role: Role,
+    /// Fights in melee range (the spec's `melee`).
+    pub melee: bool,
     pub hero_tree: Option<HeroTreeId>,
     pub stats: StatBlock,
     pub derived: DerivedStats,

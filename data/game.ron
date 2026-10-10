@@ -88,6 +88,28 @@
             ],
         ),
     },
+    // What each class brings to its group. Every Bloodlust-style spell
+    // (Heroism, Time Warp, Primal Rage, Fury of the Aspects) is Bloodlust
+    // here, cast at each pull Sated allows, until a kit casts it itself.
+    // Power Word: Fortitude is missing: seats' health is fixed at setup.
+    classes: {
+        "Shaman": (
+            name: "Shaman",
+            group_auras: [462854],
+            on_pull: [(aura: 2825, lockout: Some(57724))],
+        ),
+        "Mage": (
+            name: "Mage",
+            group_auras: [1459],
+            on_pull: [(aura: 2825, lockout: Some(57724))],
+        ),
+        "Hunter": (name: "Hunter", on_pull: [(aura: 2825, lockout: Some(57724))]),
+        "Evoker": (name: "Evoker", on_pull: [(aura: 2825, lockout: Some(57724))]),
+        "Warrior": (name: "Warrior", group_auras: [6673]),
+        "Druid": (name: "Druid", group_auras: [1126]),
+        "Monk": (name: "Monk", enemy_auras: [113746]),
+        "Demon Hunter": (name: "Demon Hunter", enemy_auras: [1490]),
+    },
     spells: {
         188196: (
             id: 188196,
@@ -690,6 +712,63 @@
         ),
     },
     auras: {
+        // Raid buffs and debuffs a full group brings, for run externals.
+        1459: (
+            id: 1459,
+            name: "Arcane Intellect",
+            duration: None,
+            modifiers: [(scope: all, kind: stat_pct(intellect), value: 3.0)],
+        ),
+        6673: (
+            id: 6673,
+            name: "Battle Shout",
+            duration: None,
+            modifiers: [(scope: all, kind: attack_power_pct, value: 5.0)],
+        ),
+        1126: (
+            id: 1126,
+            name: "Mark of the Wild",
+            duration: None,
+            modifiers: [(scope: all, kind: rated_pct(versatility), value: 3.0)],
+        ),
+        462854: (
+            id: 462854,
+            name: "Skyfury",
+            duration: None,
+            modifiers: [(scope: all, kind: rated_pct(mastery), value: 2.0)],
+            listeners: [
+                (
+                    on: swing(hand: Some(main_hand)),
+                    chance: flat(0.2),
+                    effects: [extra_swing],
+                ),
+            ],
+        ),
+        // Enemy debuffs: physical and magic damage taken.
+        113746: (
+            id: 113746,
+            name: "Mystic Touch",
+            duration: None,
+            modifiers: [(scope: school(1), kind: damage_taken_pct, value: 5.0)],
+        ),
+        1490: (
+            id: 1490,
+            name: "Chaos Brand",
+            duration: None,
+            modifiers: [(scope: school(126), kind: damage_taken_pct, value: 3.0)],
+        ),
+        2825: (
+            id: 2825,
+            name: "Bloodlust",
+            duration: Some(40000),
+            modifiers: [(scope: all, kind: haste_pct, value: 30.0)],
+            blocked_by: Some(57724),
+        ),
+        57724: (
+            id: 57724,
+            name: "Sated",
+            duration: Some(600000),
+        ),
         // Enemy debuffs, made up for the dummies in enemies.ron.
         910001: (
             id: 910001,

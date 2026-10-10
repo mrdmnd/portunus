@@ -153,9 +153,11 @@ fn thunderstrike_ward_calls_two_strikes_on_a_share_of_casts() {
                 _ => {}
             }
         }
-        // Two casts can complete in the same moment.
+        // Two casts can complete in the same moment, and the first strike
+        // of the last pair can kill.
+        let last = strikes.pop_last();
         assert!(strikes.values().all(|&n| n % 2 == 0), "{strikes:?}");
-        procs += strikes.values().sum::<usize>() / 2;
+        procs += strikes.values().sum::<usize>() / 2 + last.map_or(0, |(_, n)| n.div_ceil(2));
     }
     let rate = procs as f64 / f64::from(eligible);
     assert!((0.2..0.4).contains(&rate), "{procs} of {eligible}");

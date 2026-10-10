@@ -62,6 +62,16 @@ pub enum Effect {
     },
     /// Positive grants, negative drains (costs are gates, not effects).
     Resource(ResourceAmount),
+    /// A grant whose amount scales, e.g. rage per second of weapon speed
+    /// on each auto-attack.
+    GainResource {
+        kind: ResourceKind,
+        amount: Coefficient,
+    },
+    /// The caster swings again at once with the weapon in play (the main
+    /// hand if none): a full auto-attack whose own listeners don't fire
+    /// (Skyfury).
+    ExtraSwing,
     /// `duration` (or the pet's own, if `None`) is ignored for
     /// [`crate::pet::PetKind::Pet`].
     Summon {
@@ -153,6 +163,9 @@ pub enum Coefficient {
     EventAmount(f64),
     /// A share of the current value of the valued aura running the effect.
     AuraValue(f64),
+    /// Per second of the unhasted speed of the weapon in play: the swing's
+    /// or strike's that triggered the effect, else the main hand.
+    WeaponSpeed(f64),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -291,6 +304,9 @@ pub enum ModKind {
     ResourceMax(ResourceKind),
     StatPct(Stat),
     StatFlat(Stat),
+    /// A seat's attack power, after it is derived from primary stats
+    /// (Battle Shout); `scope` is unused.
+    AttackPowerPct,
     /// Points added to a rated secondary after rating conversion. Mastery
     /// points are scaled by the spec's mastery coefficient, as in game
     /// (Storm Swell's "Mastery +5").
@@ -354,8 +370,13 @@ pub enum ListenFor {
         crit_only: bool,
     },
     DamageTaken,
-    /// An auto-attack landed (poisons, Windfury). `None` matches both hands.
+    /// An auto-attack landed (rage, Windfury). `None` matches both hands.
     Swing {
+        hand: Option<WeaponHand>,
+    },
+    /// A melee hit landed: an auto-attack, or a hit from a spell with a
+    /// `weapon` (poisons). `None` matches both hands.
+    WeaponHit {
         hand: Option<WeaponHand>,
     },
     /// Each tick of this aura, from any holder, sourced by the listener's

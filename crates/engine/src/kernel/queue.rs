@@ -100,6 +100,11 @@ pub(crate) enum Event {
         seat: Seat,
         id: u32,
     },
+    /// A seat's lagged cast is due to start, if it is still pending for
+    /// this time.
+    LaggedCast {
+        seat: Seat,
+    },
     /// An armed seat's predicted wake time arrived; check it still holds.
     Recheck {
         seat: Seat,
@@ -128,7 +133,8 @@ impl Event {
             Event::PrepullOpen
             | Event::CombatTimeout { .. }
             | Event::CooldownReady { .. }
-            | Event::MovementEnd { .. } => EventClass::Legality,
+            | Event::MovementEnd { .. }
+            | Event::LaggedCast { .. } => EventClass::Legality,
             Event::Recheck { .. } | Event::Deliver(_) => EventClass::Decisions,
         }
     }

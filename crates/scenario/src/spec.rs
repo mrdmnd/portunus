@@ -26,7 +26,16 @@ pub struct PullSpec {
     pub prepull: SimDuration,
     /// Wipe deadline, relative to combat start.
     pub timeout: SimDuration,
+    /// Multiplies every spawn's health, drawn once per pull and run: the
+    /// fight ends on health, and its length varies like SimC's
+    /// `vary_combat_length` (e.g. `jitter(base: 1.0, jitter: 0.2)`).
+    #[serde(default = "full_health")]
+    pub health: Dist<f64>,
     pub waves: Vec<WaveSpec>,
+}
+
+fn full_health() -> Dist<f64> {
+    Dist::Fixed(1.0)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -4,6 +4,7 @@ use portunus_core::{SimDuration, SpellId};
 use serde::{Deserialize, Serialize};
 
 use crate::effect::Effect;
+use crate::item::WeaponHand;
 use crate::stats::{Cost, SchoolMask};
 
 /// `gcd` (`None` is off the GCD) and `hostile` must always be written out;
@@ -46,6 +47,10 @@ pub struct SpellDef {
     /// Usable while another cast is in progress (off-GCD, off-cast).
     #[serde(default)]
     pub usable_while_casting: bool,
+    /// A strike with this weapon: its hits are melee hits, which
+    /// `WeaponHit` listeners (poisons) react to.
+    #[serde(default)]
+    pub weapon: Option<WeaponHand>,
     #[serde(default)]
     pub effects: Vec<Effect>,
 }
@@ -143,6 +148,7 @@ mod tests {
             rolls_on_impact: false,
             castable_while_moving: false,
             usable_while_casting: false,
+            weapon: None,
             effects: Vec::new(),
         }
     }

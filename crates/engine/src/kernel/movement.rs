@@ -239,6 +239,8 @@ impl World {
         if ends < SimTime(u32::MAX / 2) {
             self.queue.push(ends, Event::MovementEnd { seat, gen });
         }
+        let me = self.seat_actor(seat);
+        self.start_swings(me);
     }
 
     fn finish_movement(&mut self, seat: Seat) {
@@ -251,6 +253,7 @@ impl World {
         self.record(TraceEvent::MovementEnd { actor });
         let now = self.now;
         self.notify(seat, WakeReason::MovementEnd, true, None, now);
+        self.start_swings(actor);
     }
 
     pub(crate) fn movement_end(&mut self, seat: Seat, gen: u32) {

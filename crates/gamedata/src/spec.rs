@@ -6,6 +6,9 @@ use serde::{Deserialize, Serialize};
 use crate::stats::{ResourceDef, Stat, StatBlock};
 use crate::talent::TalentTree;
 
+/// Farthest a melee swing or strike reaches, in yards.
+pub const MELEE_RANGE: f64 = 5.0;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
@@ -20,6 +23,9 @@ pub struct SpecDef {
     pub class: String,
     pub name: String,
     pub role: Role,
+    /// Fights in melee: starts each pull [`MELEE_RANGE`] from its enemies.
+    #[serde(default)]
+    pub melee: bool,
     pub primary_stat: Stat,
     pub base_stats: StatBlock,
     /// Mastery before any rating, in percent.

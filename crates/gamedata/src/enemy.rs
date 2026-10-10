@@ -16,8 +16,8 @@ pub struct EnemyDef {
     pub key: EnemyKey,
     pub name: String,
     pub kind: EnemyKind,
-    /// Maximum health. Fixed: in the game it depends only on the key level,
-    /// never on chance.
+    /// Maximum health. In the game it depends only on the key level; a
+    /// scenario's pull may scale it to vary how long the fight lasts.
     pub health: u64,
     /// Enemy-forces contribution.
     pub forces: u32,

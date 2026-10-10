@@ -35,6 +35,10 @@ impl ScenarioSampler for Sampler {
                 issues.push(ScenarioIssue::DuplicatePull(pull.name.clone()));
             }
             check_travel(pull, &mut issues);
+            let (lo, hi) = pull.health.bounds();
+            if !(lo > 0.0 && lo <= hi && hi.is_finite()) {
+                issues.push(ScenarioIssue::InvalidHealth(pull.name.clone()));
+            }
             let spawns = resolve_pull(pull, &enemies, &mut issues);
             forces += spawns
                 .iter()
@@ -77,6 +81,9 @@ impl ScenarioSampler for Sampler {
                 duration,
                 prepull: pull.prepull.min(duration),
             });
+            let health = pull
+                .health
+                .sample(seed, rng::domain(Purpose::EnemyHealth, &[name]), 0);
             let spawns = spawns
                 .iter()
                 .map(|s| {
@@ -84,7 +91,7 @@ impl ScenarioSampler for Sampler {
                     ResolvedSpawn {
                         label: s.label.clone(),
                         enemy: s.enemy.clone(),
-                        max_health: def.health,
+                        max_health: (def.health as f64 * health).round().max(1.0) as u64,
                         forces: def.forces,
                         engage: s.engage.clone(),
                         distance: s.distance,
@@ -323,6 +330,7 @@ mod tests {
             },
             prepull: SimDuration(2_000),
             timeout: SimDuration(300_000),
+            health: Dist::Fixed(1.0),
             waves,
         }
     }
@@ -391,6 +399,47 @@ mod tests {
         };
         for spawn in &combat.spawns {
             assert_eq!(spawn.max_health, 1000);
+        }
+    }
+
+    #[test]
+    fn health_varies_by_run_and_pull_but_not_by_spawn() {
+        let mut a = pull("a", vec![wave(3, Trigger::Now)]);
+        a.health = Dist::Uniform { lo: 0.8, hi: 1.2 };
+        let b = pull("b", vec![wave(1, Trigger::Now)]);
+        let sampler = Sampler::new(spec(vec![a, b]), enemies()).unwrap();
+        let mut seen = BTreeSet::new();
+        for seed in 0..50 {
+            let run = sampler.sample(Seed(seed));
+            let Segment::Combat(first) = &run.segments[1] else {
+                panic!("expected combat");
+            };
+            let health = first.spawns[0].max_health;
+            assert!((800..=1200).contains(&health), "{health}");
+            assert!(first.spawns.iter().all(|s| s.max_health == health));
+            seen.insert(health);
+            let Segment::Combat(second) = &run.segments[3] else {
+                panic!("expected combat");
+            };
+            assert_eq!(second.spawns[0].max_health, 1000);
+        }
+        assert!(seen.len() > 40, "{} distinct", seen.len());
+    }
+
+    #[test]
+    fn health_multipliers_must_be_positive() {
+        for health in [
+            Dist::Fixed(0.0),
+            Dist::Uniform { lo: -0.5, hi: 1.0 },
+            Dist::Uniform { lo: 1.2, hi: 0.8 },
+            Dist::Fixed(f64::NAN),
+        ] {
+            let mut p = pull("a", vec![wave(1, Trigger::Now)]);
+            p.health = health;
+            assert_eq!(
+                issues(spec(vec![p])),
+                vec![ScenarioIssue::InvalidHealth(PullName("a".into()))]
+            );
         }
     }
 

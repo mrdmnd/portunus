@@ -68,6 +68,15 @@ pub struct StatCurves {
     pub health_per_stamina: f64,
     /// Physical damage taken is reduced by `armor / (armor + armor_constant)`.
     pub armor_constant: f64,
+    /// Auto-attacks of an actor wielding two weapons miss this often, in
+    /// percent. Nothing else misses, glances, or is dodged or parried:
+    /// players hit enemies from behind.
+    #[serde(default = "dual_wield_miss_pct")]
+    pub dual_wield_miss_pct: f64,
+}
+
+fn dual_wield_miss_pct() -> f64 {
+    19.0
 }
 
 /// Bitmask over magic schools; multi-school spells set several bits.

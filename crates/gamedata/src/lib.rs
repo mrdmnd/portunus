@@ -13,6 +13,7 @@
 //! [`portunus_core::HookKey`], implemented in code by a spec kit.
 
 pub mod aura;
+pub mod class;
 pub mod effect;
 pub mod enemy;
 pub mod item;
@@ -30,6 +31,7 @@ use portunus_core::{
 use serde::{Deserialize, Serialize};
 
 pub use aura::AuraDef;
+pub use class::ClassDef;
 pub use enemy::EnemyDef;
 pub use item::{ItemDef, ItemSetDef};
 pub use pet::PetDef;
@@ -50,6 +52,9 @@ pub struct GameBuild {
 pub struct GameData {
     pub build: GameBuild,
     pub specs: BTreeMap<SpecId, SpecDef>,
+    /// By name. A class without an entry brings nothing to its group.
+    #[serde(default)]
+    pub classes: BTreeMap<String, ClassDef>,
     pub spells: BTreeMap<SpellId, SpellDef>,
     pub auras: BTreeMap<AuraId, AuraDef>,
     pub items: BTreeMap<ItemId, ItemDef>,

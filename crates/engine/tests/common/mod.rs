@@ -17,6 +17,7 @@ use portunus_engine::{
     Readiness, RunSetup, SeatSetup, StateView, Step, TargetSel, Wait,
 };
 use portunus_gamedata::effect::{Coefficient, Effect, EffectTarget};
+use portunus_gamedata::stats::SchoolMask;
 use portunus_gamedata::{EnemyData, GameData};
 use portunus_ingest::{read_ron, EnemyDataSource, GameDataSource, RonFile};
 use portunus_loadout::{ActorTemplate, Compiler, Loadout, LoadoutCompiler};
@@ -192,7 +193,17 @@ impl Mechanics for Stub {
     ) {
         land(io, cast);
     }
-    fn swing(&self, _io: &mut dyn EngineIo, _swing: &SwingEvent) {}
+    /// One point of untyped damage, so swings show in the trace.
+    fn swing(&self, io: &mut dyn EngineIo, swing: &SwingEvent) {
+        io.apply_damage(DamageEvent {
+            source: swing.actor,
+            target: swing.target,
+            amount: 1,
+            school: SchoolMask::PHYSICAL,
+            spell: None,
+            crit: false,
+        });
+    }
     fn periodic_tick(&self, io: &mut dyn EngineIo, tick: &TickEvent) {
         let Some(p) = io.data().auras[&tick.aura.aura].periodic.clone() else {
             return;
