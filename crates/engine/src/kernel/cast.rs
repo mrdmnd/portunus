@@ -11,7 +11,7 @@ use crate::mask::Readiness;
 use crate::step::WakeReason;
 
 use super::queue::Event;
-use super::world::{millis_ceil, Actor, Cooldown, Seg, World};
+use super::world::{millis_ceil, Actor, Cooldown, CooldownKey, Seg, World};
 
 /// The latest of several "not before" constraints.
 pub(crate) struct Need {
@@ -64,6 +64,29 @@ impl Need {
 }
 
 impl World {
+    /// The cooldown `spell` runs on.
+    pub(crate) fn cooldown_key(&self, spell: SpellId) -> CooldownKey {
+        self.s
+            .setup
+            .data
+            .spells
+            .get(&spell)
+            .and_then(|d| d.cooldown.as_ref()?.category)
+            .map_or(CooldownKey::Spell(spell), CooldownKey::Category)
+    }
+
+    /// The seat's abilities on cooldown `key`, for wakes about it.
+    fn abilities_on(&self, seat: Seat, key: CooldownKey, spell: SpellId) -> Vec<SpellId> {
+        match key {
+            CooldownKey::Spell(_) => vec![spell],
+            CooldownKey::Category(_) => self.s.abilities[usize::from(seat.0)]
+                .iter()
+                .copied()
+                .filter(|&a| self.cooldown_key(self.resolved(seat, a)) == key)
+                .collect(),
+        }
+    }
+
     /// A cooldown that has never been used: full, at current modifiers.
     pub(crate) fn fresh_cooldown(&self, actor: ActorId, spell: SpellId) -> Option<Cooldown> {
         let def = self.s.setup.data.spells.get(&spell)?.cooldown.as_ref()?;
@@ -91,7 +114,7 @@ impl World {
     /// When the next charge returns, if the spell has none now.
     pub(crate) fn empty_until(&self, actor: ActorId, spell: SpellId) -> Option<SimTime> {
         let a = self.actor_ref(actor)?;
-        let cd = a.cooldowns.get(&spell)?;
+        let cd = a.cooldowns.get(&self.cooldown_key(spell))?;
         if cd.charges > 0 {
             return None;
         }
@@ -100,46 +123,48 @@ impl World {
         cd.ready_at(a.haste)
     }
 
-    pub(crate) fn schedule_cooldown(&mut self, actor: ActorId, spell: SpellId) {
+    pub(crate) fn schedule_cooldown(&mut self, actor: ActorId, key: CooldownKey) {
         let Some(a) = self.actor_mut(actor) else {
             return;
         };
         let haste = a.haste;
-        let Some(cd) = a.cooldowns.get_mut(&spell) else {
+        let Some(cd) = a.cooldowns.get_mut(&key) else {
             return;
         };
         cd.gen += 1;
         let gen = cd.gen;
         if let Some(t) = cd.ready_at(haste) {
-            self.queue
-                .push(t, Event::CooldownReady { actor, spell, gen });
+            self.queue.push(t, Event::CooldownReady { actor, key, gen });
         }
     }
 
+    /// Spend a charge of `spell`'s cooldown, shared with its category if
+    /// it has one (a full one starts at this spell's modifiers).
     pub(crate) fn consume_charge(&mut self, actor: ActorId, spell: SpellId, def: &CooldownDef) {
         let now = self.now;
+        let key = self.cooldown_key(spell);
         let fresh = self.new_cooldown(actor, spell, def);
         let Some(a) = self.actor_mut(actor) else {
             return;
         };
         let haste = a.haste;
-        let cd = a.cooldowns.entry(spell).or_insert(fresh);
+        let cd = a.cooldowns.entry(key).or_insert(fresh);
         cd.settle(now, haste);
         if cd.charges == cd.max {
             cd.progress = 0.0;
             cd.base = fresh.base;
         }
         cd.charges = cd.charges.saturating_sub(1);
-        self.schedule_cooldown(actor, spell);
+        self.schedule_cooldown(actor, key);
     }
 
-    pub(crate) fn cooldown_ready(&mut self, actor: ActorId, spell: SpellId, gen: u32) {
+    pub(crate) fn cooldown_ready(&mut self, actor: ActorId, key: CooldownKey, gen: u32) {
         let now = self.now;
         let Some(a) = self.actor_mut(actor) else {
             return;
         };
         let haste = a.haste;
-        let Some(cd) = a.cooldowns.get_mut(&spell) else {
+        let Some(cd) = a.cooldowns.get_mut(&key) else {
             return;
         };
         if cd.gen != gen || cd.charges >= cd.max {
@@ -152,7 +177,7 @@ impl World {
         } else {
             (cd.progress - cd.base).max(0.0)
         };
-        self.schedule_cooldown(actor, spell);
+        self.schedule_cooldown(actor, key);
         self.schedule_pet_act(actor, now);
     }
 
@@ -163,11 +188,12 @@ impl World {
         change: CooldownChange,
     ) {
         let now = self.now;
+        let key = self.cooldown_key(spell);
         let Some(a) = self.actor_mut(actor) else {
             return;
         };
         let haste = a.haste;
-        let Some(cd) = a.cooldowns.get_mut(&spell) else {
+        let Some(cd) = a.cooldowns.get_mut(&key) else {
             return;
         };
         cd.settle(now, haste);
@@ -202,11 +228,13 @@ impl World {
             CooldownChange::RateMult(m) => cd.rate_mult *= m,
         }
         let regained = before == 0 && cd.charges > 0;
-        self.schedule_cooldown(actor, spell);
+        self.schedule_cooldown(actor, key);
         self.schedule_pet_act(actor, now);
         if regained {
             if let Some(seat) = self.player_seat(actor) {
-                self.notify(seat, WakeReason::CooldownReady(spell), false, None, now);
+                for ability in self.abilities_on(seat, key, spell) {
+                    self.notify(seat, WakeReason::CooldownReady(ability), false, None, now);
+                }
             }
         }
     }

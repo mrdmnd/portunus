@@ -24,4 +24,7 @@ pub mod scripts;
 pub use arm::{breakdown, AbilityRow, Breakdown, SimArm};
 pub use bundle::{Bundle, RunConfig, RunError, SeatConfig};
 pub use env::{NegElapsed, PartyMeter, SimEnv, Source};
-pub use observe::{AuraObs, CooldownObs, PetObs, ScriptObserver, SeatObs, TargetObs, FOREVER};
+pub use observe::{
+    AuraObs, ChannelObs, CooldownObs, DemandObs, EmpowerObs, MovementObs, PetObs, ScriptObserver,
+    SeatObs, TargetObs, FOREVER,
+};

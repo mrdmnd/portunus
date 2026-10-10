@@ -40,6 +40,7 @@ but:
 
 Phase 1 fixes this. Many specs depend on it (Mind Flay, Fists of Fury,
 Rapid Fire, Disintegrate, Drain Soul, Evocation, every Evoker empower).
+Channels (1.1), empowers (1.2) and categories (1.3) are done.
 
 The header doc of `crates/engine/src/kernel/mod.rs` is also stale: it still
 lists auto-attacks and cast lag as unimplemented. Fix it in Phase 0 and keep
@@ -145,14 +146,29 @@ it current after every phase.
 ### 0.1 Forms and stealth (done)
 Committed together with this plan. Their follow-ups are 1.7 and 1.8.
 
-### 0.2 Fix the kernel header doc
+### 0.2 Fix the kernel header doc (done)
 `crates/engine/src/kernel/mod.rs` lines 11–14. List what is actually refused
-today: channels, empowers, shared cooldown categories, enemy adds, spells
+today: shared cooldown categories (since done, 1.3), enemy adds, spells
 triggered for enemies, aura value caps, thresholds and absorbs, and pet
 autocast spells with no GCD, cooldown or cast time.
 
-### 0.3 Bleeds must ignore armor
-**Bug.** `Interpreter` calls `math.mitigate` for every hit
+Note: setup only screens *seat* abilities. A pet autocasting a channel was
+silently run as a hard cast with its effects at the end; Phase 1.1 fixes
+that because pets share `begin_cast`.
+
+### 0.3 Bleeds must ignore armor (done)
+Confirmed in SimC: `player_t::target_mitigation` applies armor only for
+`result_amount_type::DMG_DIRECT`, and `action_t::ignores_armor` comes from
+the spell's "treat as periodic" attribute (set by hand on Windstrike,
+Touch of Death, Shattering Throw). Implemented as `HitKind { Direct,
+Periodic }` in `portunus_engine::mechanics` (carried on `RolledHit` and
+`EffectCtx.hit`; aura ticks are `Periodic`, everything else `Direct`),
+`Effect::Damage.ignores_armor`, and an `IncomingHit { school, kind,
+ignores_armor }` argument to `CombatMath::mitigate` so Phase 10's armor
+penetration can extend it. No DPS change: every enemy in `data/enemies.ron`
+has 0 armor. Test: `melee.rs::armor_reduces_direct_physical_hits_but_not_bleeds`.
+
+**Bug (original description).** `Interpreter` calls `math.mitigate` for every hit
 (`crates/mechanics/src/interp.rs` around line 431), and `Formulas::mitigate`
 applies armor to all physical damage, so periodic physical damage (Rend,
 Rupture, Rake, Garrote, Deep Wounds) is wrongly reduced by armor.
@@ -168,7 +184,13 @@ Rupture, Rake, Garrote, Deep Wounds) is wrongly reduced by armor.
   against an armored enemy; the tick is unreduced, the hit is reduced by
   `armor / (armor + armor_constant)`.
 
-### 0.4 Exhaustion and Sated persist through death
+### 0.4 Exhaustion and Sated persist through death (done)
+`AuraDef.persists_through_death`, honoured in `World::kill`; recovery only
+re-applies passives, so nothing else was needed. Only Sated (57724) exists
+in the data (every lust is modelled as Bloodlust plus Sated). Test:
+`movement.rs::sated_survives_death_and_recovery`. Runs where a seat dies
+before a later pull no longer re-lust that seat, which is the intended fix.
+
 `World::kill` removes every aura with `AuraRemoval::HolderDied`. In game,
 Exhaustion, Sated, Temporal Displacement and Fatigued survive death, so a
 death currently lets Bloodlust be reapplied early.
@@ -184,7 +206,41 @@ death currently lets Bloodlust be reapplied early.
 
 ## 3. Phase 1: Casting foundations (Tier A)
 
-### 1.1 Channels
+### 1.1 Channels (done)
+
+Implemented as planned, with three corrections from SimC:
+- **Channel ticks are periodic, not direct.** SimC assesses a channel's own
+  ticks with `amount_type(state, true)`, i.e. `DMG_OVER_TIME`, so armor
+  doesn't apply. `PartyMechanics::channel_tick` runs the spell's effects
+  with `HitKind::Periodic`. Channels whose damage is a separate spell
+  (SimC's `tick_action`: Fists of Fury, Rapid Fire) should model it as a
+  `TriggerSpell` per tick, which hits as direct.
+- **Swings during a channel are wasted, not paused.** SimC's
+  `interrupt_auto_attack` (default on) lets a swing that comes due during a
+  channel go by with no effect, keeping the timer's rhythm; hard casts do
+  pause swings. Some channels opt out (Celestial Conduit sets
+  `interrupt_auto_attack = false`; SimC models Bladestorm as not
+  channeled), so `CastKind::Channel` gained `#[serde(default)] swings:
+  bool`.
+- **The cast succeeds at the start.** Costs, cooldown, `last_cast`, and
+  `Mechanics::cast_completed` (so `CastComplete` and `ResourceSpent`
+  listeners) happen as the channel starts, as the game's
+  `SPELL_CAST_SUCCESS` does; `PartyMechanics::cast_completed` skips a
+  channel's effects. Documented on `ListenFor::CastComplete` and
+  `Mechanics::cast_completed`.
+
+Other details: tick `i` lands at `start + round(duration * i / ticks)`, so
+the last lands exactly at the end; haste and duration are fixed at the start
+(SimC drops `STATE_HASTE` from channels' update flags). `Casting` gained
+`channel: Option<ChannelState>`; `CastOpts` now reaches `begin_cast` (pets
+pass the default). `CastView` gained `ticks: Option<ChannelProgress>` and a
+filled `next_tick`; `SeatObs.channel: Option<ChannelObs>` exposes them to
+scripts. `TraceEvent::ChannelTick` records each tick. Ingest reports
+`DataIssue::InvalidChannel` for zero ticks or zero duration. Pet channels
+now really channel (no pet in the data has one). No DPS change: no spell in
+`data/game.ron` is a channel. Tests: `crates/engine/tests/channel.rs`, three
+`melee.rs` channel tests, `run_file.rs::seats_see_their_channels_progress`,
+`data_files.rs::channels_without_ticks_or_duration_are_reported`.
 
 **Game rules (verify against SimC `action_t` channel handling):**
 - A channel has a duration and a tick count; ticks are evenly spaced. Haste
@@ -246,7 +302,35 @@ death currently lets Bloodlust be reapplied early.
 - Swings pause during the channel and resume at its end.
 - `Wait::ChannelTick` and `tick_wakes` wake the seat after each tick.
 
-### 1.2 Empowers
+### 1.2 Empowers (done)
+
+Verified in SimC's Evoker module (`empowered_charge_t`): the charge is a
+channel, so costs and cooldown are paid as it starts; haste (and here
+`CastTimePct`) scales stage times and the hold alike, fixed at the start;
+`last_tick` releases a separate spell at the stage reached, skipping it at
+`EMPOWER_NONE` (stage 0 fizzles, costs already paid) and restarting the GCD
+(`start_gcd`). SimC's `dot_t::cancel` also runs `last_tick`, so an empower
+cut short by movement goes off at the stage reached, same as `StopCast`;
+that's what the kernel does (`World::stop_cast`, a new
+`Followup::Released`). Death and combat end don't release. SimC has no
+"stage effects": the release spell reads the stage in its formulas, so the
+data's `effects` then `stage_effects[n - 1]` order is ours to pick.
+
+Implementation: `Casting.empower: Option<EmpowerState>` with the haste
+snapshot as a `CastScale`; `Event::EmpowerStage` and
+`WakeReason::EmpowerStage(n)` (sent when `CastOpts::tick_wakes` is set,
+reused rather than adding an option); the hold runs out through the
+existing `CastComplete` event. `CastOpts::empower` clamps to the spell's
+stages. `cast_time_of` now reports an empower's full charge time, so
+movement and stealth treat it as a non-instant. `ListenFor::CastComplete`
+fires on release. `CastView.empower_stage`/`next_stage_at` are filled;
+`SeatObs.empower: Option<EmpowerObs>`. `TraceEvent::EmpowerStage`.
+`DataIssue::InvalidEmpower` covers stage times that aren't positive and
+strictly increasing, and stage effects that don't match the stages. No
+DPS change: no spell in the data is an empower. Tests:
+`crates/engine/tests/empower.rs`, `melee.rs::empowers_pay_as_they_start_and_add_their_stage_on_release`,
+`run_file.rs::seats_see_their_empowers_progress`,
+`data_files.rs::malformed_empowers_are_reported`.
 
 **Game rules:** charge through stages (cumulative times, hasted if
 `hasted`); release on reaching a chosen stage, on `StopCast` (fires the
@@ -276,7 +360,25 @@ length equals `stages` length (some of this may exist; check `check.rs`).
 stage 1; auto-release after the hold; haste shortens stage times; stage
 effects run once; moving cancels unless a `CastWhileMoving` modifier is up.
 
-### 1.3 Shared cooldown categories (and potions)
+### 1.3 Shared cooldown categories (and potions) (done)
+
+Done as planned. `CooldownKey { Spell, Category }` (in `world.rs`) keys
+`Actor.cooldowns` and `Event::CooldownReady`; `World::cooldown_key` resolves
+a spell to its key, so readiness, `AdjustCooldown`, `CooldownView` and
+conditions all see the shared cooldown. A cooldown regained by an
+adjustment wakes the seat once for every ability on it. A full category
+cooldown starts with the modifiers of the spell that spent it.
+
+Potions, checked against SimC: `potion_t` (`engine/player/consumable.cpp`)
+uses the player's shared "potion" cooldown, with its duration from the item
+effect's cooldown group (or the spell's category cooldown), started on use
+like any action's. Nothing waits for combat to end, so there's no
+`starts_after_combat`. Documented on
+`CooldownDef.category`. `DataIssue::CategoryMismatch` also checks `hasted`.
+No DPS change: no spell in the data has a category. Tests:
+`crates/engine/tests/cooldown.rs`,
+`melee.rs::adjusting_one_spells_category_cooldown_adjusts_them_all`,
+`data_files.rs::categories_whose_spells_disagree_are_reported`.
 
 **Game rules:** spells in a category share one cooldown (and charges).
 Examples: potions (shared 5-minute cooldown across all combat potions),
@@ -301,7 +403,20 @@ charges (new `DataIssue::CategoryMismatch`).
 **Tests:** two spells in one category: casting one puts both on cooldown;
 `AdjustCooldown` on one affects both; charges are shared.
 
-### 1.4 Strikes with both weapons
+### 1.4 Strikes with both weapons (done)
+
+Done as planned, plus two fixes found on the way. `Effect::Damage.hand`
+sets `EffectCtx.hand` for that hit (`Interpreter::striking`); with no weapon
+in that hand the hit is skipped. `RolledHit.weapon` (new) carries the
+strike's hand, so `WeaponHit` listeners fire for it on landing, including
+for a travelling strike. The fixes: `Coefficient::WeaponDamage` always used
+the main hand; it now uses the weapon in play (`EffectCtx.hand`, else the
+main hand), like `WeaponSpeed`. And a spell's own `weapon` now sets the
+cast's `EffectCtx.hand`, so an off-hand strike scales with the off hand.
+No DPS change: no spell in the data has a `weapon` or uses
+`WeaponDamage`. Nothing to validate, observe, or trace beyond the existing
+damage records. Test:
+`melee.rs::strikes_with_both_hands_hit_with_each_weapon`.
 
 **Game rules:** Stormstrike, Mutilate, Windstrike, Dual Strike etc. hit
 with the main hand and the off hand separately, each a melee hit that

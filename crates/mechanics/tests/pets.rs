@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use portunus_core::{ActorId, AuraId, Dist, PetId, Seat, Seed, SimDuration, SimTime, SpellId};
-use portunus_engine::mechanics::whole_points;
+use portunus_engine::mechanics::{whole_points, HitKind};
 use portunus_engine::trace::{CastEndReason, TraceEvent};
 use portunus_engine::{
     CastOpts, Choice, Engine, Externals, Kernel, Latency, Outcome, Readiness, RunSetup, SeatSetup,
@@ -113,6 +113,8 @@ fn fire_damage(sp: f64, target: EffectTarget) -> Effect {
         school: SchoolMask::FIRE,
         target,
         aoe: None,
+        ignores_armor: false,
+        hand: None,
     }
 }
 
@@ -134,6 +136,7 @@ fn aura(id: AuraId, duration: Option<SimDuration>) -> AuraDef {
         form: None,
         stealth: None,
         ends_with: None,
+        persists_through_death: false,
     }
 }
 
@@ -774,6 +777,8 @@ fn with_hunter_pet(f: &mut Fixture) {
             school: SchoolMask::PHYSICAL,
             target: EffectTarget::Target,
             aoe: None,
+            ignores_armor: false,
+            hand: None,
         }],
     );
     bite.cooldown = cooldown(3000);
@@ -971,6 +976,7 @@ fn owner_modifiers_follow_the_pet_kind() {
         scale: 1.0,
         depth: 0,
         hand: None,
+        hit: HitKind::Direct,
     };
     let totem_want = m.math().outgoing(
         state,
@@ -1022,6 +1028,8 @@ fn hunter_pets_autocast_and_answer_command_spells() {
             school: SchoolMask::PHYSICAL,
             target: EffectTarget::Target,
             aoe: None,
+            ignores_armor: false,
+            hand: None,
         }],
     ));
     let mut kill_command = spell(

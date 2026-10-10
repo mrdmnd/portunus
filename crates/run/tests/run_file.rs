@@ -4,12 +4,15 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use portunus_core::{HeroTreeId, PetId, Seed, SpellId};
+use portunus_core::{HeroTreeId, PetId, Seed, SimDuration, SpellId};
 use portunus_engine::trace::TraceEvent;
-use portunus_engine::{Choice, MoveGoal, Readiness, StateView, Wait, WakeReason};
+use portunus_engine::{
+    CastOpts, Choice, MoveGoal, Readiness, StateView, TargetSel, Wait, WakeReason,
+};
 use portunus_env::{Decision, Env, Turn};
 use portunus_eval::{Arm, LocalRunner, Metric, Runner, SeedSet};
-use portunus_run::{Bundle, RunError, SeatObs};
+use portunus_gamedata::spell::CastKind;
+use portunus_run::{Bundle, ChannelObs, EmpowerObs, RunError, SeatObs};
 
 const LIGHTNING_BOLT: SpellId = SpellId(188196);
 
@@ -278,6 +281,98 @@ fn elemental_meets_the_mechanics_dummys_demands() {
         )
     });
     assert!(chased, "approaches after a leap");
+}
+
+#[test]
+fn seats_see_their_channels_progress() {
+    let mut b = bundle();
+    let bolt = Arc::make_mut(&mut b.data)
+        .spells
+        .get_mut(&LIGHTNING_BOLT)
+        .unwrap();
+    bolt.cast = CastKind::Channel {
+        duration: SimDuration(3000),
+        ticks: 3,
+        hasted: false,
+        swings: false,
+    };
+    bolt.speed = None;
+    let mut env = b.env(false);
+    let mut turn = env.reset(Seed(1)).unwrap();
+    let mut seen = Vec::new();
+    while let Turn::Decide(d) = turn {
+        let choice = if let Some(c) = d.obs.channel {
+            if d.reason == WakeReason::ChannelTick {
+                seen.push(c);
+            }
+            Choice::Wait(Wait::NextEvent)
+        } else if d.legal.is_ready(LIGHTNING_BOLT) {
+            Choice::Cast {
+                ability: LIGHTNING_BOLT,
+                target: TargetSel::Primary,
+                opts: CastOpts {
+                    empower: None,
+                    tick_wakes: true,
+                },
+            }
+        } else {
+            Choice::Wait(Wait::NextEvent)
+        };
+        if seen.len() == 2 {
+            break;
+        }
+        turn = env.step(choice).unwrap().next;
+    }
+    let tick = |ticks_done| ChannelObs {
+        ticks_done,
+        ticks_total: 3,
+        next_tick: SimDuration(1000),
+    };
+    assert_eq!(seen, vec![tick(1), tick(2)]);
+}
+
+#[test]
+fn seats_see_their_empowers_progress() {
+    let mut b = bundle();
+    let bolt = Arc::make_mut(&mut b.data)
+        .spells
+        .get_mut(&LIGHTNING_BOLT)
+        .unwrap();
+    bolt.cast = CastKind::Empower {
+        stages: vec![SimDuration(1000), SimDuration(1750)],
+        hasted: false,
+        hold: SimDuration(2000),
+        stage_effects: vec![Vec::new(), Vec::new()],
+    };
+    bolt.speed = None;
+    let mut env = b.env(false);
+    let mut turn = env.reset(Seed(1)).unwrap();
+    let mut seen = Vec::new();
+    while let Turn::Decide(d) = turn {
+        let choice = if let Some(e) = d.obs.empower {
+            if matches!(d.reason, WakeReason::EmpowerStage(_)) {
+                seen.push(e);
+            }
+            Choice::Wait(Wait::NextEvent)
+        } else if d.legal.is_ready(LIGHTNING_BOLT) {
+            Choice::Cast {
+                ability: LIGHTNING_BOLT,
+                target: TargetSel::Primary,
+                opts: CastOpts {
+                    empower: None,
+                    tick_wakes: true,
+                },
+            }
+        } else {
+            Choice::Wait(Wait::NextEvent)
+        };
+        if seen.len() == 2 {
+            break;
+        }
+        turn = env.step(choice).unwrap().next;
+    }
+    let stage = |stage, next_stage| EmpowerObs { stage, next_stage };
+    assert_eq!(seen, vec![stage(1, Some(SimDuration(750))), stage(2, None)]);
 }
 
 #[test]

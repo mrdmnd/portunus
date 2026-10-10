@@ -204,10 +204,18 @@ pub struct CastView {
     pub interruptible: bool,
     /// Channels: when the next tick lands.
     pub next_tick: Option<SimTime>,
+    /// Channels: ticks landed so far, of how many.
+    pub ticks: Option<ChannelProgress>,
     /// Empowers: the stage reached so far (0 before the first).
     pub empower_stage: Option<u8>,
     /// Empowers: when the next stage is reached, if any remain.
     pub next_stage_at: Option<SimTime>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChannelProgress {
+    pub done: u8,
+    pub total: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

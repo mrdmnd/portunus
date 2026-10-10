@@ -23,9 +23,9 @@ use crate::mechanics::{AuraChange, AuraEvent, CastEvent, DeathEvent, PetEvent, R
 use crate::outcome::{Outcome, PullOutcome, SeatOutcome};
 use crate::setup::{Externals, RunSetup};
 use crate::state::{
-    ActorKind, ActorView, AuraInstance, CastView, CastWhat, CombatView, CooldownView, DeckView,
-    DemandView, LastCast, MovementView, PendingPerception, PendingTimer, ProcView, Projectile,
-    ResourceView, RuleView, SeatPhase, SegmentView, StateView, SwingView,
+    ActorKind, ActorView, AuraInstance, CastView, CastWhat, ChannelProgress, CombatView,
+    CooldownView, DeckView, DemandView, LastCast, MovementView, PendingPerception, PendingTimer,
+    ProcView, Projectile, ResourceView, RuleView, SeatPhase, SegmentView, StateView, SwingView,
 };
 use crate::step::{DecisionRequest, WakeReason};
 use crate::trace::{TraceEvent, TraceRecord};
@@ -86,7 +86,7 @@ pub(crate) struct Actor {
     pub haste: f64,
     pub attack_speed: f64,
     pub resources: Vec<Resource>,
-    pub cooldowns: BTreeMap<SpellId, Cooldown>,
+    pub cooldowns: BTreeMap<CooldownKey, Cooldown>,
     pub auras: Vec<AuraInstance>,
     /// Parallel to `auras`.
     pub meta: Vec<AuraMeta>,
@@ -243,6 +243,81 @@ pub(crate) struct Casting {
     pub ev: CastEvent,
     pub ends: SimTime,
     pub seq: u32,
+    pub channel: Option<ChannelState>,
+    pub empower: Option<EmpowerState>,
+}
+
+/// A channel in progress. Its timing is fixed when it starts: haste
+/// changes during it don't move its ticks.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ChannelState {
+    pub ticks: u8,
+    /// Ticks resolved so far.
+    pub done: u8,
+    /// Tick `i` lands `duration * i / ticks` after the start, so the last
+    /// lands exactly at the end.
+    pub duration: SimDuration,
+    /// Wake the seat after every tick (`CastOpts::tick_wakes`).
+    pub tick_wakes: bool,
+    /// Auto-attacks land through it (`CastKind::Channel::swings`).
+    pub swings: bool,
+}
+
+/// What stretches a cast's times, snapshotted.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct CastScale {
+    /// 1 for unhasted spells.
+    pub haste: f64,
+    /// From `CastTimePct` modifiers.
+    pub factor: f64,
+}
+
+impl CastScale {
+    pub fn apply(self, time: SimDuration) -> SimDuration {
+        millis_round(f64::from(time.millis()) / self.haste * self.factor)
+    }
+}
+
+/// An empower charging. Stage times are fixed when it starts.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct EmpowerState {
+    /// Stages reached so far.
+    pub reached: u8,
+    pub stages: u8,
+    pub scale: CastScale,
+    /// Release on reaching this stage (`CastOpts::empower`, clamped to the
+    /// stages there are); `None` holds the final stage.
+    pub release_at: Option<u8>,
+    /// Wake the seat at each stage (`CastOpts::tick_wakes`).
+    pub stage_wakes: bool,
+}
+
+impl Casting {
+    /// The cast that goes off if this empower is released now: `None`
+    /// before its first stage (it fizzles) or if it isn't an empower.
+    pub fn released(&self) -> Option<CastEvent> {
+        let e = self.empower?;
+        (e.reached >= 1).then_some(CastEvent {
+            empower: Some(e.reached),
+            ..self.ev
+        })
+    }
+
+    /// When tick `index` (from 1) lands, for a channel.
+    pub fn tick_at(&self, index: u8) -> Option<SimTime> {
+        let ch = self.channel?;
+        let ticks = u64::from(ch.ticks.max(1));
+        let ms = (u64::from(ch.duration.millis()) * u64::from(index) + ticks / 2) / ticks;
+        Some(self.ev.started + SimDuration(u32::try_from(ms).unwrap_or(u32::MAX / 2)))
+    }
+
+    /// The next tick still to land, for a channel with ticks left.
+    pub fn next_tick(&self) -> Option<SimTime> {
+        let ch = self.channel?;
+        (ch.done < ch.ticks)
+            .then(|| self.tick_at(ch.done + 1))
+            .flatten()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -286,6 +361,14 @@ impl Resource {
         self.value = self.value_at(now, haste);
         self.at = now;
     }
+}
+
+/// Which cooldown a spell runs on: its category's, shared with every spell
+/// in it, or its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum CooldownKey {
+    Spell(SpellId),
+    Category(u32),
 }
 
 /// Recharge progress is kept in unhasted milliseconds of `base`.
@@ -358,6 +441,8 @@ pub(crate) enum Followup {
     Removed(AuraEvent),
     Died(DeathEvent),
     PetExpired(PetEvent),
+    /// An empower stopped past its first stage goes off.
+    Released(CastEvent),
 }
 
 #[derive(Debug, Clone)]
@@ -782,20 +867,37 @@ impl World {
         let Some(def) = self.s.setup.data.spells.get(&spell) else {
             return SimDuration::ZERO;
         };
-        let (time, hasted) = match def.cast {
-            CastKind::Instant | CastKind::Empower { .. } => return SimDuration::ZERO,
-            CastKind::Cast { time, hasted } => (time, hasted),
+        let (time, hasted) = match &def.cast {
+            CastKind::Instant => return SimDuration::ZERO,
+            CastKind::Cast { time, hasted } => (*time, *hasted),
             CastKind::Channel {
                 duration, hasted, ..
-            } => (duration, hasted),
+            } => (*duration, *hasted),
+            CastKind::Empower { stages, hasted, .. } => {
+                (stages.last().copied().unwrap_or_default(), *hasted)
+            }
         };
-        let haste = self.actor_ref(caster).map_or(1.0, |a| a.haste);
-        let mut ms = f64::from(time.millis());
-        if hasted {
-            ms /= haste;
-        }
+        self.cast_scale(caster, spell, hasted, target).apply(time)
+    }
+
+    /// `caster`'s haste (if `hasted`) and `CastTimePct` modifiers on
+    /// `spell`, as they stand now.
+    pub(crate) fn cast_scale(
+        &self,
+        caster: ActorId,
+        spell: SpellId,
+        hasted: bool,
+        target: Option<ActorId>,
+    ) -> CastScale {
         let pct = self.mod_sum(caster, spell, ModKind::CastTimePct, target);
-        millis_round(ms * (1.0 + pct / 100.0).max(0.0))
+        CastScale {
+            haste: if hasted {
+                self.actor_ref(caster).map_or(1.0, |a| a.haste)
+            } else {
+                1.0
+            },
+            factor: (1.0 + pct / 100.0).max(0.0),
+        }
     }
 
     /// The GCD `spell` triggers for `caster` now.
@@ -875,9 +977,9 @@ impl World {
             cd.settle(now, old);
         }
         a.haste = mult.max(f64::MIN_POSITIVE);
-        let spells: Vec<SpellId> = a.cooldowns.keys().copied().collect();
-        for spell in spells {
-            self.schedule_cooldown(actor, spell);
+        let keys: Vec<CooldownKey> = a.cooldowns.keys().copied().collect();
+        for key in keys {
+            self.schedule_cooldown(actor, key);
         }
         self.rescale_swings(actor, old_speed);
         self.schedule_pet_act(actor, now);
@@ -949,6 +1051,38 @@ impl World {
         self.resume_swings(actor);
     }
 
+    /// Stop the actor's cast by choice or by movement. An empower past its
+    /// first stage goes off at the stage reached, as SimC's `dot_t::cancel`
+    /// runs the release in `last_tick`; anything else ends with `reason`.
+    pub(crate) fn stop_cast(&mut self, actor: ActorId, reason: crate::trace::CastEndReason) {
+        let Some(a) = self.actor_mut(actor) else {
+            return;
+        };
+        let Some(ev) = a.casting.and_then(|c| c.released()) else {
+            self.cancel_cast(actor, reason);
+            return;
+        };
+        a.casting = None;
+        self.record(TraceEvent::CastEnd {
+            actor,
+            spell: ev.spell,
+            reason: crate::trace::CastEndReason::Completed,
+        });
+        self.resume_swings(actor);
+        self.followups.push_back(Followup::Released(ev));
+    }
+
+    /// When an empower reaches `stage` (from 1).
+    pub(crate) fn stage_at(&self, c: &Casting, stage: u8) -> Option<SimTime> {
+        let e = c.empower?;
+        let CastKind::Empower { stages, .. } = &self.s.setup.data.spells.get(&c.ev.spell)?.cast
+        else {
+            return None;
+        };
+        let time = *stages.get(usize::from(stage).checked_sub(1)?)?;
+        Some(c.ev.started + e.scale.apply(time))
+    }
+
     pub(crate) fn kill(&mut self, actor: ActorId, killer: Option<ActorId>) {
         use crate::trace::CastEndReason;
         let Some(a) = self.actor_mut(actor) else {
@@ -961,10 +1095,17 @@ impl World {
         self.record(TraceEvent::Death { actor });
         self.followups
             .push_back(Followup::Died(DeathEvent { actor, killer }));
-        while let Some(last) = self
-            .actor_ref(actor)
-            .and_then(|a| a.auras.len().checked_sub(1))
-        {
+        let s = Arc::clone(&self.s);
+        let mortal = |a: &Actor| {
+            a.auras.iter().rposition(|inst| {
+                !s.setup
+                    .data
+                    .auras
+                    .get(&inst.aura)
+                    .is_some_and(|def| def.persists_through_death)
+            })
+        };
+        while let Some(last) = self.actor_ref(actor).and_then(mortal) {
             self.remove_instance(actor, last, crate::mechanics::AuraRemoval::HolderDied);
         }
         if let Some(seat) = self.player_seat(actor) {
@@ -1166,9 +1307,16 @@ impl StateView for World {
                     started: c.ev.started,
                     ends: c.ends,
                     interruptible: false,
-                    next_tick: None,
-                    empower_stage: None,
-                    next_stage_at: None,
+                    next_tick: c.next_tick(),
+                    ticks: c.channel.map(|ch| ChannelProgress {
+                        done: ch.done,
+                        total: ch.ticks,
+                    }),
+                    empower_stage: c.empower.map(|e| e.reached),
+                    next_stage_at: c
+                        .empower
+                        .filter(|e| e.reached < e.stages)
+                        .and_then(|e| self.stage_at(&c, e.reached + 1)),
                 })
                 .or_else(|| {
                     a.enemy_cast.as_ref().map(|c| CastView {
@@ -1177,6 +1325,7 @@ impl StateView for World {
                         ends: c.ends,
                         interruptible: c.interruptible,
                         next_tick: None,
+                        ticks: None,
                         empower_stage: None,
                         next_stage_at: None,
                     })
@@ -1203,7 +1352,7 @@ impl StateView for World {
 
     fn cooldown(&self, id: ActorId, spell: SpellId) -> Option<CooldownView> {
         let a = self.actor_ref(id)?;
-        let cd = match a.cooldowns.get(&spell) {
+        let cd = match a.cooldowns.get(&self.cooldown_key(spell)) {
             Some(cd) => {
                 let mut cd = *cd;
                 cd.settle(self.now, a.haste);

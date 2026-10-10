@@ -1,7 +1,7 @@
 //! Reference checks for loaded tables: every id points at something, and
 //! every table entry sits under its own id.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use portunus_core::{
     AuraId, EnemyKey, HeroTreeId, ItemId, ItemSetId, PetId, Sample, SimDuration, SpecId, SpellId,
@@ -11,7 +11,7 @@ use portunus_gamedata::effect::{
     Effect, EffectTarget, ListenFor, Listener, ModScope, Predicate, ProcChance,
 };
 use portunus_gamedata::enemy::EnemyAction;
-use portunus_gamedata::spell::{CastKind, Requirement};
+use portunus_gamedata::spell::{CastKind, CooldownDef, Requirement};
 use portunus_gamedata::stats::Stat;
 use portunus_gamedata::talent::Grant;
 use portunus_gamedata::{EnemyData, GameData};
@@ -93,6 +93,14 @@ pub enum DataIssue {
     InvalidSpeed(SpellId),
     /// A range that isn't a positive number.
     InvalidRange(SpellId),
+    /// A channel with no ticks or no duration.
+    InvalidChannel(SpellId),
+    /// An empower whose stage times aren't positive and strictly
+    /// increasing, or whose stage effects don't match its stages.
+    InvalidEmpower(SpellId),
+    /// Spells sharing a cooldown category that disagree on its duration,
+    /// charges, or haste.
+    CategoryMismatch(u32),
     /// A distance, displacement, or movement demand that isn't a positive
     /// number, or a demand with no time to meet it.
     InvalidMovement(Owner),
@@ -200,13 +208,44 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
         if spell.range.is_some_and(|r| !positive(r)) {
             c.issues.push(DataIssue::InvalidRange(spell.id));
         }
-        if let CastKind::Empower { stage_effects, .. } = &spell.cast {
+        if let CastKind::Empower {
+            stages,
+            stage_effects,
+            ..
+        } = &spell.cast
+        {
             stage_effects.iter().for_each(|e| c.effects(&owner, e));
+            let rising = stages.first().is_some_and(|&s| s > SimDuration::ZERO)
+                && stages.windows(2).all(|w| w[0] < w[1]);
+            if !rising || stage_effects.len() != stages.len() {
+                c.issues.push(DataIssue::InvalidEmpower(spell.id));
+            }
+        }
+        if let CastKind::Channel {
+            duration, ticks, ..
+        } = spell.cast
+        {
+            if ticks == 0 || duration == SimDuration::ZERO {
+                c.issues.push(DataIssue::InvalidChannel(spell.id));
+            }
         }
         for r in &spell.requires {
             if let Requirement::AnyAura(auras) | Requirement::NoAura(auras) = r {
                 auras.iter().for_each(|&a| c.aura(&owner, a));
             }
+        }
+    }
+    let mut categories: BTreeMap<u32, &CooldownDef> = BTreeMap::new();
+    for cd in data.spells.values().filter_map(|s| s.cooldown.as_ref()) {
+        let Some(category) = cd.category else {
+            continue;
+        };
+        let first = *categories.entry(category).or_insert(cd);
+        let agree =
+            (first.duration, first.charges, first.hasted) == (cd.duration, cd.charges, cd.hasted);
+        let issue = DataIssue::CategoryMismatch(category);
+        if !agree && !c.issues.contains(&issue) {
+            c.issues.push(issue);
         }
     }
     for aura in data.auras.values() {

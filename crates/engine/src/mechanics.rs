@@ -24,7 +24,12 @@ pub trait Mechanics: Clone {
     fn combat_started(&self, io: &mut dyn EngineIo, combat: u16);
     fn combat_ended(&self, io: &mut dyn EngineIo, combat: u16, cleared: bool);
     fn cast_started(&self, io: &mut dyn EngineIo, cast: &CastEvent);
+    /// The cast succeeded, its costs paid and cooldown started: as a hard
+    /// cast completes, as a channel starts (its effects belong to
+    /// [`Mechanics::channel_tick`]), or as an empower is released past its
+    /// first stage (`cast.empower` holds the stage).
     fn cast_completed(&self, io: &mut dyn EngineIo, cast: &CastEvent);
+    /// Tick `tick` (from 1) of a channel; the last lands as it ends.
     fn channel_tick(&self, io: &mut dyn EngineIo, cast: &CastEvent, tick: u8);
     /// A spell with travel time reached its target, carrying the hits
     /// stashed for it at launch ([`EngineIo::stash_hit`]).
@@ -251,7 +256,17 @@ pub struct TimerEvent {
     pub token: u32,
 }
 
-/// Direct damage rolled when its spell launched, to land with it.
+/// Whether a hit is direct or an aura's periodic tick (SimC's
+/// `result_amount_type`). Armor reduces only direct physical hits, so
+/// bleeds such as Rend and Rupture tick at full strength.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HitKind {
+    Direct,
+    Periodic,
+}
+
+/// A hit rolled before the target's mitigation: direct damage rolled when
+/// its spell launched, to land with it, or any hit about to be delivered.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct RolledHit {
     pub source: ActorId,
@@ -263,6 +278,13 @@ pub struct RolledHit {
     pub crit: bool,
     /// The listener depth it was rolled at.
     pub depth: u8,
+    pub kind: HitKind,
+    /// A direct physical hit that bypasses armor anyway (see
+    /// `Effect::Damage::ignores_armor`).
+    pub ignores_armor: bool,
+    /// The hand a strike hit with (see `Effect::Damage::hand` and
+    /// `SpellDef::weapon`), whose weapon-hit listeners it fires on landing.
+    pub weapon: Option<WeaponHand>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

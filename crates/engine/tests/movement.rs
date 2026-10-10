@@ -2,7 +2,7 @@ mod common;
 
 use std::sync::Arc;
 
-use portunus_core::{Dist, EnemyKey, EventName, SimDuration, SimTime, Trigger};
+use portunus_core::{AuraId, Dist, EnemyKey, EventName, SimDuration, SimTime, Trigger};
 use portunus_engine::trace::{CastEndReason, TraceEvent, TraceRecord};
 use portunus_engine::{
     Choice, DecisionRequest, Engine, EngineError, IllegalChoice, Kernel, MoveGoal, Outcome,
@@ -50,6 +50,8 @@ fn flat(amount: f64) -> Effect {
         school: SchoolMask::PHYSICAL,
         target: EffectTarget::Target,
         aoe: None,
+        ignores_armor: false,
+        hand: None,
     }
 }
 
@@ -415,4 +417,50 @@ fn seats_recover_between_pulls() {
         .filter(|r| matches!(r.event, TraceEvent::CastStart { actor, .. } if actor == me))
         .count();
     assert!(casts_after > 0, "the revived seat plays the second pull");
+}
+
+#[test]
+fn sated_survives_death_and_recovery() {
+    const BLOODLUST: AuraId = AuraId(2825);
+    const SATED: AuraId = AuraId(57724);
+    let mut f = with_rules(vec![rule(
+        "execute",
+        at(1000),
+        EnemyAction::Damage {
+            amount: Dist::Fixed(1e12),
+            school: SchoolMask::PHYSICAL,
+            target: EnemyTarget::Tank,
+        },
+    )]);
+    let mut spec = f.sampler.spec().clone();
+    let mut second = spec.pulls[0].clone();
+    second.name = portunus_core::PullName("again".into());
+    spec.pulls.push(second);
+    f.sampler = Sampler::new(spec, Arc::clone(&f.enemies)).unwrap();
+    // Both seats are shamans, whose class lusts at each pull Sated allows.
+    let mut k = kernel(&f, 7, 2, instant());
+    let outcome = play(&mut k);
+    let trace = k.drain_trace();
+
+    assert!(outcome.completed, "{outcome:?}");
+    assert_eq!(outcome.seats[0].deaths, 2);
+    let me = k.state().seats()[0];
+    let lusted = times(
+        &trace,
+        |e| matches!(e, TraceEvent::AuraApplied { holder, aura, .. } if *holder == me && *aura == BLOODLUST),
+    );
+    let sated_lost = times(
+        &trace,
+        |e| matches!(e, TraceEvent::AuraRemoved { holder, aura } if *holder == me && *aura == SATED),
+    );
+    // Only Sated's own ten minutes end it, well after the second pull.
+    let sated = f.data.auras[&SATED].duration.unwrap();
+    assert_eq!(sated_lost, vec![lusted[0] + sated]);
+    let second_pull = times(&trace, |e| matches!(e, TraceEvent::CombatStart { .. }))[1];
+    assert!(second_pull < sated_lost[0]);
+    assert_eq!(
+        lusted.len(),
+        1,
+        "the dead seat can't lust again: {lusted:?}"
+    );
 }

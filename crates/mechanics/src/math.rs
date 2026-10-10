@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use portunus_core::{ActorId, PetId, Seat, SpecId, SpellId};
+use portunus_engine::mechanics::HitKind;
 use portunus_engine::state::{ActorKind, AuraInstance};
 use portunus_engine::{AuraRef, RunSetup, StateView};
 use portunus_gamedata::effect::{Coefficient, ModKind, ModScope, Modifier, Predicate};
@@ -13,7 +14,7 @@ use portunus_gamedata::stats::{DerivedStats, RatedStat, SchoolMask, Stat, StatBl
 use portunus_gamedata::GameData;
 use portunus_scenario::resolved::Segment;
 
-use crate::{CombatMath, EffectCtx, Outgoing};
+use crate::{CombatMath, EffectCtx, IncomingHit, Outgoing};
 
 /// Attack power per point of weapon DPS.
 const WEAPON_AP_DIVISOR: f64 = 6.0;
@@ -486,7 +487,8 @@ impl CombatMath for Formulas {
             Coefficient::SpellPower(c) => c * self.derived(view, ctx.caster).spell_power,
             Coefficient::AttackPower(c) => c * self.derived(view, ctx.caster).attack_power,
             Coefficient::WeaponDamage(c) => {
-                c * self.weapon_damage(view, ctx.caster, WeaponHand::MainHand)
+                let hand = ctx.hand.unwrap_or(WeaponHand::MainHand);
+                c * self.weapon_damage(view, ctx.caster, hand)
             }
             Coefficient::PctMaxHealth(pct) => {
                 let who = ctx.target.unwrap_or(ctx.caster);
@@ -558,22 +560,25 @@ impl CombatMath for Formulas {
         2.0 * (1.0 + bonus / 100.0)
     }
 
+    /// Armor as in SimC's `player_t::target_mitigation`: only for
+    /// `DMG_DIRECT` results, and not for actions with `ignores_armor`.
     fn mitigate(
         &self,
         view: &dyn StateView,
         target: ActorId,
         amount: f64,
-        school: SchoolMask,
+        hit: IncomingHit,
     ) -> f64 {
         let q = Query {
-            school: Some(school),
+            school: Some(hit.school),
             ..Query::holder(target)
         };
         if self.mod_any(view, &q, ModKind::Immune) {
             return 0.0;
         }
         let mut out = amount * self.mod_product(view, &q, ModKind::DamageTakenPct);
-        if school == SchoolMask::PHYSICAL {
+        let armored = hit.kind == HitKind::Direct && !hit.ignores_armor;
+        if hit.school == SchoolMask::PHYSICAL && armored {
             let armor = self.armor(view, target);
             if armor > 0.0 {
                 out *= 1.0 - armor / (armor + self.s.data.curves.armor_constant);

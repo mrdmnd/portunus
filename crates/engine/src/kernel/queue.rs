@@ -16,6 +16,8 @@ use crate::order::EventClass;
 use crate::state::AuraRef;
 use crate::step::WakeReason;
 
+use super::world::CooldownKey;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct Key {
     pub time: SimTime,
@@ -33,6 +35,20 @@ pub(crate) enum Event {
     CastComplete {
         actor: ActorId,
         cast: u32,
+    },
+    /// Tick `index` (from 1) of a channel, if the actor is still
+    /// channeling cast `cast`.
+    ChannelTick {
+        actor: ActorId,
+        cast: u32,
+        index: u8,
+    },
+    /// An empower reaches `stage` (from 1), if the actor is still charging
+    /// cast `cast`.
+    EmpowerStage {
+        actor: ActorId,
+        cast: u32,
+        stage: u8,
     },
     ProjectileLand {
         id: u32,
@@ -62,7 +78,7 @@ pub(crate) enum Event {
     EvalTriggers,
     CooldownReady {
         actor: ActorId,
-        spell: SpellId,
+        key: CooldownKey,
         gen: u32,
     },
     /// A pet may be able to cast from its autocast list.
@@ -118,6 +134,8 @@ impl Event {
         match self {
             Event::TravelEnd
             | Event::CastComplete { .. }
+            | Event::ChannelTick { .. }
+            | Event::EmpowerStage { .. }
             | Event::ProjectileLand { .. }
             | Event::Triggered { .. }
             | Event::AuraTick { .. }

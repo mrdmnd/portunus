@@ -41,6 +41,8 @@ pub enum WakeReason {
     /// A tick of the seat's channel resolved (`Wait::ChannelTick` or
     /// `CastOpts::tick_wakes`).
     ChannelTick,
+    /// The seat's empower reached this stage (`CastOpts::tick_wakes`).
+    EmpowerStage(u8),
     GcdEnd,
     /// The seat just started a GCD-triggering cast and an off-GCD ability
     /// is ready right now.

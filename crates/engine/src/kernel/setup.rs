@@ -7,7 +7,6 @@ use portunus_core::rng::{self, Purpose};
 use portunus_core::{ActorId, Seat, SimTime, Trigger, PARTY_SIZE};
 use portunus_gamedata::effect::{ModKind, Modifier};
 use portunus_gamedata::enemy::{EnemyAction, EnemySubject};
-use portunus_gamedata::spell::CastKind;
 use portunus_gamedata::stats::ResourceDef;
 use portunus_scenario::resolved::{Segment, SpawnIndex, SpawnSet};
 
@@ -154,18 +153,6 @@ fn rule_triggers(setup: &RunSetup) -> Vec<Vec<Vec<Trigger<SpawnSet>>>> {
 }
 
 fn unsupported(setup: &RunSetup) -> Option<&'static str> {
-    let data = &setup.data;
-    for seat in &setup.seats {
-        let t = &seat.template;
-        for s in t.abilities.iter().filter_map(|s| data.spells.get(s)) {
-            if matches!(s.cast, CastKind::Channel { .. } | CastKind::Empower { .. }) {
-                return Some("channels and empowers");
-            }
-            if s.cooldown.is_some_and(|c| c.category.is_some()) {
-                return Some("shared cooldown categories");
-            }
-        }
-    }
     for seg in &setup.run.segments {
         let Segment::Combat(c) = seg else { continue };
         for spawn in &c.spawns {

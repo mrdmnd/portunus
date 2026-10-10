@@ -14,6 +14,7 @@ use std::sync::Arc;
 use portunus_core::{ActorId, PetId, Seat, SimDuration, SpellId};
 use portunus_gamedata::pet::PetKind;
 
+use crate::choice::CastOpts;
 use crate::mask::Readiness;
 use crate::mechanics::{
     whole_points, AuraApplication, AuraRemoval, CastEvent, Mechanics, PetEvent,
@@ -402,7 +403,7 @@ impl<M: Mechanics> Kernel<M> {
                 life.gcd_end = Some(end);
             }
         }
-        self.begin_cast(CastEvent {
+        let ev = CastEvent {
             seat: owner,
             actor,
             ability: None,
@@ -412,6 +413,7 @@ impl<M: Mechanics> Kernel<M> {
             empower: None,
             spent: None,
             prerolled: false,
-        });
+        };
+        self.begin_cast(ev, CastOpts::default());
     }
 }

@@ -1,33 +1,54 @@
 //! The party-level [`Mechanics`].
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use portunus_core::{ActorId, Seat, SpellId};
 use portunus_engine::mechanics::{
     whole_points, AuraChange, AuraEvent, AuraRemoval, CastEvent, DamageEvent, DeathEvent, EnemyHit,
-    PetEvent, RolledHit, SwingEvent, TickEvent, TimerEvent,
+    HitKind, PetEvent, RolledHit, SwingEvent, TickEvent, TimerEvent,
 };
 use portunus_engine::state::Projectile;
 use portunus_engine::{EngineIo, Mechanics, Readiness, RunSetup, StateView};
 use portunus_gamedata::aura::AuraDef;
 use portunus_gamedata::effect::{Effect, ModKind};
-use portunus_gamedata::spell::SpellDef;
+use portunus_gamedata::spell::{CastKind, SpellDef};
 use portunus_gamedata::stats::{SpendScaling, Stat};
 
 use crate::interp::{Happening, Interpreter, Occurrence};
 use crate::math::{owner_seat, player_seat, Formulas};
-use crate::{CombatMath, EffectCtx, EffectInterpreter, KitIssue, SpecRegistry};
+use crate::{CombatMath, EffectCtx, EffectInterpreter, IncomingHit, KitIssue, SpecRegistry};
 
 /// Game semantics for a whole party: data effects through the
 /// [`Interpreter`], formulas from [`Formulas`], and each seat's spec kit
 /// for gates, hooks, and timers.
 ///
-/// A spell's effects run when it completes, or when it lands if it travels.
-/// Its `CastComplete` and `ResourceSpent` listeners fire at completion
-/// either way. Effects run by a listener don't fire further listeners.
+/// A spell's effects run when it completes, or when it lands if it travels;
+/// a channel's run on each tick, and a released empower's are followed by
+/// its stage's. Its `CastComplete` and `ResourceSpent` listeners fire at
+/// completion either way. Effects run by a listener don't fire further
+/// listeners.
 #[derive(Clone)]
 pub struct PartyMechanics {
     interp: Interpreter,
+}
+
+/// What a cast runs: the spell's effects, then a released empower's
+/// stage effects (SimC folds the stage into the release spell's own
+/// numbers; the data spells the difference out per stage).
+fn cast_effects<'a>(def: &'a SpellDef, cast: &CastEvent) -> Cow<'a, [Effect]> {
+    let extra = match (&def.cast, cast.empower) {
+        (CastKind::Empower { stage_effects, .. }, Some(stage)) => usize::from(stage)
+            .checked_sub(1)
+            .and_then(|i| stage_effects.get(i)),
+        _ => None,
+    };
+    match extra {
+        Some(extra) if !extra.is_empty() => {
+            Cow::Owned(def.effects.iter().chain(extra).cloned().collect())
+        }
+        _ => Cow::Borrowed(&def.effects),
+    }
 }
 
 impl PartyMechanics {
@@ -69,7 +90,8 @@ impl PartyMechanics {
             event_amount: None,
             scale: self.spend_scale(cast),
             depth: 0,
-            hand: None,
+            hand: self.spell(cast.spell).and_then(|d| d.weapon),
+            hit: HitKind::Direct,
         }
     }
 
@@ -149,11 +171,13 @@ impl Mechanics for PartyMechanics {
             return;
         };
         let ctx = self.spell_ctx(cast);
-        if !cast.prerolled {
+        let channel = matches!(def.cast, CastKind::Channel { .. });
+        if !cast.prerolled && !channel {
+            let effects = cast_effects(def, cast);
             if !def.travels() {
-                self.interp.run(io, &ctx, &def.effects);
+                self.interp.run(io, &ctx, &effects);
             } else if !def.rolls_on_impact {
-                for hit in self.interp.roll_direct(io, &ctx, &def.effects) {
+                for hit in self.interp.roll_direct(io, &ctx, &effects) {
                     io.stash_hit(hit);
                 }
             }
@@ -182,7 +206,19 @@ impl Mechanics for PartyMechanics {
         }
     }
 
-    fn channel_tick(&self, _io: &mut dyn EngineIo, _cast: &CastEvent, _tick: u8) {}
+    /// The channel's effects, as periodic hits: SimC assesses a channel's
+    /// own ticks as `DMG_OVER_TIME`, so armor doesn't apply. A spell a tick
+    /// triggers (SimC's `tick_action`) hits as direct.
+    fn channel_tick(&self, io: &mut dyn EngineIo, cast: &CastEvent, _tick: u8) {
+        let Some(def) = self.spell(cast.spell) else {
+            return;
+        };
+        let ctx = EffectCtx {
+            hit: HitKind::Periodic,
+            ..self.spell_ctx(cast)
+        };
+        self.interp.run(io, &ctx, &def.effects);
+    }
 
     fn projectile_landed(
         &self,
@@ -193,10 +229,11 @@ impl Mechanics for PartyMechanics {
     ) {
         if let Some(def) = self.spell(cast.spell) {
             let ctx = self.spell_ctx(cast);
+            let effects = cast_effects(def, cast);
             if def.rolls_on_impact {
-                self.interp.run(io, &ctx, &def.effects);
+                self.interp.run(io, &ctx, &effects);
             } else {
-                self.interp.land(io, &ctx, &def.effects, hits);
+                self.interp.land(io, &ctx, &effects, hits);
             }
         }
     }
@@ -222,6 +259,7 @@ impl Mechanics for PartyMechanics {
             scale: tick.fraction,
             depth: 0,
             hand: None,
+            hit: HitKind::Periodic,
         };
         self.interp.run(io, &ctx, &periodic.effects);
         let ticked = Occurrence {
@@ -264,6 +302,7 @@ impl Mechanics for PartyMechanics {
                 scale: 1.0,
                 depth: 0,
                 hand: None,
+                hit: HitKind::Direct,
             };
             self.interp.run(io, &ctx, &def.on_expire);
         }
@@ -277,6 +316,7 @@ impl Mechanics for PartyMechanics {
                 scale: 1.0,
                 depth: 0,
                 hand: None,
+                hit: HitKind::Direct,
             };
             self.interp.run(io, &ctx, &st.on_break);
         }
@@ -313,9 +353,12 @@ impl Mechanics for PartyMechanics {
     }
 
     fn enemy_hit(&self, io: &mut dyn EngineIo, hit: &EnemyHit) {
-        let amount = self
-            .math()
-            .mitigate(io.view(), hit.target, hit.amount, hit.school);
+        let amount = self.math().mitigate(
+            io.view(),
+            hit.target,
+            hit.amount,
+            IncomingHit::direct(hit.school),
+        );
         let landed = io.apply_damage(DamageEvent {
             source: hit.source,
             target: hit.target,
@@ -351,6 +394,7 @@ impl Mechanics for PartyMechanics {
             scale: 1.0,
             depth: 0,
             hand: None,
+            hit: HitKind::Direct,
         };
         self.interp.run(io, &ctx, effects);
     }

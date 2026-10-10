@@ -213,5 +213,6 @@ pub fn aura(id: AuraId, duration: Option<SimDuration>) -> AuraDef {
         form: None,
         stealth: None,
         ends_with: None,
+        persists_through_death: false,
     }
 }

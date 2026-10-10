@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use portunus_core::{ActorId, AuraId, PetId, SimDuration, SimTime, SpellId, StreamKey};
 use portunus_engine::mechanics::{
-    whole_points, AuraApplication, DamageEvent, HealEvent, RolledHit,
+    whole_points, AuraApplication, DamageEvent, HealEvent, HitKind, RolledHit,
 };
 use portunus_engine::state::ActorKind;
 use portunus_engine::{AuraRef, EngineIo, ListenerRef, ProcView, SegmentView, StateView};
@@ -15,7 +15,9 @@ use portunus_gamedata::item::WeaponHand;
 use portunus_gamedata::stats::{ResourceKind, SchoolMask};
 
 use crate::math::{instance, owner_seat, predicate, Formulas};
-use crate::{CombatMath, EffectCtx, EffectInterpreter, KitTools, Outgoing, SpecRegistry};
+use crate::{
+    CombatMath, EffectCtx, EffectInterpreter, IncomingHit, KitTools, Outgoing, SpecRegistry,
+};
 
 /// Crit rolls, per caster.
 const CRIT_STREAM: StreamKey = StreamKey(0);
@@ -37,6 +39,17 @@ const RPPM_MAX_GAP_SECS: f64 = 3.5;
 pub struct Interpreter {
     math: Formulas,
     kits: Arc<dyn SpecRegistry>,
+}
+
+/// One `Effect::Damage`'s fields.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct DamageSpec {
+    pub amount: Coefficient,
+    pub school: SchoolMask,
+    pub target: EffectTarget,
+    pub aoe: Option<AoeRule>,
+    pub ignores_armor: bool,
+    pub hand: Option<WeaponHand>,
 }
 
 /// Something listeners may react to.
@@ -183,6 +196,7 @@ impl Interpreter {
                         scale,
                         depth: 1,
                         hand,
+                        hit: HitKind::Direct,
                     };
                     self.run(io, &ctx, &l.effects);
                 }
@@ -293,19 +307,32 @@ impl Interpreter {
         out
     }
 
-    pub(crate) fn damage(
-        &self,
-        io: &mut dyn EngineIo,
-        ctx: &EffectCtx,
-        amount: Coefficient,
-        school: SchoolMask,
-        target: EffectTarget,
-        aoe: Option<AoeRule>,
-    ) {
-        for c in self.damage_targets(io, ctx, target, aoe) {
-            let hit = self.roll_hit(io, &c, amount, school);
+    pub(crate) fn damage(&self, io: &mut dyn EngineIo, ctx: &EffectCtx, d: DamageSpec) {
+        let Some(ctx) = self.striking(io.view(), ctx, d.hand) else {
+            return;
+        };
+        for c in self.damage_targets(io, &ctx, d.target, d.aoe) {
+            let hit = self.roll_hit(io, &c, d);
             self.deliver(io, hit);
         }
+    }
+
+    /// The context for a hit that strikes with `hand`, if any: `None` when
+    /// there's no weapon in that hand.
+    fn striking(
+        &self,
+        view: &dyn StateView,
+        ctx: &EffectCtx,
+        hand: Option<WeaponHand>,
+    ) -> Option<EffectCtx> {
+        let Some(hand) = hand else {
+            return Some(*ctx);
+        };
+        self.math.weapon(view, ctx.caster, hand)?;
+        Some(EffectCtx {
+            hand: Some(hand),
+            ..*ctx
+        })
     }
 
     /// One context per target hit, each scaled by its AoE share.
@@ -379,14 +406,19 @@ impl Interpreter {
             scale: 1.0,
             depth,
             hand: Some(hand),
+            hit: HitKind::Direct,
         };
         self.damage(
             io,
             &ctx,
-            Coefficient::Flat(raw),
-            SchoolMask::PHYSICAL,
-            EffectTarget::Target,
-            None,
+            DamageSpec {
+                amount: Coefficient::Flat(raw),
+                school: SchoolMask::PHYSICAL,
+                target: EffectTarget::Target,
+                aoe: None,
+                ignores_armor: false,
+                hand: None,
+            },
         );
         for what in [Happening::Swing(hand), Happening::WeaponHit(hand)] {
             let ev = Occurrence {
@@ -400,35 +432,39 @@ impl Interpreter {
     }
 
     /// Amount and crit against `c.target`, before its mitigation.
-    fn roll_hit(
-        &self,
-        io: &mut dyn EngineIo,
-        c: &EffectCtx,
-        amount: Coefficient,
-        school: SchoolMask,
-    ) -> RolledHit {
+    fn roll_hit(&self, io: &mut dyn EngineIo, c: &EffectCtx, d: DamageSpec) -> RolledHit {
         let view = io.view();
         let raw = self
             .math
-            .outgoing(view, c, amount, Outgoing::Damage(school));
+            .outgoing(view, c, d.amount, Outgoing::Damage(d.school));
         let chance = self.math.crit_chance(view, c);
         let mult = self.math.crit_multiplier(view, c);
         let crit = io.roll(c.caster, CRIT_STREAM) < chance;
+        let weapon = d.hand.or_else(|| {
+            c.spell
+                .and_then(|s| self.math.data().spells.get(&s))
+                .and_then(|def| def.weapon)
+        });
         RolledHit {
             source: c.caster,
             target: c.target.unwrap_or(c.caster),
             amount: if crit { raw * mult } else { raw },
-            school,
+            school: d.school,
             spell: c.spell,
             crit,
             depth: c.depth,
+            kind: c.hit,
+            ignores_armor: d.ignores_armor,
+            weapon,
         }
     }
 
     /// Mitigate, apply, and run the listeners for a hit.
     fn deliver(&self, io: &mut dyn EngineIo, hit: RolledHit) {
         let t = hit.target;
-        let amount = self.math.mitigate(io.view(), t, hit.amount, hit.school);
+        let amount = self
+            .math
+            .mitigate(io.view(), t, hit.amount, IncomingHit::of(&hit));
         let landed = io.apply_damage(DamageEvent {
             source: hit.source,
             target: t,
@@ -455,11 +491,7 @@ impl Interpreter {
                 ..dealt
             };
             self.fire(io, t, taken);
-            let weapon = hit
-                .spell
-                .and_then(|s| self.math.data().spells.get(&s))
-                .and_then(|d| d.weapon);
-            if let Some(hand) = weapon {
+            if let Some(hand) = hit.weapon {
                 let struck = Occurrence {
                     what: Happening::WeaponHit(hand),
                     target: Some(t),
@@ -488,9 +520,22 @@ impl Interpreter {
                     school,
                     target,
                     aoe,
+                    ignores_armor,
+                    hand,
                 } => {
-                    for c in self.damage_targets(io, ctx, target, aoe) {
-                        hits.push(self.roll_hit(io, &c, amount, school));
+                    let d = DamageSpec {
+                        amount,
+                        school,
+                        target,
+                        aoe,
+                        ignores_armor,
+                        hand,
+                    };
+                    let Some(ctx) = self.striking(io.view(), ctx, hand) else {
+                        continue;
+                    };
+                    for c in self.damage_targets(io, &ctx, target, aoe) {
+                        hits.push(self.roll_hit(io, &c, d));
                     }
                 }
                 Effect::If {
@@ -530,7 +575,8 @@ impl Interpreter {
             event_amount: None,
             scale: 1.0,
             depth: 0,
-            hand: None,
+            hand: def.weapon,
+            hit: HitKind::Direct,
         };
         Some(self.roll_direct(io, &ctx, &def.effects))
     }
@@ -606,7 +652,20 @@ impl Interpreter {
                 school,
                 target,
                 aoe,
-            } => self.damage(io, ctx, amount, school, target, aoe),
+                ignores_armor,
+                hand,
+            } => self.damage(
+                io,
+                ctx,
+                DamageSpec {
+                    amount,
+                    school,
+                    target,
+                    aoe,
+                    ignores_armor,
+                    hand,
+                },
+            ),
             &Effect::Heal { amount, target } => self.heal(io, ctx, amount, target),
             &Effect::ApplyAura {
                 aura,

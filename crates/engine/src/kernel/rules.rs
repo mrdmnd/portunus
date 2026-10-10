@@ -503,6 +503,7 @@ impl<M: Mechanics> Kernel<M> {
                 for seat in self.world.enemy_targets(enemy, rule, *target) {
                     self.world.force_move(seat, until);
                 }
+                self.drain();
             }
             EnemyAction::MustMove {
                 yards,

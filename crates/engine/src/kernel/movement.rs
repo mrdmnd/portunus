@@ -286,7 +286,7 @@ impl World {
         if self.usable_while_moving(me, c.ev.spell, def) {
             return false;
         }
-        self.cancel_cast(me, reason);
+        self.stop_cast(me, reason);
         true
     }
 

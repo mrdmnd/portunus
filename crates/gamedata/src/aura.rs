@@ -53,6 +53,11 @@ pub struct AuraDef {
     /// Removed when the holder loses this aura (Prowl with Cat Form).
     #[serde(default)]
     pub ends_with: Option<AuraId>,
+    /// Kept when the holder dies, and through its recovery between pulls
+    /// (Sated, Exhaustion, Temporal Displacement, Fatigued: dying doesn't
+    /// let the group lust again early).
+    #[serde(default)]
+    pub persists_through_death: bool,
 }
 
 /// A shapeshift or stance. Gaining a form removes any other of its group

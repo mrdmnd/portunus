@@ -66,13 +66,14 @@ impl Choice {
 /// Per-cast options. The default is a plain cast.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CastOpts {
-    /// For empowered spells, release automatically on reaching this stage;
-    /// `None` charges to the final stage and holds until the hold runs out.
-    /// The seat can also release early with `StopCast`, which fires the
-    /// stage reached so far.
+    /// For empowered spells, release automatically on reaching this stage
+    /// (clamped to the stages the spell has); `None` charges to the final
+    /// stage and holds until the hold runs out. The seat can also release
+    /// early with `StopCast` (or be made to by movement), which fires the
+    /// stage reached so far, or fizzles before the first.
     pub empower: Option<u8>,
     /// For channels, wake the seat at every tick (`Wait::ChannelTick`
-    /// covers a single tick).
+    /// covers a single tick); for empowers, at every stage.
     pub tick_wakes: bool,
 }
 

@@ -13,13 +13,14 @@ use portunus_engine::{
     CastOpts, Choice, Engine, Externals, Kernel, Latency, Readiness, RunSetup, SeatSetup,
     StateView, Step, TargetSel, TraceRecord, Wait,
 };
-use portunus_gamedata::aura::{AuraDef, FormDef, RefreshRule, StealthDef};
+use portunus_gamedata::aura::{AuraDef, FormDef, Periodic, RefreshRule, StealthDef};
 use portunus_gamedata::effect::{
-    Coefficient, Effect, EffectTarget, ListenFor, Listener, ModKind, ModScope, Modifier, ProcChance,
+    Coefficient, CooldownChange, Effect, EffectTarget, ListenFor, Listener, ModKind, ModScope,
+    Modifier, ProcChance,
 };
 use portunus_gamedata::item::{WeaponDef, WeaponHand};
 use portunus_gamedata::spell::{CastKind, CooldownDef, GcdDef, Requirement, SpellDef, Targeting};
-use portunus_gamedata::stats::{ResourceDef, ResourceKind, SchoolMask, Stat};
+use portunus_gamedata::stats::{Cost, ResourceDef, ResourceKind, SchoolMask, SpendScaling, Stat};
 use portunus_gamedata::{EnemyData, GameData};
 use portunus_ingest::{read_ron, EnemyDataSource, GameDataSource, RonFile};
 use portunus_loadout::{ActorTemplate, Compiler, Loadout, LoadoutCompiler};
@@ -75,6 +76,8 @@ fn damage(amount: f64, school: SchoolMask) -> Effect {
         school,
         target: EffectTarget::Target,
         aoe: None,
+        ignores_armor: false,
+        hand: None,
     }
 }
 
@@ -122,6 +125,7 @@ fn fixture(main_hand: WeaponDef, off_hand: Option<WeaponDef>, kit: Vec<Listener>
             form: None,
             stealth: None,
             ends_with: None,
+            persists_through_death: false,
         },
     );
     template.passive_auras.push(KIT);
@@ -363,6 +367,75 @@ fn weapon_strikes_trigger_weapon_hits_but_not_swings() {
     assert_eq!(dealt(&trace, SchoolMask::ARCANE).len(), swings + strikes);
 }
 
+const TWIN: SpellId = SpellId(900_103);
+
+/// A strike with each hand: weapon damage, then `WeaponHit` listeners for
+/// its own hand only.
+#[test]
+fn strikes_with_both_hands_hit_with_each_weapon() {
+    let on_hit = |hand, school| {
+        listener(
+            ListenFor::WeaponHit { hand: Some(hand) },
+            ProcChance::Always,
+            vec![damage(1.0, school)],
+        )
+    };
+    let kit = vec![
+        on_hit(WeaponHand::MainHand, SchoolMask::NATURE),
+        on_hit(WeaponHand::OffHand, SchoolMask::FROST),
+    ];
+    let off_hand = Some(weapon(1300, 100.0));
+    // What a white hit of each hand deals.
+    let f = fixture(weapon(2600, 1000.0), off_hand, kit.clone());
+    let mut k = f.kernel(1);
+    run_until(&mut k, COMBAT_START + SimDuration(20_000), idle);
+    let white: Vec<u64> = dealt(&k.drain_trace(), SchoolMask::PHYSICAL)
+        .into_iter()
+        .filter(|h| h.2.is_none())
+        .map(|h| h.1)
+        .collect();
+    let (mh, oh) = (*white.iter().max().unwrap(), *white.iter().min().unwrap());
+    assert!(mh > 2 * oh, "{mh} vs {oh}");
+
+    let strike = |hand| Effect::Damage {
+        amount: Coefficient::WeaponDamage(1.0),
+        school: SchoolMask::PHYSICAL,
+        target: EffectTarget::Target,
+        aoe: None,
+        ignores_armor: false,
+        hand: Some(hand),
+    };
+    let run = |off_hand: Option<WeaponDef>| {
+        let mut f = fixture(weapon(2600, 1000.0), off_hand, kit.clone());
+        f.template.melee = false;
+        let effects = vec![strike(WeaponHand::MainHand), strike(WeaponHand::OffHand)];
+        let s = spell(TWIN, CastKind::Instant, true, effects);
+        f.template.abilities.insert(s.id);
+        f.data.spells.insert(s.id, s);
+        let mut k = f.kernel(1);
+        let mut once = true;
+        script(&mut k, COMBAT_START + SimDuration(5_000), |now, k| {
+            if now >= COMBAT_START
+                && readiness(k, TWIN) == Some(Readiness::Now)
+                && std::mem::take(&mut once)
+            {
+                return cast(TWIN);
+            }
+            Choice::Wait(Wait::NextEvent)
+        });
+        let trace = k.drain_trace();
+        let hits: Vec<u64> = dealt(&trace, SchoolMask::PHYSICAL)
+            .into_iter()
+            .map(|h| h.1)
+            .collect();
+        let procs = |school| dealt(&trace, school).len();
+        (hits, procs(SchoolMask::NATURE), procs(SchoolMask::FROST))
+    };
+    assert_eq!(run(off_hand), (vec![mh, oh], 1, 1));
+    // With nothing in the off hand, its strike does nothing.
+    assert_eq!(run(None), (vec![mh], 1, 0));
+}
+
 #[test]
 fn skyfury_swings_again_without_resetting_the_timer() {
     let mut f = fixture(weapon(2600, 1000.0), None, Vec::new());
@@ -437,6 +510,7 @@ fn aura(id: AuraId, modifiers: Vec<Modifier>) -> AuraDef {
         form: None,
         stealth: None,
         ends_with: None,
+        persists_through_death: false,
     }
 }
 
@@ -542,6 +616,8 @@ fn druid() -> Fixture {
         school: SchoolMask::PHYSICAL,
         target: EffectTarget::Caster,
         aoe: None,
+        ignores_armor: false,
+        hand: None,
     };
     for s in [
         spell(CAT_FORM, CastKind::Instant, false, vec![apply_self(CAT)]),
@@ -779,4 +855,378 @@ fn stealth_ends_with_its_form_without_breaking() {
     let trace = k.drain_trace();
     assert_eq!(applied(&trace, PROWL), 1);
     assert_eq!(applied(&trace, SUBTERFUGE), 0);
+}
+
+/// Also the id of the bleed it applies, so the bleed's ticks name it.
+const REND: SpellId = SpellId(900_301);
+const PIERCE: SpellId = SpellId(900_302);
+
+#[test]
+fn armor_reduces_direct_physical_hits_but_not_bleeds() {
+    const ARMOR: f64 = 5_000.0;
+    let mut f = fixture(weapon(2600, 1000.0), None, Vec::new());
+    f.template.main_hand = None;
+    for e in Arc::make_mut(&mut f.enemies).enemies.values_mut() {
+        e.defense.armor = ARMOR;
+    }
+    let bleed = AuraId(REND.0);
+    let mut rend_bleed = aura(bleed, Vec::new());
+    rend_bleed.duration = Some(SimDuration(3000));
+    rend_bleed.periodic = Some(Periodic {
+        period: SimDuration(1000),
+        hasted: false,
+        partial_final_tick: false,
+        effects: vec![damage(1000.0, SchoolMask::PHYSICAL)],
+    });
+    f.data.auras.insert(bleed, rend_bleed);
+    let pierce = Effect::Damage {
+        amount: Coefficient::Flat(1000.0),
+        school: SchoolMask::PHYSICAL,
+        target: EffectTarget::Target,
+        aoe: None,
+        ignores_armor: true,
+        hand: None,
+    };
+    let apply_bleed = Effect::ApplyAura {
+        aura: bleed,
+        target: EffectTarget::Target,
+        stacks: 1,
+        duration: None,
+    };
+    for s in [
+        spell(
+            STRIKE,
+            CastKind::Instant,
+            true,
+            vec![damage(1000.0, SchoolMask::PHYSICAL)],
+        ),
+        spell(PIERCE, CastKind::Instant, true, vec![pierce]),
+        spell(REND, CastKind::Instant, true, vec![apply_bleed]),
+    ] {
+        f.template.abilities.insert(s.id);
+        f.data.spells.insert(s.id, s);
+    }
+    let mut k = f.kernel(1);
+    let end = COMBAT_START + SimDuration(10_000);
+    let mut order = vec![PIERCE, STRIKE, REND];
+    script(&mut k, end, |now, k| match order.last() {
+        Some(&next) if now >= COMBAT_START => {
+            let choice = cast_when_ready(k, next);
+            if matches!(choice, Choice::Cast { .. }) {
+                order.pop();
+            }
+            choice
+        }
+        Some(_) => Choice::Wait(Wait::Until(COMBAT_START)),
+        None => Choice::Wait(Wait::Until(end)),
+    });
+    let trace = k.drain_trace();
+    let physical = dealt(&trace, SchoolMask::PHYSICAL);
+    let by = |spell| -> Vec<u64> {
+        physical
+            .iter()
+            .filter(|h| h.2 == Some(spell))
+            .map(|h| h.1)
+            .collect()
+    };
+    let (ticks, strike, pierced) = (by(REND), by(STRIKE), by(PIERCE));
+    assert_eq!(ticks.len(), 3, "{physical:?}");
+    assert!(ticks.iter().all(|&t| t == ticks[0]));
+    assert_eq!(pierced, vec![ticks[0]]);
+    let reduced = ticks[0] as f64 * (1.0 - ARMOR / (ARMOR + f.data.curves.armor_constant));
+    assert_eq!(strike.len(), 1);
+    assert!(
+        (strike[0] as f64 - reduced).abs() <= 1.0,
+        "{strike:?} vs {reduced}"
+    );
+}
+
+const CHANNEL: SpellId = SpellId(900_401);
+const FRENZY: AuraId = AuraId(900_402);
+
+/// A 3 s, three-tick channel of 1000 physical damage a tick, cast
+/// whenever it's ready from the pull.
+fn channeler(swings: bool, tick: Vec<Effect>) -> Fixture {
+    let mut f = fixture(weapon(1000, 1000.0), None, Vec::new());
+    let cast = CastKind::Channel {
+        duration: SimDuration(3000),
+        ticks: 3,
+        hasted: true,
+        swings,
+    };
+    let s = spell(CHANNEL, cast, true, tick);
+    f.template.abilities.insert(s.id);
+    f.data.spells.insert(s.id, s);
+    f
+}
+
+fn channel_starts(trace: &[TraceRecord]) -> Vec<SimTime> {
+    trace
+        .iter()
+        .filter(|r| matches!(r.event, TraceEvent::CastStart { spell, .. } if spell == CHANNEL))
+        .map(|r| r.time)
+        .collect()
+}
+
+/// Channel `times` times from the pull, as soon as each is possible.
+fn play_channel(f: &Fixture, times: usize, until: SimTime) -> Vec<TraceRecord> {
+    let mut k = f.kernel(1);
+    let mut left = times;
+    script(&mut k, until, |now, k| {
+        if now < COMBAT_START {
+            return Choice::Wait(Wait::Until(COMBAT_START));
+        }
+        let choice = if left > 0 {
+            cast_when_ready(k, CHANNEL)
+        } else {
+            Choice::Wait(Wait::Until(until))
+        };
+        if matches!(choice, Choice::Cast { .. }) {
+            left -= 1;
+        }
+        choice
+    });
+    k.drain_trace()
+}
+
+#[test]
+fn channels_succeed_at_the_start_and_tick_as_periodic_damage() {
+    let run = |armor: f64| {
+        let mut f = channeler(false, vec![damage(1000.0, SchoolMask::PHYSICAL)]);
+        f.template.main_hand = None;
+        for e in Arc::make_mut(&mut f.enemies).enemies.values_mut() {
+            e.defense.armor = armor;
+        }
+        f.data.auras.get_mut(&KIT).unwrap().listeners = vec![listener(
+            ListenFor::CastComplete {
+                spell: Some(CHANNEL),
+                school: None,
+            },
+            ProcChance::Always,
+            vec![damage(1.0, SchoolMask::ARCANE)],
+        )];
+        let trace = play_channel(&f, 2, COMBAT_START + SimDuration(3_001));
+        let starts = channel_starts(&trace);
+        let succeeded: Vec<SimTime> = dealt(&trace, SchoolMask::ARCANE)
+            .into_iter()
+            .map(|h| h.0)
+            .collect();
+        assert_eq!(succeeded, starts);
+        let ticks: Vec<(SimTime, u64)> = dealt(&trace, SchoolMask::PHYSICAL)
+            .into_iter()
+            .filter(|h| h.2 == Some(CHANNEL) && h.0 <= starts[0] + SimDuration(3000))
+            .map(|h| (h.0, h.1))
+            .collect();
+        (starts[0], ticks)
+    };
+    let (start, ticks) = run(5_000.0);
+    let at = |ms| start + SimDuration(ms);
+    assert_eq!(
+        ticks.iter().map(|t| t.0).collect::<Vec<_>>(),
+        vec![at(1000), at(2000), at(3000)]
+    );
+    // Armor doesn't touch a channel's own ticks.
+    assert_eq!(ticks, run(0.0).1);
+}
+
+#[test]
+fn a_channels_haste_is_fixed_when_it_starts() {
+    let mut frenzy = aura(FRENZY, vec![modifier(ModKind::HastePct, 50.0)]);
+    frenzy.duration = Some(SimDuration(60_000));
+    let mut f = channeler(false, vec![apply_self(FRENZY)]);
+    f.template.main_hand = None;
+    f.data.auras.insert(FRENZY, frenzy);
+    let trace = play_channel(&f, 2, COMBAT_START + SimDuration(6_001));
+    let starts = channel_starts(&trace);
+    let ticks: Vec<SimTime> = trace
+        .iter()
+        .filter(|r| matches!(r.event, TraceEvent::ChannelTick { .. }))
+        .map(|r| r.time)
+        .collect();
+    let t0 = starts[0];
+    let at = |ms| t0 + SimDuration(ms);
+    // The first tick hastes the caster by half; the rest of this channel
+    // keeps its pace, the next one runs two thirds as long.
+    assert_eq!(starts[..2], [t0, at(3000)]);
+    assert_eq!(
+        ticks[..6],
+        [at(1000), at(2000), at(3000), at(3667), at(4333), at(5000)]
+    );
+}
+
+const EMPOWER: SpellId = SpellId(900_403);
+
+#[test]
+fn empowers_pay_as_they_start_and_add_their_stage_on_release() {
+    let mut f = fixture(weapon(2600, 1000.0), None, Vec::new());
+    f.template.main_hand = None;
+    f.template
+        .resources
+        .iter_mut()
+        .find(|r| r.kind == ResourceKind::Rage)
+        .unwrap()
+        .initial = 100.0;
+    f.data.auras.get_mut(&KIT).unwrap().listeners = vec![listener(
+        ListenFor::CastComplete {
+            spell: Some(EMPOWER),
+            school: None,
+        },
+        ProcChance::Always,
+        vec![damage(1.0, SchoolMask::ARCANE)],
+    )];
+    let cast = CastKind::Empower {
+        stages: vec![SimDuration(1000), SimDuration(2000)],
+        hasted: false,
+        hold: SimDuration(1000),
+        stage_effects: vec![
+            vec![damage(10.0, SchoolMask::FIRE)],
+            vec![damage(20.0, SchoolMask::FIRE)],
+        ],
+    };
+    let mut s = spell(EMPOWER, cast, true, vec![damage(1000.0, SchoolMask::FIRE)]);
+    s.costs = vec![Cost {
+        kind: ResourceKind::Rage,
+        amount: 30.0,
+        extra: 0.0,
+        scaling: SpendScaling::None,
+    }];
+    f.template.abilities.insert(s.id);
+    f.data.spells.insert(s.id, s);
+
+    let mut k = f.kernel(1);
+    let end = COMBAT_START + SimDuration(5_000);
+    let mut cast_once = true;
+    let mut at_stage_one = None;
+    script(&mut k, end, |now, k| {
+        if now < COMBAT_START {
+            return Choice::Wait(Wait::Until(COMBAT_START));
+        }
+        if k.state()
+            .actor(ActorId(0))
+            .and_then(|a| a.casting)
+            .is_some()
+        {
+            let rage = k.state().resource(ActorId(0), ResourceKind::Rage).unwrap();
+            at_stage_one.get_or_insert((now, rage.value));
+            return Choice::Wait(Wait::NextEvent);
+        }
+        if std::mem::take(&mut cast_once) {
+            return Choice::Cast {
+                ability: EMPOWER,
+                target: TargetSel::Primary,
+                opts: CastOpts {
+                    empower: Some(2),
+                    tick_wakes: true,
+                },
+            };
+        }
+        Choice::Wait(Wait::Until(end))
+    });
+    let trace = k.drain_trace();
+    let t0 = COMBAT_START;
+    // Paid at the start; nothing has gone off by the first stage.
+    assert_eq!(at_stage_one, Some((t0 + SimDuration(1000), 70.0)));
+    let released = t0 + SimDuration(2000);
+    let fire: Vec<(SimTime, u64)> = dealt(&trace, SchoolMask::FIRE)
+        .into_iter()
+        .map(|h| (h.0, h.1))
+        .collect();
+    // The base hit, then stage 2's (no crits, no versatility here).
+    assert_eq!(fire, vec![(released, 1000), (released, 20)]);
+    let listened: Vec<SimTime> = dealt(&trace, SchoolMask::ARCANE)
+        .into_iter()
+        .map(|h| h.0)
+        .collect();
+    assert_eq!(listened, vec![released]);
+}
+
+const POTION: SpellId = SpellId(900_501);
+const ELIXIR: SpellId = SpellId(900_502);
+const REFRESH: SpellId = SpellId(900_503);
+
+#[test]
+fn adjusting_one_spells_category_cooldown_adjusts_them_all() {
+    let mut f = fixture(weapon(2600, 1000.0), None, Vec::new());
+    f.template.main_hand = None;
+    let shared = CooldownDef {
+        duration: SimDuration(30_000),
+        charges: 1,
+        hasted: false,
+        category: Some(9),
+    };
+    let reset = Effect::AdjustCooldown {
+        spell: POTION,
+        change: CooldownChange::Reset,
+    };
+    for (id, cooldown, effects) in [
+        (POTION, Some(shared), vec![damage(1.0, SchoolMask::FIRE)]),
+        (ELIXIR, Some(shared), vec![damage(1.0, SchoolMask::FROST)]),
+        (REFRESH, None, vec![reset]),
+    ] {
+        let mut s = spell(id, CastKind::Instant, true, effects);
+        s.cooldown = cooldown;
+        f.template.abilities.insert(id);
+        f.data.spells.insert(id, s);
+    }
+
+    let mut k = f.kernel(1);
+    let end = COMBAT_START + SimDuration(5_000);
+    let mut plan = [POTION, REFRESH, ELIXIR].into_iter().peekable();
+    let mut elixir_before_refresh = None;
+    script(&mut k, end, |now, k| {
+        if now < COMBAT_START {
+            return Choice::Wait(Wait::Until(COMBAT_START));
+        }
+        let Some(&next) = plan.peek() else {
+            return Choice::Wait(Wait::Until(end));
+        };
+        if readiness(k, next) != Some(Readiness::Now) {
+            return Choice::Wait(Wait::NextEvent);
+        }
+        if next == REFRESH {
+            elixir_before_refresh = readiness(k, ELIXIR);
+        }
+        plan.next();
+        cast(next)
+    });
+    let trace = k.drain_trace();
+    // The potion put the elixir on its 30 s cooldown too.
+    assert!(
+        matches!(elixir_before_refresh, Some(Readiness::In(d)) if d > SimDuration(25_000)),
+        "{elixir_before_refresh:?}"
+    );
+    let at = |school| -> Vec<SimTime> { dealt(&trace, school).into_iter().map(|h| h.0).collect() };
+    let t0 = COMBAT_START;
+    // Resetting the potion freed the elixir one GCD later.
+    assert_eq!(at(SchoolMask::FIRE), vec![t0]);
+    assert_eq!(at(SchoolMask::FROST), vec![t0 + SimDuration(2000)]);
+}
+
+#[test]
+fn swings_during_a_channel_do_nothing_unless_it_allows_them() {
+    const SPEED: u32 = 1300;
+    let end = COMBAT_START + SimDuration(9_001);
+    let hits = |swings: bool| {
+        let mut f = channeler(swings, Vec::new());
+        f.template.main_hand = Some(weapon(SPEED, 1000.0));
+        let trace = play_channel(&f, 1, end);
+        let start = channel_starts(&trace)[0];
+        let (hits, _) = white_hits(&trace);
+        let (during, outside): (Vec<SimTime>, Vec<SimTime>) = hits
+            .into_iter()
+            .partition(|&t| t > start && t < start + SimDuration(3000));
+        (during, outside)
+    };
+    let (during, outside) = hits(false);
+    assert!(during.is_empty(), "{during:?}");
+    // The swings it ate kept the timer's rhythm: none waited for its end.
+    assert!(outside.len() >= 4, "{outside:?}");
+    assert!(
+        outside
+            .windows(2)
+            .all(|w| (w[1] - w[0]).millis() % SPEED == 0),
+        "{outside:?}"
+    );
+    let (during, _) = hits(true);
+    assert_eq!(during.len(), 2, "{during:?}");
 }

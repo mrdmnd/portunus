@@ -100,14 +100,26 @@ pub enum CastKind {
         time: SimDuration,
         hasted: bool,
     },
-    /// Effects run on each tick rather than at completion.
+    /// Succeeds as it starts (costs, cooldown, cast listeners); its effects
+    /// run on each tick, the last at the end of `duration`. Haste is
+    /// fixed at the start (SimC drops `STATE_HASTE` from channels' update
+    /// flags).
     Channel {
         duration: SimDuration,
         ticks: u8,
         hasted: bool,
+        /// Auto-attacks keep landing through the channel. Otherwise, as
+        /// in SimC (`interrupt_auto_attack`, on by default), swings that
+        /// come due during it keep their rhythm but do nothing.
+        #[serde(default)]
+        swings: bool,
     },
-    /// Charged, then released at a chosen stage. The spell's own effects run
-    /// on release, followed by the reached stage's.
+    /// Charged, then released at a chosen stage. Costs and cooldown are paid
+    /// as it starts (SimC runs the charge as a channel); on release the GCD
+    /// starts again and the spell's own effects run, followed by the
+    /// reached stage's. Released before the first stage, it fizzles
+    /// (SimC's `last_tick` skips the release at `EMPOWER_NONE`). Haste
+    /// scales the stage times and the hold alike, fixed at the start.
     Empower {
         /// Charge time to reach each stage, cumulative.
         stages: Vec<SimDuration>,
@@ -131,7 +143,11 @@ pub struct CooldownDef {
     pub duration: SimDuration,
     pub charges: u8,
     pub hasted: bool,
-    /// Spells sharing a category share one cooldown.
+    /// Spells sharing a category share one cooldown: its charges, its
+    /// timer, and cooldown adjustments to any of them. Every spell in a
+    /// category must agree on `duration`, `charges`, and `hasted`. Like
+    /// SimC's shared "potion" cooldown, a category's cooldown starts when
+    /// the spell is used; nothing waits for combat to end.
     pub category: Option<u32>,
 }
 

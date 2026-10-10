@@ -18,6 +18,18 @@ pub enum Effect {
         target: EffectTarget,
         #[serde(default)]
         aoe: Option<AoeRule>,
+        /// A direct physical hit that armor doesn't reduce, as it never
+        /// reduces periodic damage (SimC's `ignores_armor`: Windstrike,
+        /// Touch of Death, Shattering Throw).
+        #[serde(default)]
+        ignores_armor: bool,
+        /// A strike with this hand, whatever the spell's own `weapon`: it
+        /// scales with that hand's weapon and fires its `WeaponHit`
+        /// listeners, and does nothing without a weapon there. Spells that
+        /// strike with both hands (Stormstrike, Mutilate) have one effect
+        /// for each.
+        #[serde(default)]
+        hand: Option<WeaponHand>,
     },
     Heal {
         amount: Coefficient,
@@ -155,6 +167,8 @@ pub enum Coefficient {
     Flat(f64),
     AttackPower(f64),
     SpellPower(f64),
+    /// A white hit's worth (before modifiers) with the weapon in play, as
+    /// for `WeaponSpeed`.
     WeaponDamage(f64),
     PctMaxHealth(f64),
     /// A share of the triggering event's amount: the damage or healing a
@@ -359,7 +373,9 @@ pub struct Listener {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ListenFor {
-    /// `None` filters match anything.
+    /// A cast succeeding: hard casts as they complete, channels as they
+    /// start (the game's `SPELL_CAST_SUCCESS`), empowers as they're
+    /// released. `None` filters match anything.
     CastComplete {
         spell: Option<SpellId>,
         school: Option<SchoolMask>,

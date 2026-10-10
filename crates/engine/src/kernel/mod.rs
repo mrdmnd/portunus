@@ -8,10 +8,18 @@
 //! changes and deaths they cause are queued and delivered once the current
 //! callback returns.
 //!
-//! Not implemented yet, and rejected at setup or reported as
-//! [`EngineError::Unsupported`] on first use: players' auto-attacks (pets'
-//! work), channels, empowers, shared cooldown categories, cast lag, enemy
-//! adds, and aura value caps, thresholds, and absorbs.
+//! A channel succeeds as it starts (costs, cooldown, `cast_completed`),
+//! then ticks at times fixed at its start, the last as it ends. An empower
+//! pays as it starts and goes off (`cast_completed` with the stage) when
+//! released: at its chosen stage, when its hold runs out, or when stopped
+//! or moved past its first stage. Before that, stopping fizzles it.
+//!
+//! Spells in a cooldown category share one cooldown and its charges.
+//!
+//! Not implemented yet. Rejected at setup: enemies whose rules spawn adds.
+//! Reported as [`EngineError::Unsupported`] on first use: enemy adds,
+//! spells triggered for enemies, aura value caps, thresholds, and
+//! absorbs, and pet autocast spells with no GCD, cooldown, or cast time.
 //!
 //! Between pulls, living seats heal to full and dead ones come back with
 //! full health and their passive auras.
@@ -32,9 +40,10 @@ use std::sync::Arc;
 
 use portunus_core::{ActorId, Seat, SimDuration, SimTime, SpellId};
 use portunus_gamedata::spec::MELEE_RANGE;
+use portunus_gamedata::spell::{CastKind, SpellDef};
 use portunus_scenario::resolved::Segment;
 
-use crate::choice::{Choice, MoveGoal, Wait};
+use crate::choice::{CastOpts, Choice, MoveGoal, Wait};
 use crate::error::{EngineError, IllegalChoice};
 use crate::mask::{ActionMask, Readiness};
 use crate::mechanics::{AuraApplication, CastEvent, EngineIo, Mechanics, RolledHit, TickEvent};
@@ -50,7 +59,7 @@ pub use world::World;
 use cast::Need;
 use io::Io;
 use queue::{Event, Wake};
-use world::{Actor, Batch, Casting, Followup, RuleState, Seg};
+use world::{Actor, Batch, Casting, ChannelState, EmpowerState, Followup, RuleState, Seg};
 
 /// How many queued reactions one callback may cause before the kernel
 /// gives up with [`EngineError::Runaway`].
@@ -78,12 +87,17 @@ impl<M: Mechanics> Kernel<M> {
                 self.world.fail(EngineError::Runaway(now));
                 return;
             }
+            if let Followup::Released(ev) = next {
+                self.released(ev);
+                continue;
+            }
             let io = &mut Io { w: &mut self.world };
             match next {
                 Followup::Changed(ev) => self.mechanics.aura_changed(io, &ev),
                 Followup::Removed(ev) => self.mechanics.aura_removed(io, &ev),
                 Followup::Died(ev) => self.mechanics.actor_died(io, &ev),
                 Followup::PetExpired(ev) => self.mechanics.pet_expired(io, &ev),
+                Followup::Released(_) => {}
             }
         }
     }
@@ -136,7 +150,7 @@ impl<M: Mechanics> Kernel<M> {
                 .map(|&s| (s, self.readiness(seat, s).0))
                 .collect(),
             can_stop: a.is_some_and(|a| a.casting.is_some()),
-            can_wait_tick: false,
+            can_wait_tick: a.is_some_and(|a| a.casting.is_some_and(|c| c.channel.is_some())),
             targets: if w.in_combat() {
                 w.live_targets()
             } else {
@@ -227,7 +241,10 @@ impl<M: Mechanics> Kernel<M> {
                     Err(IllegalChoice::NotMoving)
                 }
             }
-            Choice::Wait(Wait::ChannelTick) => Err(IllegalChoice::NoChannelTick),
+            Choice::Wait(Wait::ChannelTick) => match w.actor_ref(me).and_then(|a| a.casting) {
+                Some(c) if c.channel.is_some() => Ok(()),
+                _ => Err(IllegalChoice::NoChannelTick),
+            },
             Choice::Wait(_) => Ok(()),
             Choice::StopCast => match w.actor_ref(me).and_then(|a| a.casting) {
                 Some(_) => Ok(()),
@@ -561,7 +578,13 @@ impl<M: Mechanics> Kernel<M> {
 
     // ---- casts ----
 
-    fn start_cast(&mut self, seat: Seat, ability: SpellId, target: Option<ActorId>) {
+    fn start_cast(
+        &mut self,
+        seat: Seat,
+        ability: SpellId,
+        target: Option<ActorId>,
+        opts: CastOpts,
+    ) {
         let s = Arc::clone(&self.world.s);
         let now = self.world.now;
         let actor = self.world.seat_actor(seat);
@@ -579,7 +602,7 @@ impl<M: Mechanics> Kernel<M> {
             let gcd = self.world.spell_gcd(actor, spell, g);
             self.world.seat_mut(seat).gcd_end = Some(now + gcd);
         }
-        self.begin_cast(CastEvent {
+        let ev = CastEvent {
             seat,
             actor,
             ability: Some(ability),
@@ -589,7 +612,8 @@ impl<M: Mechanics> Kernel<M> {
             empower: None,
             spent: None,
             prerolled: false,
-        });
+        };
+        self.begin_cast(ev, opts);
         if def.hostile && instant {
             self.world.break_stealth(actor, Some(spell));
             self.drain();
@@ -597,8 +621,13 @@ impl<M: Mechanics> Kernel<M> {
     }
 
     /// Start a seat's or pet's cast once its GCD is set: hard casts wait
-    /// for their cast time, instants complete now.
-    fn begin_cast(&mut self, ev: CastEvent) {
+    /// for their cast time, instants complete now, and channels take
+    /// effect now and tick until they end.
+    fn begin_cast(&mut self, ev: CastEvent, opts: CastOpts) {
+        let s = Arc::clone(&self.world.s);
+        let Some(def) = s.setup.data.spells.get(&ev.spell) else {
+            return;
+        };
         let now = self.world.now;
         let (actor, spell, target) = (ev.actor, ev.spell, ev.target);
         let cast_time = self.world.cast_time_of(actor, spell, target);
@@ -608,14 +637,47 @@ impl<M: Mechanics> Kernel<M> {
             target,
         });
         self.call(|m, io| m.cast_started(io, &ev));
-        if cast_time.millis() > 0 {
+        if let CastKind::Channel { ticks, swings, .. } = def.cast {
+            let ch = ChannelState {
+                ticks: ticks.max(1),
+                done: 0,
+                duration: cast_time,
+                tick_wakes: opts.tick_wakes,
+                swings,
+            };
+            self.begin_channel(ev, def, ch);
+        } else if let CastKind::Empower {
+            stages,
+            hasted,
+            hold,
+            ..
+        } = &def.cast
+        {
+            let scale = self.world.cast_scale(actor, spell, *hasted, target);
+            let count = u8::try_from(stages.len()).unwrap_or(u8::MAX);
+            let e = EmpowerState {
+                reached: 0,
+                stages: count,
+                scale,
+                release_at: opts.empower.map(|s| s.clamp(1, count)),
+                stage_wakes: opts.tick_wakes,
+            };
+            let full = stages.last().copied().unwrap_or_default();
+            self.begin_empower(ev, def, e, now + scale.apply(full + *hold));
+        } else if cast_time.millis() > 0 {
             let Some(a) = self.world.actor_mut(actor) else {
                 return;
             };
             a.cast_seq += 1;
             let seq = a.cast_seq;
             let ends = now + cast_time;
-            a.casting = Some(Casting { ev, ends, seq });
+            a.casting = Some(Casting {
+                ev,
+                ends,
+                seq,
+                channel: None,
+                empower: None,
+            });
             self.world
                 .queue
                 .push(ends, Event::CastComplete { actor, cast: seq });
@@ -624,18 +686,168 @@ impl<M: Mechanics> Kernel<M> {
         }
     }
 
-    fn complete_cast(&mut self, mut ev: CastEvent, hard: bool) {
+    /// A channel succeeds as it starts, as in game: costs, cooldown, and
+    /// `cast_completed` (whose listeners fire now), then its ticks.
+    /// Its duration and tick times are fixed now.
+    fn begin_channel(&mut self, ev: CastEvent, def: &SpellDef, ch: ChannelState) {
+        let now = self.world.now;
+        let actor = ev.actor;
+        let ev = self.take_effect(ev, def);
+        let Some(a) = self.world.actor_mut(actor) else {
+            return;
+        };
+        a.cast_seq += 1;
+        let seq = a.cast_seq;
+        let casting = Casting {
+            ev,
+            ends: now + ch.duration,
+            seq,
+            channel: Some(ch),
+            empower: None,
+        };
+        a.casting = Some(casting);
+        if let Some(at) = casting.next_tick() {
+            self.world.queue.push(
+                at,
+                Event::ChannelTick {
+                    actor,
+                    cast: seq,
+                    index: 1,
+                },
+            );
+        }
+        self.call(|m, io| m.cast_completed(io, &ev));
+    }
+
+    /// An empower pays its costs and starts its cooldown as it starts, as
+    /// in SimC, and goes off when released. It holds the final stage until
+    /// `ends` (stage times and hold both scaled at the start).
+    fn begin_empower(&mut self, ev: CastEvent, def: &SpellDef, e: EmpowerState, ends: SimTime) {
+        let actor = ev.actor;
+        let ev = self.take_effect(ev, def);
+        let Some(a) = self.world.actor_mut(actor) else {
+            return;
+        };
+        a.cast_seq += 1;
+        let seq = a.cast_seq;
+        let casting = Casting {
+            ev,
+            ends,
+            seq,
+            channel: None,
+            empower: Some(e),
+        };
+        a.casting = Some(casting);
+        if let Some(at) = self.world.stage_at(&casting, 1) {
+            self.world.queue.push(
+                at,
+                Event::EmpowerStage {
+                    actor,
+                    cast: seq,
+                    stage: 1,
+                },
+            );
+        }
+        self.world
+            .queue
+            .push(ends, Event::CastComplete { actor, cast: seq });
+    }
+
+    /// The actor's empower `cast` reached `stage`: release it if that's
+    /// the stage it was cast to, otherwise wait for the next.
+    fn empower_stage(&mut self, actor: ActorId, cast: u32, stage: u8) {
+        let Some(c) = self
+            .world
+            .actor_mut(actor)
+            .and_then(|a| a.casting.as_mut())
+            .filter(|c| c.seq == cast)
+        else {
+            return;
+        };
+        let Some(e) = c.empower.as_mut() else {
+            return;
+        };
+        e.reached = stage;
+        let (e, c) = (*e, *c);
+        self.world.record(TraceEvent::EmpowerStage {
+            actor,
+            spell: c.ev.spell,
+            stage,
+        });
+        if e.release_at.is_some_and(|r| stage >= r) {
+            self.release(actor);
+            return;
+        }
+        if stage < e.stages {
+            if let Some(at) = self.world.stage_at(&c, stage + 1) {
+                self.world.queue.push(
+                    at,
+                    Event::EmpowerStage {
+                        actor,
+                        cast,
+                        stage: stage + 1,
+                    },
+                );
+            }
+        }
+        if e.stage_wakes {
+            if let Some(seat) = self.world.player_seat(actor) {
+                let now = self.world.now;
+                self.world
+                    .notify(seat, WakeReason::EmpowerStage(stage), true, None, now);
+            }
+        }
+    }
+
+    /// Release the actor's empower at the stage it reached, ending the
+    /// cast.
+    fn release(&mut self, actor: ActorId) {
+        let Some(c) = self.world.actor_mut(actor).and_then(|a| a.casting.take()) else {
+            return;
+        };
+        let Some(ev) = c.released() else {
+            return;
+        };
+        self.world.record(TraceEvent::CastEnd {
+            actor,
+            spell: ev.spell,
+            reason: CastEndReason::Completed,
+        });
+        self.world.resume_swings(actor);
+        self.released(ev);
+        self.cast_over(ev, true);
+    }
+
+    /// An empower goes off: its GCD starts again (SimC's `start_gcd` in
+    /// `last_tick`), then `cast_completed` with the stage.
+    fn released(&mut self, ev: CastEvent) {
         let s = Arc::clone(&self.world.s);
         let Some(def) = s.setup.data.spells.get(&ev.spell) else {
             return;
         };
+        if let Some(g) = &def.gcd {
+            let end = self.world.now + self.world.spell_gcd(ev.actor, ev.spell, g);
+            if self.world.is_pet(ev.actor) {
+                if let Some(life) = self.world.actor_mut(ev.actor).and_then(|a| a.pet.as_mut()) {
+                    life.gcd_end = Some(end);
+                }
+            } else {
+                self.world.seat_mut(ev.seat).gcd_end = Some(end);
+            }
+        }
+        self.call(|m, io| m.cast_completed(io, &ev));
+        self.world.launch(ev, def);
+    }
+
+    /// The cast takes effect: costs, cooldown, and the seat's last cast.
+    /// Returns the event with what a scaling cost consumed.
+    fn take_effect(&mut self, mut ev: CastEvent, def: &SpellDef) -> CastEvent {
         let now = self.world.now;
         ev.spent = self.world.pay_costs(ev.actor, ev.spell, def, ev.target);
         if let Some(cd) = &def.cooldown {
             self.world.consume_charge(ev.actor, ev.spell, cd);
         }
-        let by_pet = self.world.is_pet(ev.actor);
-        if !by_pet {
+        if !self.world.is_pet(ev.actor) {
             let st = self.world.seat_mut(ev.seat);
             st.last_cast = Some(LastCast {
                 spell: ev.spell,
@@ -643,6 +855,15 @@ impl<M: Mechanics> Kernel<M> {
             });
             st.outcome.casts += 1;
         }
+        ev
+    }
+
+    fn complete_cast(&mut self, ev: CastEvent, hard: bool) {
+        let s = Arc::clone(&self.world.s);
+        let Some(def) = s.setup.data.spells.get(&ev.spell) else {
+            return;
+        };
+        let ev = self.take_effect(ev, def);
         self.world.record(TraceEvent::CastEnd {
             actor: ev.actor,
             spell: ev.spell,
@@ -650,7 +871,15 @@ impl<M: Mechanics> Kernel<M> {
         });
         self.call(|m, io| m.cast_completed(io, &ev));
         self.world.launch(ev, def);
-        if by_pet {
+        self.cast_over(ev, hard);
+    }
+
+    /// After a cast's completion or a channel's last tick: pets look for
+    /// their next cast, and a seat that was committed to a hard cast or
+    /// channel is free again.
+    fn cast_over(&mut self, ev: CastEvent, hard: bool) {
+        let now = self.world.now;
+        if self.world.is_pet(ev.actor) {
             self.world.schedule_pet_act(ev.actor, now);
         } else if hard {
             let st = self.world.seat_mut(ev.seat);
@@ -659,6 +888,74 @@ impl<M: Mechanics> Kernel<M> {
             }
             self.world
                 .notify(ev.seat, WakeReason::CastEnd, true, None, now);
+        }
+    }
+
+    /// Tick `index` of the actor's channel `cast`, if it is still going.
+    fn channel_tick(&mut self, actor: ActorId, cast: u32, index: u8) {
+        let Some(c) = self
+            .world
+            .actor_ref(actor)
+            .and_then(|a| a.casting)
+            .filter(|c| c.seq == cast && c.channel.is_some())
+        else {
+            return;
+        };
+        self.world.record(TraceEvent::ChannelTick {
+            actor,
+            spell: c.ev.spell,
+            index,
+        });
+        self.call(|m, io| m.channel_tick(io, &c.ev, index));
+        let Some(c) = self
+            .world
+            .actor_mut(actor)
+            .and_then(|a| a.casting.as_mut())
+            .filter(|c| c.seq == cast)
+        else {
+            return;
+        };
+        let Some(ch) = c.channel.as_mut() else {
+            return;
+        };
+        ch.done = index;
+        let (last, tick_wakes) = (index >= ch.ticks, ch.tick_wakes);
+        let c = *c;
+        if last {
+            if let Some(a) = self.world.actor_mut(actor) {
+                a.casting = None;
+            }
+            self.world.record(TraceEvent::CastEnd {
+                actor,
+                spell: c.ev.spell,
+                reason: CastEndReason::Completed,
+            });
+            self.world.resume_swings(actor);
+            self.cast_over(c.ev, true);
+            return;
+        }
+        if let Some(at) = c.next_tick() {
+            self.world.queue.push(
+                at,
+                Event::ChannelTick {
+                    actor,
+                    cast,
+                    index: index + 1,
+                },
+            );
+        }
+        let Some(seat) = self.world.player_seat(actor) else {
+            return;
+        };
+        let now = self.world.now;
+        let st = &self.world.seats[usize::from(seat.0)];
+        if st.wait == Some(Wait::ChannelTick) {
+            let gen = st.gen;
+            self.world
+                .notify(seat, WakeReason::ChannelTick, true, Some(gen), now);
+        } else if tick_wakes {
+            self.world
+                .notify(seat, WakeReason::ChannelTick, true, None, now);
         }
     }
 
@@ -731,12 +1028,19 @@ impl<M: Mechanics> Kernel<M> {
                 let Some(a) = self.world.actor_mut(actor) else {
                     return;
                 };
-                if a.casting.is_some_and(|c| c.seq == cast) {
-                    if let Some(c) = a.casting.take() {
-                        self.complete_cast(c.ev, true);
-                    }
+                let Some(c) = a.casting.as_mut().filter(|c| c.seq == cast) else {
+                    return;
+                };
+                if let Some(e) = c.empower.as_mut() {
+                    // The hold ran out: every stage has passed.
+                    e.reached = e.stages;
+                    self.release(actor);
+                } else if let Some(c) = a.casting.take() {
+                    self.complete_cast(c.ev, true);
                 }
             }
+            Event::EmpowerStage { actor, cast, stage } => self.empower_stage(actor, cast, stage),
+            Event::ChannelTick { actor, cast, index } => self.channel_tick(actor, cast, index),
             Event::ProjectileLand { id } => {
                 let Some(i) = self.world.flights.iter().position(|(f, ..)| *f == id) else {
                     return;
@@ -790,8 +1094,8 @@ impl<M: Mechanics> Kernel<M> {
                 self.call(|m, io| m.timer(io, &pending.timer));
             }
             Event::EvalTriggers => self.eval_triggers(),
-            Event::CooldownReady { actor, spell, gen } => {
-                self.world.cooldown_ready(actor, spell, gen);
+            Event::CooldownReady { actor, key, gen } => {
+                self.world.cooldown_ready(actor, key, gen);
             }
             Event::PetAct { actor, gen } => self.pet_act(actor, gen),
             Event::Swing { actor, hand, gen } => self.swing(actor, hand, gen),
@@ -923,7 +1227,9 @@ impl<M: Mechanics> Kernel<M> {
     /// Start a checked cast and settle the seat's phase around it.
     fn apply_cast(&mut self, seat: Seat, choice: &Choice) {
         let Choice::Cast {
-            ability, target, ..
+            ability,
+            target,
+            opts,
         } = *choice
         else {
             return;
@@ -937,7 +1243,7 @@ impl<M: Mechanics> Kernel<M> {
         let Ok(target) = self.world.resolve_target(seat, def, target) else {
             return;
         };
-        self.start_cast(seat, ability, target);
+        self.start_cast(seat, ability, target, opts);
         let casting = self
             .world
             .actor_ref(me)
@@ -1045,7 +1351,7 @@ impl<M: Mechanics> Kernel<M> {
                 }
             }
             Choice::StopCast => {
-                self.world.cancel_cast(me, CastEndReason::Stopped);
+                self.world.stop_cast(me, CastEndReason::Stopped);
                 self.world.seat_mut(seat).phase = SeatPhase::Deciding;
                 self.world.deliver_now(seat, WakeReason::CastStopped);
             }
@@ -1096,6 +1402,7 @@ impl<M: Mechanics> Kernel<M> {
         for (req, choice) in batch.requests.into_iter().zip(batch.answers) {
             if let Some(choice) = choice {
                 self.apply(req, choice);
+                self.drain();
             }
         }
     }

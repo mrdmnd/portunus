@@ -17,6 +17,7 @@ use portunus_engine::{
     Readiness, RunSetup, SeatSetup, StateView, Step, TargetSel, Wait,
 };
 use portunus_gamedata::effect::{Coefficient, Effect, EffectTarget};
+use portunus_gamedata::spell::CastKind;
 use portunus_gamedata::stats::SchoolMask;
 use portunus_gamedata::{EnemyData, GameData};
 use portunus_ingest::{read_ron, EnemyDataSource, GameDataSource, RonFile};
@@ -166,8 +167,13 @@ fn run(
     }
 }
 
+/// The spell's effects, then a released empower's stage effects.
 fn land(io: &mut dyn EngineIo, cast: &CastEvent) {
-    let effects = io.data().spells[&cast.spell].effects.clone();
+    let def = &io.data().spells[&cast.spell];
+    let mut effects = def.effects.clone();
+    if let (CastKind::Empower { stage_effects, .. }, Some(stage)) = (&def.cast, cast.empower) {
+        effects.extend(stage_effects[usize::from(stage) - 1].iter().cloned());
+    }
     run(io, cast.actor, cast.target, Some(cast.spell), &effects, 1.0);
 }
 
@@ -179,11 +185,14 @@ impl Mechanics for Stub {
     fn combat_ended(&self, _io: &mut dyn EngineIo, _combat: u16, _cleared: bool) {}
     fn cast_started(&self, _io: &mut dyn EngineIo, _cast: &CastEvent) {}
     fn cast_completed(&self, io: &mut dyn EngineIo, cast: &CastEvent) {
-        if !io.data().spells[&cast.spell].travels() {
+        let def = &io.data().spells[&cast.spell];
+        if !def.travels() && !matches!(def.cast, CastKind::Channel { .. }) {
             land(io, cast);
         }
     }
-    fn channel_tick(&self, _io: &mut dyn EngineIo, _cast: &CastEvent, _tick: u8) {}
+    fn channel_tick(&self, io: &mut dyn EngineIo, cast: &CastEvent, _tick: u8) {
+        land(io, cast);
+    }
     fn projectile_landed(
         &self,
         io: &mut dyn EngineIo,

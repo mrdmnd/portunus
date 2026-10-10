@@ -43,6 +43,18 @@ pub enum TraceEvent {
         spell: SpellId,
         reason: CastEndReason,
     },
+    /// Tick `index` (from 1) of a channel.
+    ChannelTick {
+        actor: ActorId,
+        spell: SpellId,
+        index: u8,
+    },
+    /// An empower reached `stage` (from 1).
+    EmpowerStage {
+        actor: ActorId,
+        spell: SpellId,
+        stage: u8,
+    },
     EnemyRule {
         actor: ActorId,
         rule: RuleIndex,

@@ -61,6 +61,24 @@ pub struct MovementObs {
     pub forced: bool,
 }
 
+/// A channel in progress.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChannelObs {
+    pub ticks_done: u8,
+    pub ticks_total: u8,
+    /// Until the next tick.
+    pub next_tick: SimDuration,
+}
+
+/// An empower charging.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EmpowerObs {
+    /// Stages reached so far (0 before the first).
+    pub stage: u8,
+    /// Until the next stage; `None` at the final one.
+    pub next_stage: Option<SimDuration>,
+}
+
 /// Movement owed by a deadline.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DemandObs {
@@ -82,6 +100,10 @@ pub struct SeatObs {
     pub casting: Option<SpellId>,
     /// Until the current cast completes.
     pub cast_remaining: Option<SimDuration>,
+    /// The current channel's progress.
+    pub channel: Option<ChannelObs>,
+    /// The current empower's progress.
+    pub empower: Option<EmpowerObs>,
     /// Percent of max health, 0 to 100.
     pub health_pct: f64,
     pub movement: Option<MovementObs>,
@@ -382,6 +404,20 @@ impl Observer for ScriptObserver {
             cast_remaining: actor
                 .and_then(|a| a.casting)
                 .map(|c| c.ends.saturating_since(now)),
+            channel: actor.and_then(|a| a.casting).and_then(|c| {
+                let p = c.ticks?;
+                Some(ChannelObs {
+                    ticks_done: p.done,
+                    ticks_total: p.total,
+                    next_tick: c.next_tick?.saturating_since(now),
+                })
+            }),
+            empower: actor.and_then(|a| a.casting).and_then(|c| {
+                Some(EmpowerObs {
+                    stage: c.empower_stage?,
+                    next_stage: c.next_stage_at.map(|t| t.saturating_since(now)),
+                })
+            }),
             health_pct: actor.map_or(0.0, |a| 100.0 * a.health_frac()),
             movement: state.movement(seat).map(|m| MovementObs {
                 remaining: m.ends.saturating_since(now),

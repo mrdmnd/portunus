@@ -768,6 +768,7 @@
             id: 57724,
             name: "Sated",
             duration: Some(600000),
+            persists_through_death: true,
         ),
         // Enemy debuffs, made up for the dummies in enemies.ron.
         910001: (

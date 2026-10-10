@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use portunus_core::{AuraId, Dist, HookKey, Seat, Seed, SimDuration, SpecId, SpellId};
-use portunus_engine::mechanics::whole_points;
+use portunus_engine::mechanics::{whole_points, HitKind};
 use portunus_engine::trace::TraceEvent;
 use portunus_engine::{
     CastOpts, Choice, Engine, Externals, Kernel, Latency, Outcome, Readiness, RunSetup, SeatSetup,
@@ -209,6 +209,7 @@ fn crit_chance_follows_flame_shock() {
         scale: 1.0,
         depth: 0,
         hand: None,
+        hit: HitKind::Direct,
     };
     let math = mechanics.math();
     assert!(close(

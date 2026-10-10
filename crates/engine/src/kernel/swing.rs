@@ -10,7 +10,9 @@
 //! [`AUTO_SHOT_RANGE`]): a swing due out of reach waits for the seat's
 //! approach to bring it in, or stops until the distance changes. A
 //! player's swing due during a hard cast waits for the cast to end or
-//! stop; pets keep swinging through theirs.
+//! stop; one due during a channel passes without effect (SimC's
+//! `interrupt_auto_attack`) unless the channel allows swings. Pets keep
+//! swinging through their casts.
 
 use portunus_core::{ActorId, SimTime};
 use portunus_gamedata::item::{WeaponDef, WeaponHand};
@@ -24,6 +26,15 @@ use super::world::{hand_index, millis_round, World};
 use super::Kernel;
 
 const HANDS: [WeaponHand; 2] = [WeaponHand::MainHand, WeaponHand::OffHand];
+
+/// Why a player's swing due now doesn't land.
+enum Blocked {
+    /// A hard cast: the swing waits for it to end.
+    Until(SimTime),
+    /// A channel: the swing passes without effect and the next is timed
+    /// as usual.
+    Wasted,
+}
 
 /// How far a ranged weapon's auto-attacks reach, in yards.
 pub(crate) const AUTO_SHOT_RANGE: f64 = 40.0;
@@ -55,13 +66,15 @@ impl World {
         self.in_range_at(seat, target, reach)
     }
 
-    /// When a player's hard cast ends, if one is in progress.
-    fn casting_until(&self, actor: ActorId) -> Option<SimTime> {
+    /// What a player's cast in progress does to a swing due now.
+    fn cast_blocks(&self, actor: ActorId) -> Option<Blocked> {
         self.player_seat(actor)?;
-        self.actor_ref(actor)?
-            .casting
-            .map(|c| c.ends)
-            .filter(|&ends| ends > self.now)
+        let c = self.actor_ref(actor)?.casting?;
+        match c.channel {
+            Some(ch) if ch.swings => None,
+            Some(_) => Some(Blocked::Wasted),
+            None => (c.ends > self.now).then_some(Blocked::Until(c.ends)),
+        }
     }
 
     /// Start any stopped timers if there is something to hit. The off hand
@@ -182,15 +195,22 @@ impl World {
             self.put_swing(actor, hand, None);
             return None;
         };
-        if let Some(ends) = self.casting_until(actor) {
-            self.put_swing(actor, hand, Some(ends));
-            if let Some(s) = self
-                .actor_mut(actor)
-                .and_then(|a| a.swings[hand_index(hand)].as_mut())
-            {
-                s.paused = true;
+        match self.cast_blocks(actor) {
+            Some(Blocked::Until(ends)) => {
+                self.put_swing(actor, hand, Some(ends));
+                if let Some(s) = self
+                    .actor_mut(actor)
+                    .and_then(|a| a.swings[hand_index(hand)].as_mut())
+                {
+                    s.paused = true;
+                }
+                return None;
             }
-            return None;
+            Some(Blocked::Wasted) => {
+                self.next_swing(actor, hand);
+                return None;
+            }
+            None => {}
         }
         match self.reach_at(actor, target, &weapon) {
             Some(at) if at <= now => Some(target),

@@ -19,7 +19,7 @@ mod math;
 mod party;
 
 use portunus_core::{ActorId, HookKey, Seat, SpecId, SpellId};
-use portunus_engine::mechanics::TimerEvent;
+use portunus_engine::mechanics::{HitKind, RolledHit, TimerEvent};
 use portunus_engine::{AuraRef, EngineIo, Readiness, StateView};
 use portunus_gamedata::effect::{Coefficient, Effect};
 use portunus_gamedata::item::WeaponHand;
@@ -53,6 +53,37 @@ pub struct EffectCtx {
     /// How many listeners deep this run is. Effects run by a listener don't
     /// trigger listeners themselves, so procs can't feed each other.
     pub depth: u8,
+    /// What damage dealt from here counts as: `Periodic` for an aura's
+    /// ticks, `Direct` for everything else, listeners included.
+    pub hit: HitKind,
+}
+
+/// What a target's mitigation needs to know about a hit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IncomingHit {
+    pub school: SchoolMask,
+    pub kind: HitKind,
+    /// Skip armor even for a direct physical hit.
+    pub ignores_armor: bool,
+}
+
+impl IncomingHit {
+    /// A direct hit that armor applies to, if physical.
+    pub fn direct(school: SchoolMask) -> Self {
+        Self {
+            school,
+            kind: HitKind::Direct,
+            ignores_armor: false,
+        }
+    }
+
+    pub(crate) fn of(hit: &RolledHit) -> Self {
+        Self {
+            school: hit.school,
+            kind: hit.kind,
+            ignores_armor: hit.ignores_armor,
+        }
+    }
 }
 
 pub trait EffectInterpreter {
@@ -80,14 +111,10 @@ pub trait CombatMath {
     /// A probability in `[0, 1]`.
     fn crit_chance(&self, view: &dyn StateView, ctx: &EffectCtx) -> f64;
     fn crit_multiplier(&self, view: &dyn StateView, ctx: &EffectCtx) -> f64;
-    /// Damage after the target's reductions (armor, versatility, defensives).
-    fn mitigate(
-        &self,
-        view: &dyn StateView,
-        target: ActorId,
-        amount: f64,
-        school: SchoolMask,
-    ) -> f64;
+    /// Damage after the target's reductions (armor, versatility,
+    /// defensives). Armor reduces direct physical hits only.
+    fn mitigate(&self, view: &dyn StateView, target: ActorId, amount: f64, hit: IncomingHit)
+        -> f64;
     fn haste_mult(&self, view: &dyn StateView, actor: ActorId) -> f64;
 }
 

@@ -3,7 +3,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use portunus_core::{AuraId, HeroTreeId, Seed, SpecId, SpellId, TalentId};
+use portunus_core::{AuraId, HeroTreeId, Seed, SimDuration, SpecId, SpellId, TalentId};
+use portunus_gamedata::spell::{CastKind, CooldownDef};
 use portunus_gamedata::talent::{TalentNode, TalentTree};
 use portunus_gamedata::{EnemyData, GameData, HeroTreeDef};
 use portunus_ingest::{
@@ -131,6 +132,71 @@ fn broken_references_are_reported() {
         owner: Owner::Spec(SpecId(262)),
         spell: SpellId(8042),
     }));
+}
+
+#[test]
+fn channels_without_ticks_or_duration_are_reported() {
+    let mut game = game();
+    let channel = |duration: u32, ticks: u8| CastKind::Channel {
+        duration: SimDuration(duration),
+        ticks,
+        hasted: true,
+        swings: false,
+    };
+    let bolt = SpellId(188196);
+    game.spells.get_mut(&bolt).unwrap().cast = channel(3000, 3);
+    assert!(!check_game_data(&game).contains(&DataIssue::InvalidChannel(bolt)));
+    for broken in [channel(3000, 0), channel(0, 3)] {
+        game.spells.get_mut(&bolt).unwrap().cast = broken;
+        assert!(check_game_data(&game).contains(&DataIssue::InvalidChannel(bolt)));
+    }
+}
+
+#[test]
+fn malformed_empowers_are_reported() {
+    let mut game = game();
+    let ms = |v: &[u32]| v.iter().map(|&m| SimDuration(m)).collect::<Vec<_>>();
+    let empower = |stages: &[u32], effects: usize| CastKind::Empower {
+        stages: ms(stages),
+        hasted: true,
+        hold: SimDuration(2000),
+        stage_effects: vec![Vec::new(); effects],
+    };
+    let bolt = SpellId(188196);
+    game.spells.get_mut(&bolt).unwrap().cast = empower(&[1000, 1750, 2500], 3);
+    assert!(!check_game_data(&game).contains(&DataIssue::InvalidEmpower(bolt)));
+    for broken in [
+        empower(&[], 0),
+        empower(&[0, 1000], 2),
+        empower(&[1000, 1000], 2),
+        empower(&[1000, 1750], 1),
+    ] {
+        game.spells.get_mut(&bolt).unwrap().cast = broken;
+        assert!(check_game_data(&game).contains(&DataIssue::InvalidEmpower(bolt)));
+    }
+}
+
+#[test]
+fn categories_whose_spells_disagree_are_reported() {
+    let mut game = game();
+    let cd = |duration: u32, charges: u8, hasted: bool| CooldownDef {
+        duration: SimDuration(duration),
+        charges,
+        hasted,
+        category: Some(7),
+    };
+    let (a, b) = (SpellId(188196), SpellId(8042));
+    game.spells.get_mut(&a).unwrap().cooldown = Some(cd(30_000, 1, false));
+    game.spells.get_mut(&b).unwrap().cooldown = Some(cd(30_000, 1, false));
+    assert!(!check_game_data(&game).contains(&DataIssue::CategoryMismatch(7)));
+    for broken in [
+        cd(20_000, 1, false),
+        cd(30_000, 2, false),
+        cd(30_000, 1, true),
+    ] {
+        game.spells.get_mut(&b).unwrap().cooldown = Some(broken);
+        assert!(check_game_data(&game).contains(&DataIssue::CategoryMismatch(7)));
+    }
 }
 
 #[test]
