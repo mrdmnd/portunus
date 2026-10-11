@@ -25,6 +25,6 @@ pub use arm::{breakdown, AbilityRow, Breakdown, SimArm};
 pub use bundle::{Bundle, RunConfig, RunError, SeatConfig};
 pub use env::{NegElapsed, PartyMeter, SimEnv, Source};
 pub use observe::{
-    AuraObs, ChannelObs, CooldownObs, DemandObs, EmpowerObs, GroundObs, MovementObs, PetObs,
-    ScriptObserver, SeatObs, TargetObs, FOREVER,
+    AllyObs, AuraObs, ChannelObs, CooldownObs, DemandObs, EmpowerObs, GroundObs, MovementObs,
+    PetObs, ScriptObserver, SeatObs, TargetObs, FOREVER,
 };

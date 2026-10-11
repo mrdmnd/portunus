@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use portunus_core::rng::{self, Purpose};
 use portunus_core::{ActorId, EnemyKey, Seat, SimTime, SpellId, PARTY_SIZE};
+use portunus_gamedata::class::ClassDef;
 use portunus_gamedata::effect::{ModKind, Modifier};
 use portunus_gamedata::enemy::EnemyAction;
 use portunus_gamedata::spell::Requirement;
@@ -14,7 +15,7 @@ use portunus_scenario::resolved::Segment;
 use crate::error::{EngineError, SetupIssue};
 use crate::mechanics::whole_points;
 use crate::outcome::SeatOutcome;
-use crate::setup::{Externals, RunSetup};
+use crate::setup::{BloodlustMode, Externals, PullAura, RunSetup};
 use crate::state::{ActorKind, SeatPhase, RECENT_CASTS};
 
 use super::queue::Queue;
@@ -50,6 +51,13 @@ fn issues(setup: &RunSetup) -> Vec<SetupIssue> {
         if let Some(p) = t.permanent_pet {
             if !data.pets.contains_key(&p) {
                 out.push(SetupIssue::UnknownPet(p));
+            }
+        }
+    }
+    for class in seat_classes(setup).into_iter().flatten() {
+        for spell in class.on_pull.iter().filter_map(|p| p.spell) {
+            if !data.spells.contains_key(&spell) {
+                out.push(SetupIssue::UnknownSpell(spell));
             }
         }
     }
@@ -105,20 +113,41 @@ fn spawned<'a>(action: &'a EnemyAction, out: &mut Vec<&'a EnemyKey>) {
     }
 }
 
-/// The externals plus what each class among the seats brings, in that
-/// order, each aura once.
-fn group(setup: &RunSetup) -> Externals {
+/// Each seat's class, if the data has it.
+fn seat_classes(setup: &RunSetup) -> Vec<Option<&ClassDef>> {
     let data = &setup.data;
-    let classes = setup
+    setup
         .seats
         .iter()
-        .filter_map(|s| data.specs.get(&s.template.spec))
-        .filter_map(|spec| data.classes.get(&spec.class));
+        .map(|s| {
+            let spec = data.specs.get(&s.template.spec)?;
+            data.classes.get(&spec.class)
+        })
+        .collect()
+}
+
+/// The on-pull auras whose class spells the seats cast themselves.
+fn policy_pulls(class: &ClassDef, mode: BloodlustMode) -> impl Iterator<Item = &PullAura> {
+    class
+        .on_pull
+        .iter()
+        .filter(move |p| mode == BloodlustMode::Policy && p.spell.is_some())
+}
+
+/// The externals plus what each class among the seats brings, in that
+/// order, each aura once; on-pull auras left to the policy are dropped.
+fn group(setup: &RunSetup) -> Externals {
+    let mode = setup.externals.bloodlust;
     let mut group = setup.externals.clone();
-    for class in classes {
+    for class in seat_classes(setup).into_iter().flatten() {
         group.party_auras.extend(&class.group_auras);
         group.enemy_auras.extend(&class.enemy_auras);
-        group.on_pull.extend(&class.on_pull);
+        group.on_pull.extend(
+            class
+                .on_pull
+                .iter()
+                .filter(|p| !(mode == BloodlustMode::Policy && p.spell.is_some())),
+        );
     }
     let mut seen = BTreeSet::new();
     group.party_auras.retain(|a| seen.insert(*a));
@@ -192,7 +221,20 @@ pub(crate) fn build(setup: RunSetup) -> World {
     let abilities: Vec<Vec<_>> = setup
         .seats
         .iter()
-        .map(|s| s.template.abilities.iter().copied().collect())
+        .zip(seat_classes(&setup))
+        .map(|(s, class)| {
+            let mut list: Vec<SpellId> = s.template.abilities.iter().copied().collect();
+            let granted = class
+                .into_iter()
+                .flat_map(|c| policy_pulls(c, setup.externals.bloodlust))
+                .filter_map(|p| p.spell);
+            for spell in granted {
+                if !list.contains(&spell) {
+                    list.push(spell);
+                }
+            }
+            list
+        })
         .collect();
     let actors = setup
         .seats

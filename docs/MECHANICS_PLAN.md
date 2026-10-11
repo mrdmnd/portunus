@@ -1459,6 +1459,45 @@ can wait.
 
 ## 11. Phase 9: Group play (Tier B)
 
+**Done** except the 9.3 damage credit, which is deferred (see below).
+`BloodlustMode` defaults to `Auto` and nothing else in checked-in data
+changes, so existing DPS and trace hashes are unchanged. Tests are in
+`crates/mechanics/tests/party.rs` and `crates/run/tests/run_file.rs`,
+plus an ingest test.
+
+- **9.1** `Externals.bloodlust: BloodlustMode { Auto, Policy }`.
+  `PullAura` gained an optional `spell`. In `Policy` mode, class
+  `on_pull` entries that name a spell are dropped, and each seat of that
+  class gets the spell as an ability (`StateView::abilities` lists a
+  seat's abilities, and the observer builds cooldowns from it). The
+  Shaman entry now names Bloodlust (2825). It is off the GCD with a
+  300 s cooldown, and it skips party members who already have Sated, as
+  SimC's `bloodlust_t` does. The Elemental script casts it once combat
+  starts; SimC's APL never casts it (its override applies it at the
+  start), and a test checks that Policy and Auto deal the same damage.
+- **9.2** `SeatObs.allies: Vec<AllyObs>` (health, damage done, auras,
+  cooldowns), the other seats in seat order. **Change from the plan:**
+  allies are shown with no reaction delay. There is no Priest script,
+  so Power Infusion is the helper `scripts::buff_top_ally`, which buffs
+  the living ally with the most damage that lacks the buff.
+- **9.3** `ModKind::StatShare(Stat)` with the percent in `value` (not a
+  `StatShareFromSource { stat, pct }` struct, since modifiers already
+  carry a value). It adds that share of the source's stat as flat points
+  before the holder's `StatPct` multipliers. The source's stat counts its
+  own auras but not shares from others, as SimC's `ebon_int` does. When
+  a seat's auras change, seats holding its shares have their max health
+  and haste re-pushed. Test: a share raises the ally; sharing back
+  doesn't chain; the source's own Stamina buff grows the share and its
+  end shrinks it. Prescience needs nothing new: it is a `CritChanceAdd` on the ally.
+  **Damage credit deferred; the plan was wrong:** SimC does *not*
+  credit allied damage to the Augmentation Evoker. Its buffs just raise
+  the allies' own DPS, and only Breath of Eons (409632) deals damage
+  under the Evoker's name. Crediting would be a new reporting field, not
+  something that matches SimC, so it waits until someone needs it.
+- **9.4** `EngineIo::set_max_health`, which keeps the health fraction.
+  Mechanics call it when a player's aura with `StatFlat`, `StatPct` or
+  `StatShare` of Stamina changes.
+
 ### 9.1 Bloodlust as a decision
 Today Bloodlust is an `on_pull` class provision applied automatically.
 - Add a run-level setting `BloodlustMode { Auto, Policy }` (in `RunSetup`

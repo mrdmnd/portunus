@@ -21,8 +21,8 @@ use portunus_scenario::resolved::SpawnSet;
 use crate::choice::{Choice, MoveGoal, Wait};
 use crate::error::EngineError;
 use crate::mechanics::{
-    AbsorbEvent, AuraApplication, AuraChange, AuraEvent, CastEvent, DeathEvent, Landed, PetEvent,
-    RolledHit,
+    whole_points, AbsorbEvent, AuraApplication, AuraChange, AuraEvent, CastEvent, DeathEvent,
+    Landed, PetEvent, RolledHit,
 };
 use crate::outcome::{Outcome, PullOutcome, SeatOutcome};
 use crate::setup::{Externals, RunSetup};
@@ -1145,6 +1145,20 @@ impl World {
         }
     }
 
+    /// Health keeps its fraction of the maximum, in whole points, and a
+    /// living actor keeps at least one.
+    pub(crate) fn set_max_health(&mut self, actor: ActorId, max: u64) {
+        let Some(a) = self.actor_mut(actor) else {
+            return;
+        };
+        if !a.alive || max == 0 || a.max_health == max {
+            return;
+        }
+        let health = whole_points(a.health_frac() * max as f64).clamp(1, max);
+        a.health = health;
+        a.max_health = max;
+    }
+
     pub(crate) fn set_haste(&mut self, actor: ActorId, mult: f64) {
         let now = self.now;
         let Some(a) = self.actor_mut(actor) else {
@@ -1877,6 +1891,19 @@ impl StateView for World {
 
     fn pmultiplier(&self, source: ActorId, aura: AuraId) -> f64 {
         self.pmultiplier_of(source, aura)
+    }
+
+    fn abilities(&self, seat: Seat) -> &[SpellId] {
+        self.s
+            .abilities
+            .get(usize::from(seat.0))
+            .map_or(&[], Vec::as_slice)
+    }
+
+    fn damage_done(&self, seat: Seat) -> u64 {
+        self.seats
+            .get(usize::from(seat.0))
+            .map_or(0, |s| s.outcome.damage_done)
     }
 
     fn pets(&self, owner: Seat) -> &[ActorId] {

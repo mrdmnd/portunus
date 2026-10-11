@@ -6,11 +6,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use portunus_core::{
-    AuraId, EnemyKey, EventName, HeroTreeId, PetId, Seed, SimDuration, SpellId, Trigger,
+    ActorId, AuraId, EnemyKey, EventName, HeroTreeId, PetId, Seat, Seed, SimDuration, SimTime,
+    SpellId, Trigger,
 };
 use portunus_engine::trace::TraceEvent;
 use portunus_engine::{
-    CastOpts, Choice, MoveGoal, Readiness, StateView, TargetSel, Wait, WakeReason,
+    BloodlustMode, CastOpts, Choice, MoveGoal, Readiness, StateView, TargetSel, TraceRecord, Wait,
+    WakeReason,
 };
 use portunus_env::{Decision, Env, EpisodeSource, ProgressMeter, Turn};
 use portunus_eval::{Arm, LocalRunner, Metric, Runner, SeedSet};
@@ -19,10 +21,11 @@ use portunus_gamedata::aura::{
 };
 use portunus_gamedata::effect::{Coefficient, Effect, EffectTarget};
 use portunus_gamedata::enemy::{EnemyAction, EnemyKind, EnemyRule};
-use portunus_gamedata::spell::CastKind;
+use portunus_gamedata::spell::{CastKind, Targeting};
 use portunus_gamedata::stats::{
     Cost, RechargeDef, ResourceDef, ResourceKind, SchoolMask, SpendScaling,
 };
+use portunus_run::scripts::buff_top_ally;
 use portunus_run::{
     Bundle, ChannelObs, EmpowerObs, GroundObs, PartyMeter, RunError, SeatObs, FOREVER,
 };
@@ -682,6 +685,168 @@ fn closures_are_policies() {
     let bolts = arm.rollout(Seed(1)).unwrap();
     assert!(bolts.completed);
     assert!(bolts.end_time > full.end_time);
+}
+
+const BLOODLUST: SpellId = SpellId(2825);
+const SATED: AuraId = AuraId(57724);
+
+/// Two Shamans with Bloodlust left to their policies.
+fn lust_pair() -> Bundle {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/runs");
+    let mut config = bundle().config;
+    config.seats.push(config.seats[0].clone());
+    config.externals.bloodlust = BloodlustMode::Policy;
+    Bundle::from_config(config, &path).unwrap()
+}
+
+/// When each seat (by actor) gained `aura`.
+fn gained(trace: &[TraceRecord], aura: AuraId) -> Vec<(SimTime, ActorId)> {
+    trace
+        .iter()
+        .filter_map(|r| match r.event {
+            TraceEvent::AuraApplied {
+                holder, aura: a, ..
+            } if a == aura => Some((r.time, holder)),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn bloodlust_left_to_policies_waits_for_a_cast_and_sated_stops_the_second() {
+    let b = lust_pair();
+    let elemental = Arc::clone(&b.arm(false).policies[0]);
+    // Seat 0 lusts 15 s in, seat 1 tries 25 s in; until then neither may.
+    let lust_at = |seat: Seat| SimDuration(if seat == Seat(0) { 15_000 } else { 25_000 });
+    let mut env = b.env(true);
+    let mut turn = env.reset(Seed(1)).unwrap();
+    let mut casts = Vec::new();
+    while let Turn::Decide(mut d) = turn {
+        let due = d.obs.combat_time.is_some_and(|t| t >= lust_at(d.seat));
+        let choice = if due && d.legal.is_ready(BLOODLUST) {
+            casts.push((d.obs.now, d.seat));
+            Choice::cast(BLOODLUST)
+        } else {
+            d.legal.abilities.remove(&BLOODLUST);
+            elemental.act(&d)
+        };
+        turn = env.step(choice).unwrap().next;
+    }
+    let trace = env.drain_trace();
+    assert_eq!(casts.len(), 2, "{casts:?}");
+    let first = casts[0].0;
+    let both = |at| vec![(at, ActorId(0)), (at, ActorId(1))];
+    // The first cast lusts and sates both seats at once; the second, with
+    // both sated, does nothing.
+    assert_eq!(gained(&trace, AuraId(2825)), both(first));
+    assert_eq!(gained(&trace, SATED), both(first));
+}
+
+#[test]
+fn the_elemental_script_lusts_at_the_pull_when_it_has_the_spell() {
+    let b = lust_pair();
+    let policies = b.arm(false).policies;
+    let mut env = b.env(true);
+    let mut turn = env.reset(Seed(1)).unwrap();
+    let mut started = None;
+    while let Turn::Decide(d) = turn {
+        if d.obs.combat_time == Some(SimDuration::ZERO) {
+            started.get_or_insert(d.obs.now);
+        }
+        turn = env
+            .step(policies[usize::from(d.seat.0)].act(&d))
+            .unwrap()
+            .next;
+    }
+    let trace = env.drain_trace();
+    let started = started.expect("a decision as combat starts");
+    assert_eq!(
+        gained(&trace, AuraId(2825)),
+        vec![(started, ActorId(0)), (started, ActorId(1))]
+    );
+    // Which is what the automatic Bloodlust does.
+    let mut auto = b.config.clone();
+    auto.externals.bloodlust = BloodlustMode::Auto;
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/runs");
+    let auto = Bundle::from_config(auto, &path).unwrap();
+    let damage = |b: &Bundle| {
+        let o = b.arm(false).rollout(Seed(1)).unwrap();
+        o.seats.iter().map(|s| s.damage_done).collect::<Vec<_>>()
+    };
+    assert_eq!(damage(&b), damage(&auto));
+}
+
+const POWER_INFUSION: SpellId = SpellId(10060);
+const INFUSED: AuraId = AuraId(10060);
+const HEAVY_HITTER: AuraId = AuraId(900_941);
+
+/// Three Shamans: the first can Power Infuse an ally, the third hits half
+/// again as hard as the second.
+#[test]
+fn power_infusion_goes_to_the_ally_with_the_most_damage_and_allies_see_it() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/runs");
+    let mut config = bundle().config;
+    config.seats.push(config.seats[0].clone());
+    config.seats.push(config.seats[0].clone());
+    let mut b = Bundle::from_config(config, &path).unwrap();
+    let data = Arc::make_mut(&mut b.data);
+    let mut infused = data.auras[&AuraId(2825)].clone();
+    infused.id = INFUSED;
+    infused.name = "Power Infusion".into();
+    infused.duration = Some(SimDuration(15_000));
+    infused.blocked_by = None;
+    let mut heavy = data.auras[&AuraId(910_001)].clone();
+    heavy.id = HEAVY_HITTER;
+    heavy.duration = None;
+    heavy.modifiers[0].value = 50.0;
+    let mut pi = data.spells[&BLOODLUST].clone();
+    pi.id = POWER_INFUSION;
+    pi.targeting = Targeting::Ally;
+    pi.effects = vec![Effect::ApplyAura {
+        aura: INFUSED,
+        target: EffectTarget::Target,
+        stacks: 1,
+        duration: None,
+        per_unit_spent: None,
+    }];
+    data.auras.insert(INFUSED, infused);
+    data.auras.insert(HEAVY_HITTER, heavy);
+    data.spells.insert(POWER_INFUSION, pi);
+    b.templates[0].abilities.insert(POWER_INFUSION);
+    b.templates[2].passive_auras.push(HEAVY_HITTER);
+    let elemental = Arc::clone(&b.arm(false).policies[0]);
+    let mut env = b.env(true);
+    let mut turn = env.reset(Seed(1)).unwrap();
+    let mut meters = None;
+    let mut seen_cooling = false;
+    while let Turn::Decide(d) = turn {
+        let late = d.obs.combat_time.is_some_and(|t| t >= SimDuration(10_000));
+        let infuse = (d.seat == Seat(0) && late)
+            .then(|| buff_top_ally(&d, POWER_INFUSION, INFUSED))
+            .flatten();
+        if infuse.is_some() {
+            let seats: Vec<Seat> = d.obs.allies.iter().map(|a| a.seat).collect();
+            assert_eq!(seats, vec![Seat(1), Seat(2)]);
+            meters = Some((d.obs.allies[0].damage_done, d.obs.allies[1].damage_done));
+        }
+        if d.seat == Seat(1) {
+            seen_cooling |= d.obs.allies[0]
+                .cooldowns
+                .get(&POWER_INFUSION)
+                .is_some_and(|c| c.remaining > SimDuration::ZERO);
+        }
+        let choice = infuse.unwrap_or_else(|| elemental.act(&d));
+        turn = env.step(choice).unwrap().next;
+    }
+    let trace = env.drain_trace();
+    let (second, third) = meters.expect("seat 0 infused someone");
+    assert!(third > second, "{second} {third}");
+    assert_eq!(gained(&trace, INFUSED).len(), 1);
+    assert_eq!(gained(&trace, INFUSED)[0].1, ActorId(2));
+    assert!(
+        seen_cooling,
+        "seat 1 sees seat 0's Power Infusion cooling down"
+    );
 }
 
 #[test]

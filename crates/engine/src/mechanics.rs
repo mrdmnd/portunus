@@ -109,6 +109,9 @@ pub trait EngineIo {
     fn set_haste(&mut self, actor: ActorId, mult: f64);
     /// Rescales swing timers from now on, on top of haste.
     fn set_attack_speed(&mut self, actor: ActorId, mult: f64);
+    /// Sets a living actor's max health, keeping the fraction of it the
+    /// actor has (Power Word: Fortitude, Stamina procs).
+    fn set_max_health(&mut self, actor: ActorId, max: u64);
     /// `actor` is a seat's actor or a pet.
     fn adjust_cooldown(&mut self, actor: ActorId, spell: SpellId, change: CooldownChange);
     /// Spawn pets; returns their actors. `duration` is ignored for

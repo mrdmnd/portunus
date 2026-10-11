@@ -138,6 +138,54 @@ impl PartyMechanics {
         }
     }
 
+    /// Re-push what the kernel keeps of `holder`'s stats after `def`
+    /// changed on it, and of every seat holding a `StatShare` from it: a
+    /// share follows its source's stats, as SimC's `update_stats` on
+    /// Ebon Might.
+    fn refresh_stats(&self, io: &mut dyn EngineIo, holder: ActorId, def: &AuraDef) {
+        self.refresh_speed(io, holder, def);
+        self.refresh_health(io, holder, def);
+        let view = io.view();
+        let mut sharing: Vec<(ActorId, portunus_core::AuraId)> = Vec::new();
+        for &seat in view.seats().iter().filter(|&&s| s != holder) {
+            for inst in view.auras(seat).iter().filter(|i| i.source == holder) {
+                let shares = self.aura_def(inst.aura).is_some_and(|d| {
+                    d.modifiers
+                        .iter()
+                        .any(|m| matches!(m.kind, ModKind::StatShare(_)))
+                });
+                if shares {
+                    sharing.push((seat, inst.aura));
+                }
+            }
+        }
+        for (seat, aura) in sharing {
+            let Some(share) = self.aura_def(aura) else {
+                continue;
+            };
+            self.refresh_speed(io, seat, share);
+            self.refresh_health(io, seat, share);
+        }
+    }
+
+    /// Re-push a seat's max health to the kernel if this aura changes its
+    /// Stamina.
+    fn refresh_health(&self, io: &mut dyn EngineIo, holder: ActorId, def: &AuraDef) {
+        let touches_stamina = def.modifiers.iter().any(|m| {
+            matches!(
+                m.kind,
+                ModKind::StatFlat(Stat::Stamina)
+                    | ModKind::StatPct(Stat::Stamina)
+                    | ModKind::StatShare(Stat::Stamina)
+            )
+        });
+        if !touches_stamina || player_seat(io.view(), holder).is_none() {
+            return;
+        }
+        let max = self.math().derived(io.view(), holder).max_health;
+        io.set_max_health(holder, whole_points(max));
+    }
+
     /// Re-push haste and attack speed to the kernel if this aura can change
     /// them. A seat's haste reaches its pets too.
     fn refresh_speed(&self, io: &mut dyn EngineIo, holder: ActorId, def: &AuraDef) {
@@ -147,6 +195,7 @@ impl PartyMechanics {
                 ModKind::HastePct
                     | ModKind::StatFlat(Stat::HasteRating)
                     | ModKind::StatPct(Stat::HasteRating)
+                    | ModKind::StatShare(Stat::HasteRating)
             )
         });
         let touches_attack_speed = def
@@ -361,7 +410,7 @@ impl Mechanics for PartyMechanics {
             };
             self.interp.fire(io, ev.aura.holder, stacked);
         }
-        self.refresh_speed(io, ev.aura.holder, def);
+        self.refresh_stats(io, ev.aura.holder, def);
     }
 
     fn aura_removed(&self, io: &mut dyn EngineIo, ev: &AuraEvent) {
@@ -429,7 +478,7 @@ impl Mechanics for PartyMechanics {
             };
             self.interp.fire(io, r.holder, removed);
         }
-        self.refresh_speed(io, r.holder, def);
+        self.refresh_stats(io, r.holder, def);
     }
 
     /// An enemy's death reaches every seat's and pet's listeners.

@@ -216,6 +216,9 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
         if *key != class.name {
             c.issues.push(DataIssue::KeyMismatch(owner.clone()));
         }
+        for spell in class.on_pull.iter().filter_map(|p| p.spell) {
+            c.spell(&owner, spell);
+        }
         let pulled = class
             .on_pull
             .iter()

@@ -480,6 +480,12 @@ pub enum ModKind {
     /// unused): Elemental's Lava Burst, whose Flame Shock crit doesn't
     /// count.
     CritChanceAddsDamage,
+    /// Adds `value` percent of the aura *source's* `stat` to the holder,
+    /// before the holder's `StatPct` multipliers: Ebon Might. The source's
+    /// stat counts its own auras but not what others share to it (SimC's
+    /// `ebon_int` subtracts the Ebon Mights on the Evoker), so shares never
+    /// chain. Only between players; on a share from itself it does nothing.
+    StatShare(Stat),
 }
 
 /// A reaction to combat events: procs, on-hit effects, and the like.

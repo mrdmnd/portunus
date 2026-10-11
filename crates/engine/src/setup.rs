@@ -73,4 +73,21 @@ pub struct Externals {
     /// Applied to every living seat as each pull starts.
     #[serde(default)]
     pub on_pull: Vec<PullAura>,
+    /// Who decides when the seats' classes' Bloodlust goes out.
+    #[serde(default)]
+    pub bloodlust: BloodlustMode,
+}
+
+/// When a class's on-pull aura with a granting spell ([`PullAura::spell`])
+/// goes out. Auras from `Externals::on_pull`, and classes without the
+/// spell, are always automatic.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BloodlustMode {
+    /// On every living seat as each pull starts.
+    #[default]
+    Auto,
+    /// Each seat of a providing class has the spell, and casts it when its
+    /// policy chooses.
+    Policy,
 }

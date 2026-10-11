@@ -40,6 +40,8 @@ pub struct Fixture {
     pub enemies: EnemyData,
     pub template: ActorTemplate,
     pub spec: ScenarioSpec,
+    /// How many copies of `template` sit in the party; 1 by default.
+    pub seats: usize,
 }
 
 pub fn dummy() -> EnemyKey {
@@ -195,6 +197,7 @@ pub fn fixture(kit: Vec<Listener>) -> Fixture {
         enemies,
         template,
         spec,
+        seats: 1,
     }
 }
 
@@ -240,14 +243,17 @@ impl Fixture {
             run: Arc::new(sampler.sample(Seed(1))),
             data: Arc::new(self.data.clone()),
             enemies,
-            seats: vec![SeatSetup {
-                template: self.template.clone(),
-                latency: Latency {
-                    anticipated: Dist::Fixed(SimDuration::ZERO),
-                    reaction: Dist::Fixed(SimDuration::ZERO),
-                    cast_lag: Dist::Fixed(SimDuration::ZERO),
-                },
-            }],
+            seats: vec![
+                SeatSetup {
+                    template: self.template.clone(),
+                    latency: Latency {
+                        anticipated: Dist::Fixed(SimDuration::ZERO),
+                        reaction: Dist::Fixed(SimDuration::ZERO),
+                        cast_lag: Dist::Fixed(SimDuration::ZERO),
+                    },
+                };
+                self.seats
+            ],
             externals: Externals::default(),
             record_trace: true,
         };

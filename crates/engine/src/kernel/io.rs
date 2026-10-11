@@ -75,6 +75,10 @@ impl EngineIo for Io<'_> {
         self.w.set_attack_speed(actor, mult);
     }
 
+    fn set_max_health(&mut self, actor: ActorId, max: u64) {
+        self.w.set_max_health(actor, max);
+    }
+
     fn adjust_cooldown(&mut self, actor: ActorId, spell: SpellId, change: CooldownChange) {
         self.w.adjust_cooldown(actor, spell, change);
     }

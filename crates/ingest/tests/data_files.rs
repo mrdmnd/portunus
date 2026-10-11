@@ -732,3 +732,17 @@ fn stuns_must_last_and_dispels_must_name_a_type_and_take_something() {
     );
     assert_eq!(check_game_data(&game), Vec::new());
 }
+
+#[test]
+fn a_class_can_only_grant_its_pull_aura_by_a_spell_that_exists() {
+    let mut game = game();
+    let shaman = game.classes.get_mut("Shaman").expect("Shaman");
+    shaman.on_pull[0].spell = Some(SpellId(1));
+    assert_eq!(
+        check_game_data(&game),
+        vec![DataIssue::UnknownSpell {
+            owner: Owner::Class("Shaman".into()),
+            spell: SpellId(1),
+        }]
+    );
+}

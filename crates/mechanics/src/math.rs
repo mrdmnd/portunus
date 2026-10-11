@@ -215,19 +215,43 @@ impl Formulas {
     /// A seat's stats with every active aura applied, and its `RatedPct`
     /// additions; `None` for actors that aren't players.
     fn stat_block(&self, view: &dyn StateView, actor: ActorId) -> Option<SeatSnapshot> {
+        self.stat_block_sharing(view, actor, true)
+    }
+
+    /// [`Self::stat_block`], taking `StatShare`s from other seats only if
+    /// `shared`; a source's own stats are read without them.
+    fn stat_block_sharing(
+        &self,
+        view: &dyn StateView,
+        actor: ActorId,
+        shared: bool,
+    ) -> Option<SeatSnapshot> {
         let seat = player_seat(view, actor)?;
         let base = self.s.seats.get(usize::from(seat.0))?;
         let mut stats = base.stats.clone();
         let mut pct: BTreeMap<Stat, f64> = BTreeMap::new();
         let mut rated: BTreeMap<RatedStat, f64> = BTreeMap::new();
         let mut ap_mult = 1.0;
-        self.each_mod(view, &Query::holder(actor), |m, value| match m.kind {
-            ModKind::AttackPowerPct => ap_mult *= 1.0 + value / 100.0,
-            ModKind::StatFlat(stat) => *stats.0.entry(stat).or_default() += value,
-            ModKind::StatPct(stat) => *pct.entry(stat).or_insert(1.0) *= 1.0 + value / 100.0,
-            ModKind::RatedPct(stat) => *rated.entry(stat).or_default() += value,
-            _ => {}
+        let mut shares: Vec<(Stat, f64, ActorId)> = Vec::new();
+        self.each_sourced_mod(view, &Query::holder(actor), |m, value, source| {
+            match m.kind {
+                ModKind::AttackPowerPct => ap_mult *= 1.0 + value / 100.0,
+                ModKind::StatFlat(stat) => *stats.0.entry(stat).or_default() += value,
+                ModKind::StatPct(stat) => *pct.entry(stat).or_insert(1.0) *= 1.0 + value / 100.0,
+                ModKind::RatedPct(stat) => *rated.entry(stat).or_default() += value,
+                ModKind::StatShare(stat) if shared && source != actor => {
+                    shares.push((stat, value, source));
+                }
+                _ => {}
+            }
         });
+        for (stat, value, source) in shares {
+            let Some(from) = self.stat_block_sharing(view, source, false) else {
+                continue;
+            };
+            let have = from.stats.0.get(&stat).copied().unwrap_or(0.0);
+            *stats.0.entry(stat).or_default() += have * value / 100.0;
+        }
         for (stat, mult) in pct {
             if let Some(v) = stats.0.get_mut(&stat) {
                 *v *= mult;
@@ -344,6 +368,16 @@ impl Formulas {
     /// Calls `f` with every applicable modifier and its value times stacks
     /// (for `per_stack` modifiers).
     fn each_mod(&self, view: &dyn StateView, q: &Query, mut f: impl FnMut(&Modifier, f64)) {
+        self.each_sourced_mod(view, q, |m, value, _| f(m, value));
+    }
+
+    /// [`Self::each_mod`], also passing who applied each modifier's aura.
+    fn each_sourced_mod(
+        &self,
+        view: &dyn StateView,
+        q: &Query,
+        mut f: impl FnMut(&Modifier, f64, ActorId),
+    ) {
         for inst in view.auras(q.holder) {
             let Some(def) = self.s.data.auras.get(&inst.aura) else {
                 continue;
@@ -357,7 +391,7 @@ impl Formulas {
                 } else {
                     1.0
                 };
-                f(m, m.value * stacks);
+                f(m, m.value * stacks, inst.source);
             }
         }
     }

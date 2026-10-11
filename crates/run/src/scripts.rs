@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use portunus_core::{AuraId, SimDuration, SpellId};
-use portunus_engine::{ActionMask, Choice, MoveGoal, Wait};
+use portunus_engine::{ActionMask, CastOpts, Choice, MoveGoal, TargetSel, Wait};
 use portunus_env::Decision;
 use portunus_gamedata::stats::ResourceKind;
 use portunus_policy::Policy;
@@ -26,11 +26,32 @@ pub fn by_name(name: &str) -> Option<Arc<dyn Policy<SeatObs>>> {
         .map(|&(_, f)| Arc::new(f) as Arc<dyn Policy<SeatObs>>)
 }
 
+/// Give `spell`, which puts `buff` on an ally, to the living ally that
+/// has done the most damage and lacks it: the usual Power Infusion
+/// target. `None` out of combat, or if the spell isn't ready.
+pub fn buff_top_ally(d: &Decision<SeatObs>, spell: SpellId, buff: AuraId) -> Option<Choice> {
+    if d.obs.combat_time.is_none() || !d.legal.is_ready(spell) {
+        return None;
+    }
+    let ally = d
+        .obs
+        .allies
+        .iter()
+        .filter(|a| a.alive && !a.buffs.contains_key(&buff))
+        .max_by_key(|a| a.damage_done)?;
+    Some(Choice::Cast {
+        ability: spell,
+        target: TargetSel::Actor(ally.actor),
+        opts: CastOpts::default(),
+    })
+}
+
 /// Never acts.
 pub fn idle(_: &Decision<SeatObs>) -> Choice {
     Choice::Wait(Wait::NextEvent)
 }
 
+const BLOODLUST: SpellId = SpellId(2825);
 const LIGHTNING_BOLT: SpellId = SpellId(188196);
 const LAVA_BURST: SpellId = SpellId(51505);
 const FLAME_SHOCK: SpellId = SpellId(188389);
@@ -158,6 +179,9 @@ pub fn elemental(d: &Decision<SeatObs>) -> Choice {
     let empowered_lvb = talent(MOLTEN_WRATH) || talent(PURGING_FLAMES);
 
     let choice = [
+        // Only known when the run leaves Bloodlust to policies: then as
+        // combat starts, as SimC's default `override.bloodlust` does.
+        pick(BLOODLUST, obs.combat_time.is_some()),
         pick(LIGHTNING_SHIELD, !obs.has_buff(LIGHTNING_SHIELD_BUFF)),
         pick(THUNDERSTRIKE_WARD, !obs.has_buff(THUNDERSTRIKE_WARD_BUFF)),
         pick(STORMKEEPER, asc_cd > SimDuration(10_000) || asc_cd < GCD),

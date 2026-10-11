@@ -42,6 +42,11 @@ pub trait StateView {
     fn segment(&self) -> SegmentView;
     /// Seat index to actor.
     fn seats(&self) -> &[ActorId];
+    /// What a seat can cast: its template's abilities, plus any spell the
+    /// run hands it (Bloodlust under `BloodlustMode::Policy`).
+    fn abilities(&self, seat: Seat) -> &[SpellId];
+    /// A seat's damage done so far this run, as a damage meter shows it.
+    fn damage_done(&self, seat: Seat) -> u64;
     /// Every enemy spawned so far in the current combat, engaged or not.
     fn enemies(&self) -> &[ActorId];
     /// What an enemy of any combat so far is.

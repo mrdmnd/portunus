@@ -285,6 +285,7 @@ fn on_pull_auras_respect_their_lockout_across_pulls() {
         on_pull: vec![PullAura {
             aura: BLOODLUST,
             lockout: Some(SATED),
+            spell: None,
         }],
         ..Externals::default()
     };

@@ -110,6 +110,23 @@ pub struct DemandObs {
     pub remaining: SimDuration,
 }
 
+/// Another seat, as party frames, cooldown trackers and a damage meter
+/// show it: as it is, with no reaction delay.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AllyObs {
+    pub seat: Seat,
+    pub actor: ActorId,
+    pub alive: bool,
+    /// Percent of max health, 0 to 100.
+    pub health_pct: f64,
+    /// Damage done so far this run.
+    pub damage_done: u64,
+    /// Auras it holds, from any source.
+    pub buffs: BTreeMap<AuraId, AuraObs>,
+    /// One entry per ability with a cooldown.
+    pub cooldowns: BTreeMap<SpellId, CooldownObs>,
+}
+
 /// One seat's view of the moment, in game terms.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SeatObs {
@@ -154,6 +171,8 @@ pub struct SeatObs {
     /// Remaining lifetime of each active guardian and totem, by type,
     /// oldest first (`None`: no time limit).
     pub guardians: BTreeMap<PetId, Vec<Option<SimDuration>>>,
+    /// The other seats, in seat order.
+    pub allies: Vec<AllyObs>,
 }
 
 /// A controlled pet, as its owner sees it on the pet frame.
@@ -417,9 +436,9 @@ impl Observer for ScriptObserver {
                 )
             })
             .collect();
-        let cooldown = |actor: ActorId, s: SpellId| {
+        let cooldown_hiding = |actor: ActorId, s: SpellId, hidden: &[SpellId]| {
             let cd = state.cooldown(actor, s)?;
-            let obs = if hide.cooldowns.contains(&s) {
+            let obs = if hidden.contains(&s) {
                 CooldownObs {
                     charges: 0,
                     remaining: SimDuration::ZERO,
@@ -443,9 +462,35 @@ impl Observer for ScriptObserver {
             };
             Some((s, obs))
         };
-        let cooldowns = template
-            .into_iter()
-            .flat_map(|t| &t.abilities)
+        let cooldown = |actor: ActorId, s: SpellId| cooldown_hiding(actor, s, &hide.cooldowns);
+        let allies = (0..state.seats().len())
+            .map(|i| Seat(i as u8))
+            .filter(|&s| s != seat)
+            .filter_map(|s| {
+                let actor = state.seats()[usize::from(s.0)];
+                let a = state.actor(actor)?;
+                Some(AllyObs {
+                    seat: s,
+                    actor,
+                    alive: a.alive,
+                    health_pct: 100.0 * a.health_frac(),
+                    damage_done: state.damage_done(s),
+                    buffs: state
+                        .auras(actor)
+                        .iter()
+                        .map(|i| (i.aura, aura_obs(i, now)))
+                        .collect(),
+                    cooldowns: state
+                        .abilities(s)
+                        .iter()
+                        .filter_map(|&sp| cooldown_hiding(actor, sp, &[]))
+                        .collect(),
+                })
+            })
+            .collect();
+        let cooldowns = state
+            .abilities(seat)
+            .iter()
             .filter_map(|&s| cooldown(me, s))
             .collect();
         let mut pet = None;
@@ -586,6 +631,7 @@ impl Observer for ScriptObserver {
             target,
             pet,
             guardians,
+            allies,
         }
     }
 

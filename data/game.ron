@@ -96,7 +96,7 @@
         "Shaman": (
             name: "Shaman",
             group_auras: [462854],
-            on_pull: [(aura: 2825, lockout: Some(57724))],
+            on_pull: [(aura: 2825, lockout: Some(57724), spell: Some(2825))],
         ),
         "Mage": (
             name: "Mage",
@@ -685,6 +685,33 @@
             targeting: self_only,
             hostile: false,
             effects: [apply_aura(aura: 443454, target: caster)],
+        ),
+        // Off the GCD on a 5 minute cooldown (SimC's spell data). Party
+        // members already Sated get neither aura (SimC's bloodlust_t).
+        2825: (
+            id: 2825,
+            name: "Bloodlust",
+            school: 8,
+            cast: instant,
+            gcd: None,
+            cooldown: Some((duration: 300000, charges: 1, hasted: false, category: None)),
+            targeting: none,
+            hostile: false,
+            effects: [
+                for_each(
+                    target: party,
+                    then: [
+                        if(
+                            when: target_has_aura(aura: 57724, from_self: false),
+                            then: [],
+                            otherwise: [
+                                apply_aura(aura: 2825, target: target),
+                                apply_aura(aura: 57724, target: target),
+                            ],
+                        ),
+                    ],
+                ),
+            ],
         ),
         // Movement tools from the class tree; numbers are placeholders.
         79206: (

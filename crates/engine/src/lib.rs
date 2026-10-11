@@ -103,7 +103,7 @@ pub use mask::{ActionMask, Readiness};
 pub use mechanics::{EngineIo, Mechanics};
 pub use order::EventClass;
 pub use outcome::Outcome;
-pub use setup::{Externals, Latency, PullAura, RunSetup, SeatSetup};
+pub use setup::{BloodlustMode, Externals, Latency, PullAura, RunSetup, SeatSetup};
 pub use state::{
     AuraRef, DeckView, DemandView, GroundView, ListenerRef, MovementView, PendingTimer, ProcView,
     SeatPhase, SegmentView, StateView,

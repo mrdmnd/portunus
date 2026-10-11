@@ -1,6 +1,6 @@
 //! Classes: what one brings to its group, whichever spec plays it.
 
-use portunus_core::AuraId;
+use portunus_core::{AuraId, SpellId};
 use serde::{Deserialize, Serialize};
 
 /// Raid buffs and debuffs a class provides. A run applies those of every
@@ -28,4 +28,8 @@ pub struct PullAura {
     /// get (Sated after Bloodlust).
     #[serde(default)]
     pub lockout: Option<AuraId>,
+    /// The class's spell that grants it, for runs that leave the timing
+    /// to the policy (`BloodlustMode::Policy`).
+    #[serde(default)]
+    pub spell: Option<SpellId>,
 }
