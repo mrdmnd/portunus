@@ -133,6 +133,21 @@ pub(crate) struct Actor {
     pub rules: Vec<RuleState>,
     /// Enemies: a rule's cast bar in progress.
     pub enemy_cast: Option<EnemyCast>,
+    /// Enemies: stuns taken.
+    pub stun: StunState,
+}
+
+/// An enemy's stuns, and their diminishing returns.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct StunState {
+    /// When the current stun ends; past or `None` when not stunned.
+    pub until: Option<SimTime>,
+    /// Total time stunned, which its rules' clocks stood still for.
+    pub paused: SimDuration,
+    /// Stuns since diminishing returns last reset.
+    pub applied: u8,
+    /// When diminishing returns reset, if no stun lands before.
+    pub resets_at: SimTime,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -249,6 +264,7 @@ impl Actor {
             engaged_at: None,
             rules: Vec::new(),
             enemy_cast: None,
+            stun: StunState::default(),
         }
     }
 
@@ -266,6 +282,8 @@ pub(crate) struct PetLife {
     pub gcd_end: Option<SimTime>,
     /// Bumped whenever a pending autocast check becomes obsolete.
     pub gen: u32,
+    /// No autocast before this (`PetDef::autocast_interval`).
+    pub next_autocast: Option<SimTime>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -824,12 +842,14 @@ impl World {
         self.enemies
             .iter()
             .copied()
-            .filter(|&e| self.actor_ref(e).is_some_and(|a| a.alive && a.engaged))
+            .filter(|&e| self.is_live_target(e))
             .collect()
     }
 
     pub(crate) fn is_live_target(&self, id: ActorId) -> bool {
-        self.enemies.contains(&id) && self.actor_ref(id).is_some_and(|a| a.alive && a.engaged)
+        self.enemies.contains(&id)
+            && self.actor_ref(id).is_some_and(|a| a.alive && a.engaged)
+            && !self.untargetable(id)
     }
 
     pub(crate) fn queue_triggers(&mut self) {
@@ -1478,7 +1498,7 @@ impl World {
         for add in followers {
             self.despawn(add);
         }
-        self.enemy_gone(actor);
+        self.enemy_gone(actor, WakeReason::EnemyDied(actor));
     }
 
     /// `enemy` leaves the combat without dying: no death, no killer, its
@@ -1511,11 +1531,12 @@ impl World {
         {
             self.remove_instance(enemy, last, crate::mechanics::AuraRemoval::HolderDied);
         }
-        self.enemy_gone(enemy);
+        self.enemy_gone(enemy, WakeReason::EnemyDied(enemy));
     }
 
-    /// Seats and pets move off `actor`, an enemy no longer alive.
-    fn enemy_gone(&mut self, actor: ActorId) {
+    /// Seats and pets move off `actor`, an enemy that can no longer be
+    /// targeted (dead, gone, or untargetable), and are told `why`.
+    pub(crate) fn enemy_gone(&mut self, actor: ActorId, why: WakeReason) {
         use crate::trace::CastEndReason;
         let next = self.live_targets().first().copied();
         let casting_at_it = |w: &World, id: ActorId| {
@@ -1539,7 +1560,7 @@ impl World {
                 }
             }
             let now = self.now;
-            self.notify(seat, WakeReason::EnemyDied(actor), false, None, now);
+            self.notify(seat, why, false, None, now);
         }
         self.approach_lost(actor);
         for pet in self.all_pets() {
@@ -1576,25 +1597,32 @@ impl World {
                 anchor: None,
             });
         }
+        self.enemy_available(enemy, WakeReason::EnemyEngaged(enemy));
+        self.queue_triggers();
+    }
+
+    /// Seats without a live target take `enemy`, if it can be targeted,
+    /// and every seat is told `why`; swings and pets pick up.
+    pub(crate) fn enemy_available(&mut self, enemy: ActorId, why: WakeReason) {
+        let live = self.is_live_target(enemy);
         for i in 0..self.seats.len() {
             let seat = Seat(i as u8);
             let me = self.seat_actor(seat);
             let needs_target = self
                 .actor_ref(me)
                 .is_some_and(|a| a.target.is_none_or(|t| !self.is_live_target(t)));
-            if needs_target {
+            if needs_target && live {
                 if let Some(a) = self.actor_mut(me) {
                     a.target = Some(enemy);
                 }
             }
             let now = self.now;
-            self.notify(seat, WakeReason::EnemyEngaged(enemy), false, None, now);
+            self.notify(seat, why, false, None, now);
             self.start_swings(me);
         }
         for pet in self.all_pets() {
             self.wake_pet(pet);
         }
-        self.queue_triggers();
     }
 
     /// Sends a completed cast on its way if it travels, or if it carries
@@ -1717,6 +1745,8 @@ impl StateView for World {
             max_health: a.max_health,
             alive: a.alive,
             engaged: a.engaged,
+            targetable: !self.untargetable(id),
+            stunned_until: a.stun.until.filter(|&u| u > self.now),
             casting: a
                 .casting
                 .map(|c| CastView {

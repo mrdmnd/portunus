@@ -1,5 +1,6 @@
 //! The checked-in run files, end to end.
 
+use std::collections::BTreeMap;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -13,7 +14,9 @@ use portunus_engine::{
 };
 use portunus_env::{Decision, Env, EpisodeSource, ProgressMeter, Turn};
 use portunus_eval::{Arm, LocalRunner, Metric, Runner, SeedSet};
-use portunus_gamedata::aura::{AuraDef, AuraValue, AuraValueKind, GroundDef, RefreshRule};
+use portunus_gamedata::aura::{
+    AuraDef, AuraValue, AuraValueKind, DispelType, GroundDef, RefreshRule,
+};
 use portunus_gamedata::effect::{Coefficient, Effect, EffectTarget};
 use portunus_gamedata::enemy::{EnemyAction, EnemyKind, EnemyRule};
 use portunus_gamedata::spell::CastKind;
@@ -293,6 +296,58 @@ fn elemental_meets_the_mechanics_dummys_demands() {
     assert!(chased, "approaches after a leap");
 }
 
+/// The shield dummy's barrier soaks a twentieth of its health each time
+/// it goes up, and what it soaks is the seat's absorbed damage.
+#[test]
+fn the_shield_dummys_barriers_soak_its_share_of_health_first() {
+    const BARRIER: AuraId = AuraId(910_002);
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../data/runs/elemental_stormbringer_shield.ron");
+    let b = Bundle::load(&path).unwrap();
+    let policy = &b.arm(false).policies[0];
+    let mut env = b.env(true);
+    let mut turn = env.reset(Seed(2)).unwrap();
+    let outcome = loop {
+        match turn {
+            Turn::Done(o) => break o,
+            Turn::Decide(d) => turn = env.step(policy.act(&d)).unwrap().next,
+        }
+    };
+    let trace = env.drain_trace();
+    assert!(outcome.completed);
+    // What each barrier soaked, and whether it broke before running out.
+    let mut barriers: Vec<(u64, Option<SimDuration>)> = Vec::new();
+    let mut raised = None;
+    for r in &trace {
+        match r.event {
+            TraceEvent::AuraApplied { aura, .. } if aura == BARRIER => {
+                barriers.push((0, None));
+                raised = Some(r.time);
+            }
+            TraceEvent::Absorbed { aura, amount, .. } if aura == BARRIER => {
+                barriers.last_mut().unwrap().0 += amount;
+            }
+            TraceEvent::AuraRemoved { aura, .. } if aura == BARRIER => {
+                barriers.last_mut().unwrap().1 = raised.map(|t| r.time - t);
+            }
+            _ => {}
+        }
+    }
+    assert!(barriers.len() >= 3, "{barriers:?}");
+    assert!(barriers.iter().all(|b| b.0 > 0), "{barriers:?}");
+    let total: u64 = barriers.iter().map(|b| b.0).sum();
+    assert_eq!(outcome.seats[0].damage_absorbed, total);
+    let broken: Vec<u64> = barriers
+        .iter()
+        .filter(|b| b.1.is_some_and(|d| d < SimDuration(15_000)))
+        .map(|b| b.0)
+        .collect();
+    assert!(!broken.is_empty(), "{barriers:?}");
+    assert!(broken.iter().all(|&s| s == broken[0]), "{broken:?}");
+    // 5% of six million, give or take the run's 20% health jitter.
+    assert!((240_000..=360_000).contains(&broken[0]), "{broken:?}");
+}
+
 #[test]
 fn seats_see_their_channels_progress() {
     let mut b = bundle();
@@ -385,6 +440,79 @@ fn seats_see_their_empowers_progress() {
     assert_eq!(seen, vec![stage(1, Some(SimDuration(750))), stage(2, None)]);
 }
 
+/// A dummy with a magic ward and a 5 s vanishing act 10 s into its clock,
+/// and Lightning Bolt stunning what it hits.
+#[test]
+fn seats_see_their_targets_stuns_and_wards_and_lose_it_while_it_hides() {
+    const WARD: AuraId = AuraId(900_931);
+    const VANISH: AuraId = AuraId(900_932);
+    let mut b = bundle();
+    let data = Arc::make_mut(&mut b.data);
+    let mut ward = data.auras[&AuraId(910_001)].clone();
+    ward.id = WARD;
+    ward.duration = None;
+    ward.modifiers.clear();
+    ward.dispel = Some(DispelType::Magic);
+    let mut vanish = ward.clone();
+    vanish.id = VANISH;
+    vanish.duration = Some(SimDuration(5000));
+    vanish.dispel = None;
+    vanish.untargetable = true;
+    data.auras.insert(WARD, ward);
+    data.auras.insert(VANISH, vanish);
+    // The seat's own Flame Shock is magic too, but not the dummy's to lose.
+    data.auras.get_mut(&AuraId(188389)).unwrap().dispel = Some(DispelType::Magic);
+    data.spells
+        .get_mut(&LIGHTNING_BOLT)
+        .unwrap()
+        .effects
+        .push(Effect::Stun {
+            duration: SimDuration(2000),
+            target: EffectTarget::Target,
+        });
+    let enemies = Arc::make_mut(&mut b.enemies);
+    let rule = |name: &str, when, aura| EnemyRule {
+        name: EventName(name.into()),
+        phase: None,
+        when,
+        repeat: None,
+        action: EnemyAction::SelfAura(aura),
+    };
+    enemies
+        .enemies
+        .get_mut(&EnemyKey("target_dummy".into()))
+        .unwrap()
+        .rules = vec![
+        rule("ward", Trigger::Now, WARD),
+        rule("vanish", Trigger::Elapsed(SimDuration(10_000)), VANISH),
+    ];
+    let policy = Arc::clone(&b.arm(false).policies[0]);
+    let mut env = b.env(false);
+    let mut turn = env.reset(Seed(1)).unwrap();
+    let mut stunned = 0;
+    // Whether the seat had the dummy as its target, decision by decision
+    // from when it first did, with repeats dropped.
+    let mut seen: Vec<bool> = Vec::new();
+    while let Turn::Decide(d) = turn {
+        if let Some(t) = &d.obs.target {
+            assert_eq!(t.dispellable, BTreeMap::from([(WARD, DispelType::Magic)]));
+            if let Some(left) = t.stunned {
+                assert!(left > SimDuration::ZERO && left <= SimDuration(2000));
+                stunned += 1;
+            }
+        }
+        let has = d.obs.target.is_some();
+        if (has || !seen.is_empty()) && seen.last() != Some(&has) {
+            seen.push(has);
+        }
+        turn = env.step(policy.act(&d)).unwrap().next;
+    }
+    assert!(stunned > 0);
+    // Stuns hold the dummy's clock back, so it hides later than 10 s in,
+    // but it hides once and comes back.
+    assert_eq!(seen, vec![true, false, true]);
+}
+
 #[test]
 fn seats_see_shields_as_a_share_of_health() {
     let mut b = bundle();
@@ -418,6 +546,8 @@ fn seats_see_shields_as_a_share_of_health() {
         unique_per_source: false,
         prevents_death: None,
         ground: None,
+        untargetable: false,
+        dispel: None,
     };
     let apply = |id: u32, target| Effect::ApplyAura {
         aura: AuraId(id),
@@ -692,6 +822,8 @@ fn seats_see_how_far_they_can_stray_from_their_area_and_who_is_in_it() {
             unique_per_source: false,
             prevents_death: None,
             ground: Some(GroundDef { radius: 8.0 }),
+            untargetable: false,
+            dispel: None,
         },
     );
     data.spells

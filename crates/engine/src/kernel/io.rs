@@ -92,6 +92,30 @@ impl EngineIo for Io<'_> {
         self.w.summon(owner, pet, count, duration)
     }
 
+    fn summon_staggered(
+        &mut self,
+        owner: Seat,
+        pet: PetId,
+        count: u8,
+        duration: Option<SimDuration>,
+        every: SimDuration,
+    ) {
+        if self.w.seat_ref(owner).is_none() || count == 0 {
+            return;
+        }
+        let at = self.w.now + every;
+        self.w.queue.push(
+            at,
+            Event::SummonNext {
+                owner,
+                pet,
+                left: count,
+                duration,
+                every,
+            },
+        );
+    }
+
     fn dismiss(&mut self, owner: Seat, pet: PetId, count: Option<u8>) {
         self.w.dismiss(owner, pet, count);
     }
@@ -130,6 +154,10 @@ impl EngineIo for Io<'_> {
 
     fn interrupt(&mut self, target: ActorId) -> bool {
         self.w.interrupt(target)
+    }
+
+    fn stun(&mut self, target: ActorId, duration: SimDuration) -> bool {
+        self.w.stun(target, duration)
     }
 
     fn displace(&mut self, actor: ActorId, yards: f64, toward: Option<ActorId>) {

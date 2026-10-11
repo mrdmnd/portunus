@@ -183,6 +183,9 @@ impl World {
                 if def.stealth.is_some() {
                     self.stop_swings(r.holder);
                 }
+                if def.untargetable && self.enemies.contains(&r.holder) {
+                    self.enemy_gone(r.holder, WakeReason::EnemyUntargetable(r.holder));
+                }
             }
             Some(i) => {
                 let Some(holder) = self.actor_mut(r.holder) else {
@@ -318,6 +321,9 @@ impl World {
         if def.stealth.is_some() {
             self.start_swings(holder);
         }
+        if def.untargetable && self.is_live_target(holder) {
+            self.enemy_available(holder, WakeReason::EnemyTargetable(holder));
+        }
         if !self.has_aura(holder, aura) {
             self.remove_matching(holder, AuraRemoval::Removed, |a| a.ends_with == Some(aura));
         }
@@ -343,6 +349,20 @@ impl World {
     pub(crate) fn has_aura(&self, actor: ActorId, aura: AuraId) -> bool {
         self.actor_ref(actor)
             .is_some_and(|a| a.auras.iter().any(|x| x.aura == aura))
+    }
+
+    /// Whether the actor holds an untargetable aura.
+    pub(crate) fn untargetable(&self, actor: ActorId) -> bool {
+        self.actor_ref(actor).is_some_and(|a| {
+            a.auras.iter().any(|x| {
+                self.s
+                    .setup
+                    .data
+                    .auras
+                    .get(&x.aura)
+                    .is_some_and(|d| d.untargetable)
+            })
+        })
     }
 
     pub(crate) fn stealthed(&self, actor: ActorId) -> bool {

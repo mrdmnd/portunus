@@ -145,6 +145,11 @@ pub enum TraceEvent {
         actor: ActorId,
         aura: AuraId,
     },
+    /// A stun on enemy `actor`, after diminishing returns, lasts `until`.
+    Stunned {
+        actor: ActorId,
+        until: SimTime,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

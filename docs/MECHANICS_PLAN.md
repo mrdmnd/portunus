@@ -1302,6 +1302,39 @@ while standing still or break when moving.
 
 ## 9. Phase 7: Pets (Tier B)
 
+**Done** (except 7.5, which is Tier C). Nothing in the checked-in data uses
+the new fields, so DPS and trace hashes are unchanged. Tests are at the end
+of `crates/mechanics/tests/pets.rs`, plus an ingest test.
+
+- **7.1** `Effect::Summon.stagger` (serde default zero) goes through a new
+  `EngineIo::summon_staggered` and a kernel `Event::SummonNext` chain. When
+  I checked SimC (`army_of_the_dead_t`'s `summon_army_event_t`), the
+  first copy arrives one step *after* the cast, not at it; I followed
+  that. The rest stop arriving if the owner dies. Test: 8 ghouls at
+  +0.5 s … +4.0 s.
+- **7.2** `PetDef.expires_when_empty: Option<ResourceKind>`. **Change from
+  the plan:** SimC's Wild Imp (`fel_firebolt_t::consume_resource`) leaves
+  when, after paying, it can't afford another Fel Firebolt (`energy <
+  cost()`), not when energy reaches zero. The kernel checks this as a
+  pet's cast completes: below the spell's cost (with cost modifiers) means
+  the pet leaves as if timed out, so `Departed` and `PetExpired` fire and
+  its spells in flight still land. Test: 110 energy at 20 a bolt gives
+  five bolts, then the imp leaves.
+- **7.3** `PetDef.autocast_interval: Option<SimDuration>` is a minimum
+  gap between autocasts, kept per pet (`next_autocast`). Commanded casts
+  ignore it. An autocast spell with no GCD, cooldown or cast time is
+  still refused unless the pet has an interval. I didn't add the "has a
+  cost it can't regenerate" alternative. Test: a free instant pulse every
+  2 s, five in 9 s.
+- **7.4** Needed no engine work. Spirits are guardians, an owner aura's
+  `CastComplete` listener commands them (`CommandPet`), and an owner
+  `GuardianDamagePct` sets their share. Test: two spirits each echo every
+  Lightning Bolt at exactly 45%.
+- Ingest reports `InvalidPet` for running dry of a resource the pet lacks,
+  or for a zero interval.
+
+**Original plan:**
+
 ### 7.1 Staggered summons
 `Effect::Summon` gains `#[serde(default)] stagger: SimDuration`: summon one
 copy every `stagger` until `count` (Army of the Dead). Implement with a
@@ -1337,6 +1370,54 @@ Nothing damages pets and they always reach their target. Defer.
 ---
 
 ## 10. Phase 8: Enemy side (Tier B)
+
+**Done** (except 8.5, which is Tier C). The only checked-in data that uses
+the new fields is the new shield dummy, so existing DPS and trace hashes
+are unchanged. Tests are in `crates/mechanics/tests/enemies.rs`, plus two
+run-file tests and an ingest test.
+
+- **8.1** `AuraDef.untargetable`. While an enemy holds it, the enemy is
+  not a live target. Seats targeting it switch to the first live enemy
+  (or to none) and are woken with `WakeReason::EnemyUntargetable`. Casts
+  at it are illegal, and swings follow the seat's new target. When the
+  aura ends, seats without a target take the enemy back and are woken
+  with `EnemyTargetable`. **Addition:** area effects pass over it too
+  (`ActorView.targetable`), and seats don't see it. Its DoTs keep ticking.
+  Tests: the seat turns to the add, kills it, waits, and turns back the
+  moment the boss returns, while swings stop and resume and a DoT ticks
+  throughout. A second test checks that an area spell skips the boss.
+- **8.2** `data/scenarios/shield_dummy.ron` and
+  `data/runs/elemental_stormbringer_shield.ron`. The `shield_dummy`
+  raises Barrier (910002), an all-school absorb of 5% of its health, at
+  20 s and every 45 s after. Test: every barrier soaks damage, those
+  broken early soak exactly their share, and the seat's
+  `damage_absorbed` matches.
+- **8.3** `Effect::Stun { duration, target }` and `EnemyDef.cc_immune`.
+  A stun stops the enemy's cast even if it can't be interrupted.
+  Elapsed triggers and pending repeats are pushed back by the time
+  stunned, and a rule that comes due mid-stun (e.g. a `Delayed`) fires
+  when the stun ends. **Change from the plan:** since patch 12.1.0,
+  stuns on creatures never reach immunity. Each repeat lasts half as long,
+  down to 1/16 of the duration, and the count resets 20 s (not 18 s)
+  after the last stun *ends*. Recorded as `TraceEvent::Stunned`.
+  `ActorView.stunned_until` and `TargetObs.stunned` show it. Tests: an
+  uninterruptible cast is stopped and three kinds of rule wait it out; a
+  `cc_immune` boss ignores the stun; a full run of diminishing returns
+  including the reset.
+- **8.4** `AuraDef.dispel: Option<DispelType>` and
+  `Effect::Dispel { types, count, target }`. **Change from the plan:**
+  the game picks among dispellable auras at random, not newest first.
+  The pick uses the caster's random-choice stream. A dispel takes only
+  auras that an enemy applied, so a purge takes an enemy's buffs and a
+  cleanse a seat's debuffs, never the party's own. `TargetObs.dispellable`
+  lists those auras. I didn't add the game's "refuse the cast if there
+  is nothing to dispel" rule. Tests: purge, soothe, decurse and a
+  type-mismatched dispel each take exactly what they should; `count`
+  caps removals.
+- Ingest reports `InvalidControl` for a zero-length stun, or for a dispel
+  with no types or a count of zero.
+
+**Original plan:**
 
 ### 8.1 Untargetable phases
 `AuraDef.untargetable: bool` on enemy auras (applied by `SelfAura`). While

@@ -5,7 +5,9 @@
 //! whenever triggers are re-evaluated; once it holds, the rule fires, then
 //! again every `repeat` while its phase is active. A rule whose phase ends
 //! stops repeating, and resumes when the phase returns and its trigger
-//! holds.
+//! holds. A stun stops every one of an enemy's rule clocks while it
+//! lasts: elapsed times and repeats count only unstunned time, and a rule
+//! that comes due while stunned waits for the stun to end.
 
 use std::sync::Arc;
 
@@ -31,6 +33,12 @@ use super::Kernel;
 const TIMING: usize = 0;
 const TARGETS: usize = 1;
 const AMOUNTS: usize = 2;
+
+/// Stun diminishing returns on creatures, as of patch 12.1.0: each stun
+/// within this long of the last one ending lasts half as long...
+const STUN_DR_RESET: SimDuration = SimDuration(20_000);
+/// ...down to a sixteenth, never immune.
+const STUN_DR_FLOOR: u8 = 4;
 
 /// Every `Elapsed` duration in a trigger, so the kernel can re-evaluate at
 /// those moments.
@@ -388,6 +396,76 @@ impl World {
         interruptible && self.cancel_enemy_cast(target, CastEndReason::Interrupted)
     }
 
+    /// Stun an enemy that isn't immune: its cast stops even if it can't be
+    /// interrupted, and its rules' clocks stand still until the stun ends.
+    /// Returns whether it landed.
+    pub(crate) fn stun(&mut self, target: ActorId, base: SimDuration) -> bool {
+        let now = self.now;
+        let Some(a) = self.actor_ref(target) else {
+            return false;
+        };
+        let immune = enemy_def(&self.s, &self.spawns, a.kind).is_none_or(|d| d.cc_immune);
+        if !a.alive || immune {
+            return false;
+        }
+        let marks = self.spawn_of(a.kind).map_or_else(Vec::new, |sp| {
+            let mut marks = Vec::new();
+            for t in sp.rules.iter() {
+                elapsed_marks(t, &mut marks);
+            }
+            marks
+        });
+        let Some(a) = self.actor_mut(target) else {
+            return false;
+        };
+        let st = &mut a.stun;
+        if now >= st.resets_at {
+            st.applied = 0;
+        }
+        let lasts = SimDuration(base.0 >> st.applied.min(STUN_DR_FLOOR));
+        st.applied = st.applied.saturating_add(1);
+        let was = st.until.filter(|&u| u > now).unwrap_or(now);
+        let until = (now + lasts).max(was);
+        let shift = until - was;
+        st.until = Some(until);
+        st.paused = st.paused + shift;
+        st.resets_at = until + STUN_DR_RESET;
+        let started = a.engaged_at.map(|t| t + st.paused);
+        let mut fires = Vec::new();
+        if shift > SimDuration::ZERO {
+            for (r, rs) in a.rules.iter_mut().enumerate() {
+                if let Some(t) = rs.next_at.filter(|&t| t > now) {
+                    rs.gen += 1;
+                    rs.next_at = Some(t + shift);
+                    fires.push((RuleIndex(r as u16), t + shift, rs.gen));
+                }
+            }
+        }
+        for (rule, at, gen) in fires {
+            self.queue.push(
+                at,
+                Event::RuleFire {
+                    enemy: target,
+                    rule,
+                    gen,
+                },
+            );
+        }
+        if let Some(started) = started.filter(|_| shift > SimDuration::ZERO) {
+            for d in marks {
+                if started + d > now {
+                    self.queue.push(started + d, Event::EvalTriggers);
+                }
+            }
+        }
+        self.record(TraceEvent::Stunned {
+            actor: target,
+            until,
+        });
+        self.cancel_enemy_cast(target, CastEndReason::Interrupted);
+        true
+    }
+
     /// The spawn record behind an enemy actor.
     pub(crate) fn spawn_of(&self, kind: ActorKind) -> Option<&EnemySpawn> {
         let ActorKind::Enemy { combat, spawn } = kind else {
@@ -495,7 +573,7 @@ impl<M: Mechanics> Kernel<M> {
             if !(a.alive && a.engaged) {
                 continue;
             }
-            let started = a.engaged_at.unwrap_or(now);
+            let started = a.engaged_at.unwrap_or(now) + a.stun.paused;
             let Some(def) = enemy_def(&s, &self.world.spawns, a.kind) else {
                 continue;
             };
@@ -545,6 +623,12 @@ impl<M: Mechanics> Kernel<M> {
             return;
         };
         if !(a.alive && a.engaged) || a.rules.get(r).is_none_or(|st| st.gen != gen) {
+            return;
+        }
+        if let Some(until) = a.stun.until.filter(|&u| u > now) {
+            self.world
+                .queue
+                .push(until, Event::RuleFire { enemy, rule, gen });
             return;
         }
         let Some(rdef) = enemy_def(&s, &self.world.spawns, a.kind).and_then(|d| d.rules.get(r))

@@ -97,8 +97,8 @@ impl World {
                     && matches!(d.cast, portunus_gamedata::spell::CastKind::Instant)
             })
         });
-        if spins {
-            self.unsupported("pet autocast spells with no GCD, cooldown, or cast time");
+        if spins && def.autocast_interval.is_none() {
+            self.unsupported("pet autocast spells with no GCD, cooldown, cast time, or interval");
             return Vec::new();
         }
         let me = self.seat_actor(owner);
@@ -165,6 +165,7 @@ impl World {
                 expires,
                 gcd_end: None,
                 gen: 0,
+                next_autocast: None,
             });
             if def.kind != PetKind::Totem {
                 actor.swings[0] = def.melee.map(Swing::new);
@@ -237,6 +238,50 @@ impl World {
                     rolled: None,
                 },
             );
+        }
+    }
+
+    /// Whether a pet that leaves when a resource runs dry can no longer pay
+    /// for the spell it just cast.
+    pub(crate) fn pet_exhausted(&self, actor: ActorId, spell: SpellId) -> bool {
+        let s = &self.s;
+        let Some(a) = self.actor_ref(actor).filter(|a| a.alive) else {
+            return false;
+        };
+        let ActorKind::Pet { pet, .. } = a.kind else {
+            return false;
+        };
+        let Some(kind) = s
+            .setup
+            .data
+            .pets
+            .get(&pet)
+            .and_then(|d| d.expires_when_empty)
+        else {
+            return false;
+        };
+        let Some(cost) = s
+            .setup
+            .data
+            .spells
+            .get(&spell)
+            .and_then(|d| d.costs.iter().find(|c| c.kind == kind))
+        else {
+            return false;
+        };
+        let need = cost.amount * self.cost_mult(actor, spell, None);
+        a.resources
+            .iter()
+            .find(|r| r.def.kind == kind)
+            .is_some_and(|r| r.value < need)
+    }
+
+    /// The pet ran dry: it leaves as if its time were up.
+    pub(crate) fn exhaust_pet(&mut self, actor: ActorId) {
+        if let Some(ActorKind::Pet { owner, pet }) = self.actor_ref(actor).map(|a| a.kind) {
+            self.release_pet(actor, true);
+            self.followups
+                .push_back(Followup::PetExpired(PetEvent { owner, pet, actor }));
         }
     }
 
@@ -353,6 +398,10 @@ impl<M: Mechanics> Kernel<M> {
         if !a.alive || life.gen != gen || a.casting.is_some() || !w.in_combat() {
             return;
         }
+        if let Some(at) = life.next_autocast.filter(|&at| at > w.now) {
+            self.world.schedule_pet_act(actor, at);
+            return;
+        }
         let s = Arc::clone(&w.s);
         let Some(def) = s.setup.data.pets.get(&pet) else {
             return;
@@ -400,6 +449,21 @@ impl<M: Mechanics> Kernel<M> {
             if let Some(life) = self.world.actor_mut(actor).and_then(|a| a.pet.as_mut()) {
                 life.gcd_end = Some(end);
             }
+        }
+        let interval = match self.world.actor_ref(actor).map(|a| a.kind) {
+            Some(ActorKind::Pet { pet, .. }) => s
+                .setup
+                .data
+                .pets
+                .get(&pet)
+                .and_then(|d| d.autocast_interval),
+            _ => None,
+        };
+        if let (Some(i), Some(life)) = (
+            interval,
+            self.world.actor_mut(actor).and_then(|a| a.pet.as_mut()),
+        ) {
+            life.next_autocast = Some(now + i);
         }
         let ev = CastEvent {
             seat: owner,

@@ -120,6 +120,17 @@ pub trait EngineIo {
         count: u8,
         duration: Option<SimDuration>,
     ) -> Vec<ActorId>;
+    /// Spawn `count` pets one at a time, the first `every` from now and
+    /// each `every` after that. The rest don't arrive once the owner is
+    /// dead.
+    fn summon_staggered(
+        &mut self,
+        owner: Seat,
+        pet: PetId,
+        count: u8,
+        duration: Option<SimDuration>,
+        every: SimDuration,
+    );
     /// Remove an owner's pets of a type, oldest first (`None`: all).
     fn dismiss(&mut self, owner: Seat, pet: PetId, count: Option<u8>);
     /// Extend an owner's guardians (`pet: None` extends every type).
@@ -147,6 +158,9 @@ pub trait EngineIo {
     /// Stop `target`'s cast if it is interruptible. Returns whether one was
     /// stopped.
     fn interrupt(&mut self, target: ActorId) -> bool;
+    /// Stun enemy `target` for `duration`, less diminishing returns: see
+    /// `Effect::Stun`. Returns whether it landed (not on the immune).
+    fn stun(&mut self, target: ActorId, duration: SimDuration) -> bool;
     /// Move a seat's actor `yards` at once (no-op for anyone else). It
     /// counts toward movement the seat owes, and closes distance to
     /// `toward` if that is an enemy.

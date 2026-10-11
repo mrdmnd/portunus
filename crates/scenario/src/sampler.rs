@@ -311,6 +311,7 @@ mod tests {
                 armor: 0.0,
             },
             initial_phase: None,
+            cc_immune: false,
             rules: vec![EnemyRule {
                 name: EventName("slam".into()),
                 phase: None,

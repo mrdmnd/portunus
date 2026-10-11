@@ -7,7 +7,7 @@
 use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
 
-use portunus_core::{ActorId, Seat, SimTime, SpellId};
+use portunus_core::{ActorId, PetId, Seat, SimDuration, SimTime, SpellId};
 use portunus_gamedata::enemy::RuleIndex;
 use portunus_gamedata::item::WeaponHand;
 
@@ -90,6 +90,14 @@ pub(crate) enum Event {
     PetExpire {
         actor: ActorId,
     },
+    /// The next of a staggered summon's pets arrives; `left` counts it.
+    SummonNext {
+        owner: Seat,
+        pet: PetId,
+        left: u8,
+        duration: Option<SimDuration>,
+        every: SimDuration,
+    },
     Swing {
         actor: ActorId,
         hand: WeaponHand,
@@ -144,6 +152,7 @@ impl Event {
             | Event::Timer { .. }
             | Event::PetAct { .. }
             | Event::PetExpire { .. }
+            | Event::SummonNext { .. }
             | Event::Swing { .. }
             | Event::DemandDeadline { .. } => EventClass::World,
             Event::RuleFire { .. } | Event::EnemyCastEnd { .. } => EventClass::EnemyRules,

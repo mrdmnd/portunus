@@ -26,6 +26,9 @@ pub struct EnemyDef {
     pub initial_phase: Option<PhaseName>,
     #[serde(default)]
     pub rules: Vec<EnemyRule>,
+    /// Ignores stuns (most bosses).
+    #[serde(default)]
+    pub cc_immune: bool,
 }
 
 /// What reduces incoming player damage and crits.

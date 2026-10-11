@@ -7,7 +7,9 @@ use portunus_core::{
     AuraId, Dist, EnemyKey, EventName, HeroTreeId, Seed, SimDuration, SpecId, SpellId, TalentId,
     Trigger,
 };
-use portunus_gamedata::aura::{AuraValue, AuraValueKind, BankDraw, GroundDef, PreventDeath};
+use portunus_gamedata::aura::{
+    AuraValue, AuraValueKind, BankDraw, DispelType, GroundDef, PreventDeath,
+};
 use portunus_gamedata::effect::{
     Coefficient, CountScale, Effect, EffectTarget, ListenFor, Listener, ModKind, ModScope,
     Modifier, Predicate, ProcChance, TargetCount,
@@ -675,4 +677,58 @@ fn ground_auras_need_a_radius_and_standing_in_one_needs_one_on_the_ground() {
         check_game_data(&game),
         vec![DataIssue::InvalidPredicate(Owner::Aura(holder))]
     );
+}
+
+#[test]
+fn pets_can_only_run_dry_of_what_they_have_and_need_a_real_autocast_gap() {
+    let mut game = game();
+    let pet = game.pets.values_mut().next().expect("a pet to edit");
+    let id = pet.id;
+    pet.resources.clear();
+    pet.expires_when_empty = Some(ResourceKind::Energy);
+    assert_eq!(check_game_data(&game), vec![DataIssue::InvalidPet(id)]);
+    let pet = game.pets.get_mut(&id).unwrap();
+    pet.expires_when_empty = None;
+    pet.autocast_interval = Some(SimDuration::ZERO);
+    assert_eq!(check_game_data(&game), vec![DataIssue::InvalidPet(id)]);
+    game.pets.get_mut(&id).unwrap().autocast_interval = Some(SimDuration(500));
+    assert_eq!(check_game_data(&game), Vec::new());
+}
+
+#[test]
+fn stuns_must_last_and_dispels_must_name_a_type_and_take_something() {
+    let mut game = game();
+    let bolt = SpellId(188196);
+    let owner = Owner::Spell(bolt);
+    let set = |game: &mut GameData, effect: Effect| {
+        game.spells.get_mut(&bolt).expect("Lightning Bolt").effects = vec![effect];
+    };
+    let dispel = |types: Vec<DispelType>, count: u8| Effect::Dispel {
+        types,
+        count,
+        target: EffectTarget::Target,
+    };
+    let invalid = vec![DataIssue::InvalidControl(owner)];
+    set(
+        &mut game,
+        Effect::Stun {
+            duration: SimDuration::ZERO,
+            target: EffectTarget::Target,
+        },
+    );
+    assert_eq!(check_game_data(&game), invalid);
+    set(&mut game, dispel(Vec::new(), 1));
+    assert_eq!(check_game_data(&game), invalid);
+    set(&mut game, dispel(vec![DispelType::Magic], 0));
+    assert_eq!(check_game_data(&game), invalid);
+    set(&mut game, dispel(vec![DispelType::Magic], 1));
+    assert_eq!(check_game_data(&game), Vec::new());
+    set(
+        &mut game,
+        Effect::Stun {
+            duration: SimDuration(1000),
+            target: EffectTarget::Target,
+        },
+    );
+    assert_eq!(check_game_data(&game), Vec::new());
 }

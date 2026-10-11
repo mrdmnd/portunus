@@ -6,6 +6,7 @@
 use portunus_core::{AuraId, HookKey, PetId, SimDuration, SpellId};
 use serde::{Deserialize, Serialize};
 
+use crate::aura::DispelType;
 use crate::item::WeaponHand;
 use crate::stats::{RatedStat, ResourceAmount, ResourceKind, SchoolMask, Stat};
 
@@ -101,11 +102,15 @@ pub enum Effect {
     /// (Skyfury).
     ExtraSwing,
     /// `duration` (or the pet's own, if `None`) is ignored for
-    /// [`crate::pet::PetKind::Pet`].
+    /// [`crate::pet::PetKind::Pet`]. With a `stagger`, one copy arrives
+    /// every `stagger`, the first one `stagger` after the effect, as
+    /// SimC's Army of the Dead (`summon_army_event_t`) does.
     Summon {
         pet: PetId,
         count: u8,
         duration: Option<SimDuration>,
+        #[serde(default)]
+        stagger: SimDuration,
     },
     /// Remove the caster's pets of this type, oldest first; `None` removes
     /// all (e.g. Implosion). Removal runs the pets' expiry like a timeout.
@@ -188,6 +193,24 @@ pub enum Effect {
         to: EffectTarget,
         #[serde(default)]
         max: Option<u8>,
+    },
+    /// Stun enemies that aren't `cc_immune`: their cast stops, even one
+    /// that can't be interrupted, and their rules wait it out. Repeats
+    /// within 20 s of the last one ending last half as long each time,
+    /// down to a sixteenth (stun diminishing returns on creatures, as of
+    /// patch 12.1.0).
+    Stun {
+        duration: SimDuration,
+        target: EffectTarget,
+    },
+    /// Remove up to `count` auras of these types from each target, picked
+    /// at random as in the game; only auras an enemy applied, so a purge
+    /// takes an enemy's buffs and a cleanse a seat's debuffs, never the
+    /// party's own.
+    Dispel {
+        types: Vec<DispelType>,
+        count: u8,
+        target: EffectTarget,
     },
 }
 

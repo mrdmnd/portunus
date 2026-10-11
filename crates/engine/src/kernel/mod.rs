@@ -953,7 +953,12 @@ impl<M: Mechanics> Kernel<M> {
     fn cast_over(&mut self, ev: CastEvent, hard: bool) {
         let now = self.world.now;
         if self.world.is_pet(ev.actor) {
-            self.world.schedule_pet_act(ev.actor, now);
+            if self.world.pet_exhausted(ev.actor, ev.spell) {
+                self.world.exhaust_pet(ev.actor);
+                self.drain();
+            } else {
+                self.world.schedule_pet_act(ev.actor, now);
+            }
         } else if hard {
             let st = self.world.seat_mut(ev.seat);
             if st.phase == SeatPhase::Committed {
@@ -1176,6 +1181,33 @@ impl<M: Mechanics> Kernel<M> {
             Event::Swing { actor, hand, gen } => self.swing(actor, hand, gen),
             Event::PetExpire { actor } => {
                 self.world.pet_expire(actor);
+                self.drain();
+            }
+            Event::SummonNext {
+                owner,
+                pet,
+                left,
+                duration,
+                every,
+            } => {
+                let me = self.world.seat_actor(owner);
+                if !self.world.actor_ref(me).is_some_and(|a| a.alive) {
+                    return;
+                }
+                self.world.summon(owner, pet, 1, duration);
+                if left > 1 {
+                    let at = self.world.now + every;
+                    self.world.queue.push(
+                        at,
+                        Event::SummonNext {
+                            owner,
+                            pet,
+                            left: left - 1,
+                            duration,
+                            every,
+                        },
+                    );
+                }
                 self.drain();
             }
             Event::RuleFire { enemy, rule, gen } => self.fire_rule(enemy, rule, gen),

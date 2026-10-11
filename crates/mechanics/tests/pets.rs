@@ -142,6 +142,8 @@ fn aura(id: AuraId, duration: Option<SimDuration>) -> AuraDef {
         unique_per_source: false,
         prevents_death: None,
         ground: None,
+        untargetable: false,
+        dispel: None,
     }
 }
 
@@ -161,6 +163,8 @@ fn pet(id: PetId, kind: PetKind, sp_from_sp: f64) -> PetDef {
         resources: Vec::new(),
         duration: None,
         max_active: None,
+        expires_when_empty: None,
+        autocast_interval: None,
     }
 }
 
@@ -360,6 +364,7 @@ fn with_fire_elemental(f: &mut Fixture) {
             pet: FIRE_ELEMENTAL_PET,
             count: 1,
             duration: None,
+            stagger: SimDuration::ZERO,
         }],
     );
     summon.cooldown = cooldown(150_000);
@@ -503,6 +508,7 @@ fn with_magma_totem(f: &mut Fixture) {
             pet: LIQUID_MAGMA_TOTEM_PET,
             count: 1,
             duration: None,
+            stagger: SimDuration::ZERO,
         }],
     );
     drop.cooldown = cooldown(10_000);
@@ -541,6 +547,7 @@ fn permanent_pets_persist_and_take_commands() {
             pet: PRIMAL_FIRE_ELEMENTAL,
             count: 3,
             duration: Some(ms(1000)),
+            stagger: SimDuration::ZERO,
         }],
     );
     resummon.cooldown = cooldown(50_000);
@@ -1102,6 +1109,7 @@ fn hunter_pets_autocast_and_answer_command_spells() {
             pet: HUNTER_PET,
             count: 1,
             duration: None,
+            stagger: SimDuration::ZERO,
         }],
     );
     call.targeting = Targeting::SelfOnly;
@@ -1115,4 +1123,188 @@ fn hunter_pets_autocast_and_answer_command_spells() {
     let bites = completed(&trace, BITE);
     assert!(bites.len() > 5);
     assert!(bites.iter().all(|&(t, _)| t >= called));
+}
+
+const ARMY: SpellId = SpellId(900_010);
+const GHOUL: PetId = PetId(900_011);
+const CALL_IMP: SpellId = SpellId(900_012);
+const IMP: PetId = PetId(900_013);
+const FEL_BOLT: SpellId = SpellId(900_014);
+const DROP_PULSER: SpellId = SpellId(900_015);
+const PULSER: PetId = PetId(900_016);
+const PULSE: SpellId = SpellId(900_017);
+const SEF: SpellId = SpellId(900_018);
+const SPIRIT: PetId = PetId(900_019);
+const SPIRIT_BOLT: SpellId = SpellId(900_020);
+const ECHO: AuraId = AuraId(900_021);
+
+fn summon(pet: PetId, count: u8, stagger: SimDuration) -> Effect {
+    Effect::Summon {
+        pet,
+        count,
+        duration: None,
+        stagger,
+    }
+}
+
+fn summoner(id: SpellId, effect: Effect) -> SpellDef {
+    let mut s = spell(id, CastKind::Instant, gcd(), vec![effect]);
+    s.cooldown = cooldown(600_000);
+    s
+}
+
+#[test]
+fn a_staggered_summon_brings_one_copy_per_step_after_the_cast() {
+    let mut f = fixture();
+    let mut ghoul = pet(GHOUL, PetKind::Guardian, 0.0);
+    ghoul.duration = Some(ms(30_000));
+    f.data.pets.insert(ghoul.id, ghoul);
+    f.add_ability(summoner(ARMY, summon(GHOUL, 8, ms(500))));
+    let (_, trace) = f.rollout(1, &[ARMY]);
+    let cast = completed(&trace, ARMY)[0].0;
+    let arrivals: Vec<u32> = lifetimes(&trace, GHOUL)
+        .values()
+        .map(|&(at, _)| (at - cast).millis())
+        .collect();
+    assert_eq!(
+        arrivals,
+        vec![500, 1000, 1500, 2000, 2500, 3000, 3500, 4000]
+    );
+}
+
+#[test]
+fn a_pet_that_runs_dry_leaves_after_its_last_affordable_cast() {
+    let mut f = fixture();
+    let mut imp = pet(IMP, PetKind::Guardian, 0.5);
+    imp.duration = Some(ms(60_000));
+    imp.autocast = vec![FEL_BOLT];
+    imp.resources = vec![ResourceDef {
+        kind: ResourceKind::Energy,
+        max: 110.0,
+        initial: 110.0,
+        regen_per_sec: 0.0,
+        regen_hasted: false,
+        recharge: None,
+        out_of_combat: None,
+    }];
+    imp.expires_when_empty = Some(ResourceKind::Energy);
+    f.data.pets.insert(imp.id, imp);
+    let mut bolt = spell(
+        FEL_BOLT,
+        CastKind::Cast {
+            time: ms(1000),
+            hasted: false,
+        },
+        None,
+        vec![fire_damage(0.1, EffectTarget::Target)],
+    );
+    bolt.costs = vec![Cost {
+        kind: ResourceKind::Energy,
+        amount: 20.0,
+        extra: 0.0,
+        scaling: SpendScaling::None,
+    }];
+    f.add_spell(bolt);
+    f.add_ability(summoner(CALL_IMP, summon(IMP, 1, SimDuration::ZERO)));
+    let (_, trace) = f.rollout(1, &[CALL_IMP]);
+    let lives = lifetimes(&trace, IMP);
+    let (&imp, &(_, left)) = lives.iter().next().unwrap();
+    let bolts: Vec<SimTime> = completed(&trace, FEL_BOLT)
+        .into_iter()
+        .filter(|&(_, a)| a == imp)
+        .map(|(t, _)| t)
+        .collect();
+    assert_eq!(bolts.len(), 5, "110 energy, 20 a bolt");
+    assert_eq!(
+        left,
+        Some(bolts[4]),
+        "gone as the fifth lands, unable to pay for a sixth"
+    );
+    assert_eq!(damage_by(&trace, imp).len(), 5);
+}
+
+#[test]
+fn an_autocast_interval_spaces_out_free_instant_spells() {
+    let mut f = fixture();
+    let mut pulser = pet(PULSER, PetKind::Guardian, 0.5);
+    pulser.duration = Some(ms(9000));
+    pulser.autocast = vec![PULSE];
+    pulser.autocast_interval = Some(ms(2000));
+    f.data.pets.insert(pulser.id, pulser);
+    f.add_spell(spell(
+        PULSE,
+        CastKind::Instant,
+        None,
+        vec![fire_damage(0.1, EffectTarget::Target)],
+    ));
+    f.add_ability(summoner(DROP_PULSER, summon(PULSER, 1, SimDuration::ZERO)));
+    let (_, trace) = f.rollout(1, &[DROP_PULSER]);
+    let pulses: Vec<SimTime> = completed(&trace, PULSE)
+        .into_iter()
+        .map(|(t, _)| t)
+        .collect();
+    let gaps: Vec<u32> = pulses.windows(2).map(|w| (w[1] - w[0]).millis()).collect();
+    assert_eq!(gaps, vec![2000; 4], "five pulses in nine seconds");
+}
+
+#[test]
+fn spirits_echo_the_owners_casts_for_a_fixed_share() {
+    // Storm, Earth, and Fire as data: two guardians, and an owner aura
+    // whose listener has them copy each Lightning Bolt at 45% strength.
+    let mut f = fixture();
+    let mut spirit = pet(SPIRIT, PetKind::Guardian, 1.0);
+    spirit.duration = Some(ms(15_000));
+    f.data.pets.insert(spirit.id, spirit);
+    f.add_spell(spell(
+        SPIRIT_BOLT,
+        CastKind::Instant,
+        None,
+        vec![fire_damage(1.0, EffectTarget::Target)],
+    ));
+    let mut echo = aura(ECHO, None);
+    echo.modifiers = vec![
+        modifier(ModKind::GuardianDamagePct, -55.0),
+        modifier(ModKind::CritChanceAdd, -1000.0),
+    ];
+    echo.listeners = vec![Listener {
+        on: ListenFor::CastComplete {
+            spell: Some(LIGHTNING_BOLT),
+            school: None,
+        },
+        chance: ProcChance::Always,
+        internal_cooldown: None,
+        per_unit: false,
+        shared_with: None,
+        condition: None,
+        effects: vec![Effect::CommandPet {
+            pet: Some(SPIRIT),
+            spell: SPIRIT_BOLT,
+        }],
+    }];
+    f.data.auras.insert(ECHO, echo);
+    f.template.passive_auras.push(ECHO);
+    f.add_ability(summoner(SEF, summon(SPIRIT, 2, SimDuration::ZERO)));
+    let k = f.kernel(3);
+    let m = f.mechanics(3);
+    let state = k.state();
+    let vers = 1.0 + m.math().derived(state, state.seats()[0]).versatility_pct / 100.0;
+    let (_, trace) = f.rollout(3, &[SEF]);
+    let lives = lifetimes(&trace, SPIRIT);
+    assert_eq!(lives.len(), 2);
+    let (from, until) = lives.values().next().copied().unwrap();
+    let until = until.unwrap();
+    let bolts = completed(&trace, LIGHTNING_BOLT)
+        .into_iter()
+        .filter(|&(t, _)| t > from && t < until)
+        .count();
+    assert!(bolts > 3, "{bolts} bolts while the spirits were out");
+    for &spirit in lives.keys() {
+        let hits = damage_by(&trace, spirit);
+        assert_eq!(hits.len(), bolts, "one echo per bolt");
+        for (_, spell, crit, amount) in hits {
+            assert_eq!(spell, Some(SPIRIT_BOLT));
+            assert!(!crit);
+            assert_eq!(amount, whole_points(SPELL_POWER * vers * 0.45));
+        }
+    }
 }

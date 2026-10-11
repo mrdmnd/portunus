@@ -103,5 +103,23 @@
                 ),
             ],
         ),
+        // Raises a shield of 5% of its health now and then, which has to be
+        // broken before its health moves again.
+        "shield_dummy": (
+            key: "shield_dummy",
+            name: "Target Dummy (shield)",
+            kind: boss,
+            health: 6000000,
+            forces: 0,
+            defense: (level_offset: 3, armor: 0.0),
+            rules: [
+                (
+                    name: "barrier",
+                    when: elapsed(20000),
+                    repeat: Some(fixed(45000)),
+                    action: self_aura(910002),
+                ),
+            ],
+        ),
     },
 )

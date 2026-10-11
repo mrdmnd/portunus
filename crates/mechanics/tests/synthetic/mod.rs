@@ -68,6 +68,8 @@ pub fn aura(id: AuraId) -> AuraDef {
         unique_per_source: false,
         prevents_death: None,
         ground: None,
+        untargetable: false,
+        dispel: None,
     }
 }
 

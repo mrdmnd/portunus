@@ -22,7 +22,7 @@ use crate::{
 
 /// Crit rolls, per caster.
 const CRIT_STREAM: StreamKey = StreamKey(0);
-/// `Effect::RandomOf` branch choices, per caster.
+/// Random choices of `RandomOf`, `ApplyOneOf` and `Dispel`, per caster.
 const RANDOM_STREAM: StreamKey = StreamKey(1);
 /// Auto-attack miss rolls, per attacker.
 const MISS_STREAM: StreamKey = StreamKey(2);
@@ -995,9 +995,14 @@ impl Interpreter {
                 pet,
                 count,
                 duration,
+                stagger,
             } => {
                 if let Some(seat) = owner_seat(io.view(), caster) {
-                    io.summon(seat, pet, count, duration);
+                    if stagger == SimDuration::ZERO {
+                        io.summon(seat, pet, count, duration);
+                    } else {
+                        io.summon_staggered(seat, pet, count, duration, stagger);
+                    }
                 }
             }
             &Effect::Dismiss { pet, count } => {
@@ -1037,6 +1042,41 @@ impl Interpreter {
                             depth: ctx.depth,
                         };
                         self.fire(io, caster, stopped);
+                    }
+                }
+            }
+            &Effect::Stun { duration, target } => {
+                for t in self.targets(io, ctx, target) {
+                    io.stun(t, duration);
+                }
+            }
+            Effect::Dispel {
+                types,
+                count,
+                target,
+            } => {
+                for t in self.targets(io, ctx, *target) {
+                    let view = io.view();
+                    let mut pool: Vec<(AuraId, ActorId)> = view
+                        .auras(t)
+                        .iter()
+                        .filter(|i| view.enemies().contains(&i.source))
+                        .filter(|i| {
+                            io.data()
+                                .auras
+                                .get(&i.aura)
+                                .and_then(|d| d.dispel)
+                                .is_some_and(|d| types.contains(&d))
+                        })
+                        .map(|i| (i.aura, i.source))
+                        .collect();
+                    for _ in 0..*count {
+                        if pool.is_empty() {
+                            break;
+                        }
+                        let pick = io.roll(caster, RANDOM_STREAM) * pool.len() as f64;
+                        let (aura, source) = pool.remove((pick as usize).min(pool.len() - 1));
+                        io.remove_aura(t, aura, Some(source));
                     }
                 }
             }
@@ -1263,7 +1303,10 @@ fn engaged_enemies(view: &dyn StateView) -> Vec<ActorId> {
     view.enemies()
         .iter()
         .copied()
-        .filter(|&e| view.actor(e).is_some_and(|a| a.engaged && a.alive))
+        .filter(|&e| {
+            view.actor(e)
+                .is_some_and(|a| a.engaged && a.alive && a.targetable)
+        })
         .collect()
 }
 

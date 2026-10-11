@@ -9,7 +9,7 @@ use portunus_core::{AuraId, PetId, SimDuration, SpellId};
 use serde::{Deserialize, Serialize};
 
 use crate::item::WeaponDef;
-use crate::stats::ResourceDef;
+use crate::stats::{ResourceDef, ResourceKind};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PetDef {
@@ -38,6 +38,16 @@ pub struct PetDef {
     /// Summoning past this many active copies replaces the oldest.
     #[serde(default)]
     pub max_active: Option<u8>,
+    /// The pet leaves, as if its time were up, once a completed cast leaves
+    /// it unable to pay for that spell again (Wild Imps and their energy,
+    /// as SimC's `fel_firebolt_t::consume_resource`).
+    #[serde(default)]
+    pub expires_when_empty: Option<ResourceKind>,
+    /// The shortest gap between autocasts. Required for an autocast spell
+    /// with no GCD, cooldown, or cast time, which would otherwise repeat
+    /// at one instant.
+    #[serde(default)]
+    pub autocast_interval: Option<SimDuration>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -777,6 +777,20 @@
             duration: Some(10000),
             modifiers: [(scope: all, kind: damage_done_pct, value: -10.0)],
         ),
+        // Made up for the shield dummy: soaks every school, sized off the
+        // holder's own health.
+        910002: (
+            id: 910002,
+            name: "Barrier",
+            duration: Some(15000),
+            value: Some((
+                kind: absorb(school: 127),
+                initial: Some(pct_max_health(5.0)),
+                cap: None,
+                threshold: None,
+                on_threshold: [],
+            )),
+        ),
         79206: (
             id: 79206,
             name: "Spiritwalker's Grace",

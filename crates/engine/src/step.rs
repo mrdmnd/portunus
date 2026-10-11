@@ -71,4 +71,8 @@ pub enum WakeReason {
     /// The seat's primary target fell to the health one of its abilities
     /// requires (Execute at 20%).
     TargetHealth(ActorId),
+    /// An enemy became untargetable; seats on it have moved off.
+    EnemyUntargetable(ActorId),
+    /// An untargetable enemy can be targeted again.
+    EnemyTargetable(ActorId),
 }

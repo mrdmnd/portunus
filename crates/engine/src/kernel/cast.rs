@@ -239,7 +239,7 @@ impl World {
         }
     }
 
-    fn cost_mult(&self, actor: ActorId, spell: SpellId, target: Option<ActorId>) -> f64 {
+    pub(crate) fn cost_mult(&self, actor: ActorId, spell: SpellId, target: Option<ActorId>) -> f64 {
         (1.0 + self.mod_sum(actor, spell, ModKind::CostPct, target) / 100.0).max(0.0)
     }
 

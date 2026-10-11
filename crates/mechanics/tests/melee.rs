@@ -140,6 +140,8 @@ fn fixture(main_hand: WeaponDef, off_hand: Option<WeaponDef>, kit: Vec<Listener>
             unique_per_source: false,
             prevents_death: None,
             ground: None,
+            untargetable: false,
+            dispel: None,
         },
     );
     template.passive_auras.push(KIT);
@@ -530,6 +532,8 @@ fn aura(id: AuraId, modifiers: Vec<Modifier>) -> AuraDef {
         unique_per_source: false,
         prevents_death: None,
         ground: None,
+        untargetable: false,
+        dispel: None,
     }
 }
 

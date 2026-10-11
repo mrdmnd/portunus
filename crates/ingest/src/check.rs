@@ -144,6 +144,11 @@ pub enum DataIssue {
     InvalidDeathPrevention(AuraId),
     /// A ground aura whose radius isn't a positive number of yards.
     InvalidGround(AuraId),
+    /// A pet that leaves when a resource it doesn't have runs dry, or
+    /// whose autocast interval is zero.
+    InvalidPet(PetId),
+    /// A stun that lasts no time, or a dispel of no types or no auras.
+    InvalidControl(Owner),
 }
 
 fn positive(x: f64) -> bool {
@@ -415,6 +420,13 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
         pet.resources.iter().for_each(|r| c.resource(&owner, r));
         pet.autocast.iter().for_each(|&s| c.spell(&owner, s));
         pet.passive_auras.iter().for_each(|&a| c.aura(&owner, a));
+        let dries_up = pet
+            .expires_when_empty
+            .is_none_or(|k| pet.resources.iter().any(|r| r.kind == k));
+        let gap = pet.autocast_interval.is_none_or(|i| i > SimDuration::ZERO);
+        if !(dries_up && gap) {
+            c.issues.push(DataIssue::InvalidPet(pet.id));
+        }
     }
     for (&stat, curve) in &data.curves.ratings {
         let ordered = curve.diminishing.windows(2).all(|w| w[0].0 < w[1].0);
@@ -720,6 +732,22 @@ impl Checker<'_> {
                     self.target(owner, target);
                 }
                 Effect::Heal { target, .. } | Effect::Interrupt { target } => {
+                    self.target(owner, target);
+                }
+                Effect::Stun { duration, target } => {
+                    if *duration == SimDuration::ZERO {
+                        self.issues.push(DataIssue::InvalidControl(owner.clone()));
+                    }
+                    self.target(owner, target);
+                }
+                Effect::Dispel {
+                    types,
+                    count,
+                    target,
+                } => {
+                    if types.is_empty() || *count == 0 {
+                        self.issues.push(DataIssue::InvalidControl(owner.clone()));
+                    }
                     self.target(owner, target);
                 }
                 Effect::ApplyAura {

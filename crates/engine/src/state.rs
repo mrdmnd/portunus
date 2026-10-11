@@ -195,6 +195,10 @@ pub struct ActorView {
     pub max_health: u64,
     pub alive: bool,
     pub engaged: bool,
+    /// False while an enemy holds an untargetable aura.
+    pub targetable: bool,
+    /// When an enemy's stun ends, while it is stunned.
+    pub stunned_until: Option<SimTime>,
     pub casting: Option<CastView>,
     pub moving_until: Option<SimTime>,
     /// When a guardian or totem despawns; `None` for everything else.

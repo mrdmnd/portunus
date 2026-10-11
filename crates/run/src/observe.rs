@@ -6,7 +6,7 @@ use portunus_core::{ActorId, AuraId, HeroTreeId, PetId, Seat, SimDuration, SimTi
 use portunus_engine::state::{ActorKind, AuraInstance, CastWhat};
 use portunus_engine::{ActionMask, Readiness, SegmentView, WakeReason};
 use portunus_env::{InfoSet, ObsContext, Observer};
-use portunus_gamedata::aura::AuraValueKind;
+use portunus_gamedata::aura::{AuraValueKind, DispelType};
 use portunus_gamedata::pet::PetKind;
 use portunus_gamedata::stats::ResourceKind;
 
@@ -68,6 +68,11 @@ pub struct TargetObs {
     pub neighbours: Vec<f64>,
     /// This seat's own auras on the target.
     pub mine: BTreeMap<AuraId, AuraObs>,
+    /// Until its stun ends, while it is stunned.
+    pub stunned: Option<SimDuration>,
+    /// Auras enemies put on it that a dispel can take, as the game's
+    /// frames highlight them.
+    pub dispellable: BTreeMap<AuraId, DispelType>,
 }
 
 /// Movement in progress.
@@ -386,7 +391,11 @@ impl Observer for ScriptObserver {
                 .iter()
                 .copied()
                 .filter(|e| !hide.enemies.contains(e))
-                .filter(|&e| state.actor(e).is_some_and(|a| a.engaged && a.alive))
+                .filter(|&e| {
+                    state
+                        .actor(e)
+                        .is_some_and(|a| a.engaged && a.alive && a.targetable)
+                })
         };
         let buffs = state
             .auras(me)
@@ -505,6 +514,13 @@ impl Observer for ScriptObserver {
                         .iter()
                         .filter(|i| i.source == me)
                         .map(|i| (i.aura, aura_obs(i, now)))
+                        .collect(),
+                    stunned: a.stunned_until.map(|u| u.saturating_since(now)),
+                    dispellable: state
+                        .auras(t)
+                        .iter()
+                        .filter(|i| state.enemies().contains(&i.source))
+                        .filter_map(|i| Some((i.aura, ctx.data.auras.get(&i.aura)?.dispel?)))
                         .collect(),
                 })
             });

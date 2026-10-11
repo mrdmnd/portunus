@@ -72,6 +72,25 @@ pub struct AuraDef {
     /// it.
     #[serde(default)]
     pub ground: Option<GroundDef>,
+    /// An enemy holding it can't be targeted, by spells, swings, or area
+    /// effects, though its auras keep ticking (a boss's intermission).
+    #[serde(default)]
+    pub untargetable: bool,
+    /// What can remove it early (`Effect::Dispel`), if anything.
+    #[serde(default)]
+    pub dispel: Option<DispelType>,
+}
+
+/// What a dispel can remove: magic (Purge, Cleanse), curses, poisons,
+/// diseases, or enrages (Soothe, Tranquilizing Shot).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DispelType {
+    Magic,
+    Curse,
+    Poison,
+    Disease,
+    Enrage,
 }
 
 /// Where a ground aura reaches. It is centred where its spell's target
