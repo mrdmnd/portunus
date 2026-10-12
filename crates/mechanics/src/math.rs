@@ -82,6 +82,9 @@ struct Query {
     target: Option<ActorId>,
     spell: Option<SpellId>,
     school: Option<SchoolMask>,
+    /// An auto-attack's damage, for `ModScope::AutoAttack` and
+    /// `ModScope::Abilities`.
+    auto: bool,
 }
 
 impl Query {
@@ -91,6 +94,7 @@ impl Query {
             target: None,
             spell: None,
             school: None,
+            auto: false,
         }
     }
 }
@@ -177,17 +181,69 @@ impl Formulas {
 
     /// A white hit before modifiers: average weapon damage plus attack
     /// power over 6 per second of weapon speed, halved for the off hand.
+    /// As in SimC's `action_t::calculate_weapon_damage`, `AttackPowerPct`
+    /// scales the weapon roll too, and the attack power is the actor's own,
+    /// without the weapon's (`attack_power_type::NO_WEAPON`).
     pub fn weapon_damage(&self, view: &dyn StateView, actor: ActorId, hand: WeaponHand) -> f64 {
         let Some(w) = self.weapon(view, actor, hand) else {
             return 0.0;
         };
         let speed = f64::from(w.speed.millis()) / 1000.0;
         let ap = self.derived(view, actor).attack_power;
-        let hit = (w.min_damage + w.max_damage) / 2.0 + ap / WEAPON_AP_DIVISOR * speed;
+        let roll = (w.min_damage + w.max_damage) / 2.0 * self.ap_mult(view, actor);
+        let hit = roll + ap / WEAPON_AP_DIVISOR * speed;
         match hand {
             WeaponHand::MainHand => hit,
             WeaponHand::OffHand => hit * OFF_HAND_MULT,
         }
+    }
+
+    /// The attack power an attack-power coefficient scales with: the
+    /// actor's own plus its weapon's, `floor(dps * 6)` times its
+    /// `AttackPowerPct` modifiers (SimC's
+    /// `composite_total_attack_power_by_type` with the default
+    /// `WEAPON_MAINHAND`, or `WEAPON_OFFHAND` for an off-hand spell). An
+    /// actor without a weapon there adds none, where SimC counts 0.5 dps
+    /// unarmed; pets add none.
+    fn ability_attack_power(&self, view: &dyn StateView, ctx: &EffectCtx) -> f64 {
+        let own = self.derived(view, ctx.caster).attack_power;
+        if player_seat(view, ctx.caster).is_none() {
+            return own;
+        }
+        let hand = ctx
+            .spell
+            .and_then(|s| self.s.data.spells.get(&s)?.weapon)
+            .unwrap_or(WeaponHand::MainHand);
+        let weapon = self.weapon(view, ctx.caster, hand).map_or(0.0, |w| {
+            let speed = f64::from(w.speed.millis()) / 1000.0;
+            let dps = (w.min_damage + w.max_damage) / 2.0 / speed;
+            (dps * WEAPON_AP_DIVISOR).floor()
+        });
+        own + weapon * self.ap_mult(view, ctx.caster)
+    }
+
+    /// How many more enemies a single-target hit chains to (the sum of its
+    /// `ChainTargetsAdd`, rounded) and the share of the hit each takes (the
+    /// product of its `ChainSharePct`, as fractions).
+    pub(crate) fn chain(
+        &self,
+        view: &dyn StateView,
+        ctx: &EffectCtx,
+        school: SchoolMask,
+    ) -> (usize, f64) {
+        let q = self.spell_query(view, ctx, Some(school));
+        let (mut n, mut share) = (0.0, 1.0);
+        self.each_mod(view, &q, |m, v| match m.kind {
+            ModKind::ChainTargetsAdd => n += v,
+            ModKind::ChainSharePct => share *= v / 100.0,
+            _ => {}
+        });
+        (n.round().max(0.0) as usize, share)
+    }
+
+    /// The product of a seat's `AttackPowerPct` modifiers; 1 for others.
+    fn ap_mult(&self, view: &dyn StateView, actor: ActorId) -> f64 {
+        self.stat_block(view, actor).map_or(1.0, |s| s.ap_mult)
     }
 
     /// The chance an auto-attack misses: only an actor wielding two weapons
@@ -380,6 +436,7 @@ impl Formulas {
             target: None,
             spell: hit.spell,
             school: Some(hit.school),
+            auto: false,
         };
         let mut kept = 1.0;
         self.each_mod(view, &q, |m, v| {
@@ -388,6 +445,27 @@ impl Formulas {
             }
         });
         kept
+    }
+
+    /// The product of the target's `SourceDamageTakenPct` modifiers from
+    /// auras the attacker applied, scoped to the attacker's spell.
+    fn source_taken(&self, view: &dyn StateView, target: ActorId, hit: &IncomingHit) -> f64 {
+        let Some(attacker) = hit.attacker else {
+            return 1.0;
+        };
+        let attacker = self.modifier_holder(view, attacker);
+        let q = Query {
+            spell: hit.spell,
+            school: Some(hit.school),
+            ..Query::holder(target)
+        };
+        let mut total = 1.0;
+        self.each_sourced_mod(view, &q, |m, v, source| {
+            if m.kind == ModKind::SourceDamageTakenPct && source == attacker {
+                total *= 1.0 + v / 100.0;
+            }
+        });
+        total
     }
 
     /// A rated secondary in percent.
@@ -457,6 +535,8 @@ impl Formulas {
             ModScope::All => true,
             ModScope::Spell(s) => q.spell == Some(s),
             ModScope::School(mask) => q.school.is_some_and(|s| s.0 & mask.0 != 0),
+            ModScope::AutoAttack => q.auto,
+            ModScope::Abilities => !q.auto,
         };
         in_scope
             && m.condition
@@ -501,6 +581,7 @@ impl Formulas {
             target: ctx.target,
             spell: ctx.spell,
             school: school.or_else(|| self.spell_school(ctx.spell)),
+            auto: ctx.spell.is_none() && ctx.aura.is_none() && ctx.hand.is_some(),
         }
     }
 
@@ -548,7 +629,7 @@ impl CombatMath for Formulas {
         let raw = match amount {
             Coefficient::Flat(x) => x,
             Coefficient::SpellPower(c) => c * self.derived(view, ctx.caster).spell_power,
-            Coefficient::AttackPower(c) => c * self.derived(view, ctx.caster).attack_power,
+            Coefficient::AttackPower(c) => c * self.ability_attack_power(view, ctx),
             Coefficient::WeaponDamage(c) => {
                 let hand = ctx.hand.unwrap_or(WeaponHand::MainHand);
                 c * self.weapon_damage(view, ctx.caster, hand)
@@ -596,9 +677,17 @@ impl CombatMath for Formulas {
                     };
                     by_crit *= 1.0 + self.uncapped_crit(view, &untargeted).max(0.0);
                 }
+                let mastery = self.derived(view, ctx.caster).mastery_pct / 100.0;
+                let mut by_mastery = 1.0;
+                self.each_mod(view, &q, |m, v| {
+                    if m.kind == ModKind::MasteryDamagePct {
+                        by_mastery *= 1.0 + v * mastery;
+                    }
+                });
                 self.mod_product(view, &q, ModKind::DamageDonePct)
                     * self.owner_pet_mult(view, ctx, school)
                     * by_crit
+                    * by_mastery
             }
             Outgoing::Heal => 1.0,
         };
@@ -639,7 +728,9 @@ impl CombatMath for Formulas {
         if self.mod_any(view, &q, ModKind::Immune) {
             return 0.0;
         }
-        let mut out = amount * self.mod_product(view, &q, ModKind::DamageTakenPct);
+        let mut out = amount
+            * self.mod_product(view, &q, ModKind::DamageTakenPct)
+            * self.source_taken(view, target, &hit);
         let armored = hit.kind == HitKind::Direct && !hit.ignores_armor;
         if hit.school == SchoolMask::PHYSICAL && armored {
             let armor = self.armor(view, target) * self.armor_kept(view, &hit);

@@ -256,7 +256,10 @@ fn swings_build_rage_by_weapon_speed_and_dual_wielders_miss() {
         Some(weapon(1300, 100.0)),
         vec![
             listener(
-                ListenFor::Swing { hand: None },
+                ListenFor::Swing {
+                    hand: None,
+                    crit_only: false,
+                },
                 ProcChance::Always,
                 vec![Effect::GainResource {
                     kind: ResourceKind::Rage,
@@ -314,7 +317,10 @@ fn weapon_strikes_trigger_weapon_hits_but_not_swings() {
         None,
         vec![
             listener(
-                ListenFor::Swing { hand: None },
+                ListenFor::Swing {
+                    hand: None,
+                    crit_only: false,
+                },
                 ProcChance::Always,
                 vec![damage(1.0, SchoolMask::SHADOW)],
             ),
@@ -1057,6 +1063,8 @@ fn channeler(swings: bool, tick: Vec<Effect>) -> Fixture {
         ticks: 3,
         hasted: true,
         swings,
+        tick_zero: false,
+        on_end: Vec::new(),
     };
     let s = spell(CHANNEL, cast, true, tick);
     f.template.abilities.insert(s.id);

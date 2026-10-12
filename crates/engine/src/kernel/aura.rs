@@ -170,6 +170,7 @@ impl World {
                         last_proc: None,
                         icd_ready_at: None,
                         deck,
+                        attempts: 0,
                     });
                 }
                 self.schedule_aura(r);
@@ -594,6 +595,9 @@ impl World {
         if procced {
             p.last_proc = Some(now);
             p.icd_ready_at = def.internal_cooldown.map(|d| now + d);
+            p.attempts = 0;
+        } else {
+            p.attempts = p.attempts.saturating_add(1);
         }
         let Some(deck) = &mut p.deck else { return };
         deck.cards = deck.cards.saturating_sub(1);

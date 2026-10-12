@@ -11,8 +11,8 @@ use portunus_gamedata::aura::{
     AuraValue, AuraValueKind, BankDraw, DispelType, GroundDef, PreventDeath,
 };
 use portunus_gamedata::effect::{
-    Coefficient, CountScale, Effect, EffectTarget, ListenFor, Listener, ModKind, ModScope,
-    Modifier, Predicate, ProcChance, TargetCount,
+    Coefficient, CountForm, CountScale, Effect, EffectTarget, ListenFor, Listener, ModKind,
+    ModScope, Modifier, Predicate, ProcChance, TargetCount,
 };
 use portunus_gamedata::enemy::{EnemyAction, EnemyKind, EnemyRule};
 use portunus_gamedata::spell::{CastKind, CooldownDef, Requirement};
@@ -109,6 +109,37 @@ fn farseer_loadout_compiles() {
 }
 
 #[test]
+fn arms_loadout_compiles() {
+    let game = game();
+    let loadout: Loadout = read_ron(&data_dir().join("loadouts/arms.ron")).expect("loadout");
+    assert_eq!(Compiler.validate(&game, &loadout), vec![]);
+    let template = Compiler.compile(&game, &loadout).expect("compiles");
+    assert_eq!(template.hero_tree, None);
+    // Massacre's Execute in place of the plain one.
+    for spell in [12294, 7384, 167105, 845, 227847, 107574, 281000, 1464, 100] {
+        assert!(template.abilities.contains(&SpellId(spell)), "{spell}");
+    }
+    assert!(!template.abilities.contains(&SpellId(163201)));
+    let held = |aura: u32| {
+        template
+            .passive_auras
+            .iter()
+            .filter(|&&a| a == AuraId(aura))
+            .count()
+    };
+    // A copy per rank: Strength of Arms, Sharpened Blades, Bloodborne,
+    // Critical Thinking, and Master of Warfare's middle two ranks.
+    for aura in [400803, 383341, 383287, 389306, 1269306] {
+        assert_eq!(held(aura), 2, "{aura}");
+    }
+    for aura in [137049, 1258398, 386164, 29725, 1269314, 1269307] {
+        assert_eq!(held(aura), 1, "{aura}");
+    }
+    let weapon = template.main_hand.expect("a two-hander");
+    assert_eq!(weapon.speed.millis(), 3600);
+}
+
+#[test]
 fn dummy_scenario_samples_deterministically() {
     let spec: ScenarioSpec =
         read_ron(&data_dir().join("scenarios/target_dummy.ron")).expect("scenario");
@@ -156,6 +187,8 @@ fn channels_without_ticks_or_duration_are_reported() {
         ticks,
         hasted: true,
         swings: false,
+        tick_zero: false,
+        on_end: Vec::new(),
     };
     let bolt = SpellId(188196);
     game.spells.get_mut(&bolt).unwrap().cast = channel(3000, 3);
@@ -163,6 +196,63 @@ fn channels_without_ticks_or_duration_are_reported() {
     for broken in [channel(3000, 0), channel(0, 3)] {
         game.spells.get_mut(&bolt).unwrap().cast = broken;
         assert!(check_game_data(&game).contains(&DataIssue::InvalidChannel(bolt)));
+    }
+}
+
+#[test]
+fn what_a_channel_does_as_it_ends_is_checked() {
+    let mut game = game();
+    let ghost = AuraId(999_996);
+    let bolt = SpellId(188196);
+    game.spells.get_mut(&bolt).unwrap().cast = CastKind::Channel {
+        duration: SimDuration(3000),
+        ticks: 3,
+        hasted: true,
+        swings: false,
+        tick_zero: true,
+        on_end: vec![Effect::ApplyAura {
+            aura: ghost,
+            target: EffectTarget::Caster,
+            stacks: 1,
+            duration: None,
+            per_unit_spent: None,
+        }],
+    };
+    assert!(check_game_data(&game).contains(&DataIssue::UnknownAura {
+        owner: Owner::Spell(bolt),
+        aura: ghost,
+    }));
+}
+
+#[test]
+fn pseudo_random_chances_must_be_a_real_chance() {
+    let mut game = game();
+    let holder = AuraId(77756);
+    let owner = Owner::Aura(holder);
+    let mut reported = |chance: f64| {
+        let def = game.auras.get_mut(&holder).unwrap();
+        def.listeners = vec![Listener {
+            on: ListenFor::Swing {
+                hand: None,
+                crit_only: true,
+            },
+            chance: ProcChance::Prd { chance },
+            internal_cooldown: None,
+            per_unit: false,
+            shared_with: None,
+            condition: None,
+            effects: Vec::new(),
+        }];
+        check_game_data(&game).contains(&DataIssue::InvalidChance(owner.clone()))
+    };
+    for (chance, bad) in [
+        (0.25, false),
+        (1.0, false),
+        (0.0, true),
+        (1.5, true),
+        (f64::NAN, true),
+    ] {
+        assert_eq!(reported(chance), bad, "{chance}");
     }
 }
 
@@ -276,6 +366,9 @@ fn predicates_that_cannot_hold_meaningfully_are_reported() {
             true,
         ),
         (Predicate::TargetHpBelowCasterMaxHp, false),
+        (Predicate::EnemiesAtLeast(2), false),
+        (Predicate::EnemiesAtLeast(0), true),
+        (Predicate::TargetIsCurrent, false),
     ] {
         assert_eq!(reported(when), bad, "{when:?}");
     }
@@ -631,6 +724,7 @@ fn target_sets_and_count_scales_name_auras_that_exist() {
                     from_self: false,
                 },
                 pct: f64::NAN,
+                form: CountForm::Linear,
             }),
             unmodified: false,
         },

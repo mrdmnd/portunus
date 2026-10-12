@@ -848,6 +848,7 @@ fn pet_melee_and_haste_follow_owner_and_pet_buffs() {
     frenzy.listeners = vec![Listener {
         on: ListenFor::Swing {
             hand: Some(WeaponHand::MainHand),
+            crit_only: false,
         },
         chance: ProcChance::Always,
         internal_cooldown: None,

@@ -12,8 +12,8 @@ use portunus_engine::trace::TraceEvent;
 use portunus_engine::{Engine, StateView, TraceRecord};
 use portunus_gamedata::aura::Periodic;
 use portunus_gamedata::effect::{
-    AoeRule, Coefficient, CountScale, Effect, EffectTarget, ListenFor, ModKind, ModScope, Modifier,
-    TargetCount,
+    AoeRule, Coefficient, CountForm, CountScale, Effect, EffectTarget, ListenFor, ModKind,
+    ModScope, Modifier, TargetCount,
 };
 use portunus_gamedata::enemy::{EnemyAction, EnemyKind, EnemyRule};
 use portunus_gamedata::stats::SchoolMask;
@@ -155,6 +155,7 @@ fn damage_can_grow_with_marked_enemies_and_targets_hit() {
                 from_self: true,
             },
             pct: 10.0,
+            form: CountForm::Linear,
         });
     }
     let mut cleave = damage(10_000.0, EffectTarget::AllEnemies);
@@ -162,6 +163,7 @@ fn damage_can_grow_with_marked_enemies_and_targets_hit() {
         *per_count = Some(CountScale {
             count: TargetCount::TargetsHit,
             pct: 5.0,
+            form: CountForm::Linear,
         });
     }
     add_spell(&mut f, spell(CRANE, vec![crane]));

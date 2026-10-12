@@ -132,6 +132,15 @@ pub enum CastKind {
         /// come due during it keep their rhythm but do nothing.
         #[serde(default)]
         swings: bool,
+        /// One more tick as it starts, before the `ticks` spread over the
+        /// duration (SimC's `tick_zero`, Bladestorm).
+        #[serde(default)]
+        tick_zero: bool,
+        /// Run once its last tick lands (SimC's `last_tick`: Violent
+        /// Euphoria after Bladestorm). A channel cut short skips them,
+        /// where SimC's cancelled dot still runs `last_tick`.
+        #[serde(default)]
+        on_end: Vec<Effect>,
     },
     /// Charged, then released at a chosen stage. Costs and cooldown are paid
     /// as it starts (SimC runs the charge as a channel); on release the GCD

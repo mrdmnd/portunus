@@ -36,6 +36,8 @@ fn channel_fixture(haste_pct: f64, rules: Vec<EnemyRule>) -> Fixture {
         ticks: 3,
         hasted: true,
         swings: false,
+        tick_zero: false,
+        on_end: Vec::new(),
     };
     bolt.speed = None;
     bolt.effects = vec![Effect::Damage {

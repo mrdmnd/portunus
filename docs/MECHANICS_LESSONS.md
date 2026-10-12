@@ -173,9 +173,25 @@ places to look if a spec's numbers drift from SimC.
 - **Pitfalls to remember** (also in plan §1.6): class raid buffs leak into
   fixtures; pull health varies ±20% unless pinned; pre-pull decisions come
   before combat starts, so scripts that should act in combat must check
-  `combat_time`; passive auras show up in aura lists.
+  `combat_time`; passive auras show up in aura lists. `play_party` walks
+  one script for all seats, so when the next step is one seat's and both
+  wait for the next event, nothing may come and the step never runs;
+  give each seat its own queue instead (as `arms_engine.rs` does). A hit
+  of zero damage leaves no damage event in the trace.
+- **More trace pitfalls, from Arms.** The trace reports `AuraApplied`
+  when a stack is taken away too (2 → 1), so count procs as events
+  where the stack count doesn't fall. Enemies don't exist before the
+  pull spawns them. A seat that waits for the next event may not be
+  woken by its own swings, so use `Wait::Until` to watch something
+  closely. Stopping at a decision without submitting a choice and then
+  advancing again returns the same decision forever.
+- **Mutate every copy.** A data mutation must change every listener or
+  modifier it means to break: `perl -0pi -e 's/.../'` without `/g`
+  changes only the first match. That match may even be in another
+  spec's data, and then the mutation tests nothing.
 - The test count grew from 117 early in the work to 230 after Phase 9,
-  and 241 after Phase 11.
+  241 after Phase 11, 255 after the Arms engine additions, and 271 with
+  core Arms.
 
 ## 6. Process lessons (tooling and workflow)
 

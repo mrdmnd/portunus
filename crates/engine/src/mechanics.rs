@@ -31,6 +31,9 @@ pub trait Mechanics: Clone {
     fn cast_completed(&self, io: &mut dyn EngineIo, cast: &CastEvent);
     /// Tick `tick` (from 1) of a channel; the last lands as it ends.
     fn channel_tick(&self, io: &mut dyn EngineIo, cast: &CastEvent, tick: u8);
+    /// A channel ran its course: its last tick landed and it is over.
+    /// Channels cut short don't get this.
+    fn channel_ended(&self, _io: &mut dyn EngineIo, _cast: &CastEvent) {}
     /// A spell with travel time reached its target, carrying the hits
     /// stashed for it at launch ([`EngineIo::stash_hit`]).
     fn projectile_landed(

@@ -96,7 +96,7 @@ pub enum DataIssue {
     InvalidSharedProc(Owner),
     /// An `ApplyOneOf` with no auras to choose from.
     EmptyChoice(Owner),
-    /// A `Chance` outside `[0, 1]`.
+    /// A `Chance` outside `[0, 1]`, or a `ProcChance::Prd` outside `(0, 1]`.
     InvalidChance(Owner),
     /// A missile speed that isn't a positive number.
     InvalidSpeed(SpellId),
@@ -289,9 +289,13 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
             }
         }
         if let CastKind::Channel {
-            duration, ticks, ..
+            duration,
+            ticks,
+            ref on_end,
+            ..
         } = spell.cast
         {
+            c.effects(&owner, on_end);
             if ticks == 0 || duration == SimDuration::ZERO {
                 c.issues.push(DataIssue::InvalidChannel(spell.id));
             }
@@ -629,7 +633,10 @@ impl Checker<'_> {
                     .is_none_or(|a| a.ground.is_some());
                 self.valid_predicate(owner, ground);
             }
-            Predicate::DiffersFromLastCast | Predicate::TargetHpBelowCasterMaxHp => {}
+            Predicate::EnemiesAtLeast(n) => self.valid_predicate(owner, n > 0),
+            Predicate::DiffersFromLastCast
+            | Predicate::TargetHpBelowCasterMaxHp
+            | Predicate::TargetIsCurrent => {}
         }
     }
 
@@ -706,10 +713,14 @@ impl Checker<'_> {
             self.issues
                 .push(DataIssue::PerUnitWithoutSpend(owner.clone()));
         }
-        if let ProcChance::Deck { successes, size } = l.chance {
-            if size == 0 || successes > size {
+        match l.chance {
+            ProcChance::Deck { successes, size } if size == 0 || successes > size => {
                 self.issues.push(DataIssue::InvalidDeck(owner.clone()));
             }
+            ProcChance::Prd { chance } if !(chance > 0.0 && chance <= 1.0) => {
+                self.issues.push(DataIssue::InvalidChance(owner.clone()));
+            }
+            _ => {}
         }
         if let Some(p) = &l.condition {
             self.predicate(owner, p);
@@ -750,7 +761,9 @@ impl Checker<'_> {
                             self.issues
                                 .push(DataIssue::InvalidCountScale(owner.clone()));
                         }
-                        if let TargetCount::EnemiesWithAura { aura, .. } = scale.count {
+                        if let TargetCount::EnemiesWithAura { aura, .. }
+                        | TargetCount::TargetStacks { aura } = scale.count
+                        {
                             self.aura(owner, aura);
                         }
                     }

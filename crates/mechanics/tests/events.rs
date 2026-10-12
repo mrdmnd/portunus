@@ -78,6 +78,8 @@ fn cast_starts_fire_for_hard_casts_only() {
         ticks: 2,
         hasted: false,
         swings: false,
+        tick_zero: false,
+        on_end: Vec::new(),
     };
     add_spell(&mut f, hard);
     add_spell(&mut f, channel);

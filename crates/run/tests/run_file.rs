@@ -230,6 +230,39 @@ fn full_builds_press_their_whole_kit() {
     }
 }
 
+#[test]
+fn arms_policy_uses_the_kit() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/runs/arms_dummy.ron");
+    let bd = Bundle::load(&path)
+        .unwrap()
+        .breakdown(SeedSet { first: 0, count: 4 })
+        .unwrap();
+    let casts = |name: &str| {
+        bd.rows
+            .iter()
+            .filter(|r| r.name == name)
+            .map(|r| r.casts)
+            .sum::<f64>()
+    };
+    for name in [
+        "Charge",
+        "Colossus Smash",
+        "Avatar",
+        "Bladestorm",
+        "Mortal Strike",
+        "Overpower",
+        "Execute",
+        "Heroic Strike",
+        "Slam",
+        "Cleave",
+    ] {
+        assert!(casts(name) > 0.0, "casts {name}");
+    }
+    // Cleave keeps Rend up, so Rend itself is never pressed.
+    assert!(bd.rows.iter().any(|r| r.name == "Rend" && r.damage > 0.0));
+    assert_eq!(casts("Rend"), 0.0);
+}
+
 /// Lava Surge's buff and Lava Burst's reset stay hidden until perceived.
 #[test]
 fn realistic_seats_miss_what_they_have_not_perceived() {
@@ -363,6 +396,8 @@ fn seats_see_their_channels_progress() {
         ticks: 3,
         hasted: false,
         swings: false,
+        tick_zero: false,
+        on_end: Vec::new(),
     };
     bolt.speed = None;
     let mut env = b.env(false);

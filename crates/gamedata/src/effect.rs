@@ -238,11 +238,41 @@ pub enum Effect {
     },
 }
 
-/// Multiplies an amount by `1 + pct / 100 * count`.
+/// Multiplies an amount by a function of a count, by default
+/// `1 + pct / 100 * count`.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct CountScale {
     pub count: TargetCount,
     pub pct: f64,
+    #[serde(default)]
+    pub form: CountForm,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CountForm {
+    /// `1 + pct / 100 * count`: a bonus per target.
+    #[default]
+    Linear,
+    /// `1 + pct / 100 / count`: a bonus split across them (Culling
+    /// Cyclone). No bonus at a count of 0.
+    Inverse,
+    /// `pct / 100 * count`: an amount per unit counted (Fatality per
+    /// Fatal Mark).
+    Times,
+}
+
+impl CountForm {
+    /// The multiplier for `count`.
+    pub fn apply(self, pct: f64, count: usize) -> f64 {
+        let n = count as f64;
+        match self {
+            Self::Linear => 1.0 + pct / 100.0 * n,
+            Self::Inverse if count == 0 => 1.0,
+            Self::Inverse => 1.0 + pct / 100.0 / n,
+            Self::Times => pct / 100.0 * n,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -252,6 +282,10 @@ pub enum TargetCount {
     EnemiesWithAura { aura: AuraId, from_self: bool },
     /// The targets this effect hits.
     TargetsHit,
+    /// Stacks of the caster's `aura` on the target being hit.
+    TargetStacks { aura: AuraId },
+    /// Every engaged enemy (SimC's `target_non_sleeping_list`).
+    Enemies,
 }
 
 /// How an amount scales.
@@ -358,6 +392,9 @@ pub enum CooldownChange {
     /// spell whose cooldown waits for its buff to be spent (Ancestral
     /// Swiftness, "cooldown on event").
     Restart,
+    /// Times the effect's scale: a `ResourceSpent` listener's is the amount
+    /// spent, so `Reduce(50)` there is 1 s per 20 spent (Anger
+    /// Management).
     Reduce(SimDuration),
     /// Change the recovery rate, e.g. a 100% faster recharge.
     RateMult(f64),
@@ -445,6 +482,12 @@ pub enum Predicate {
     /// the caster counts as inside until it has moved, in all, more than
     /// the radius since placing it. Pets and totems never leave.
     InOwnGround(AuraId),
+    /// At least this many enemies are engaged: a multi-target spell had
+    /// a second target to hit (Sweeping Strikes, Reap the Storm).
+    EnemiesAtLeast(u8),
+    /// The target is the caster's current target, its "primary target"
+    /// (Slayer's Dominance; SimC's `s->target == p()->target`).
+    TargetIsCurrent,
 }
 
 /// How many of a seat's casts the engine remembers for
@@ -457,6 +500,11 @@ pub enum ModScope {
     All,
     Spell(SpellId),
     School(SchoolMask),
+    /// Auto-attacks only (SimC's "Modify Auto Attack Damage Done%").
+    AutoAttack,
+    /// Everything but auto-attacks: spells, their ticks, and listener
+    /// effects.
+    Abilities,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -540,6 +588,26 @@ pub enum ModKind {
     /// several multiply (`armor * (1 - value / 100)` each), as SimC's
     /// `composite_player_target_armor` with Find Weakness.
     ArmorPenPct,
+    /// Damage done times `1 + value * mastery / 100`, mastery in percent
+    /// (Master of Arms: `value` 1 with the spec's `mastery_coef` 1.1).
+    MasteryDamagePct,
+    /// On an aura its holder carries: damage the aura's *source* deals to
+    /// the holder, in scope (by the attacker's spell or school), times
+    /// `1 + value / 100`. SimC's "Modify Damage Taken% from Caster's
+    /// Spells" (Colossus Smash, Overwhelmed).
+    SourceDamageTakenPct,
+    /// A channel in scope ticks this many more times, each lengthening it
+    /// by a tick's time (whole numbers; Imminent Demise on Bladestorm, whose
+    /// SimC duration is `tick_time × (ticks + stacks)`). Read as it starts.
+    ChannelTicksAdd,
+    /// A single-target damage effect of a spell in scope also hits this
+    /// many more engaged enemies (whole numbers), each for
+    /// `ChainSharePct` of the damage and each its own hit: SimC's
+    /// `n_targets` and chain multiplier (Sweeping Strikes).
+    ChainTargetsAdd,
+    /// The share, in percent, of a chained hit (see `ChainTargetsAdd`);
+    /// several multiply. Full damage without one.
+    ChainSharePct,
 }
 
 /// A reaction to combat events: procs, on-hit effects, and the like.
@@ -589,6 +657,9 @@ pub enum ListenFor {
     /// An auto-attack landed (rage, Windfury). `None` matches both hands.
     Swing {
         hand: Option<WeaponHand>,
+        /// Only swings that crit (Seasoned Soldier, Wild Strikes).
+        #[serde(default)]
+        crit_only: bool,
     },
     /// A melee hit landed: an auto-attack, or a hit from a spell with a
     /// `weapon` (poisons). `None` matches both hands.
@@ -700,4 +771,57 @@ pub enum ProcChance {
         successes: u16,
         size: u16,
     },
+    /// Pseudo-random distribution averaging `chance`: the `n`th attempt
+    /// since the last proc succeeds with `C * n`, `C` from SimC's
+    /// `prd::find_constant(chance)` (Slayer's Dominance, Master of
+    /// Warfare).
+    Prd {
+        chance: f64,
+    },
+}
+
+impl ProcChance {
+    /// SimC's `prd::find_constant`: the per-attempt step `C` whose
+    /// distribution averages `p` procs per attempt, with no cap.
+    pub fn prd_constant(p: f64) -> f64 {
+        const MAX_ATTEMPTS: u32 = 100_000;
+        if p <= 0.0 {
+            return 0.0;
+        }
+        if p >= 1.0 {
+            return 1.0;
+        }
+        if p <= 1.0 / f64::from(MAX_ATTEMPTS) {
+            return 1e-300;
+        }
+        let target = 1.0 / p;
+        let mut c = (1.25 * p * p).min(0.99);
+        for _ in 0..20 {
+            let (expected, slope) = prd_expected_attempts(c, MAX_ATTEMPTS);
+            let error = expected - target;
+            if error.abs() < 1e-12 {
+                break;
+            }
+            c -= error / slope;
+        }
+        c
+    }
+}
+
+/// The expected attempts to a proc with step `c`, and its derivative in
+/// `c` (SimC's `prd::expected_attempts`).
+fn prd_expected_attempts(c: f64, cap: u32) -> (f64, f64) {
+    let (mut chain, mut d_chain) = (1.0, 0.0);
+    let (mut expected, mut d_expected) = (0.0, 0.0);
+    for i in 1..=cap {
+        expected += chain;
+        d_expected += d_chain;
+        let p = f64::from(i) * c;
+        if p >= 1.0 {
+            break;
+        }
+        d_chain = d_chain * (1.0 - p) - chain * f64::from(i);
+        chain *= 1.0 - p;
+    }
+    (expected, d_expected)
 }

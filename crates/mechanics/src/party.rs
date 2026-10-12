@@ -331,6 +331,15 @@ impl Mechanics for PartyMechanics {
         self.interp.run(io, &ctx, &def.effects);
     }
 
+    fn channel_ended(&self, io: &mut dyn EngineIo, cast: &CastEvent) {
+        let Some(def) = self.spell(cast.spell) else {
+            return;
+        };
+        if let CastKind::Channel { on_end, .. } = &def.cast {
+            self.interp.run(io, &self.spell_ctx(cast), on_end);
+        }
+    }
+
     fn projectile_landed(
         &self,
         io: &mut dyn EngineIo,

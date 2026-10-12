@@ -26,7 +26,7 @@ impl Kits {
 
     /// Every kit this crate implements.
     pub fn standard() -> Self {
-        Self::new(vec![Box::new(Elemental)])
+        Self::new(vec![Box::new(Elemental), Box::new(Arms)])
     }
 }
 
@@ -104,10 +104,14 @@ fn hooks_in(data: &GameData) -> BTreeSet<HookKey> {
     let mut out = BTreeSet::new();
     for spell in data.spells.values() {
         walk(&spell.effects, &mut out);
-        if let CastKind::Empower { stage_effects, .. } = &spell.cast {
-            for stage in stage_effects {
-                walk(stage, &mut out);
+        match &spell.cast {
+            CastKind::Empower { stage_effects, .. } => {
+                for stage in stage_effects {
+                    walk(stage, &mut out);
+                }
             }
+            CastKind::Channel { on_end, .. } => walk(on_end, &mut out),
+            _ => {}
         }
     }
     for aura in data.auras.values() {
@@ -138,6 +142,35 @@ pub struct Elemental;
 impl SpecKit for Elemental {
     fn spec(&self) -> SpecId {
         SpecId(262)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Arms Warrior. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Arms;
+
+impl SpecKit for Arms {
+    fn spec(&self) -> SpecId {
+        SpecId(71)
     }
 
     fn hooks(&self) -> &[HookKey] {

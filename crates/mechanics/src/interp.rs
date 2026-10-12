@@ -9,8 +9,8 @@ use portunus_engine::mechanics::{
 use portunus_engine::state::ActorKind;
 use portunus_engine::{AuraRef, EngineIo, ListenerRef, ProcView, SegmentView, StateView};
 use portunus_gamedata::effect::{
-    AoeRule, Coefficient, CountScale, Effect, EffectTarget, ListenFor, ProcChance, RemovalReason,
-    TargetCount,
+    AoeRule, Coefficient, CooldownChange, CountScale, Effect, EffectTarget, ListenFor, ProcChance,
+    RemovalReason, TargetCount,
 };
 use portunus_gamedata::item::WeaponHand;
 use portunus_gamedata::stats::{RatedStat, ResourceKind, SchoolMask};
@@ -55,6 +55,13 @@ pub(crate) struct DamageSpec {
     pub unmodified: bool,
 }
 
+/// The enemies a single-target hit chains to, nearest the target first,
+/// and the share each takes.
+struct Chain {
+    extra: Vec<ActorId>,
+    share: f64,
+}
+
 /// Something listeners may react to.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum Happening {
@@ -69,7 +76,10 @@ pub(crate) enum Happening {
         killing_blow: bool,
     },
     DamageTaken,
-    Swing(WeaponHand),
+    Swing {
+        hand: WeaponHand,
+        crit: bool,
+    },
     WeaponHit(WeaponHand),
     PeriodicTick(AuraId),
     ResourceSpent(ResourceKind),
@@ -225,7 +235,7 @@ impl Interpreter {
                         _ => 1.0,
                     };
                     let hand = match ev.what {
-                        Happening::Swing(h) | Happening::WeaponHit(h) => Some(h),
+                        Happening::Swing { hand: h, .. } | Happening::WeaponHit(h) => Some(h),
                         _ => None,
                     };
                     let ctx = EffectCtx {
@@ -293,6 +303,10 @@ impl Interpreter {
                 } else {
                     0.0
                 }
+            }
+            ProcChance::Prd { chance } => {
+                let attempt = proc.map_or(1, |p| p.attempts.saturating_add(1));
+                ProcChance::prd_constant(chance) * f64::from(attempt)
             }
         }
     }
@@ -507,34 +521,85 @@ impl Interpreter {
                 }
             }
         }
-        if let Some(scale) = d.per_count {
-            let count = match scale.count {
+        let view = io.view();
+        let count = |t: ActorId| -> usize {
+            let Some(scale) = d.per_count else { return 0 };
+            match scale.count {
                 TargetCount::TargetsHit => targets.len(),
-                TargetCount::EnemiesWithAura { aura, from_self } => {
-                    let view = io.view();
-                    engaged_enemies(view)
-                        .into_iter()
-                        .filter(|&e| holds_aura(view, e, aura, from_self.then_some(ctx.caster)))
-                        .count()
-                }
-            };
-            falloff *= 1.0 + scale.pct / 100.0 * count as f64;
-        }
+                TargetCount::EnemiesWithAura { aura, from_self } => engaged_enemies(view)
+                    .into_iter()
+                    .filter(|&e| holds_aura(view, e, aura, from_self.then_some(ctx.caster)))
+                    .count(),
+                TargetCount::TargetStacks { aura } => instance(
+                    view,
+                    AuraRef {
+                        holder: t,
+                        aura,
+                        source: ctx.caster,
+                    },
+                )
+                .map_or(0, |i| usize::from(i.stacks)),
+                TargetCount::Enemies => engaged_enemies(view).len(),
+            }
+        };
+        let chain = self.chain_targets(view, ctx, d, &targets);
+        let primary = targets.len();
         targets
-            .into_iter()
-            .map(|t| {
-                let share = if ctx.target == Some(t) {
+            .iter()
+            .copied()
+            .chain(chain.extra)
+            .enumerate()
+            .map(|(i, t)| {
+                let share = if i >= primary {
+                    chain.share
+                } else if ctx.target == Some(t) {
                     1.0
                 } else {
                     secondary
                 };
+                let by_count = d.per_count.map_or(1.0, |s| s.form.apply(s.pct, count(t)));
                 EffectCtx {
                     target: Some(t),
-                    scale: ctx.scale * falloff * share,
+                    scale: ctx.scale * falloff * share * by_count,
                     ..*ctx
                 }
             })
             .collect()
+    }
+
+    /// The extra enemies a single-target hit chains to (`ChainTargetsAdd`)
+    /// and their share of it: none for area effects, listener effects
+    /// (no spell), or without a modifier in scope.
+    fn chain_targets(
+        &self,
+        view: &dyn StateView,
+        ctx: &EffectCtx,
+        d: DamageSpec,
+        hit: &[ActorId],
+    ) -> Chain {
+        let none = Chain {
+            extra: Vec::new(),
+            share: 1.0,
+        };
+        if d.target != EffectTarget::Target || d.aoe.is_some() || ctx.spell.is_none() {
+            return none;
+        }
+        let (n, share) = self.math.chain(view, ctx, d.school);
+        if n == 0 {
+            return none;
+        }
+        let centre = ctx.target.and_then(|t| view.pack_position(t));
+        let distance = |e: ActorId| match (centre, view.pack_position(e)) {
+            (Some(c), Some(at)) => (at.0 - c.0).hypot(at.1 - c.1),
+            _ => 0.0,
+        };
+        let mut extra: Vec<ActorId> = engaged_enemies(view)
+            .into_iter()
+            .filter(|e| !hit.contains(e))
+            .collect();
+        extra.sort_by(|&a, &b| distance(a).total_cmp(&distance(b)));
+        extra.truncate(n);
+        Chain { extra, share }
     }
 
     /// Add to the caster's resource; on a gain, fire its `ResourceGained`
@@ -613,21 +678,20 @@ impl Interpreter {
             hit: HitKind::Direct,
             ground: None,
         };
-        self.damage(
-            io,
-            &ctx,
-            DamageSpec {
-                amount: Coefficient::Flat(raw),
-                school: SchoolMask::PHYSICAL,
-                target: EffectTarget::Target,
-                aoe: None,
-                ignores_armor: false,
-                hand: None,
-                per_count: None,
-                unmodified: false,
-            },
-        );
-        for what in [Happening::Swing(hand), Happening::WeaponHit(hand)] {
+        let d = DamageSpec {
+            amount: Coefficient::Flat(raw),
+            school: SchoolMask::PHYSICAL,
+            target: EffectTarget::Target,
+            aoe: None,
+            ignores_armor: false,
+            hand: None,
+            per_count: None,
+            unmodified: false,
+        };
+        let hit = self.roll_hit(io, &ctx, d);
+        let crit = hit.crit;
+        self.deliver(io, hit);
+        for what in [Happening::Swing { hand, crit }, Happening::WeaponHit(hand)] {
             let ev = Occurrence {
                 what,
                 target: Some(target),
@@ -1087,7 +1151,15 @@ impl Interpreter {
                     io.extend_pets(seat, pet, by);
                 }
             }
-            &Effect::AdjustCooldown { spell, change } => io.adjust_cooldown(caster, spell, change),
+            &Effect::AdjustCooldown { spell, change } => {
+                let change = match change {
+                    CooldownChange::Reduce(by) => {
+                        CooldownChange::Reduce(millis_scaled(by, ctx.scale))
+                    }
+                    other => other,
+                };
+                io.adjust_cooldown(caster, spell, change);
+            }
             &Effect::TriggerSpell {
                 spell,
                 target,
@@ -1302,10 +1374,10 @@ fn listens(on: ListenFor, what: Happening, died_with: impl Fn(AuraId) -> bool) -
                 && (fatal || !killing_blow)
         }
         (ListenFor::DamageTaken, Happening::DamageTaken) => true,
-        (ListenFor::Swing { hand }, Happening::Swing(got))
-        | (ListenFor::WeaponHit { hand }, Happening::WeaponHit(got)) => {
-            hand.is_none_or(|h| h == got)
+        (ListenFor::Swing { hand, crit_only }, Happening::Swing { hand: got, crit }) => {
+            hand.is_none_or(|h| h == got) && (crit || !crit_only)
         }
+        (ListenFor::WeaponHit { hand }, Happening::WeaponHit(got)) => hand.is_none_or(|h| h == got),
         (ListenFor::PeriodicTick(a), Happening::PeriodicTick(b))
         | (ListenFor::AuraApplied(a), Happening::AuraApplied(b))
         | (ListenFor::AuraExpired(a), Happening::AuraExpired(b)) => a == b,
@@ -1382,6 +1454,12 @@ fn engaged_enemies(view: &dyn StateView) -> Vec<ActorId> {
                 .is_some_and(|a| a.engaged && a.alive && a.targetable)
         })
         .collect()
+}
+
+/// `d` times `scale`, to the nearest millisecond; never negative.
+fn millis_scaled(d: SimDuration, scale: f64) -> SimDuration {
+    let ms = (f64::from(d.millis()) * scale).round();
+    SimDuration(ms.clamp(0.0, f64::from(u32::MAX / 2)) as u32)
 }
 
 /// A listener's own stream, from its aura and index (FNV-1a).

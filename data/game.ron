@@ -1,4 +1,4 @@
-// Hand-written Elemental Shaman slice.
+// Hand-written Elemental Shaman and Arms Warrior slices.
 //
 // Spell and aura ids follow the live game where known, but every
 // coefficient, duration, proc rate, and stat curve here is an UNCALIBRATED
@@ -15,6 +15,12 @@
 // Blast, Voltaic Blaze, Ascendance, the Elementals, and the 12.0 spec tree)
 // takes its mechanics from SimC and its percentages from the 12.0 dump; its
 // coefficients are the dump's scaled by this file's Bolt (1.15 / 1.7).
+//
+// Arms (12.1, spec tree only; Slayer and Colossus aren't here yet) takes
+// its mechanics from SimC's `sc_warrior.cpp` and its attack power
+// coefficients and percentages straight from the dump, unscaled. The
+// class tree isn't modelled: the reference build's damage talents in it
+// are baseline auras of the spec.
 (
     build: (version: "placeholder", build: 0),
     specs: {
@@ -82,6 +88,75 @@
                         (row: 10, choices: [1269215], max_rank: 2),
                         (row: 10, choices: [1259471], max_rank: 1),
                         (row: 11, choices: [1270061, 1270062, 1270064], max_rank: 2),
+                    ],
+                    gates: [(5, 8), (8, 20)],
+                ),
+            ],
+        ),
+        71: (
+            id: 71,
+            class: "Warrior",
+            name: "Arms",
+            role: damage,
+            melee: true,
+            primary_stat: strength,
+            base_stats: { strength: 2000.0, stamina: 2000.0 },
+            base_mastery_pct: 8.8,
+            mastery_coef: 1.1,
+            // Out of combat rage drains; the rate is a placeholder.
+            resources: [
+                (kind: rage, max: 100.0, initial: 0.0, regen_per_sec: 0.0, regen_hasted: false, out_of_combat: Some(-1.0)),
+            ],
+            // Execute, Slam, and Charge are baseline. Rend, Storm Bolt, and
+            // Wrecking Throw come from the class tree, which isn't modelled:
+            // the reference build's damage talents in it are baseline here
+            // (the auras after Seasoned Soldier), at the ranks it takes.
+            baseline_spells: [163201, 1464, 100, 772, 107570, 384110],
+            baseline_auras: [137049, 1258398, 279423, 386164, 262231, 382896, 383082, 392792, 382946, 382767, 392777, 152278],
+            trees: [
+                // The 12.1 tree from SimC's trait data, each talent once.
+                // Master of Warfare's four ranks are three spells (1269306
+                // holds two); here they're one talent of four ranks.
+                (
+                    name: "Arms",
+                    points: 34,
+                    nodes: [
+                        (row: 1, choices: [12294], max_rank: 1),
+                        (row: 2, choices: [7384], max_rank: 1),
+                        (row: 2, choices: [29725], max_rank: 1),
+                        (row: 3, choices: [383103, 1277297], max_rank: 1),
+                        (row: 3, choices: [118038], max_rank: 1),
+                        (row: 4, choices: [384361], max_rank: 1),
+                        (row: 4, choices: [385571], max_rank: 1),
+                        (row: 4, choices: [316405], max_rank: 1),
+                        (row: 4, choices: [202316], max_rank: 1),
+                        (row: 5, choices: [184783], max_rank: 1),
+                        (row: 5, choices: [167105], max_rank: 1),
+                        (row: 5, choices: [383430], max_rank: 1),
+                        (row: 6, choices: [1261046, 1261047], max_rank: 1),
+                        (row: 6, choices: [400205, 1273075], max_rank: 1),
+                        (row: 6, choices: [400803], max_rank: 2),
+                        (row: 6, choices: [1261048, 1261049], max_rank: 1),
+                        (row: 6, choices: [383341], max_rank: 2),
+                        (row: 6, choices: [845], max_rank: 1),
+                        (row: 6, choices: [1261050], max_rank: 1),
+                        (row: 7, choices: [1273062], max_rank: 1),
+                        (row: 7, choices: [262150], max_rank: 1),
+                        (row: 7, choices: [1261060], max_rank: 1),
+                        (row: 7, choices: [1261051, 1261056], max_rank: 1),
+                        (row: 7, choices: [281001], max_rank: 1),
+                        (row: 7, choices: [334779], max_rank: 1),
+                        (row: 8, choices: [383287], max_rank: 2),
+                        (row: 8, choices: [227847, 228920], max_rank: 1),
+                        (row: 8, choices: [389306], max_rank: 2),
+                        (row: 9, choices: [1261057], max_rank: 1),
+                        (row: 9, choices: [383154], max_rank: 1),
+                        (row: 9, choices: [386634], max_rank: 1),
+                        (row: 9, choices: [383703], max_rank: 1),
+                        (row: 10, choices: [386630], max_rank: 1),
+                        (row: 10, choices: [1261062], max_rank: 1),
+                        (row: 10, choices: [107574], max_rank: 1),
+                        (row: 11, choices: [1269314], max_rank: 4),
                     ],
                     gates: [(5, 8), (8, 20)],
                 ),
@@ -736,6 +811,310 @@
             targeting: self_only,
             hostile: false,
             effects: [displace(yards: 20.0)],
+        ),
+        // Arms Warrior (12.1). Coefficients are the dump's attack power
+        // coefficients, UNCALIBRATED like the rest of this file.
+        // Executioner's Precision goes once the strike has landed (SimC's
+        // `mortal_strike_t::execute`).
+        12294: (
+            id: 12294,
+            name: "Mortal Strike",
+            school: 1,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            cooldown: Some((duration: 6000, charges: 1, hasted: true, category: None)),
+            costs: [(kind: rage, amount: 30.0, extra: 0.0, scaling: none)],
+            targeting: enemy,
+            hostile: true,
+            range: Some(5.0),
+            effects: [
+                damage(amount: attack_power(5.20121), school: 1, target: target),
+                remove_aura(aura: 386633, target: caster),
+            ],
+        ),
+        7384: (
+            id: 7384,
+            name: "Overpower",
+            school: 1,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            cooldown: Some((duration: 12000, charges: 1, hasted: false, category: None)),
+            targeting: enemy,
+            hostile: true,
+            range: Some(5.0),
+            effects: [
+                damage(amount: attack_power(3.85614), school: 1, target: target),
+            ],
+        ),
+        // SimC's `execute_arms_t` spends 20 to 40 rage and triggers
+        // `execute_damage_t` (260798) at 2 x spent / 40: here the cast deals
+        // the damage itself, scaled by spent / 20. Improved Execute takes its
+        // 6 s cooldown away (the reference build has it, so no cooldown here)
+        // and refunds 10% of the rage spent, Critical Thinking 10% more per
+        // rank: 2 rage per 20 spent each.
+        163201: (
+            id: 163201,
+            name: "Execute",
+            school: 1,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            costs: [(kind: rage, amount: 20.0, extra: 20.0, scaling: extra(1.0))],
+            targeting: enemy,
+            hostile: true,
+            range: Some(5.0),
+            requires: [target_hp_at_most(0.2)],
+            effects: [
+                damage(amount: attack_power(2.42125), school: 1, target: target),
+                if(when: caster_has_aura(316405), then: [resource((kind: rage, amount: 2.0)), if(when: caster_stacks_at_least(aura: 389306, stacks: 1), then: [resource((kind: rage, amount: 2.0))]), if(when: caster_stacks_at_least(aura: 389306, stacks: 2), then: [resource((kind: rage, amount: 2.0))])]),
+            ],
+        ),
+        // Massacre's Execute: below 35%.
+        281000: (
+            id: 281000,
+            name: "Execute",
+            school: 1,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            costs: [(kind: rage, amount: 20.0, extra: 20.0, scaling: extra(1.0))],
+            targeting: enemy,
+            hostile: true,
+            range: Some(5.0),
+            requires: [target_hp_at_most(0.35)],
+            effects: [
+                damage(amount: attack_power(2.42125), school: 1, target: target),
+                if(when: caster_has_aura(316405), then: [resource((kind: rage, amount: 2.0)), if(when: caster_stacks_at_least(aura: 389306, stacks: 1), then: [resource((kind: rage, amount: 2.0))]), if(when: caster_stacks_at_least(aura: 389306, stacks: 2), then: [resource((kind: rage, amount: 2.0))])]),
+            ],
+        ),
+        // Execute under Sudden Death: free, on any target, and as if 40 rage
+        // were spent (SimC's `cost_rage == 0` doubling, 2 x 2.42125).
+        260798: (
+            id: 260798,
+            name: "Execute",
+            school: 1,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            targeting: enemy,
+            hostile: true,
+            range: Some(5.0),
+            effects: [
+                damage(amount: attack_power(4.8425), school: 1, target: target),
+                remove_stacks(aura: 52437, target: caster, stacks: 1),
+            ],
+        ),
+        1464: (
+            id: 1464,
+            name: "Slam",
+            school: 1,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            costs: [(kind: rage, amount: 20.0, extra: 0.0, scaling: none)],
+            targeting: enemy,
+            hostile: true,
+            range: Some(5.0),
+            effects: [
+                damage(amount: attack_power(3.03485), school: 1, target: target),
+            ],
+        ),
+        // Slam while Master of Warfare's proc is up. As SimC's
+        // `heroic_strike_t::execute`, the proc goes and a stack of armor
+        // penetration comes after the strike lands.
+        1269383: (
+            id: 1269383,
+            name: "Heroic Strike",
+            school: 1,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            costs: [(kind: rage, amount: 20.0, extra: 0.0, scaling: none)],
+            targeting: enemy,
+            hostile: true,
+            range: Some(5.0),
+            effects: [
+                damage(amount: attack_power(6.0), school: 1, target: target),
+                remove_aura(aura: 1269391, target: caster),
+                apply_aura(aura: 1269394, target: caster),
+                if(when: caster_has_aura(1269307), then: [apply_aura(aura: 1292058, target: caster)]),
+            ],
+        ),
+        // The debuff goes on after the hit, and Heroic Might's stacks turn
+        // into the buff after that (SimC's `colossus_smash_t`).
+        167105: (
+            id: 167105,
+            name: "Colossus Smash",
+            school: 1,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            cooldown: Some((duration: 45000, charges: 1, hasted: false, category: None)),
+            targeting: enemy,
+            hostile: true,
+            range: Some(5.0),
+            effects: [
+                damage(amount: attack_power(3.06263), school: 1, target: all_enemies, aoe: Some((max_targets: None, sqrt_cap: Some(8), secondary: 1.0))),
+                apply_aura(aura: 208086, target: all_enemies),
+                if(when: caster_stacks_at_least(aura: 1292058, stacks: 5), then: [apply_aura(aura: 910101, target: caster, stacks: 5)], otherwise: [if(when: caster_stacks_at_least(aura: 1292058, stacks: 4), then: [apply_aura(aura: 910101, target: caster, stacks: 4)], otherwise: [if(when: caster_stacks_at_least(aura: 1292058, stacks: 3), then: [apply_aura(aura: 910101, target: caster, stacks: 3)], otherwise: [if(when: caster_stacks_at_least(aura: 1292058, stacks: 2), then: [apply_aura(aura: 910101, target: caster, stacks: 2)], otherwise: [if(when: caster_has_aura(1292058), then: [apply_aura(aura: 910101, target: caster)])])])])]),
+                remove_aura(aura: 1292058, target: caster),
+            ],
+        ),
+        107574: (
+            id: 107574,
+            name: "Avatar",
+            school: 1,
+            cast: instant,
+            gcd: None,
+            cooldown: Some((duration: 90000, charges: 1, hasted: false, category: None)),
+            targeting: self_only,
+            hostile: false,
+            effects: [
+                apply_aura(aura: 107574, target: caster),
+            ],
+        ),
+        // SimC's Bladestorm is a 6 s dot with a tick as it starts, each tick
+        // a main-hand strike (50622) on every enemy around; autos keep going
+        // (`interrupt_auto_attack = false`). Arms gets no rage from it.
+        227847: (
+            id: 227847,
+            name: "Bladestorm",
+            school: 1,
+            cast: channel(duration: 6000, ticks: 6, hasted: true, swings: true, tick_zero: true),
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            cooldown: Some((duration: 90000, charges: 1, hasted: false, category: Some(2270))),
+            targeting: enemy,
+            hostile: true,
+            range: Some(8.0),
+            effects: [
+                trigger_spell(spell: 50622, target: target),
+            ],
+        ),
+        50622: (
+            id: 50622,
+            name: "Bladestorm",
+            school: 1,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            effects: [
+                damage(amount: attack_power(2.71635), school: 1, target: all_enemies, aoe: Some((max_targets: None, sqrt_cap: Some(8), secondary: 1.0))),
+            ],
+        ),
+        772: (
+            id: 772,
+            name: "Rend",
+            school: 1,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            costs: [(kind: rage, amount: 10.0, extra: 0.0, scaling: none)],
+            targeting: enemy,
+            hostile: true,
+            range: Some(5.0),
+            effects: [
+                damage(amount: attack_power(1.24581), school: 1, target: target),
+                apply_aura(aura: 388539, target: target),
+            ],
+        ),
+        // Rend's bleed, which Cleave and Bloodletting apply as well.
+        388539: (
+            id: 388539,
+            name: "Rend",
+            school: 1,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            effects: [
+                apply_aura(aura: 388539, target: target),
+            ],
+        ),
+        // In 12.1 Cleave puts Rend on everything it hits.
+        845: (
+            id: 845,
+            name: "Cleave",
+            school: 1,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            cooldown: Some((duration: 4500, charges: 1, hasted: true, category: None)),
+            costs: [(kind: rage, amount: 20.0, extra: 0.0, scaling: none)],
+            targeting: enemy,
+            hostile: true,
+            range: Some(5.0),
+            effects: [
+                damage(amount: attack_power(2.32814), school: 1, target: all_enemies, aoe: Some((max_targets: None, sqrt_cap: Some(5), secondary: 1.0))),
+                apply_aura(aura: 388539, target: all_enemies),
+            ],
+        ),
+        // Applies the rolling bleed: a fresh 6 s (Bloodletting: 7.98 s) of
+        // 0.242466 attack power a second, plus whatever was left of it.
+        262115: (
+            id: 262115,
+            name: "Deep Wounds",
+            school: 1,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            effects: [
+                if(when: caster_has_aura(383154), then: [apply_aura(aura: 262115, target: target, duration: Some(7980)), add_aura_value(aura: 262115, target: target, amount: attack_power(1.934879))], otherwise: [apply_aura(aura: 262115, target: target), add_aura_value(aura: 262115, target: target, amount: attack_power(1.454796))]),
+            ],
+        ),
+        // Once per Fatal Mark on the target, which it then clears.
+        383706: (
+            id: 383706,
+            name: "Fatal Mark",
+            school: 1,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            effects: [
+                damage(amount: attack_power(2.76), school: 1, target: target, per_count: Some((count: target_stacks(aura: 383704), pct: 100.0, form: times))),
+                remove_aura(aura: 383704, target: target),
+            ],
+        ),
+        // The stun isn't modelled.
+        107570: (
+            id: 107570,
+            name: "Storm Bolt",
+            school: 1,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            cooldown: Some((duration: 30000, charges: 1, hasted: false, category: None)),
+            targeting: enemy,
+            hostile: true,
+            range: Some(20.0),
+            effects: [
+                damage(amount: attack_power(0.285), school: 1, target: target),
+            ],
+        ),
+        // SimC's damage half (394354), dealt by the cast; it can't crit.
+        384110: (
+            id: 384110,
+            name: "Wrecking Throw",
+            school: 1,
+            cast: instant,
+            gcd: Some((base: 1500, hasted: true, floor: 750)),
+            cooldown: Some((duration: 45000, charges: 1, hasted: false, category: None)),
+            targeting: enemy,
+            hostile: true,
+            range: Some(25.0),
+            effects: [
+                damage(amount: attack_power(6.0), school: 1, target: target, ignores_armor: true),
+            ],
+        ),
+        // As SimC's first Charge: from wherever the warrior stands (its
+        // 8-yard minimum isn't modelled), 20 rage and 126664's damage.
+        100: (
+            id: 100,
+            name: "Charge",
+            school: 1,
+            cast: instant,
+            gcd: None,
+            cooldown: Some((duration: 20000, charges: 1, hasted: false, category: None)),
+            targeting: enemy,
+            hostile: true,
+            range: Some(25.0),
+            effects: [
+                resource((kind: rage, amount: 20.0)),
+                damage(amount: attack_power(0.21), school: 1, target: target),
+            ],
         ),
     },
     auras: {
@@ -2230,6 +2609,690 @@
                 ),
             ],
         ),
+        // Arms Warrior (12.1).
+        // The spec aura. Autos give 1.75 rage per second of weapon speed,
+        // times 3.5 for Arms (SimC's `melee_t::trigger_rage_gain`; SimC then
+        // rounds to a tenth). Wrecking Throw can't crit.
+        137049: (
+            id: 137049,
+            name: "Arms Warrior",
+            duration: None,
+            modifiers: [
+                (scope: abilities, kind: damage_done_pct, value: 15.0),
+                (scope: spell(163201), kind: damage_done_pct, value: 17.0),
+                (scope: spell(281000), kind: damage_done_pct, value: 17.0),
+                (scope: spell(260798), kind: damage_done_pct, value: 17.0),
+                (scope: auto_attack, kind: damage_done_pct, value: 476.0),
+                (scope: spell(384110), kind: crit_chance_add, value: -1000.0),
+            ],
+            listeners: [
+                (
+                    on: swing(hand: None),
+                    chance: always,
+                    effects: [gain_resource(kind: rage, amount: weapon_speed(6.125))],
+                ),
+            ],
+        ),
+        // Mastery times 1.1 more damage, autos included, with a two-hander.
+        1258398: (
+            id: 1258398,
+            name: "Mastery: Master of Arms",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: mastery_damage_pct, value: 1.0),
+            ],
+        ),
+        // Auto crits give 10% more rage.
+        279423: (
+            id: 279423,
+            name: "Seasoned Soldier",
+            duration: None,
+            listeners: [
+                (
+                    on: swing(hand: None, crit_only: true),
+                    chance: always,
+                    effects: [gain_resource(kind: rage, amount: weapon_speed(0.6125))],
+                ),
+            ],
+        ),
+        // Taken as always on (SimC's precombat `battle_stance`), with Stance
+        // Mastery's critical damage.
+        386164: (
+            id: 386164,
+            name: "Battle Stance",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: crit_chance_add, value: 3.0),
+                (scope: abilities, kind: crit_damage_pct, value: 3.0),
+            ],
+        ),
+        // 10% more rage from autos, crits' Seasoned Soldier share included.
+        262231: (
+            id: 262231,
+            name: "War Machine",
+            duration: None,
+            listeners: [
+                (
+                    on: swing(hand: None),
+                    chance: always,
+                    effects: [gain_resource(kind: rage, amount: weapon_speed(0.6125))],
+                ),
+                (
+                    on: swing(hand: None, crit_only: true),
+                    chance: always,
+                    effects: [gain_resource(kind: rage, amount: weapon_speed(0.06125))],
+                ),
+            ],
+        ),
+        // Both ranks: 3% each, abilities and autos.
+        382896: (
+            id: 382896,
+            name: "Two-Handed Weapon Specialization",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 6.0),
+            ],
+        ),
+        383082: (
+            id: 383082,
+            name: "Barbaric Training",
+            duration: None,
+            modifiers: [
+                (scope: spell(845), kind: damage_done_pct, value: 10.0),
+                (scope: spell(1464), kind: damage_done_pct, value: 10.0),
+                (scope: spell(1269383), kind: damage_done_pct, value: 10.0),
+                (scope: spell(845), kind: crit_damage_pct, value: 5.0),
+                (scope: spell(1464), kind: crit_damage_pct, value: 5.0),
+                (scope: spell(1269383), kind: crit_damage_pct, value: 5.0),
+            ],
+        ),
+        // Mortal Strike and Cleave: 20% to refund 10% of their rage. SimC
+        // rolls it with no internal cooldown.
+        392792: (
+            id: 392792,
+            name: "Frothing Berserker",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(12294), school: None),
+                    chance: flat(0.2),
+                    effects: [resource((kind: rage, amount: 3.0))],
+                ),
+                (
+                    on: cast_complete(spell: Some(845), school: None),
+                    chance: flat(0.2),
+                    effects: [resource((kind: rage, amount: 2.0))],
+                ),
+            ],
+        ),
+        // Both ranks: 1% haste, and 10% attack speed after an auto crit, each.
+        382946: (
+            id: 382946,
+            name: "Wild Strikes",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: haste_pct, value: 2.0),
+            ],
+            listeners: [
+                (
+                    on: swing(hand: None, crit_only: true),
+                    chance: always,
+                    internal_cooldown: Some(8000),
+                    effects: [apply_aura(aura: 392778, target: caster)],
+                ),
+            ],
+        ),
+        392778: (
+            id: 392778,
+            name: "Wild Strikes",
+            duration: Some(10000),
+            modifiers: [
+                (scope: all, kind: attack_speed_pct, value: 20.0),
+            ],
+        ),
+        382767: (
+            id: 382767,
+            name: "Overwhelming Rage",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: resource_max(rage), value: 30.0),
+            ],
+        ),
+        // Both ranks.
+        392777: (
+            id: 392777,
+            name: "Cruel Strikes",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: crit_chance_add, value: 2.0),
+                (scope: spell(163201), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(281000), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(260798), kind: crit_damage_pct, value: 10.0),
+            ],
+        ),
+        // 1 s off Avatar and Colossus Smash per 20 rage spent.
+        152278: (
+            id: 152278,
+            name: "Anger Management",
+            duration: None,
+            listeners: [
+                (
+                    on: resource_spent(rage),
+                    chance: always,
+                    effects: [adjust_cooldown(spell: 107574, change: reduce(50)), adjust_cooldown(spell: 167105, change: reduce(50))],
+                ),
+            ],
+        ),
+        // 1.7 hasted procs a minute, at most one every 3 s, rolled as each
+        // special attack is used (SimC's `warrior_attack_t::execute`; Avatar
+        // isn't an attack). With Improved Execute there's no cooldown to reset.
+        29725: (
+            id: 29725,
+            name: "Sudden Death",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(12294), school: None),
+                    chance: rppm(rate: 1.7, hasted: true),
+                    internal_cooldown: Some(3000),
+                    effects: [apply_aura(aura: 52437, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(7384), school: None),
+                    chance: rppm(rate: 1.7, hasted: true),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 52437, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(163201), school: None),
+                    chance: rppm(rate: 1.7, hasted: true),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 52437, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(281000), school: None),
+                    chance: rppm(rate: 1.7, hasted: true),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 52437, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(260798), school: None),
+                    chance: rppm(rate: 1.7, hasted: true),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 52437, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(1464), school: None),
+                    chance: rppm(rate: 1.7, hasted: true),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 52437, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(1269383), school: None),
+                    chance: rppm(rate: 1.7, hasted: true),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 52437, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(167105), school: None),
+                    chance: rppm(rate: 1.7, hasted: true),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 52437, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(772), school: None),
+                    chance: rppm(rate: 1.7, hasted: true),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 52437, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(845), school: None),
+                    chance: rppm(rate: 1.7, hasted: true),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 52437, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(227847), school: None),
+                    chance: rppm(rate: 1.7, hasted: true),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 52437, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(107570), school: None),
+                    chance: rppm(rate: 1.7, hasted: true),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 52437, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(384110), school: None),
+                    chance: rppm(rate: 1.7, hasted: true),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 52437, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(100), school: None),
+                    chance: rppm(rate: 1.7, hasted: true),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 52437, target: caster)],
+                ),
+            ],
+        ),
+        52437: (
+            id: 52437,
+            name: "Sudden Death",
+            duration: Some(12000),
+            max_stacks: 2,
+            overrides: [(163201, 260798), (281000, 260798)],
+        ),
+        // Every 3 s (hasted), 30% for 5 rage while Rend is up. SimC rolls
+        // once at 30% x sqrt(n) for n Rends; here each Rend rolls 30%, the
+        // same with one target.
+        384361: (
+            id: 384361,
+            name: "Bloodsurge",
+            duration: None,
+            periodic: Some((period: 3000, hasted: true, partial_final_tick: false, effects: [for_each(target: enemies_with_aura(aura: 388539, from_self: true), then: [chance(chance: 0.3, then: [resource((kind: rage, amount: 5.0))])])])),
+        ),
+        385571: (
+            id: 385571,
+            name: "Improved Overpower",
+            duration: None,
+            modifiers: [
+                (scope: spell(7384), kind: damage_done_pct, value: 15.0),
+                (scope: spell(7384), kind: charges_add, value: 1.0),
+            ],
+        ),
+        // Read by Execute's refund.
+        316405: (
+            id: 316405,
+            name: "Improved Execute",
+            duration: None,
+        ),
+        // 30% per rage-spending attack for a charge of Overpower. SimC rolls
+        // it in `consume_resource` with no internal cooldown.
+        184783: (
+            id: 184783,
+            name: "Tactician",
+            duration: None,
+            listeners: [
+                (
+                    on: resource_spent(rage),
+                    chance: flat(0.3),
+                    effects: [adjust_cooldown(spell: 7384, change: add_charge)],
+                ),
+            ],
+        ),
+        383430: (
+            id: 383430,
+            name: "Impale",
+            duration: None,
+            modifiers: [
+                (scope: abilities, kind: crit_damage_pct, value: 10.0),
+            ],
+        ),
+        400803: (
+            id: 400803,
+            name: "Strength of Arms",
+            duration: None,
+            max_stacks: 2,
+            modifiers: [
+                (scope: spell(1464), kind: damage_done_pct, value: 5.0, per_stack: true),
+                (scope: spell(7384), kind: damage_done_pct, value: 5.0, per_stack: true),
+                (scope: spell(1269383), kind: damage_done_pct, value: 5.0, per_stack: true),
+                (scope: spell(1464), kind: crit_damage_pct, value: 5.0, per_stack: true),
+                (scope: spell(7384), kind: crit_damage_pct, value: 5.0, per_stack: true),
+                (scope: spell(1269383), kind: crit_damage_pct, value: 5.0, per_stack: true),
+                (scope: spell(1464), kind: crit_chance_add, value: 5.0, per_stack: true),
+                (scope: spell(7384), kind: crit_chance_add, value: 5.0, per_stack: true),
+                (scope: spell(1269383), kind: crit_chance_add, value: 5.0, per_stack: true),
+            ],
+        ),
+        1261048: (
+            id: 1261048,
+            name: "Just Warming Up",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(167105), school: None),
+                    chance: always,
+                    effects: [resource((kind: rage, amount: 15.0))],
+                ),
+            ],
+        ),
+        383341: (
+            id: 383341,
+            name: "Sharpened Blades",
+            duration: None,
+            max_stacks: 2,
+            modifiers: [
+                (scope: spell(845), kind: damage_done_pct, value: 5.0, per_stack: true),
+                (scope: spell(12294), kind: damage_done_pct, value: 5.0, per_stack: true),
+                (scope: spell(163201), kind: damage_done_pct, value: 5.0, per_stack: true),
+                (scope: spell(281000), kind: damage_done_pct, value: 5.0, per_stack: true),
+                (scope: spell(260798), kind: damage_done_pct, value: 5.0, per_stack: true),
+                (scope: spell(845), kind: crit_damage_pct, value: 5.0, per_stack: true),
+                (scope: spell(12294), kind: crit_damage_pct, value: 5.0, per_stack: true),
+                (scope: spell(163201), kind: crit_damage_pct, value: 5.0, per_stack: true),
+                (scope: spell(281000), kind: crit_damage_pct, value: 5.0, per_stack: true),
+                (scope: spell(260798), kind: crit_damage_pct, value: 5.0, per_stack: true),
+            ],
+        ),
+        // Execute's hit inflicts Deep Wounds (`execute_damage_t::impact`).
+        1261060: (
+            id: 1261060,
+            name: "Deep Wounds",
+            duration: None,
+            listeners: [
+                (
+                    on: damage_dealt(spell: Some(163201), school: None, crit_only: false),
+                    chance: always,
+                    effects: [trigger_spell(spell: 262115, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(281000), school: None, crit_only: false),
+                    chance: always,
+                    effects: [trigger_spell(spell: 262115, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(260798), school: None, crit_only: false),
+                    chance: always,
+                    effects: [trigger_spell(spell: 262115, target: target)],
+                ),
+            ],
+        ),
+        // SimC's rolling periodic: a refresh rolls what's left into the new
+        // duration. SimC keeps the tick rhythm through a refresh; here it
+        // starts afresh.
+        262115: (
+            id: 262115,
+            name: "Deep Wounds",
+            duration: Some(6000),
+            periodic: Some((period: 1000, hasted: false, partial_final_tick: true, effects: [damage(amount: event_amount(1.0), school: 1, target: target)])),
+            value: Some((kind: bank(spread_over_remaining), initial: None, cap: None, threshold: None, on_threshold: [])),
+        ),
+        // Colossus Smash grants a Sudden Death.
+        1261051: (
+            id: 1261051,
+            name: "Tactical Edge",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(167105), school: None),
+                    chance: always,
+                    effects: [apply_aura(aura: 52437, target: caster)],
+                ),
+            ],
+        ),
+        383287: (
+            id: 383287,
+            name: "Bloodborne",
+            duration: None,
+            max_stacks: 2,
+            modifiers: [
+                (scope: spell(262115), kind: damage_done_pct, value: 5.0, per_stack: true),
+                (scope: spell(388539), kind: damage_done_pct, value: 5.0, per_stack: true),
+                (scope: spell(262115), kind: crit_damage_pct, value: 5.0, per_stack: true),
+                (scope: spell(388539), kind: crit_damage_pct, value: 5.0, per_stack: true),
+            ],
+        ),
+        // Its refund is in Execute's effects.
+        389306: (
+            id: 389306,
+            name: "Critical Thinking",
+            duration: None,
+            max_stacks: 2,
+            modifiers: [
+                (scope: spell(163201), kind: crit_chance_add, value: 5.0, per_stack: true),
+                (scope: spell(281000), kind: crit_chance_add, value: 5.0, per_stack: true),
+                (scope: spell(260798), kind: crit_chance_add, value: 5.0, per_stack: true),
+            ],
+        ),
+        // Abilities crit 5% more against your Rend, Mortal Strike puts Rend
+        // on targets below 35%, and Deep Wounds lasts 33% longer.
+        383154: (
+            id: 383154,
+            name: "Bloodletting",
+            duration: None,
+            modifiers: [
+                (scope: abilities, kind: crit_chance_add, value: 5.0, condition: Some(target_has_aura(aura: 388539, from_self: true))),
+            ],
+            listeners: [
+                (
+                    on: damage_dealt(spell: Some(12294), school: None, crit_only: false),
+                    chance: always,
+                    condition: Some(target_hp_below(0.35)),
+                    effects: [apply_aura(aura: 388539, target: target)],
+                ),
+            ],
+        ),
+        386634: (
+            id: 386634,
+            name: "Executioner's Precision",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(163201), school: None),
+                    chance: always,
+                    internal_cooldown: Some(500),
+                    effects: [apply_aura(aura: 386633, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(281000), school: None),
+                    chance: always,
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 386633, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(260798), school: None),
+                    chance: always,
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 386633, target: caster)],
+                ),
+            ],
+        ),
+        386633: (
+            id: 386633,
+            name: "Executioner's Precision",
+            duration: Some(30000),
+            max_stacks: 2,
+            modifiers: [
+                (scope: spell(12294), kind: damage_done_pct, value: 35.0, per_stack: true),
+            ],
+        ),
+        // Mortal Strike's hit: 50% for a Fatal Mark. Execute's hit sets the
+        // marks off (`fatality_t`, which can't crit).
+        383703: (
+            id: 383703,
+            name: "Fatality",
+            duration: None,
+            modifiers: [
+                (scope: spell(383706), kind: crit_chance_add, value: -1000.0),
+            ],
+            listeners: [
+                (
+                    on: damage_dealt(spell: Some(12294), school: None, crit_only: false),
+                    chance: flat(0.5),
+                    effects: [apply_aura(aura: 383704, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(163201), school: None, crit_only: false),
+                    chance: always,
+                    condition: Some(target_has_aura(aura: 383704, from_self: true)),
+                    effects: [trigger_spell(spell: 383706, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(281000), school: None, crit_only: false),
+                    chance: always,
+                    condition: Some(target_has_aura(aura: 383704, from_self: true)),
+                    effects: [trigger_spell(spell: 383706, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(260798), school: None, crit_only: false),
+                    chance: always,
+                    condition: Some(target_has_aura(aura: 383704, from_self: true)),
+                    effects: [trigger_spell(spell: 383706, target: target)],
+                ),
+            ],
+        ),
+        383704: (
+            id: 383704,
+            name: "Fatal Mark",
+            duration: Some(30000),
+            max_stacks: 5,
+        ),
+        // Mortal Strike and Slam crits (Heroic Strike is a Slam) inflict Deep Wounds.
+        1261062: (
+            id: 1261062,
+            name: "Mortal Wounds",
+            duration: None,
+            listeners: [
+                (
+                    on: damage_dealt(spell: Some(12294), school: None, crit_only: true),
+                    chance: always,
+                    effects: [trigger_spell(spell: 262115, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(1464), school: None, crit_only: true),
+                    chance: always,
+                    effects: [trigger_spell(spell: 262115, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(1269383), school: None, crit_only: true),
+                    chance: always,
+                    effects: [trigger_spell(spell: 262115, target: target)],
+                ),
+            ],
+        ),
+        107574: (
+            id: 107574,
+            name: "Avatar",
+            duration: Some(20000),
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 20.0),
+            ],
+        ),
+        208086: (
+            id: 208086,
+            name: "Colossus Smash",
+            duration: Some(10000),
+            modifiers: [
+                (scope: all, kind: source_damage_taken_pct, value: 30.0),
+            ],
+        ),
+        388539: (
+            id: 388539,
+            name: "Rend",
+            duration: Some(15000),
+            refresh: pandemic(0.3),
+            periodic: Some((period: 3000, hasted: true, partial_final_tick: true, effects: [damage(amount: attack_power(0.380931), school: 1, target: target)])),
+        ),
+        // Mortal Strike, Slam, Overpower, and Execute's hit roll SimC's
+        // `prd::find_constant(0.15)` while the proc is down; Heroic Strike
+        // lands with it still up, so never rolls.
+        1269314: (
+            id: 1269314,
+            name: "Master of Warfare",
+            duration: None,
+            listeners: [
+                (
+                    on: damage_dealt(spell: Some(12294), school: None, crit_only: false),
+                    chance: prd(chance: 0.15),
+                    internal_cooldown: Some(100),
+                    condition: Some(caster_lacks_aura(1269391)),
+                    effects: [apply_aura(aura: 1269391, target: caster)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(1464), school: None, crit_only: false),
+                    chance: prd(chance: 0.15),
+                    shared_with: Some(0),
+                    condition: Some(caster_lacks_aura(1269391)),
+                    effects: [apply_aura(aura: 1269391, target: caster)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(7384), school: None, crit_only: false),
+                    chance: prd(chance: 0.15),
+                    shared_with: Some(0),
+                    condition: Some(caster_lacks_aura(1269391)),
+                    effects: [apply_aura(aura: 1269391, target: caster)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(163201), school: None, crit_only: false),
+                    chance: prd(chance: 0.15),
+                    shared_with: Some(0),
+                    condition: Some(caster_lacks_aura(1269391)),
+                    effects: [apply_aura(aura: 1269391, target: caster)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(281000), school: None, crit_only: false),
+                    chance: prd(chance: 0.15),
+                    shared_with: Some(0),
+                    condition: Some(caster_lacks_aura(1269391)),
+                    effects: [apply_aura(aura: 1269391, target: caster)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(260798), school: None, crit_only: false),
+                    chance: prd(chance: 0.15),
+                    shared_with: Some(0),
+                    condition: Some(caster_lacks_aura(1269391)),
+                    effects: [apply_aura(aura: 1269391, target: caster)],
+                ),
+            ],
+        ),
+        // Read by the armor penetration stacks.
+        1269306: (
+            id: 1269306,
+            name: "Master of Warfare",
+            duration: None,
+        ),
+        // Read by Heroic Strike.
+        1269307: (
+            id: 1269307,
+            name: "Master of Warfare",
+            duration: None,
+        ),
+        1269391: (
+            id: 1269391,
+            name: "Master of Warfare",
+            duration: Some(15000),
+            overrides: [(1464, 1269383)],
+        ),
+        // Each stack lasts on its own. With 1269306 at its two ranks, each
+        // also gives Mortal Strike, Cleave, and Overpower 5% damage and
+        // critical damage (2.5% a rank: SimC's `base_value() / 10`).
+        1269394: (
+            id: 1269394,
+            name: "Master of Warfare",
+            duration: Some(30000),
+            max_stacks: 10,
+            refresh: ironfur,
+            modifiers: [
+                (scope: all, kind: armor_pen_pct, value: 3.0, per_stack: true),
+                (scope: spell(12294), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(1269306))),
+                (scope: spell(845), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(1269306))),
+                (scope: spell(7384), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(1269306))),
+                (scope: spell(12294), kind: crit_damage_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(1269306))),
+                (scope: spell(845), kind: crit_damage_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(1269306))),
+                (scope: spell(7384), kind: crit_damage_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(1269306))),
+            ],
+        ),
+        1292058: (
+            id: 1292058,
+            name: "Heroic Might",
+            duration: Some(30000),
+            max_stacks: 5,
+        ),
+        // Made up: the Heroic Might buff SimC splits from its accumulator
+        // (1292058), for Colossus Smash's 10 s. SimC raises the debuff's 1.3
+        // to 1.3 + 0.03 a stack; times 1 + 0.03 / 1.3 a stack is the same.
+        910101: (
+            id: 910101,
+            name: "Heroic Might",
+            duration: Some(10000),
+            max_stacks: 5,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 2.3076923, per_stack: true, condition: Some(target_has_aura(aura: 208086, from_self: true))),
+            ],
+        ),
     },
     items: {
         1: (
@@ -2237,6 +3300,21 @@
             name: "Placeholder Robe",
             equip: chest,
             stat_allocation: [(intellect, 0.6), (stamina, 0.4), (crit_rating, 0.25), (mastery_rating, 0.25)],
+        ),
+        // Placeholder gear for Arms: plate and a two-hander, sized so the
+        // weapon's attack power is about a fifth of the total.
+        2: (
+            id: 2,
+            name: "Placeholder Breastplate",
+            equip: chest,
+            stat_allocation: [(strength, 0.6), (stamina, 0.4), (crit_rating, 0.25), (mastery_rating, 0.25)],
+        ),
+        3: (
+            id: 3,
+            name: "Placeholder Greatsword",
+            equip: two_hand,
+            stat_allocation: [(strength, 0.6), (stamina, 0.4), (haste_rating, 0.25), (crit_rating, 0.25)],
+            weapon: Some((speed: 3600, min_damage: 260.0, max_damage: 365.0, ranged: false)),
         ),
     },
     item_sets: {},
@@ -2339,6 +3417,49 @@
             name: "Ancestral Swiftness",
             ranks: [[spell(443454), passive_aura(448861)]],
         ),
+        // The Arms spec tree. Talents the reference build skips grant nothing.
+        12294: (id: 12294, name: "Mortal Strike", ranks: [[spell(12294)]]),
+        7384: (id: 7384, name: "Overpower", ranks: [[spell(7384)]]),
+        29725: (id: 29725, name: "Sudden Death", ranks: [[passive_aura(29725)]]),
+        383103: (id: 383103, name: "Fueled by Violence", ranks: [[]]),
+        1277297: (id: 1277297, name: "Ignore Pain", ranks: [[]]),
+        118038: (id: 118038, name: "Die by the Sword", ranks: [[]]),
+        384361: (id: 384361, name: "Bloodsurge", ranks: [[passive_aura(384361)]]),
+        385571: (id: 385571, name: "Improved Overpower", ranks: [[passive_aura(385571)]]),
+        316405: (id: 316405, name: "Improved Execute", ranks: [[passive_aura(316405)]]),
+        202316: (id: 202316, name: "Fervor of Battle", ranks: [[]]),
+        184783: (id: 184783, name: "Tactician", ranks: [[passive_aura(184783)]]),
+        167105: (id: 167105, name: "Colossus Smash", ranks: [[spell(167105)]]),
+        383430: (id: 383430, name: "Impale", ranks: [[passive_aura(383430)]]),
+        1261046: (id: 1261046, name: "Brute Force", ranks: [[]]),
+        1261047: (id: 1261047, name: "Efficiency", ranks: [[]]),
+        400205: (id: 400205, name: "Overpowering Finish", ranks: [[]]),
+        1273075: (id: 1273075, name: "Mass Execution", ranks: [[]]),
+        400803: (id: 400803, name: "Strength of Arms", ranks: [[passive_aura(400803)], [passive_aura(400803)]]),
+        1261048: (id: 1261048, name: "Just Warming Up", ranks: [[passive_aura(1261048)]]),
+        1261049: (id: 1261049, name: "Broad Strokes", ranks: [[]]),
+        383341: (id: 383341, name: "Sharpened Blades", ranks: [[passive_aura(383341)], [passive_aura(383341)]]),
+        845: (id: 845, name: "Cleave", ranks: [[spell(845)]]),
+        1261050: (id: 1261050, name: "Powerful Momentum", ranks: [[]]),
+        1273062: (id: 1273062, name: "Martial Prowess", ranks: [[]]),
+        262150: (id: 262150, name: "Dreadnaught", ranks: [[]]),
+        1261060: (id: 1261060, name: "Deep Wounds", ranks: [[passive_aura(1261060)]]),
+        1261051: (id: 1261051, name: "Tactical Edge", ranks: [[passive_aura(1261051)]]),
+        1261056: (id: 1261056, name: "Crushing Combo", ranks: [[]]),
+        281001: (id: 281001, name: "Massacre", ranks: [[replace_spell(from: 163201, to: 281000)]]),
+        334779: (id: 334779, name: "Collateral Damage", ranks: [[]]),
+        383287: (id: 383287, name: "Bloodborne", ranks: [[passive_aura(383287)], [passive_aura(383287)]]),
+        227847: (id: 227847, name: "Bladestorm", ranks: [[spell(227847)]]),
+        228920: (id: 228920, name: "Ravager", ranks: [[]]),
+        389306: (id: 389306, name: "Critical Thinking", ranks: [[passive_aura(389306)], [passive_aura(389306)]]),
+        1261057: (id: 1261057, name: "Master Tactician", ranks: [[]]),
+        383154: (id: 383154, name: "Bloodletting", ranks: [[passive_aura(383154)]]),
+        386634: (id: 386634, name: "Executioner's Precision", ranks: [[passive_aura(386634)]]),
+        383703: (id: 383703, name: "Fatality", ranks: [[passive_aura(383703)]]),
+        386630: (id: 386630, name: "Battlelord", ranks: [[]]),
+        1261062: (id: 1261062, name: "Mortal Wounds", ranks: [[passive_aura(1261062)]]),
+        107574: (id: 107574, name: "Avatar", ranks: [[spell(107574)]]),
+        1269314: (id: 1269314, name: "Master of Warfare", ranks: [[passive_aura(1269314)], [passive_aura(1269306)], [passive_aura(1269306)], [passive_aura(1269307)]]),
     },
     // Rows and choice nodes follow the 12.0 tree; the links between nodes
     // aren't in the spell dump, so none are required yet.

@@ -337,6 +337,9 @@ pub struct ProcView {
     /// rest, the deck outlives the instance: it carries over to the holder's
     /// next instance of the aura for the rest of the run.
     pub deck: Option<DeckView>,
+    /// Failed attempts since the last proc (a `Prd` listener's chance
+    /// grows with it).
+    pub attempts: u32,
 }
 
 /// The undrawn part of a shuffled deck: the next draw procs with chance
@@ -501,6 +504,18 @@ pub fn predicate(
                 seat().is_none_or(|s| g.yards_left(view.yards_travelled(s)) >= 0.0)
             })
         }),
+        Predicate::EnemiesAtLeast(n) => {
+            let engaged = view
+                .enemies()
+                .iter()
+                .filter(|&&e| {
+                    view.actor(e)
+                        .is_some_and(|a| a.engaged && a.alive && a.targetable)
+                })
+                .count();
+            engaged >= usize::from(n)
+        }
+        Predicate::TargetIsCurrent => target.is_some() && target == view.target(caster),
     }
 }
 

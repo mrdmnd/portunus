@@ -1,7 +1,8 @@
 //! The kernel: [`Kernel`] implements [`Engine`] for any [`Mechanics`].
 //!
 //! The kernel reads the timing modifiers itself (`CastTimePct`, `GcdPct`,
-//! `CooldownPct`, `ChargesAdd`, `CostPct`), because cast, GCD, and cooldown
+//! `CooldownPct`, `ChargesAdd`, `CostPct`, `ChannelTicksAdd`), because
+//! cast, GCD, and cooldown
 //! timing are its job, and `ResourceMax` when it builds the seats; every
 //! other modifier is left to the mechanics. Mechanics' calls
 //! into [`EngineIo`] never call back into mechanics directly: the aura
@@ -9,7 +10,11 @@
 //! callback returns.
 //!
 //! A channel succeeds as it starts (costs, cooldown, `cast_completed`),
-//! then ticks at times fixed at its start, the last as it ends. An empower
+//! then ticks at times fixed at its start, the last as it ends (plus one
+//! as it starts with `tick_zero`, and more for its `ChannelTicksAdd`
+//! modifiers, read then, each lengthening it by a tick's time, as SimC's
+//! Imminent Demise does Bladestorm); `channel_ended` follows a last tick.
+//! An empower
 //! pays as it starts and goes off (`cast_completed` with the stage) when
 //! released: at its chosen stage, when its hold runs out, or when stopped
 //! or moved past its first stage. Before that, stopping fizzles it.
@@ -60,6 +65,7 @@ mod world;
 use std::sync::Arc;
 
 use portunus_core::{ActorId, Seat, SimDuration, SimTime, SpellId};
+use portunus_gamedata::effect::ModKind;
 use portunus_gamedata::spec::MELEE_RANGE;
 use portunus_gamedata::spell::{CastKind, SpellDef};
 use portunus_scenario::resolved::Segment;
@@ -681,11 +687,26 @@ impl<M: Mechanics> Kernel<M> {
             target,
         });
         self.call(|m, io| m.cast_started(io, &ev));
-        if let CastKind::Channel { ticks, swings, .. } = def.cast {
+        if let CastKind::Channel {
+            ticks,
+            swings,
+            tick_zero,
+            ..
+        } = def.cast
+        {
+            let added = self
+                .world
+                .mod_sum(actor, spell, ModKind::ChannelTicksAdd, target)
+                .round()
+                .clamp(0.0, f64::from(u8::MAX));
+            let base = ticks.max(1);
+            let spread = base.saturating_add(added as u8);
+            let ms = u64::from(cast_time.millis()) * u64::from(spread) / u64::from(base);
             let ch = ChannelState {
-                ticks: ticks.max(1),
+                ticks: spread.saturating_add(u8::from(tick_zero)),
                 done: 0,
-                duration: cast_time,
+                duration: SimDuration(u32::try_from(ms).unwrap_or(u32::MAX / 2)),
+                tick_zero,
                 tick_wakes: opts.tick_wakes,
                 swings,
             };
@@ -993,6 +1014,7 @@ impl<M: Mechanics> Kernel<M> {
                 reason: CastEndReason::Completed,
             });
             self.world.resume_swings(actor);
+            self.call(|m, io| m.channel_ended(io, &c.ev));
             self.cast_over(c.ev, true);
             return;
         }

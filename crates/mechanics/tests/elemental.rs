@@ -12,6 +12,7 @@ use portunus_engine::{
     StateView, Step, TargetSel, TraceRecord, Wait,
 };
 use portunus_gamedata::effect::Effect;
+use portunus_gamedata::spell::CastKind;
 use portunus_gamedata::{EnemyData, GameData};
 use portunus_ingest::{read_ron, EnemyDataSource, GameDataSource, RonFile};
 use portunus_loadout::{ActorTemplate, Compiler, Loadout, LoadoutCompiler};
@@ -183,6 +184,18 @@ fn kits_cover_the_data() {
     let issues = Kits::standard().validate(&data);
     assert!(issues.contains(&KitIssue::MissingKit(SpecId(1))));
     assert!(issues.contains(&KitIssue::UnknownHook(HookKey("missing".into()))));
+
+    let bolt = data.spells.get_mut(&LIGHTNING_BOLT).unwrap();
+    bolt.cast = CastKind::Channel {
+        duration: SimDuration(3000),
+        ticks: 3,
+        hasted: false,
+        swings: false,
+        tick_zero: false,
+        on_end: vec![Effect::Hook(HookKey("at_the_end".into()))],
+    };
+    let issues = Kits::standard().validate(&data);
+    assert!(issues.contains(&KitIssue::UnknownHook(HookKey("at_the_end".into()))));
 }
 
 #[test]

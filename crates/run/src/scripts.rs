@@ -9,6 +9,7 @@ use std::sync::Arc;
 use portunus_core::{AuraId, SimDuration, SpellId};
 use portunus_engine::{ActionMask, CastOpts, Choice, MoveGoal, TargetSel, Wait};
 use portunus_env::Decision;
+use portunus_gamedata::spec::MELEE_RANGE;
 use portunus_gamedata::stats::ResourceKind;
 use portunus_policy::Policy;
 
@@ -17,7 +18,7 @@ use crate::observe::{SeatObs, FOREVER};
 type Script = fn(&Decision<SeatObs>) -> Choice;
 
 /// Every named policy.
-pub const SCRIPTS: &[(&str, Script)] = &[("elemental", elemental), ("idle", idle)];
+pub const SCRIPTS: &[(&str, Script)] = &[("elemental", elemental), ("arms", arms), ("idle", idle)];
 
 pub fn by_name(name: &str) -> Option<Arc<dyn Policy<SeatObs>>> {
     SCRIPTS
@@ -245,6 +246,103 @@ pub fn elemental(d: &Decision<SeatObs>) -> Choice {
         // Moving: Lightning Bolt isn't castable.
         pick(FLAME_SHOCK, true),
         pick(FROST_SHOCK, true),
+    ]
+    .into_iter()
+    .flatten()
+    .next();
+    choice.map_or(Choice::Wait(Wait::NextEvent), Choice::cast)
+}
+
+const MORTAL_STRIKE: SpellId = SpellId(12294);
+const OVERPOWER: SpellId = SpellId(7384);
+const EXECUTE: SpellId = SpellId(163201);
+const EXECUTE_MASSACRE: SpellId = SpellId(281000);
+const SLAM: SpellId = SpellId(1464);
+const COLOSSUS_SMASH: SpellId = SpellId(167105);
+const AVATAR: SpellId = SpellId(107574);
+const BLADESTORM: SpellId = SpellId(227847);
+const REND: SpellId = SpellId(772);
+const CLEAVE: SpellId = SpellId(845);
+const WRECKING_THROW: SpellId = SpellId(384110);
+const CHARGE: SpellId = SpellId(100);
+
+const SUDDEN_DEATH: AuraId = AuraId(52437);
+const COLOSSUS_SMASH_DEBUFF: AuraId = AuraId(208086);
+const REND_DOT: AuraId = AuraId(388539);
+const AVATAR_BUFF: AuraId = AuraId(107574);
+const MASTER_OF_WARFARE_PROC: AuraId = AuraId(1269391);
+
+/// SimulationCraft's Arms `slayer_st` list (12.1), which its default list
+/// runs below three targets, read without the Slayer talents: their
+/// buffs never come up, so Imminent Demise's `stack<1` always holds and
+/// the Executioner and Opportunist lines never fire. Sweeping Strikes,
+/// Ravager, and the bladestorming Storm Bolt (Unrelenting Onslaught's)
+/// aren't modelled. Heroic Strike is Slam while Master of Warfare's proc
+/// is up, and Execute is Sudden Death's free one while that is.
+pub fn arms(d: &Decision<SeatObs>) -> Choice {
+    let (obs, legal) = (&d.obs, &d.legal);
+    if let Some(t) = &obs.target {
+        if legal.can_move && obs.movement.is_none() && t.distance > MELEE_RANGE {
+            return Choice::Move(MoveGoal::Approach {
+                target: t.actor,
+                within: MELEE_RANGE,
+            });
+        }
+    }
+    let ready = |s: SpellId| legal.is_ready(s);
+    let known = |s: SpellId| legal.abilities.contains_key(&s);
+    let cd = |s: SpellId| {
+        if known(s) {
+            obs.cooldown_remaining(s)
+        } else {
+            FOREVER
+        }
+    };
+    let pick = |s: SpellId, when: bool| (when && ready(s)).then_some(s);
+
+    let execute = if known(EXECUTE_MASSACRE) {
+        EXECUTE_MASSACRE
+    } else {
+        EXECUTE
+    };
+    let enemies = obs.target.as_ref().map_or(0, |t| 1 + t.neighbours.len());
+    let rend = obs.target_aura_remaining(REND_DOT);
+    let smashed = obs.target_aura(COLOSSUS_SMASH_DEBUFF).is_some();
+    let cs_cd = cd(COLOSSUS_SMASH);
+    let sudden_death = obs.buff_stacks(SUDDEN_DEATH);
+    let cleave = known(CLEAVE);
+    let soon = SimDuration(2000);
+
+    let choice = [
+        pick(
+            CHARGE,
+            obs.combat_time.is_some_and(|t| t <= SimDuration(500)),
+        ),
+        pick(
+            CLEAVE,
+            rend <= GCD || cs_cd < soon && rend <= SimDuration(10_000),
+        ),
+        pick(
+            REND,
+            !cleave && enemies < 2 && (rend <= GCD || cs_cd < soon && rend <= SimDuration(10_000)),
+        ),
+        pick(
+            AVATAR,
+            smashed || cs_cd < SimDuration(10_000) && cs_cd > GCD,
+        ),
+        pick(
+            execute,
+            sudden_death == 2 || cd(BLADESTORM) == SimDuration::ZERO,
+        ),
+        pick(COLOSSUS_SMASH, sudden_death < 2),
+        pick(BLADESTORM, smashed || obs.has_buff(AVATAR_BUFF)),
+        pick(SLAM, obs.has_buff(MASTER_OF_WARFARE_PROC)),
+        pick(MORTAL_STRIKE, true),
+        pick(OVERPOWER, true),
+        pick(CLEAVE, enemies == 2 || rend <= SimDuration(5000)),
+        pick(REND, !cleave && rend <= SimDuration(5000)),
+        pick(SLAM, true),
+        pick(WRECKING_THROW, enemies == 1),
     ]
     .into_iter()
     .flatten()

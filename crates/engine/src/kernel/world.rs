@@ -300,12 +300,16 @@ pub(crate) struct Casting {
 /// changes during it don't move its ticks.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ChannelState {
+    /// Every tick, the one at the start included.
     pub ticks: u8,
     /// Ticks resolved so far.
     pub done: u8,
     /// Tick `i` lands `duration * i / ticks` after the start, so the last
-    /// lands exactly at the end.
+    /// lands exactly at the end; with `tick_zero`, tick 1 lands at the
+    /// start and tick `i` at `duration * (i - 1) / (ticks - 1)`.
     pub duration: SimDuration,
+    /// The first tick lands as it starts (`CastKind::Channel::tick_zero`).
+    pub tick_zero: bool,
     /// Wake the seat after every tick (`CastOpts::tick_wakes`).
     pub tick_wakes: bool,
     /// Auto-attacks land through it (`CastKind::Channel::swings`).
@@ -355,8 +359,10 @@ impl Casting {
     /// When tick `index` (from 1) lands, for a channel.
     pub fn tick_at(&self, index: u8) -> Option<SimTime> {
         let ch = self.channel?;
-        let ticks = u64::from(ch.ticks.max(1));
-        let ms = (u64::from(ch.duration.millis()) * u64::from(index) + ticks / 2) / ticks;
+        let zero = u8::from(ch.tick_zero);
+        let ticks = u64::from(ch.ticks.saturating_sub(zero).max(1));
+        let index = u64::from(index.saturating_sub(zero));
+        let ms = (u64::from(ch.duration.millis()) * index + ticks / 2) / ticks;
         Some(self.ev.started + SimDuration(u32::try_from(ms).unwrap_or(u32::MAX / 2)))
     }
 
@@ -748,9 +754,10 @@ pub(crate) fn gcd_length(g: &GcdDef, haste: f64, mult: f64) -> SimDuration {
 
 fn scope_matches(scope: ModScope, spell: SpellId, def: Option<&SpellDef>) -> bool {
     match scope {
-        ModScope::All => true,
+        ModScope::All | ModScope::Abilities => true,
         ModScope::Spell(s) => s == spell,
         ModScope::School(mask) => def.is_some_and(|d| d.school.0 & mask.0 != 0),
+        ModScope::AutoAttack => false,
     }
 }
 
@@ -1109,9 +1116,9 @@ impl World {
             };
             for m in &def.modifiers {
                 let applies = match m.scope {
-                    ModScope::All => true,
+                    ModScope::All | ModScope::Abilities => true,
                     ModScope::Spell(s) => s.0 == aura.0,
-                    ModScope::School(_) => false,
+                    ModScope::School(_) | ModScope::AutoAttack => false,
                 };
                 if m.kind == ModKind::PersistentPct && applies {
                     let stacks = if m.per_stack {
