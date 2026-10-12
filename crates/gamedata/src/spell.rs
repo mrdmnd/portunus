@@ -177,6 +177,10 @@ pub enum Targeting {
     SelfOnly,
     Enemy,
     Ally,
+    /// A dead seat no resurrection is already on its way to (Rebirth,
+    /// Raise Ally). Legal only while one lies dead and, in combat, while
+    /// the group has a battle resurrection charge.
+    DeadAlly,
 }
 
 #[cfg(test)]

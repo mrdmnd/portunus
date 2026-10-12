@@ -9,8 +9,8 @@ use portunus_core::{
 };
 use portunus_gamedata::aura::{AuraValueKind, BankDraw};
 use portunus_gamedata::effect::{
-    Coefficient, Effect, EffectTarget, ListenFor, Listener, ModScope, Predicate, ProcChance,
-    TargetCount, RECENT_CASTS,
+    Coefficient, Effect, EffectTarget, ListenFor, Listener, ModKind, ModScope, Predicate,
+    ProcChance, TargetCount, RECENT_CASTS,
 };
 use portunus_gamedata::enemy::{EnemyAction, EnemyKind};
 use portunus_gamedata::spell::{CastKind, CooldownDef, Requirement};
@@ -149,6 +149,12 @@ pub enum DataIssue {
     InvalidPet(PetId),
     /// A stun that lasts no time, or a dispel of no types or no auras.
     InvalidControl(Owner),
+    /// A modifier that can't mean anything: a stat converted into itself,
+    /// or armor penetration outside `(0, 100]` percent.
+    InvalidModifier(AuraId),
+    /// A resurrection's health share outside `(0, 1]`, or an aura that
+    /// resurrects its holder but doesn't persist through death.
+    InvalidResurrect(Owner),
 }
 
 fn positive(x: f64) -> bool {
@@ -358,10 +364,23 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
             }
             c.effects(&owner, &p.on_prevent);
         }
+        if let Some(h) = aura.self_resurrect {
+            if !(positive(h) && h <= 1.0 && aura.persists_through_death) {
+                c.issues.push(DataIssue::InvalidResurrect(owner.clone()));
+            }
+        }
         if aura.ground.is_some_and(|g| !positive(g.radius)) {
             c.issues.push(DataIssue::InvalidGround(aura.id));
         }
         for m in &aura.modifiers {
+            let meaningless = match m.kind {
+                ModKind::StatFromStat { from, to } => from == to,
+                ModKind::ArmorPenPct => !(m.value > 0.0 && m.value <= 100.0),
+                _ => false,
+            };
+            if meaningless {
+                c.issues.push(DataIssue::InvalidModifier(aura.id));
+            }
             if let ModScope::Spell(s) = m.scope {
                 c.spell(&owner, s);
             }
@@ -437,7 +456,10 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
             .diminishing
             .iter()
             .all(|&(_, f)| (0.0..=1.0).contains(&f));
-        if curve.rating_per_pct <= 0.0 || !ordered || !fractions {
+        let falloff = curve
+            .falloff
+            .is_none_or(|f| f.per_rating >= 0.0 && f.per_rating.is_finite() && positive(f.scale));
+        if curve.rating_per_pct <= 0.0 || !ordered || !fractions || !falloff {
             c.issues.push(DataIssue::InvalidRatingCurve(stat));
         }
     }
@@ -737,6 +759,12 @@ impl Checker<'_> {
                 Effect::Heal { target, .. } | Effect::Interrupt { target } => {
                     self.target(owner, target);
                 }
+                Effect::Resurrect { target, health_pct } => {
+                    if !(positive(*health_pct) && *health_pct <= 1.0) {
+                        self.issues.push(DataIssue::InvalidResurrect(owner.clone()));
+                    }
+                    self.target(owner, target);
+                }
                 Effect::Stun { duration, target } => {
                     if *duration == SimDuration::ZERO {
                         self.issues.push(DataIssue::InvalidControl(owner.clone()));
@@ -832,6 +860,16 @@ impl Checker<'_> {
                 Effect::ForEach { target, then } => {
                     self.target(owner, target);
                     self.effects(owner, then);
+                }
+                Effect::HighestSecondary {
+                    crit,
+                    haste,
+                    mastery,
+                    versatility,
+                } => {
+                    for list in [crit, haste, mastery, versatility] {
+                        self.effects(owner, list);
+                    }
                 }
                 Effect::Displace { yards, .. } => {
                     if !positive(*yards) {

@@ -219,5 +219,6 @@ pub fn aura(id: AuraId, duration: Option<SimDuration>) -> AuraDef {
         ground: None,
         untargetable: false,
         dispel: None,
+        self_resurrect: None,
     }
 }

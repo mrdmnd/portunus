@@ -79,6 +79,15 @@ impl EngineIo for Io<'_> {
         self.w.set_max_health(actor, max);
     }
 
+    fn set_speed_pct(&mut self, actor: ActorId, pct: f64) {
+        self.w.set_speed_pct(actor, pct);
+    }
+
+    fn resurrect(&mut self, target: ActorId, health_pct: f64) {
+        self.w
+            .offer_res(target, super::resurrect::ResOffer::Spell { health_pct });
+    }
+
     fn adjust_cooldown(&mut self, actor: ActorId, spell: SpellId, change: CooldownChange) {
         self.w.adjust_cooldown(actor, spell, change);
     }

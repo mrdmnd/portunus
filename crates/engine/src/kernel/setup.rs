@@ -19,6 +19,7 @@ use crate::setup::{BloodlustMode, Externals, PullAura, RunSetup};
 use crate::state::{ActorKind, SeatPhase, RECENT_CASTS};
 
 use super::queue::Queue;
+use super::resurrect::ResPool;
 use super::world::{Actor, Resource, SeatState, Seg, Statics, Swing, Trace, World};
 
 fn issues(setup: &RunSetup) -> Vec<SetupIssue> {
@@ -304,6 +305,8 @@ pub(crate) fn build(setup: RunSetup) -> World {
             moving_told: false,
             travelled: 0.0,
             demands: Vec::new(),
+            speed_pct: setup.seats[i].template.derived.speed_pct,
+            res_offer: None,
         })
         .collect();
     let record = setup.record_trace;
@@ -313,6 +316,7 @@ pub(crate) fn build(setup: RunSetup) -> World {
         .map(|list| hp_thresholds(&setup, list))
         .collect();
     let group = group(&setup);
+    let battle_res = ResPool::new(group.battle_res);
     World {
         s: Arc::new(Statics {
             setup,
@@ -345,6 +349,7 @@ pub(crate) fn build(setup: RunSetup) -> World {
         pulls: Vec::new(),
         next_id: 0,
         triggers_queued: None,
+        battle_res,
         delayed: BTreeMap::new(),
         fault: None,
         trace: Trace::new(record),

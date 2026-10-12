@@ -37,8 +37,23 @@ impl World {
     /// Yards per second.
     pub(crate) fn speed(&self, seat: Seat) -> f64 {
         let me = self.seat_actor(seat);
-        let pct = self.mod_sum(me, SpellId(0), ModKind::MoveSpeedPct, None);
+        let pct = self.mod_sum(me, SpellId(0), ModKind::MoveSpeedPct, None)
+            + self.seat_ref(seat).map_or(0.0, |st| st.speed_pct);
         BASE_RUN_SPEED * (1.0 + pct / 100.0).max(0.0)
+    }
+
+    /// A seat's run speed from Speed rating changed: settle at the old
+    /// speed, then re-time its movement.
+    pub(crate) fn set_speed_pct(&mut self, actor: ActorId, pct: f64) {
+        let Some(seat) = self.player_seat(actor) else {
+            return;
+        };
+        if self.seat_ref(seat).is_none_or(|st| st.speed_pct == pct) {
+            return;
+        }
+        self.settle_movement(seat);
+        self.seat_mut(seat).speed_pct = pct;
+        self.after_movement_aura(actor);
     }
 
     /// Yards covered since the seat's movement was last settled.

@@ -13,9 +13,9 @@ use portunus_gamedata::effect::{
     TargetCount,
 };
 use portunus_gamedata::item::WeaponHand;
-use portunus_gamedata::stats::{ResourceKind, SchoolMask};
+use portunus_gamedata::stats::{RatedStat, ResourceKind, SchoolMask};
 
-use crate::math::{instance, owner_seat, predicate, Formulas};
+use crate::math::{instance, owner_seat, player_seat, predicate, Formulas};
 use crate::{
     CombatMath, EffectCtx, EffectInterpreter, IncomingHit, KitTools, Outgoing, SpecRegistry,
 };
@@ -303,6 +303,19 @@ impl Interpreter {
         ctx: &EffectCtx,
         target: EffectTarget,
     ) -> Vec<ActorId> {
+        let mut out = self.living_or_dead(io, ctx, target);
+        let view = io.view();
+        out.retain(|id| view.actor(*id).is_some_and(|a| a.alive));
+        out
+    }
+
+    /// `targets` before the dead are dropped, for resurrections.
+    fn living_or_dead(
+        &self,
+        io: &mut dyn EngineIo,
+        ctx: &EffectCtx,
+        target: EffectTarget,
+    ) -> Vec<ActorId> {
         if target == EffectTarget::RandomEnemy {
             let engaged = engaged_enemies(io.view());
             if engaged.is_empty() {
@@ -313,8 +326,7 @@ impl Interpreter {
             return vec![engaged[index]];
         }
         let view = io.view();
-        let alive = |id: &ActorId| view.actor(*id).is_some_and(|a| a.alive);
-        let mut out: Vec<ActorId> = match target {
+        match target {
             EffectTarget::Caster => vec![ctx.caster],
             EffectTarget::Target => ctx.target.into_iter().collect(),
             EffectTarget::AllEnemies => {
@@ -378,9 +390,7 @@ impl Interpreter {
                     .collect(),
                 _ => Vec::new(),
             },
-        };
-        out.retain(alive);
-        out
+        }
     }
 
     /// One context per target of a `ForEach`, each as the event's target.
@@ -658,6 +668,7 @@ impl Interpreter {
             kind: c.hit,
             ignores_armor: d.ignores_armor,
             weapon,
+            area: d.aoe.is_some() || d.target.is_area(),
         }
     }
 
@@ -679,6 +690,7 @@ impl Interpreter {
             crit: hit.crit,
         });
         let health = (health_before, health_fraction(io.view(), t));
+        self.leech(io, hit.source, landed.amount);
         if landed.connected() {
             let dealt = Occurrence {
                 what: Happening::DamageDealt {
@@ -763,6 +775,10 @@ impl Interpreter {
                     let holds = predicate(io.view(), *when, ctx.caster, ctx.target, ctx.spell);
                     hits.extend(self.roll_direct(io, ctx, if holds { then } else { otherwise }));
                 }
+                Effect::HighestSecondary { .. } => {
+                    let list = self.highest(io.view(), ctx.caster, effect);
+                    hits.extend(self.roll_direct(io, ctx, list));
+                }
                 _ => {}
             }
         }
@@ -827,6 +843,10 @@ impl Interpreter {
                     let holds = predicate(io.view(), *when, ctx.caster, ctx.target, ctx.spell);
                     self.run_besides_damage(io, ctx, if holds { then } else { otherwise });
                 }
+                Effect::HighestSecondary { .. } => {
+                    let list = self.highest(io.view(), ctx.caster, effect);
+                    self.run_besides_damage(io, ctx, list);
+                }
                 Effect::ForEach { target, then } => {
                     for c in self.each(io, ctx, *target) {
                         self.run_besides_damage(io, &c, then);
@@ -835,6 +855,51 @@ impl Interpreter {
                 other => self.run_one(io, ctx, other),
             }
         }
+    }
+
+    /// A `HighestSecondary`'s list for `caster`'s highest secondary now;
+    /// empty for any other effect.
+    fn highest<'a>(
+        &self,
+        view: &dyn StateView,
+        caster: ActorId,
+        effect: &'a Effect,
+    ) -> &'a [Effect] {
+        let Effect::HighestSecondary {
+            crit,
+            haste,
+            mastery,
+            versatility,
+        } = effect
+        else {
+            return &[];
+        };
+        match self.math.highest_secondary(view, caster) {
+            RatedStat::Crit => crit,
+            RatedStat::Haste => haste,
+            RatedStat::Mastery => mastery,
+            RatedStat::Versatility => versatility,
+        }
+    }
+
+    /// A seat heals itself for its Leech share of damage it dealt, scaled
+    /// by its versatility, at once. SimC's `leech_t` pools it and heals
+    /// every hasted GCD instead.
+    fn leech(&self, io: &mut dyn EngineIo, source: ActorId, dealt: u64) {
+        if dealt == 0 || player_seat(io.view(), source).is_none() {
+            return;
+        }
+        let d = self.math.derived(io.view(), source);
+        if d.leech_pct <= 0.0 {
+            return;
+        }
+        let amount = dealt as f64 * d.leech_pct / 100.0 * (1.0 + d.versatility_pct / 100.0);
+        io.apply_heal(HealEvent {
+            source,
+            target: source,
+            amount: whole_points(amount),
+            spell: None,
+        });
     }
 
     fn heal(
@@ -1050,6 +1115,11 @@ impl Interpreter {
                     io.stun(t, duration);
                 }
             }
+            &Effect::Resurrect { target, health_pct } => {
+                for t in self.living_or_dead(io, ctx, target) {
+                    io.resurrect(t, health_pct);
+                }
+            }
             Effect::Dispel {
                 types,
                 count,
@@ -1136,6 +1206,10 @@ impl Interpreter {
             } => {
                 let holds = predicate(io.view(), *when, caster, ctx.target, ctx.spell);
                 self.run(io, ctx, if holds { then } else { otherwise });
+            }
+            Effect::HighestSecondary { .. } => {
+                let list = self.highest(io.view(), caster, effect);
+                self.run(io, ctx, list);
             }
             Effect::ForEach { target, then } => {
                 for c in self.each(io, ctx, *target) {

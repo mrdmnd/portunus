@@ -2436,10 +2436,13 @@
     },
     curves: (
         ratings: {
-            crit_rating: (rating_per_pct: 700.0, diminishing: [(30.0, 0.9), (39.0, 0.8), (47.0, 0.7), (54.0, 0.6), (66.0, 0.5)]),
-            haste_rating: (rating_per_pct: 660.0, diminishing: [(30.0, 0.9), (39.0, 0.8), (47.0, 0.7), (54.0, 0.6), (66.0, 0.5)]),
-            mastery_rating: (rating_per_pct: 700.0, diminishing: [(30.0, 0.9), (39.0, 0.8), (47.0, 0.7), (54.0, 0.6), (66.0, 0.5)]),
-            versatility_rating: (rating_per_pct: 780.0, diminishing: [(30.0, 0.9), (39.0, 0.8), (47.0, 0.7), (54.0, 0.6), (66.0, 0.5)]),
+            crit_rating: (rating_per_pct: 700.0, diminishing: [(30.0, 0.9), (40.0, 0.8), (50.0, 0.7), (60.0, 0.6), (80.0, 0.5)]),
+            haste_rating: (rating_per_pct: 660.0, diminishing: [(30.0, 0.9), (40.0, 0.8), (50.0, 0.7), (60.0, 0.6), (80.0, 0.5)]),
+            mastery_rating: (rating_per_pct: 700.0, diminishing: [(30.0, 0.9), (40.0, 0.8), (50.0, 0.7), (60.0, 0.6), (80.0, 0.5)]),
+            versatility_rating: (rating_per_pct: 780.0, diminishing: [(30.0, 0.9), (40.0, 0.8), (50.0, 0.7), (60.0, 0.6), (80.0, 0.5)]),
+            leech: (rating_per_pct: 1050.0, diminishing: [(10.0, 0.8), (15.0, 0.6), (20.0, 0.4)]),
+            avoidance: (rating_per_pct: 560.0, diminishing: [(10.0, 0.8), (15.0, 0.6), (20.0, 0.4)]),
+            speed: (rating_per_pct: 175.0, diminishing: [(10.0, 0.8), (15.0, 0.6), (20.0, 0.4)], falloff: Some((per_rating: 0.0003, scale: 0.1))),
         },
         item_budget: { 600: 1000.0 },
         base_crit_pct: 5.0,

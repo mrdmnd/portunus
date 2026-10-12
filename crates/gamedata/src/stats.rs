@@ -17,6 +17,12 @@ pub enum Stat {
     MasteryRating,
     VersatilityRating,
     Armor,
+    /// Heals for a share of damage dealt.
+    Leech,
+    /// Reduces area damage taken.
+    Avoidance,
+    /// Adds to run speed.
+    Speed,
 }
 
 /// The four rated secondaries, as percentages after conversion.
@@ -44,6 +50,10 @@ pub struct DerivedStats {
     pub attack_power: f64,
     pub spell_power: f64,
     pub max_health: f64,
+    pub leech_pct: f64,
+    pub avoidance_pct: f64,
+    /// Run speed added, in percent, stacking with `MoveSpeedPct`.
+    pub speed_pct: f64,
 }
 
 /// Rating-to-percent conversion with diminishing returns.
@@ -54,6 +64,18 @@ pub struct RatingCurve {
     /// percent before diminishing returns; each band keeps its own fraction.
     #[serde(default)]
     pub diminishing: Vec<(f64, f64)>,
+    /// Scales the result down further as rating grows.
+    #[serde(default)]
+    pub falloff: Option<RatingFalloff>,
+}
+
+/// After diminishing returns, multiply by `scale * exp(-per_rating *
+/// rating)`. SimC's `composite_run_speed` does this to Speed, with
+/// `per_rating` 0.0003 and `scale` 0.1.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct RatingFalloff {
+    pub per_rating: f64,
+    pub scale: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -71,7 +93,8 @@ pub struct StatCurves {
     pub armor_constant: f64,
     /// Auto-attacks of an actor wielding two weapons miss this often, in
     /// percent. Nothing else misses, glances, or is dodged or parried:
-    /// players hit enemies from behind.
+    /// players hit enemies from behind (SimC's default `POSITION_BACK`),
+    /// so there is no facing to model and no spell asks for the front.
     #[serde(default = "dual_wield_miss_pct")]
     pub dual_wield_miss_pct: f64,
 }

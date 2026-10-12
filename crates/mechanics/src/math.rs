@@ -233,6 +233,7 @@ impl Formulas {
         let mut rated: BTreeMap<RatedStat, f64> = BTreeMap::new();
         let mut ap_mult = 1.0;
         let mut shares: Vec<(Stat, f64, ActorId)> = Vec::new();
+        let mut conversions: Vec<(Stat, Stat, f64)> = Vec::new();
         self.each_sourced_mod(view, &Query::holder(actor), |m, value, source| {
             match m.kind {
                 ModKind::AttackPowerPct => ap_mult *= 1.0 + value / 100.0,
@@ -242,6 +243,7 @@ impl Formulas {
                 ModKind::StatShare(stat) if shared && source != actor => {
                     shares.push((stat, value, source));
                 }
+                ModKind::StatFromStat { from, to } => conversions.push((from, to, value)),
                 _ => {}
             }
         });
@@ -252,10 +254,16 @@ impl Formulas {
             let have = from.stats.0.get(&stat).copied().unwrap_or(0.0);
             *stats.0.entry(stat).or_default() += have * value / 100.0;
         }
-        for (stat, mult) in pct {
-            if let Some(v) = stats.0.get_mut(&stat) {
+        for (stat, mult) in &pct {
+            if let Some(v) = stats.0.get_mut(stat) {
                 *v *= mult;
             }
+        }
+        let converted = stats.clone();
+        for (from, to, value) in conversions {
+            let have = converted.0.get(&from).copied().unwrap_or(0.0);
+            let mult = pct.get(&to).copied().unwrap_or(1.0);
+            *stats.0.entry(to).or_default() += have * value / 100.0 * mult;
         }
         Some(SeatSnapshot {
             spec: base.spec,
@@ -331,7 +339,55 @@ impl Formulas {
             attack_power: o.attack_power * k.ap_from_ap + o.spell_power * k.ap_from_sp,
             spell_power: o.spell_power * k.sp_from_sp + o.attack_power * k.sp_from_ap,
             max_health: view.actor(actor).map_or(0.0, |a| a.max_health as f64),
+            ..DerivedStats::default()
         }
+    }
+
+    /// The secondary rating `actor` (a pet's owner) has most of, ties going
+    /// to versatility, then mastery, haste and crit, as SimC's
+    /// `util::highest_stat` over `secondary_ratings` (ratings with buffs,
+    /// not percentages).
+    pub fn highest_secondary(&self, view: &dyn StateView, actor: ActorId) -> RatedStat {
+        let who = owner_seat(view, actor)
+            .and_then(|s| view.seats().get(usize::from(s.0)).copied())
+            .unwrap_or(actor);
+        let stats = self
+            .stat_block(view, who)
+            .map(|s| s.stats)
+            .unwrap_or_default();
+        let rating = |s: Stat| stats.0.get(&s).copied().unwrap_or(0.0);
+        let mut best = (RatedStat::Versatility, rating(Stat::VersatilityRating));
+        for (r, s) in [
+            (RatedStat::Mastery, Stat::MasteryRating),
+            (RatedStat::Haste, Stat::HasteRating),
+            (RatedStat::Crit, Stat::CritRating),
+        ] {
+            if rating(s) > best.1 {
+                best = (r, rating(s));
+            }
+        }
+        best.0
+    }
+
+    /// The attacker's multiplier on its target's armor, from its
+    /// `ArmorPenPct` modifiers.
+    fn armor_kept(&self, view: &dyn StateView, hit: &IncomingHit) -> f64 {
+        let Some(attacker) = hit.attacker else {
+            return 1.0;
+        };
+        let q = Query {
+            holder: self.modifier_holder(view, attacker),
+            target: None,
+            spell: hit.spell,
+            school: Some(hit.school),
+        };
+        let mut kept = 1.0;
+        self.each_mod(view, &q, |m, v| {
+            if m.kind == ModKind::ArmorPenPct {
+                kept *= (1.0 - v / 100.0).max(0.0);
+            }
+        });
+        kept
     }
 
     /// A rated secondary in percent.
@@ -586,13 +642,17 @@ impl CombatMath for Formulas {
         let mut out = amount * self.mod_product(view, &q, ModKind::DamageTakenPct);
         let armored = hit.kind == HitKind::Direct && !hit.ignores_armor;
         if hit.school == SchoolMask::PHYSICAL && armored {
-            let armor = self.armor(view, target);
+            let armor = self.armor(view, target) * self.armor_kept(view, &hit);
             if armor > 0.0 {
                 out *= 1.0 - armor / (armor + self.s.data.curves.armor_constant);
             }
         }
         if player_seat(view, target).is_some() {
-            out *= 1.0 - self.derived(view, target).versatility_pct / 200.0;
+            let d = self.derived(view, target);
+            out *= 1.0 - d.versatility_pct / 200.0;
+            if hit.area {
+                out *= (1.0 - d.avoidance_pct / 100.0).max(0.0);
+            }
         }
         out.max(0.0)
     }

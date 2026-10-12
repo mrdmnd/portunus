@@ -142,6 +142,7 @@ fn fixture(main_hand: WeaponDef, off_hand: Option<WeaponDef>, kit: Vec<Listener>
             ground: None,
             untargetable: false,
             dispel: None,
+            self_resurrect: None,
         },
     );
     template.passive_auras.push(KIT);
@@ -534,6 +535,7 @@ fn aura(id: AuraId, modifiers: Vec<Modifier>) -> AuraDef {
         ground: None,
         untargetable: false,
         dispel: None,
+        self_resurrect: None,
     }
 }
 

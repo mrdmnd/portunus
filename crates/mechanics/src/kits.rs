@@ -87,6 +87,16 @@ fn hooks_in(data: &GameData) -> BTreeSet<HookKey> {
                     walk(otherwise, out);
                 }
                 Effect::Chance { then, .. } | Effect::ForEach { then, .. } => walk(then, out),
+                Effect::HighestSecondary {
+                    crit,
+                    haste,
+                    mastery,
+                    versatility,
+                } => {
+                    for list in [crit, haste, mastery, versatility] {
+                        walk(list, out);
+                    }
+                }
                 _ => {}
             }
         }

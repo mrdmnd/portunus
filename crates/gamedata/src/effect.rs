@@ -212,6 +212,30 @@ pub enum Effect {
         count: u8,
         target: EffectTarget,
     },
+    /// Run the list for whichever secondary rating the caster (a pet's
+    /// owner) has most of as this runs; ties go to versatility, then
+    /// mastery, haste and crit. SimC's `util::highest_stat` over
+    /// `secondary_ratings`, chosen when the proc triggers: trinkets that
+    /// grant your highest secondary.
+    HighestSecondary {
+        #[serde(default)]
+        crit: Vec<Effect>,
+        #[serde(default)]
+        haste: Vec<Effect>,
+        #[serde(default)]
+        mastery: Vec<Effect>,
+        #[serde(default)]
+        versatility: Vec<Effect>,
+    },
+    /// Offers each dead seat among the targets a resurrection with
+    /// `health_pct` of its maximum health, in `(0, 1]`. The seat accepts
+    /// after its reaction time; in combat that takes one of the group's
+    /// battle resurrection charges, and if none is left by then the offer
+    /// lapses.
+    Resurrect {
+        target: EffectTarget,
+        health_pct: f64,
+    },
 }
 
 /// Multiplies an amount by `1 + pct / 100 * count`.
@@ -290,6 +314,23 @@ pub enum EffectTarget {
     NearTarget {
         yards: u8,
     },
+}
+
+impl EffectTarget {
+    /// Whether it can reach more than one actor, which makes a hit area
+    /// damage (SimC's `action_t::is_aoe`): what Avoidance reduces.
+    pub fn is_area(self) -> bool {
+        match self {
+            Self::Caster | Self::Target | Self::Owner | Self::RandomEnemy => false,
+            Self::AllEnemies
+            | Self::Party
+            | Self::Pets(_)
+            | Self::EnemiesWithAura { .. }
+            | Self::OtherEnemies
+            | Self::AlliesWithAura { .. }
+            | Self::NearTarget { .. } => true,
+        }
+    }
 }
 
 /// Target caps and damage reduction past a soft cap.
@@ -486,6 +527,19 @@ pub enum ModKind {
     /// `ebon_int` subtracts the Ebon Mights on the Evoker), so shares never
     /// chain. Only between players; on a share from itself it does nothing.
     StatShare(Stat),
+    /// Adds `value` percent of the holder's `from` (after its `StatPct`
+    /// multipliers) to its `to`, before `to`'s multipliers. `from` keeps
+    /// its points, and converted points never convert again. SimC's Slow
+    /// Burn (mastery from crit rating), Lightning Reflexes (dodge from
+    /// crit).
+    StatFromStat {
+        from: Stat,
+        to: Stat,
+    },
+    /// The attacker ignores `value` percent of its target's armor;
+    /// several multiply (`armor * (1 - value / 100)` each), as SimC's
+    /// `composite_player_target_armor` with Find Weakness.
+    ArmorPenPct,
 }
 
 /// A reaction to combat events: procs, on-hit effects, and the like.

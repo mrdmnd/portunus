@@ -112,6 +112,13 @@ pub trait EngineIo {
     /// Sets a living actor's max health, keeping the fraction of it the
     /// actor has (Power Word: Fortitude, Stamina procs).
     fn set_max_health(&mut self, actor: ActorId, max: u64);
+    /// Sets a seat's run speed from Speed rating, in percent; it stacks
+    /// additively with `MoveSpeedPct` modifiers.
+    fn set_speed_pct(&mut self, actor: ActorId, pct: f64);
+    /// Offers `target`, if it is a dead seat with no offer already, a
+    /// resurrection with `health_pct` of its maximum health, which it
+    /// accepts after its reaction time (`Effect::Resurrect`).
+    fn resurrect(&mut self, target: ActorId, health_pct: f64);
     /// `actor` is a seat's actor or a pet.
     fn adjust_cooldown(&mut self, actor: ActorId, spell: SpellId, change: CooldownChange);
     /// Spawn pets; returns their actors. `duration` is ignored for
@@ -310,6 +317,8 @@ pub struct EnemyHit {
     pub rule: RuleIndex,
     pub amount: f64,
     pub school: SchoolMask,
+    /// The rule hits more than one player (see `EnemyTarget::is_area`).
+    pub area: bool,
 }
 
 /// A computed hit, heal, or health pool as whole points, the way the game
@@ -359,6 +368,9 @@ pub struct RolledHit {
     /// The hand a strike hit with (see `Effect::Damage::hand` and
     /// `SpellDef::weapon`), whose weapon-hit listeners it fires on landing.
     pub weapon: Option<WeaponHand>,
+    /// Area damage: an AoE rule or a target set that can reach more than
+    /// one actor (see `EffectTarget::is_area`).
+    pub area: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

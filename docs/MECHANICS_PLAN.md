@@ -5,7 +5,8 @@ covers every gap found in the October 2026 audit, ordered so that each phase
 builds on the ones before it. Each item says what to add to the data, the
 kernel, the mechanics and the checks, how to test it, and what "done" means.
 
-Read the whole of section 1 before starting any phase.
+Read the whole of section 1 before starting any phase, and
+`MECHANICS_LESSONS.md` for what Phases 0–9 taught us.
 
 ---
 
@@ -1537,6 +1538,50 @@ proportionally.
 
 ## 12. Phase 10: Stats and math (Tier B)
 
+**Done.** Checked against SimC's `player_t` composites and its rating
+curves (DB2 curves 21024 and 21025). DPS and trace hashes are unchanged.
+Tests are in `crates/mechanics/tests/stats.rs`, plus an ingest test.
+
+- **Tertiary stats.** `Stat::Leech`, `Avoidance` and `Speed` were added at
+  the end of the enum, with `DerivedStats` percentages for each. The
+  curves use SimC's tertiary knees (10/15/20% at 80/60/40%). Rating per
+  percent is SimC's level-90 base scaled by the same ~57× as our
+  secondaries: Leech 1050, Avoidance 560, Speed 175.
+  - **Speed follows SimC's odd formula:** percent ×
+    `exp(-0.0003 × rating)` × 0.1, which `RatingCurve.falloff` holds.
+    It is pushed into the kernel like haste (`EngineIo::set_speed_pct`)
+    and added to the `MoveSpeedPct` sum in `World::speed`.
+  - **Leech heals at once:** SimC pools leech and heals the pool every
+    hasted GCD. Here each hit heals right away for
+    dealt × leech% × (1 + versatility). The total is the same; only the
+    timing differs.
+  - **Avoidance, change from the plan:** there is no `aoe` flag. As in
+    SimC's `action_t::is_aoe`, whether a hit counts as area damage comes
+    from its target. Enemy hits on `AllPlayers` or `RandomPlayers(n > 1)`
+    count, and so do spells with an `aoe` or a multi-target
+    `EffectTarget`. `EnemyHit` and `RolledHit` carry an `area` flag.
+- **Stat conversions.** `ModKind::StatFromStat { from, to }`, with the
+  percent in `value`. Conversions run after every flat and percent
+  modifier, from the stats as they stood before any conversion, so they
+  never chain (Mage Slow Burn). `party.rs` refreshes health, haste and
+  speed when a converted stat changes.
+- **Highest secondary, change from the plan:** an effect, not a
+  modifier. `Effect::HighestSecondary { crit, haste, mastery,
+  versatility }` runs the list for the highest secondary rating at
+  trigger time. This is SimC's `util::highest_stat`, which compares
+  ratings with a strict greater-than in the order Versatility, Mastery,
+  Haste, Crit, so ties go to the earlier stat.
+- **Armor penetration, change from the plan:** it multiplies the
+  target's armor. `ModKind::ArmorPenPct` on the attacker keeps
+  `1 - v/100` of the armor per modifier, as in SimC's
+  `composite_player_target_armor`.
+- **Positionals:** documented on `dual_wield_miss_pct`; no
+  `Requirement::Behind`.
+- **Plan correction (data bug):** the secondary curve's thresholds were
+  39/47/54/66% instead of SimC's 30/40/50/60/80%. They are fixed. No DPS
+  changed: the seats are far below the first knee.
+- Observation shows no stat sheet; `run_speed` already includes Speed.
+
 - **Tertiary stats:** add `Stat::Leech`, `Stat::Avoidance`, `Stat::Speed`
   with rating curves in `StatCurves.ratings`. Speed adds to run speed
   (`World::speed`). Leech heals for a share of damage done (self-healing
@@ -1560,6 +1605,45 @@ proportionally.
 ---
 
 ## 13. Phase 11: Survival in Mythic+ (Tier B)
+
+**Done.** SimC has no resurrections. The rules come from Wowhead's
+Mythic+ guide (the 7.3.5 change):
+
+- one charge shared by the group at the start of the dungeon, plus one
+  every 10 minutes, at most 5 stored;
+- Rebirth, Raise Ally, Intercession and Soulstone all draw on that pool;
+- a charge is spent only when the dead player accepts, and pre-placing
+  Soulstone costs nothing.
+
+DPS and trace hashes are unchanged. Tests are in
+`crates/mechanics/tests/resurrect.rs`, plus an ingest test and an
+observation check in `run_file.rs`.
+
+- `Externals.battle_res: BattleRes { initial, every, max }` holds the
+  Mythic+ defaults (1, 10 min, 5), counted from the start of the run.
+  Charges recharge one at a time while below `max`, like a spell's
+  charges.
+- `Targeting::DeadAlly` targets a dead seat with no resurrection already
+  on its way. It is blocked without one; in combat with no charge left,
+  it waits for the next charge (`WakeReason::BattleResCharge`). When a
+  seat dies with nothing on its way, seats that have such an ability get
+  `WakeReason::AllyDied`.
+- `Effect::Resurrect { target, health_pct }` offers the resurrection. The
+  dead seat accepts after its reaction draw. In combat that spends a
+  charge, and if none is left by then, the offer lapses.
+- `AuraDef.self_resurrect: Option<f64>` is Soulstone. The aura must
+  persist through death (ingest checks this). It offers its holder a
+  resurrection as the holder dies; if no charge is left, it waits for the
+  next one. Accepting uses the aura up.
+- A revived seat gets its passive and party auras back and starts
+  swinging again. The kernel arms it like any locked seat, so it acts at
+  once. Its target was kept up to date while it lay dead, by the same
+  code that retargets living seats. On-pull auras (Bloodlust) don't come
+  back. The between-pull recovery shares the same aura restore.
+- Observation: `SeatObs.battle_res` (charges and time to the next) and
+  `AllyObs.res_offered`.
+- **Divergence:** a wipe still ends the pull even if a Soulstone is
+  waiting.
 
 - **Battle resurrection and Soulstone:** `Effect::Resurrect { health_pct }`
   on a dead seat in combat (with a shared group charge pool, as in Mythic+:

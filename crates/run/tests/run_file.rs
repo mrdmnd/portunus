@@ -27,7 +27,7 @@ use portunus_gamedata::stats::{
 };
 use portunus_run::scripts::buff_top_ally;
 use portunus_run::{
-    Bundle, ChannelObs, EmpowerObs, GroundObs, PartyMeter, RunError, SeatObs, FOREVER,
+    BattleResObs, Bundle, ChannelObs, EmpowerObs, GroundObs, PartyMeter, RunError, SeatObs, FOREVER,
 };
 
 const LIGHTNING_BOLT: SpellId = SpellId(188196);
@@ -551,6 +551,7 @@ fn seats_see_shields_as_a_share_of_health() {
         ground: None,
         untargetable: false,
         dispel: None,
+        self_resurrect: None,
     };
     let apply = |id: u32, target| Effect::ApplyAura {
         aura: AuraId(id),
@@ -821,6 +822,15 @@ fn power_infusion_goes_to_the_ally_with_the_most_damage_and_allies_see_it() {
     let mut seen_cooling = false;
     while let Turn::Decide(d) = turn {
         let late = d.obs.combat_time.is_some_and(|t| t >= SimDuration(10_000));
+        // Nobody dies: charges come every 10 minutes from one at the start.
+        let due = d.obs.now.0 / 600_000;
+        assert_eq!(
+            d.obs.battle_res,
+            BattleResObs {
+                charges: (1 + due as u8).min(5),
+                next_in: Some(SimTime((due + 1) * 600_000).saturating_since(d.obs.now)),
+            }
+        );
         let infuse = (d.seat == Seat(0) && late)
             .then(|| buff_top_ally(&d, POWER_INFUSION, INFUSED))
             .flatten();
@@ -989,6 +999,7 @@ fn seats_see_how_far_they_can_stray_from_their_area_and_who_is_in_it() {
             ground: Some(GroundDef { radius: 8.0 }),
             untargetable: false,
             dispel: None,
+            self_resurrect: None,
         },
     );
     data.spells

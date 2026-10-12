@@ -125,6 +125,16 @@ pub struct AllyObs {
     pub buffs: BTreeMap<AuraId, AuraObs>,
     /// One entry per ability with a cooldown.
     pub cooldowns: BTreeMap<SpellId, CooldownObs>,
+    /// Dead, with a resurrection on its way to it.
+    pub res_offered: bool,
+}
+
+/// The group's battle resurrection charges, as the UI shows them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BattleResObs {
+    pub charges: u8,
+    /// Until the next charge; `None` while full.
+    pub next_in: Option<SimDuration>,
 }
 
 /// One seat's view of the moment, in game terms.
@@ -173,6 +183,7 @@ pub struct SeatObs {
     pub guardians: BTreeMap<PetId, Vec<Option<SimDuration>>>,
     /// The other seats, in seat order.
     pub allies: Vec<AllyObs>,
+    pub battle_res: BattleResObs,
 }
 
 /// A controlled pet, as its owner sees it on the pet frame.
@@ -485,6 +496,7 @@ impl Observer for ScriptObserver {
                         .iter()
                         .filter_map(|&sp| cooldown_hiding(actor, sp, &[]))
                         .collect(),
+                    res_offered: state.res_offered(s),
                 })
             })
             .collect();
@@ -632,6 +644,13 @@ impl Observer for ScriptObserver {
             pet,
             guardians,
             allies,
+            battle_res: {
+                let b = state.battle_res();
+                BattleResObs {
+                    charges: b.charges,
+                    next_in: b.next_at.map(|t| t.saturating_since(now)),
+                }
+            },
         }
     }
 

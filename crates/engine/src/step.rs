@@ -75,4 +75,9 @@ pub enum WakeReason {
     EnemyUntargetable(ActorId),
     /// An untargetable enemy can be targeted again.
     EnemyTargetable(ActorId),
+    /// A seat died with no resurrection on its way, or its offer lapsed;
+    /// sent to seats with an ability that targets dead allies.
+    AllyDied(ActorId),
+    /// The group's battle resurrection charge came back.
+    BattleResCharge,
 }

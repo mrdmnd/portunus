@@ -683,6 +683,7 @@ impl<M: Mechanics> Kernel<M> {
                         rule,
                         amount: self.world.rule_amount(enemy, rule, amount),
                         school: *school,
+                        area: target.is_area(),
                     };
                     self.call(|m, io| m.enemy_hit(io, &hit));
                 }

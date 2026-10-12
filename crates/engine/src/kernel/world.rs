@@ -27,15 +27,16 @@ use crate::mechanics::{
 use crate::outcome::{Outcome, PullOutcome, SeatOutcome};
 use crate::setup::{Externals, RunSetup};
 use crate::state::{
-    self, ActorKind, ActorView, AuraInstance, AuraRef, CastView, CastWhat, ChannelProgress,
-    CombatView, CooldownView, DeckView, DemandView, LastCast, MovementView, PendingPerception,
-    PendingTimer, ProcView, Projectile, ResourceView, RuleView, SeatPhase, SegmentView, StateView,
-    SwingView, RECENT_CASTS,
+    self, ActorKind, ActorView, AuraInstance, AuraRef, BattleResView, CastView, CastWhat,
+    ChannelProgress, CombatView, CooldownView, DeckView, DemandView, LastCast, MovementView,
+    PendingPerception, PendingTimer, ProcView, Projectile, ResourceView, RuleView, SeatPhase,
+    SegmentView, StateView, SwingView, RECENT_CASTS,
 };
 use crate::step::{DecisionRequest, WakeReason};
 use crate::trace::{TraceEvent, TraceRecord};
 
 use super::queue::{Event, Queue, Wake};
+use super::resurrect::{ResOffer, ResPool};
 
 /// What never changes during a rollout, shared by every fork.
 pub(crate) struct Statics {
@@ -614,6 +615,10 @@ pub(crate) struct SeatState {
     pub travelled: f64,
     /// Soonest deadline first.
     pub demands: Vec<Demand>,
+    /// Run speed from Speed rating, in percent, as mechanics last set it.
+    pub speed_pct: f64,
+    /// A resurrection offered to the dead seat, not yet accepted.
+    pub res_offer: Option<ResOffer>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -707,6 +712,7 @@ pub struct World {
     pub(crate) pulls: Vec<PullOutcome>,
     pub(crate) next_id: u32,
     pub(crate) triggers_queued: Option<SimTime>,
+    pub(crate) battle_res: ResPool,
     /// When each `Delayed` trigger's inner condition first held, by owner
     /// and the node's position in its trigger.
     pub(crate) delayed: BTreeMap<(TriggerOwner, u32), SimTime>,
@@ -859,6 +865,21 @@ impl World {
         }
     }
 
+    /// The seat's next latency draw of `kind`: `[anticipated, reaction,
+    /// cast lag]`.
+    pub(crate) fn latency_draw(&mut self, seat: Seat, kind: usize) -> SimDuration {
+        let i = usize::from(seat.0);
+        let latency = &self.s.setup.seats[i].latency;
+        let dist = match kind {
+            0 => &latency.anticipated,
+            1 => &latency.reaction,
+            _ => &latency.cast_lag,
+        };
+        let index = self.seats[i].draws[kind];
+        self.seats[i].draws[kind] += 1;
+        dist.sample(self.s.setup.run.seed, self.s.latency[i][kind], index)
+    }
+
     /// Schedule a wake after the seat's latency draw. Idle and dead seats
     /// aren't told anything.
     pub(crate) fn notify(
@@ -873,16 +894,7 @@ impl World {
         if matches!(self.seats[i].phase, SeatPhase::Idle | SeatPhase::Dead) {
             return;
         }
-        let kind = usize::from(!anticipated);
-        let latency = &self.s.setup.seats[i].latency;
-        let dist = if anticipated {
-            &latency.anticipated
-        } else {
-            &latency.reaction
-        };
-        let index = self.seats[i].draws[kind];
-        self.seats[i].draws[kind] += 1;
-        let delay = dist.sample(self.s.setup.run.seed, self.s.latency[i][kind], index);
+        let delay = self.latency_draw(seat, usize::from(!anticipated));
         let at = event_at.max(self.now) + delay;
         let perception = (!anticipated).then(|| {
             let id = self.fresh_id();
@@ -910,14 +922,7 @@ impl World {
 
     /// The next cast lag from the seat's own stream.
     pub(crate) fn draw_cast_lag(&mut self, seat: Seat) -> SimDuration {
-        let i = usize::from(seat.0);
-        let index = self.seats[i].draws[2];
-        self.seats[i].draws[2] += 1;
-        self.s.setup.seats[i].latency.cast_lag.sample(
-            self.s.setup.run.seed,
-            self.s.latency[i][2],
-            index,
-        )
+        self.latency_draw(seat, 2)
     }
 
     /// Ask again at this timestamp, with no latency (free actions).
@@ -1491,6 +1496,7 @@ impl World {
             if let Some(pull) = self.pulls.last_mut() {
                 pull.deaths += 1;
             }
+            self.seat_died(seat);
             return;
         }
         if self.is_pet(actor) {
@@ -1877,6 +1883,15 @@ impl StateView for World {
     fn yards_travelled(&self, seat: Seat) -> f64 {
         self.seat_ref(seat)
             .map_or(0.0, |st| st.travelled + self.unsettled_yards(seat))
+    }
+
+    fn battle_res(&self) -> BattleResView {
+        let (charges, next_at) = self.battle_res_now();
+        BattleResView { charges, next_at }
+    }
+
+    fn res_offered(&self, seat: Seat) -> bool {
+        self.seat_ref(seat).is_some_and(|st| st.res_offer.is_some())
     }
 
     fn pack_position(&self, enemy: ActorId) -> Option<(f64, f64)> {

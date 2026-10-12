@@ -301,7 +301,10 @@ fn rating_pct(curve: &RatingCurve, rating: f64) -> f64 {
         prev = threshold;
         keep = fraction;
     }
-    out + (raw - prev) * keep
+    let pct = out + (raw - prev) * keep;
+    curve
+        .falloff
+        .map_or(pct, |f| pct * f.scale * (-f.per_rating * rating).exp())
 }
 
 /// Percentages and derived values for a stat block. Mechanics call this
@@ -326,6 +329,9 @@ pub fn derive(curves: &StatCurves, spec: &SpecDef, stats: &StatBlock) -> Derived
         attack_power: primary_for_ap * curves.attack_power_per_primary,
         spell_power: stat(Stat::Intellect) * curves.spell_power_per_intellect,
         max_health: stat(Stat::Stamina) * curves.health_per_stamina,
+        leech_pct: pct(Stat::Leech),
+        avoidance_pct: pct(Stat::Avoidance),
+        speed_pct: pct(Stat::Speed),
     }
 }
 
@@ -584,6 +590,7 @@ mod tests {
                     RatingCurve {
                         rating_per_pct: 10.0,
                         diminishing: vec![(30.0, 0.5)],
+                        falloff: None,
                     },
                 )]),
                 item_budget: BTreeMap::from([(400, 1000.0)]),
@@ -650,6 +657,7 @@ mod tests {
         let curve = RatingCurve {
             rating_per_pct: 10.0,
             diminishing: vec![(30.0, 0.5), (40.0, 0.25)],
+            falloff: None,
         };
         assert_eq!(rating_pct(&curve, 200.0), 20.0);
         assert_eq!(rating_pct(&curve, 400.0), 30.0 + 5.0);

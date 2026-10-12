@@ -51,6 +51,7 @@ mod io;
 mod movement;
 mod pet;
 mod queue;
+mod resurrect;
 mod rules;
 mod setup;
 mod swing;
@@ -338,8 +339,7 @@ impl<M: Mechanics> Kernel<M> {
     /// Between pulls: everyone back to full health, the dead revived with
     /// their passive auras.
     fn recover_seats(&mut self) {
-        let s = Arc::clone(&self.world.s);
-        for (i, setup) in s.setup.seats.iter().enumerate() {
+        for i in 0..self.world.seats.len() {
             let seat = Seat(i as u8);
             let me = self.world.seat_actor(seat);
             let Some(a) = self.world.actor_mut(me) else {
@@ -348,29 +348,13 @@ impl<M: Mechanics> Kernel<M> {
             let revived = !a.alive;
             a.alive = true;
             a.health = a.max_health;
+            let st = self.world.seat_mut(seat);
+            st.res_offer = None;
             if !revived {
                 continue;
             }
-            self.world.seat_mut(seat).phase = SeatPhase::Idle;
-            self.world.record(TraceEvent::Resurrect { actor: me });
-            let auras = setup
-                .template
-                .passive_auras
-                .iter()
-                .chain(&s.group.party_auras);
-            for &aura in auras {
-                self.world.apply_aura(AuraApplication {
-                    aura: AuraRef {
-                        holder: me,
-                        aura,
-                        source: me,
-                    },
-                    stacks: 1,
-                    duration: None,
-                    pmultiplier: None,
-                    anchor: None,
-                });
-            }
+            st.phase = SeatPhase::Idle;
+            self.world.restore_passives(seat);
         }
         self.drain();
     }
@@ -1217,6 +1201,10 @@ impl<M: Mechanics> Kernel<M> {
                 self.drain();
             }
             Event::LaggedCast { seat } => self.lagged_cast(seat),
+            Event::AcceptRes { seat, gen } => {
+                self.world.accept_res(seat, gen);
+                self.drain();
+            }
             Event::DemandDeadline { seat, id } => self.demand_deadline(seat, id),
             Event::Recheck { .. } | Event::Deliver(_) => {
                 let mut ignored = Vec::new();

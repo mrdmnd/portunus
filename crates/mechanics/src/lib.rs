@@ -71,15 +71,24 @@ pub struct IncomingHit {
     pub kind: HitKind,
     /// Skip armor even for a direct physical hit.
     pub ignores_armor: bool,
+    /// Whose `ArmorPenPct` applies; `None` for none.
+    pub attacker: Option<ActorId>,
+    pub spell: Option<SpellId>,
+    /// Area damage, which Avoidance reduces.
+    pub area: bool,
 }
 
 impl IncomingHit {
-    /// A direct hit that armor applies to, if physical.
+    /// A direct hit from no one in particular that armor applies to, if
+    /// physical.
     pub fn direct(school: SchoolMask) -> Self {
         Self {
             school,
             kind: HitKind::Direct,
             ignores_armor: false,
+            attacker: None,
+            spell: None,
+            area: false,
         }
     }
 
@@ -88,6 +97,9 @@ impl IncomingHit {
             school: hit.school,
             kind: hit.kind,
             ignores_armor: hit.ignores_armor,
+            attacker: Some(hit.source),
+            spell: hit.spell,
+            area: hit.area,
         }
     }
 }

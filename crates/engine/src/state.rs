@@ -116,6 +116,18 @@ pub trait StateView {
     fn distance(&self, seat: Seat, enemy: ActorId) -> Option<f64>;
     /// Yards the seat has moved, by any means, since the run began.
     fn yards_travelled(&self, seat: Seat) -> f64;
+    /// The group's battle resurrection charges.
+    fn battle_res(&self) -> BattleResView;
+    /// Whether the dead seat has a resurrection on its way to it.
+    fn res_offered(&self, seat: Seat) -> bool;
+}
+
+/// The group's battle resurrection charges, as of now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BattleResView {
+    pub charges: u8,
+    /// When the next charge comes; `None` while full.
+    pub next_at: Option<SimTime>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

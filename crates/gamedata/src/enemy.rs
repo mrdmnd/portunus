@@ -159,3 +159,15 @@ pub enum EnemyTarget {
     RandomPlayers(u8),
     AllPlayers,
 }
+
+impl EnemyTarget {
+    /// Whether it hits more than one player, which makes the hit area
+    /// damage (SimC's `action_t::is_aoe`): what Avoidance reduces.
+    pub fn is_area(self) -> bool {
+        match self {
+            Self::Tank | Self::RandomPlayer | Self::RandomNonTank => false,
+            Self::RandomPlayers(n) => n > 1,
+            Self::AllPlayers => true,
+        }
+    }
+}

@@ -79,6 +79,13 @@ pub struct AuraDef {
     /// What can remove it early (`Effect::Dispel`), if anything.
     #[serde(default)]
     pub dispel: Option<DispelType>,
+    /// The holder, a seat, may bring itself back when it dies, with this
+    /// share of its maximum health in `(0, 1]` (Soulstone). It must
+    /// persist through death. The seat accepts after its reaction time; in
+    /// combat that takes one of the group's battle resurrection charges,
+    /// waiting for the next if none is left, and uses the aura up.
+    #[serde(default)]
+    pub self_resurrect: Option<f64>,
 }
 
 /// What a dispel can remove: magic (Purge, Cleanse), curses, poisons,

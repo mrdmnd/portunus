@@ -3,12 +3,8 @@
 
 mod synthetic;
 
-use portunus_core::{
-    ActorId, AuraId, Dist, EventName, Seat, SimDuration, SimTime, SpellId, Trigger,
-};
-use portunus_engine::{
-    CastOpts, Choice, Engine, Kernel, Readiness, StateView, Step, TargetSel, Wait,
-};
+use portunus_core::{ActorId, AuraId, Dist, EventName, SimDuration, SpellId, Trigger};
+use portunus_engine::{Engine, Kernel, StateView};
 use portunus_gamedata::effect::{EffectTarget, ModKind, ModScope, Modifier};
 use portunus_gamedata::enemy::{EnemyAction, EnemyRule, EnemyTarget};
 use portunus_gamedata::spell::Targeting;
@@ -78,45 +74,6 @@ const BULK_UP: SpellId = SpellId(900_956);
 fn max_health(k: &Kernel<PartyMechanics>, seat: usize) -> u64 {
     let s = k.state();
     s.actor(s.seats()[seat]).unwrap().max_health
-}
-
-/// Cast each `(caster, spell, target seat)` in turn once the caster can,
-/// then wait until `until`; no seat means the primary target.
-fn play_party(
-    k: &mut Kernel<PartyMechanics>,
-    script: &[(usize, SpellId, Option<usize>)],
-    until: SimTime,
-) {
-    let mut next = 0;
-    loop {
-        match k.advance().unwrap() {
-            Step::Done(_) => return,
-            Step::Decide(req) => {
-                if req.now >= until {
-                    return;
-                }
-                let choice = match script.get(next) {
-                    Some(&(caster, spell, target))
-                        if req.seat == Seat(caster as u8)
-                            && req.now >= COMBAT_START
-                            && k.legal(req.seat).abilities.get(&spell) == Some(&Readiness::Now) =>
-                    {
-                        next += 1;
-                        Choice::Cast {
-                            ability: spell,
-                            target: target.map_or(TargetSel::Primary, |t| {
-                                TargetSel::Actor(k.state().seats()[t])
-                            }),
-                            opts: CastOpts::default(),
-                        }
-                    }
-                    Some(_) => Choice::Wait(Wait::NextEvent),
-                    None => Choice::Wait(Wait::Until(until)),
-                };
-                k.submit(req.seat, choice).unwrap();
-            }
-        }
-    }
 }
 
 #[test]

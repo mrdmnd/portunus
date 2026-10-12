@@ -336,6 +336,17 @@ impl World {
             need.block();
             return need.finish(ability);
         }
+        if def.targeting == Targeting::DeadAlly {
+            if self.awaiting_res().is_empty() {
+                need.block();
+            } else if self.in_combat() {
+                match self.battle_res_now() {
+                    (0, Some(at)) => need.until(at, WakeReason::BattleResCharge),
+                    (0, None) => need.block(),
+                    _ => {}
+                }
+            }
+        }
         match self.seg {
             Seg::Finished => need.block(),
             Seg::Travel {
@@ -469,6 +480,7 @@ impl World {
             Targeting::None => Some(None),
             Targeting::SelfOnly => Some(Some(pet)),
             Targeting::Ally => Some(Some(self.seat_actor(owner))),
+            Targeting::DeadAlly => None,
             Targeting::Enemy => self
                 .actor_ref(self.seat_actor(owner))
                 .and_then(|a| a.target)
@@ -533,6 +545,18 @@ impl World {
                     TargetSel::LowestHealth => pick(allies, true),
                     TargetSel::HighestHealth => pick(allies, false),
                     TargetSel::Casting => Err(IllegalChoice::NoValidTarget),
+                }
+            }
+            Targeting::DeadAlly => {
+                let dead = self.awaiting_res();
+                match sel {
+                    TargetSel::Actor(id) if dead.contains(&id) => Ok(Some(id)),
+                    TargetSel::Actor(id) => Err(IllegalChoice::NotATarget(id)),
+                    _ => dead
+                        .first()
+                        .copied()
+                        .map(Some)
+                        .ok_or(IllegalChoice::NoValidTarget),
                 }
             }
         }

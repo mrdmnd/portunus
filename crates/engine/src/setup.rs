@@ -76,6 +76,33 @@ pub struct Externals {
     /// Who decides when the seats' classes' Bloodlust goes out.
     #[serde(default)]
     pub bloodlust: BloodlustMode,
+    /// The group's shared battle resurrection charges.
+    #[serde(default)]
+    pub battle_res: BattleRes,
+}
+
+/// Battle resurrection charges, shared by the whole group and counted from
+/// the start of the run. A resurrection taken in combat (`Effect::Resurrect`,
+/// a Soulstone) spends one when the dead seat accepts it. Charges recharge
+/// one at a time while below `max`, like a spell's.
+///
+/// The defaults are Mythic+'s: one charge at the start of the dungeon,
+/// another every 10 minutes, at most 5 stored. SimC has no resurrections.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BattleRes {
+    pub initial: u8,
+    pub every: SimDuration,
+    pub max: u8,
+}
+
+impl Default for BattleRes {
+    fn default() -> Self {
+        BattleRes {
+            initial: 1,
+            every: SimDuration::from_secs(600),
+            max: 5,
+        }
+    }
 }
 
 /// When a class's on-pull aura with a granting spell ([`PullAura::spell`])

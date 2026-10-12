@@ -16,7 +16,9 @@ use portunus_gamedata::effect::{
 };
 use portunus_gamedata::enemy::{EnemyAction, EnemyKind, EnemyRule};
 use portunus_gamedata::spell::{CastKind, CooldownDef, Requirement};
-use portunus_gamedata::stats::{RechargeDef, ResourceDef, ResourceKind, SchoolMask};
+use portunus_gamedata::stats::{
+    RatingFalloff, RechargeDef, ResourceDef, ResourceKind, SchoolMask, Stat,
+};
 use portunus_gamedata::talent::{TalentNode, TalentTree};
 use portunus_gamedata::{EnemyData, GameData, HeroTreeDef};
 use portunus_ingest::{
@@ -745,4 +747,92 @@ fn a_class_can_only_grant_its_pull_aura_by_a_spell_that_exists() {
             spell: SpellId(1),
         }]
     );
+}
+
+#[test]
+fn conversions_need_two_stats_pen_a_share_and_falloff_a_rate() {
+    let mut game = game();
+    let aura = AuraId(60188);
+    let set = |game: &mut GameData, kind: ModKind, value: f64| {
+        game.auras.get_mut(&aura).expect("aura").modifiers = vec![Modifier {
+            scope: ModScope::All,
+            kind,
+            value,
+            per_stack: false,
+            condition: None,
+        }];
+    };
+    let invalid = vec![DataIssue::InvalidModifier(aura)];
+    let convert = |to| ModKind::StatFromStat {
+        from: Stat::CritRating,
+        to,
+    };
+    set(&mut game, convert(Stat::CritRating), 10.0);
+    assert_eq!(check_game_data(&game), invalid);
+    set(&mut game, convert(Stat::MasteryRating), 10.0);
+    assert_eq!(check_game_data(&game), Vec::new());
+    for pen in [0.0, 101.0, f64::NAN] {
+        set(&mut game, ModKind::ArmorPenPct, pen);
+        assert_eq!(check_game_data(&game), invalid, "{pen}");
+    }
+    set(&mut game, ModKind::ArmorPenPct, 100.0);
+    assert_eq!(check_game_data(&game), Vec::new());
+
+    fn speed(game: &mut GameData) -> &mut portunus_gamedata::stats::RatingCurve {
+        game.curves.ratings.get_mut(&Stat::Speed).expect("speed")
+    }
+    for (per_rating, scale) in [(-0.1, 0.1), (0.0003, 0.0), (f64::INFINITY, 0.1)] {
+        speed(&mut game).falloff = Some(RatingFalloff { per_rating, scale });
+        assert_eq!(
+            check_game_data(&game),
+            vec![DataIssue::InvalidRatingCurve(Stat::Speed)],
+            "{per_rating} {scale}"
+        );
+    }
+    speed(&mut game).falloff = Some(RatingFalloff {
+        per_rating: 0.0,
+        scale: 1.0,
+    });
+    assert_eq!(check_game_data(&game), Vec::new());
+}
+
+#[test]
+fn resurrections_need_a_health_share_and_stones_must_survive_death() {
+    let mut game = game();
+    let spell = *game.spells.keys().next().expect("a spell");
+    let rez = |health_pct| Effect::Resurrect {
+        target: EffectTarget::Target,
+        health_pct,
+    };
+    for bad in [0.0, 1.5, f64::NAN] {
+        let mut g = game.clone();
+        g.spells
+            .get_mut(&spell)
+            .expect("spell")
+            .effects
+            .push(rez(bad));
+        assert_eq!(
+            check_game_data(&g),
+            vec![DataIssue::InvalidResurrect(Owner::Spell(spell))],
+            "{bad}"
+        );
+    }
+    game.spells
+        .get_mut(&spell)
+        .expect("spell")
+        .effects
+        .push(rez(1.0));
+    assert_eq!(check_game_data(&game), Vec::new());
+
+    let aura = AuraId(60188);
+    game.auras.get_mut(&aura).expect("aura").self_resurrect = Some(0.6);
+    assert_eq!(
+        check_game_data(&game),
+        vec![DataIssue::InvalidResurrect(Owner::Aura(aura))]
+    );
+    game.auras
+        .get_mut(&aura)
+        .expect("aura")
+        .persists_through_death = true;
+    assert_eq!(check_game_data(&game), Vec::new());
 }

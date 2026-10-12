@@ -135,6 +135,12 @@ pub(crate) enum Event {
         gen: u32,
     },
     Deliver(Wake),
+    /// A dead seat takes up its resurrection offer, if its generation
+    /// still matches.
+    AcceptRes {
+        seat: Seat,
+        gen: u32,
+    },
 }
 
 impl Event {
@@ -154,7 +160,8 @@ impl Event {
             | Event::PetExpire { .. }
             | Event::SummonNext { .. }
             | Event::Swing { .. }
-            | Event::DemandDeadline { .. } => EventClass::World,
+            | Event::DemandDeadline { .. }
+            | Event::AcceptRes { .. } => EventClass::World,
             Event::RuleFire { .. } | Event::EnemyCastEnd { .. } => EventClass::EnemyRules,
             Event::EvalTriggers => EventClass::Triggers,
             Event::PrepullOpen

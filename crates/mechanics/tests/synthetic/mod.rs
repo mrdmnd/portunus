@@ -42,6 +42,7 @@ pub struct Fixture {
     pub spec: ScenarioSpec,
     /// How many copies of `template` sit in the party; 1 by default.
     pub seats: usize,
+    pub externals: Externals,
 }
 
 pub fn dummy() -> EnemyKey {
@@ -72,6 +73,7 @@ pub fn aura(id: AuraId) -> AuraDef {
         ground: None,
         untargetable: false,
         dispel: None,
+        self_resurrect: None,
     }
 }
 
@@ -198,6 +200,7 @@ pub fn fixture(kit: Vec<Listener>) -> Fixture {
         template,
         spec,
         seats: 1,
+        externals: Externals::default(),
     }
 }
 
@@ -254,7 +257,7 @@ impl Fixture {
                 };
                 self.seats
             ],
-            externals: Externals::default(),
+            externals: self.externals.clone(),
             record_trace: true,
         };
         let mechanics = PartyMechanics::new(&setup, Arc::new(Kits::standard())).unwrap();
@@ -328,4 +331,43 @@ pub fn close(got: u64, want: f64) -> bool {
 pub fn add_spell(f: &mut Fixture, s: SpellDef) {
     f.template.abilities.insert(s.id);
     f.data.spells.insert(s.id, s);
+}
+
+/// Cast each `(caster, spell, target seat)` in turn once the caster can,
+/// then wait until `until`; no seat means the primary target.
+pub fn play_party(
+    k: &mut Kernel<PartyMechanics>,
+    script: &[(usize, SpellId, Option<usize>)],
+    until: SimTime,
+) {
+    let mut next = 0;
+    loop {
+        match k.advance().unwrap() {
+            Step::Done(_) => return,
+            Step::Decide(req) => {
+                if req.now >= until {
+                    return;
+                }
+                let choice = match script.get(next) {
+                    Some(&(caster, spell, target))
+                        if req.seat == Seat(caster as u8)
+                            && req.now >= COMBAT_START
+                            && k.legal(req.seat).abilities.get(&spell) == Some(&Readiness::Now) =>
+                    {
+                        next += 1;
+                        Choice::Cast {
+                            ability: spell,
+                            target: target.map_or(TargetSel::Primary, |t| {
+                                TargetSel::Actor(k.state().seats()[t])
+                            }),
+                            opts: CastOpts::default(),
+                        }
+                    }
+                    Some(_) => Choice::Wait(Wait::NextEvent),
+                    None => Choice::Wait(Wait::Until(until)),
+                };
+                k.submit(req.seat, choice).unwrap();
+            }
+        }
+    }
 }

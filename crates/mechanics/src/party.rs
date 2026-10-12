@@ -145,6 +145,7 @@ impl PartyMechanics {
     fn refresh_stats(&self, io: &mut dyn EngineIo, holder: ActorId, def: &AuraDef) {
         self.refresh_speed(io, holder, def);
         self.refresh_health(io, holder, def);
+        self.refresh_run_speed(io, holder, def);
         let view = io.view();
         let mut sharing: Vec<(ActorId, portunus_core::AuraId)> = Vec::new();
         for &seat in view.seats().iter().filter(|&&s| s != holder) {
@@ -165,21 +166,46 @@ impl PartyMechanics {
             };
             self.refresh_speed(io, seat, share);
             self.refresh_health(io, seat, share);
+            self.refresh_run_speed(io, seat, share);
         }
+    }
+
+    /// Whether `def` can change `holder`'s `stat`: directly, or through a
+    /// `StatFromStat` the holder has into it.
+    fn touches(&self, view: &dyn StateView, holder: ActorId, def: &AuraDef, stat: Stat) -> bool {
+        let direct = |s: Stat, d: &AuraDef| {
+            d.modifiers.iter().any(|m| match m.kind {
+                ModKind::StatFlat(x) | ModKind::StatPct(x) | ModKind::StatShare(x) => x == s,
+                ModKind::StatFromStat { to, .. } => to == s,
+                _ => false,
+            })
+        };
+        direct(stat, def)
+            || view
+                .auras(holder)
+                .iter()
+                .filter_map(|i| self.aura_def(i.aura))
+                .flat_map(|d| &d.modifiers)
+                .any(|m| {
+                    matches!(m.kind, ModKind::StatFromStat { from, to } if to == stat && direct(from, def))
+                })
+    }
+
+    /// Re-push a seat's run speed from Speed rating if this aura changes it.
+    fn refresh_run_speed(&self, io: &mut dyn EngineIo, holder: ActorId, def: &AuraDef) {
+        let view = io.view();
+        if player_seat(view, holder).is_none() || !self.touches(view, holder, def, Stat::Speed) {
+            return;
+        }
+        let pct = self.math().derived(view, holder).speed_pct;
+        io.set_speed_pct(holder, pct);
     }
 
     /// Re-push a seat's max health to the kernel if this aura changes its
     /// Stamina.
     fn refresh_health(&self, io: &mut dyn EngineIo, holder: ActorId, def: &AuraDef) {
-        let touches_stamina = def.modifiers.iter().any(|m| {
-            matches!(
-                m.kind,
-                ModKind::StatFlat(Stat::Stamina)
-                    | ModKind::StatPct(Stat::Stamina)
-                    | ModKind::StatShare(Stat::Stamina)
-            )
-        });
-        if !touches_stamina || player_seat(io.view(), holder).is_none() {
+        let view = io.view();
+        if player_seat(view, holder).is_none() || !self.touches(view, holder, def, Stat::Stamina) {
             return;
         }
         let max = self.math().derived(io.view(), holder).max_health;
@@ -189,15 +215,8 @@ impl PartyMechanics {
     /// Re-push haste and attack speed to the kernel if this aura can change
     /// them. A seat's haste reaches its pets too.
     fn refresh_speed(&self, io: &mut dyn EngineIo, holder: ActorId, def: &AuraDef) {
-        let touches_haste = def.modifiers.iter().any(|m| {
-            matches!(
-                m.kind,
-                ModKind::HastePct
-                    | ModKind::StatFlat(Stat::HasteRating)
-                    | ModKind::StatPct(Stat::HasteRating)
-                    | ModKind::StatShare(Stat::HasteRating)
-            )
-        });
+        let touches_haste = def.modifiers.iter().any(|m| m.kind == ModKind::HastePct)
+            || self.touches(io.view(), holder, def, Stat::HasteRating);
         let touches_attack_speed = def
             .modifiers
             .iter()
@@ -542,7 +561,11 @@ impl Mechanics for PartyMechanics {
             io.view(),
             hit.target,
             hit.amount,
-            IncomingHit::direct(hit.school),
+            IncomingHit {
+                attacker: Some(hit.source),
+                area: hit.area,
+                ..IncomingHit::direct(hit.school)
+            },
         );
         let before = health_fraction(io.view(), hit.target);
         let landed = io.apply_damage(DamageEvent {
