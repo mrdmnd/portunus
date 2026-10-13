@@ -43,6 +43,10 @@ pub struct RunConfig {
     pub first_seed: u64,
     #[serde(default = "default_seeds")]
     pub seeds: u32,
+    /// Where the held-out seeds start: as many as `seeds`, kept apart
+    /// from the ones a policy is tuned on, to confirm a gain afterwards.
+    #[serde(default = "default_holdout_first_seed")]
+    pub holdout_first_seed: u64,
 }
 
 fn realistic() -> InfoSet {
@@ -51,6 +55,10 @@ fn realistic() -> InfoSet {
 
 fn default_seeds() -> u32 {
     100
+}
+
+fn default_holdout_first_seed() -> u64 {
+    1_000_000
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -77,6 +85,8 @@ pub enum RunError {
     UnknownPolicy { seat: usize, name: String },
     #[error("a run needs at least one seat")]
     NoSeats,
+    #[error("no seat {0}")]
+    NoSuchSeat(usize),
 }
 
 /// A loaded, validated run file.
@@ -175,6 +185,15 @@ impl Bundle {
         }
     }
 
+    /// The run's held-out seeds: as many as [`Self::seeds`], from
+    /// `holdout_first_seed`.
+    pub fn holdout_seeds(&self) -> SeedSet {
+        SeedSet {
+            first: self.config.holdout_first_seed,
+            count: self.config.seeds,
+        }
+    }
+
     pub fn source(&self, record_trace: bool) -> Source {
         Source {
             data: Arc::clone(&self.data),
@@ -215,9 +234,40 @@ impl Bundle {
         }
     }
 
+    /// [`Self::arm`] with `seat` playing the named policy instead, and the
+    /// arm named after it.
+    pub fn arm_with(
+        &self,
+        record_trace: bool,
+        seat: usize,
+        policy: &str,
+    ) -> Result<SimArm, RunError> {
+        let mut arm = self.arm(record_trace);
+        let slot = arm
+            .policies
+            .get_mut(seat)
+            .ok_or(RunError::NoSuchSeat(seat))?;
+        *slot = scripts::by_name(policy).ok_or_else(|| RunError::UnknownPolicy {
+            seat,
+            name: policy.to_owned(),
+        })?;
+        policy.clone_into(&mut arm.name);
+        Ok(arm)
+    }
+
     /// Per-seat damage and DPS, plus party-wide time, completion, deaths,
     /// damage taken, and failed movement demands.
     pub fn experiment(&self, seeds: SeedSet) -> Experiment {
+        Experiment {
+            arms: vec![Arc::new(self.arm(false))],
+            baseline: 0,
+            seeds,
+            metrics: self.metrics(),
+        }
+    }
+
+    /// What [`Self::experiment`] measures.
+    pub fn metrics(&self) -> Vec<Metric> {
         let mut metrics = Vec::new();
         for s in 0..self.templates.len() {
             let seat = Seat(u8::try_from(s).unwrap_or(u8::MAX));
@@ -231,12 +281,7 @@ impl Bundle {
             Metric::DamageTaken,
             Metric::DemandsFailed,
         ]);
-        Experiment {
-            arms: vec![Arc::new(self.arm(false))],
-            baseline: 0,
-            seeds,
-            metrics,
-        }
+        metrics
     }
 
     pub fn breakdown(&self, seeds: SeedSet) -> Result<Breakdown, ArmError> {

@@ -27,7 +27,8 @@ use portunus_gamedata::stats::{
 };
 use portunus_run::scripts::buff_top_ally;
 use portunus_run::{
-    BattleResObs, Bundle, ChannelObs, EmpowerObs, GroundObs, PartyMeter, RunError, SeatObs, FOREVER,
+    compare, report, BattleResObs, Bundle, ChannelObs, CompareSpec, Comparison, EmpowerObs,
+    GroundObs, PartyMeter, RunError, SeatObs, Verdict, FOREVER,
 };
 
 const LIGHTNING_BOLT: SpellId = SpellId(188196);
@@ -261,6 +262,107 @@ fn arms_policy_uses_the_kit() {
     // Cleave keeps Rend up, so Rend itself is never pressed.
     assert!(bd.rows.iter().any(|r| r.name == "Rend" && r.damage > 0.0));
     assert_eq!(casts("Rend"), 0.0);
+}
+
+fn arms_bundle() -> Bundle {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/runs/arms_dummy.ron");
+    Bundle::load(&path).unwrap()
+}
+
+fn compare_arms(candidate: &str, breakdowns: bool) -> Comparison {
+    compare_on_arms("arms", candidate, breakdowns)
+}
+
+fn compare_on_arms(baseline: &str, candidate: &str, breakdowns: bool) -> Comparison {
+    let b = arms_bundle();
+    let spec = CompareSpec {
+        seat: 0,
+        baseline: baseline.into(),
+        candidate: candidate.into(),
+        seeds: SeedSet { first: 0, count: 6 },
+        breakdowns,
+    };
+    let runner = LocalRunner {
+        threads: NonZeroUsize::new(3).unwrap(),
+    };
+    compare(&b, &runner, spec).unwrap()
+}
+
+#[test]
+fn a_policy_against_itself_changes_nothing() {
+    let c = compare_arms("arms", true);
+    assert!(c.report.failures.is_empty());
+    assert_eq!(c.report.arms[1].name, "arms (again)");
+    let d = c.dps_change().unwrap();
+    assert_eq!((d.n, d.mean, d.std_err), (6, 0.0, 0.0));
+    assert_eq!(c.verdict(), Verdict::Unclear);
+    assert!(c.baseline_dps().unwrap() > 0.0);
+    let (base, cand) = c.breakdowns.as_ref().unwrap();
+    assert_eq!(base, cand);
+    let text = report::render_comparison(&c);
+    assert!(text.contains("no clear difference"), "{text}");
+}
+
+#[test]
+fn the_tuned_arms_beats_the_simc_port() {
+    let c = compare_arms("arms_h4", false);
+    assert!(c.report.failures.is_empty());
+    assert_eq!(c.verdict(), Verdict::Better);
+    assert!(c.dps_change().unwrap().ci95.0 > 0.05 * c.baseline_dps().unwrap());
+}
+
+#[test]
+fn compare_tells_a_worse_policy_apart() {
+    let c = compare_arms("idle", true);
+    assert_eq!(c.verdict(), Verdict::Worse);
+    assert!(c.dps_change().unwrap().ci95.1 < 0.0);
+    let (base, cand) = c.breakdowns.as_ref().unwrap();
+    let casts = |b: &portunus_run::Breakdown| {
+        b.rows
+            .iter()
+            .filter(|r| r.name == "Mortal Strike")
+            .map(|r| r.casts)
+            .sum::<f64>()
+    };
+    assert!(casts(base) > 0.0);
+    assert_eq!(casts(cand), 0.0);
+    let text = report::render_comparison(&c);
+    assert!(
+        text.contains("worse") && text.contains("Mortal Strike"),
+        "{text}"
+    );
+    // Without breakdowns, only the experiment runs.
+    assert!(compare_arms("idle", false).breakdowns.is_none());
+    let better = compare_on_arms("idle", "arms", false);
+    assert_eq!(better.verdict(), Verdict::Better);
+    assert!(report::render_comparison(&better).contains("better"));
+}
+
+#[test]
+fn compare_names_what_it_cannot_find() {
+    let b = arms_bundle();
+    assert!(matches!(
+        b.arm_with(false, 0, "no_such_policy"),
+        Err(RunError::UnknownPolicy { seat: 0, .. })
+    ));
+    assert!(matches!(
+        b.arm_with(false, 3, "arms"),
+        Err(RunError::NoSuchSeat(3))
+    ));
+    assert_eq!(b.arm_with(false, 0, "idle").unwrap().name, "idle");
+}
+
+#[test]
+fn held_out_seeds_are_apart_from_the_tuning_seeds() {
+    let b = arms_bundle();
+    let (tune, hold) = (b.seeds(), b.holdout_seeds());
+    assert_eq!(tune.count, hold.count);
+    assert!(hold.first >= tune.first + u64::from(tune.count));
+    let long = Bundle::load(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/runs/arms_long.ron"),
+    )
+    .unwrap();
+    assert_eq!(long.holdout_seeds().first, 1_000_000);
 }
 
 /// Lava Surge's buff and Lava Burst's reset stay hidden until perceived.

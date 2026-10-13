@@ -13,9 +13,12 @@
 //!
 //! The `portunus-run` binary runs a file's seeds through
 //! [`portunus_eval::LocalRunner`] and prints the [`report::render`] report.
+//! Its `compare` mode plays two policies for one seat on the same seeds
+//! ([`compare()`]) and prints [`report::render_comparison`].
 
 mod arm;
 mod bundle;
+mod compare;
 mod env;
 mod observe;
 pub mod report;
@@ -23,6 +26,7 @@ pub mod scripts;
 
 pub use arm::{breakdown, AbilityRow, Breakdown, SimArm};
 pub use bundle::{Bundle, RunConfig, RunError, SeatConfig};
+pub use compare::{compare, CompareError, CompareSpec, Comparison, Verdict};
 pub use env::{NegElapsed, PartyMeter, SimEnv, Source};
 pub use observe::{
     AllyObs, AuraObs, BattleResObs, ChannelObs, CooldownObs, DemandObs, EmpowerObs, GroundObs,

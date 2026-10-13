@@ -1,58 +1,65 @@
 //! `portunus-run <run.ron> [--seeds N] [--first-seed S] [--threads T] [--no-breakdown]`
+//!
+//! `portunus-run compare <run.ron> --policy NAME [--baseline NAME] [--seat K]
+//! [--holdout] [--seeds N] [--first-seed S] [--threads T] [--no-breakdown]`
+//! plays seat `K` (default 0) with `NAME` against the run file's own policy
+//! (or `--baseline`) on the same seeds. `--holdout` uses the run's held-out
+//! seeds instead of its tuning seeds.
 
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use portunus_eval::{LocalRunner, Runner, SeedSet};
-use portunus_run::{report, Bundle};
+use portunus_run::{compare, report, Bundle, CompareSpec};
 
+#[derive(Default)]
 struct Args {
+    compare: bool,
     path: PathBuf,
     seeds: Option<u32>,
     first_seed: Option<u64>,
     threads: Option<NonZeroUsize>,
-    breakdown: bool,
+    no_breakdown: bool,
+    policy: Option<String>,
+    baseline: Option<String>,
+    seat: usize,
+    holdout: bool,
 }
 
 const USAGE: &str =
-    "usage: portunus-run <run.ron> [--seeds N] [--first-seed S] [--threads T] [--no-breakdown]";
+    "usage: portunus-run <run.ron> [--seeds N] [--first-seed S] [--threads T] [--no-breakdown]
+       portunus-run compare <run.ron> --policy NAME [--baseline NAME] [--seat K] [--holdout]
+                    [--seeds N] [--first-seed S] [--threads T] [--no-breakdown]";
+
+fn number<T: std::str::FromStr>(name: &str, v: String) -> Result<T, String>
+where
+    T::Err: std::fmt::Display,
+{
+    v.parse().map_err(|e| format!("{name}: {e}"))
+}
 
 fn parse() -> Result<Args, String> {
+    let mut args = Args::default();
     let mut path = None;
-    let mut args = Args {
-        path: PathBuf::new(),
-        seeds: None,
-        first_seed: None,
-        threads: None,
-        breakdown: true,
-    };
-    let mut it = std::env::args().skip(1);
+    let mut it = std::env::args().skip(1).peekable();
+    if it.peek().is_some_and(|a| a == "compare") {
+        it.next();
+        args.compare = true;
+    }
     while let Some(a) = it.next() {
         let mut value = |name: &str| it.next().ok_or_else(|| format!("{name} needs a value"));
         match a.as_str() {
-            "--seeds" => {
-                args.seeds = Some(
-                    value("--seeds")?
-                        .parse()
-                        .map_err(|e| format!("--seeds: {e}"))?,
-                )
-            }
+            "--seeds" => args.seeds = Some(number("--seeds", value("--seeds")?)?),
             "--first-seed" => {
-                args.first_seed = Some(
-                    value("--first-seed")?
-                        .parse()
-                        .map_err(|e| format!("--first-seed: {e}"))?,
-                );
+                args.first_seed = Some(number("--first-seed", value("--first-seed")?)?);
             }
-            "--threads" => {
-                args.threads = Some(
-                    value("--threads")?
-                        .parse()
-                        .map_err(|e| format!("--threads: {e}"))?,
-                );
-            }
-            "--no-breakdown" => args.breakdown = false,
+            "--threads" => args.threads = Some(number("--threads", value("--threads")?)?),
+            "--no-breakdown" => args.no_breakdown = true,
+            "--policy" if args.compare => args.policy = Some(value("--policy")?),
+            "--baseline" if args.compare => args.baseline = Some(value("--baseline")?),
+            "--seat" if args.compare => args.seat = number("--seat", value("--seat")?)?,
+            "--holdout" if args.compare => args.holdout = true,
             "-h" | "--help" => return Err(USAGE.into()),
             _ if a.starts_with('-') => return Err(format!("unknown flag {a}\n{USAGE}")),
             _ if path.is_none() => path = Some(PathBuf::from(a)),
@@ -60,6 +67,12 @@ fn parse() -> Result<Args, String> {
         }
     }
     args.path = path.ok_or(USAGE)?;
+    if args.compare && args.policy.is_none() {
+        return Err(format!("compare needs --policy\n{USAGE}"));
+    }
+    if args.holdout && args.first_seed.is_some() {
+        return Err("--holdout and --first-seed both pick the seeds".into());
+    }
     Ok(args)
 }
 
@@ -78,7 +91,11 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let defaults = bundle.seeds();
+    let defaults = if args.holdout {
+        bundle.holdout_seeds()
+    } else {
+        bundle.seeds()
+    };
     let seeds = SeedSet {
         first: args.first_seed.unwrap_or(defaults.first),
         count: args.seeds.unwrap_or(defaults.count),
@@ -86,8 +103,18 @@ fn main() -> ExitCode {
     let runner = args
         .threads
         .map_or_else(LocalRunner::available, |threads| LocalRunner { threads });
+    if args.compare {
+        run_compare(&bundle, &runner, args, seeds)
+    } else {
+        run_one(&bundle, &runner, &args, seeds)
+    }
+}
+
+fn run_one(bundle: &Bundle, runner: &LocalRunner, args: &Args, seeds: SeedSet) -> ExitCode {
     let report = runner.run(&bundle.experiment(seeds));
-    let breakdown = if args.breakdown {
+    let breakdown = if args.no_breakdown {
+        None
+    } else {
         match bundle.breakdown(seeds) {
             Ok(b) => Some(b),
             Err(e) => {
@@ -95,13 +122,39 @@ fn main() -> ExitCode {
                 None
             }
         }
-    } else {
-        None
     };
     print!("{}", report::render(&report, breakdown.as_ref()));
     if report.failures.is_empty() {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+fn run_compare(bundle: &Bundle, runner: &LocalRunner, args: Args, seeds: SeedSet) -> ExitCode {
+    let Some(seat) = bundle.config.seats.get(args.seat) else {
+        eprintln!("error: no seat {}", args.seat);
+        return ExitCode::FAILURE;
+    };
+    let spec = CompareSpec {
+        seat: args.seat,
+        baseline: args.baseline.unwrap_or_else(|| seat.policy.clone()),
+        candidate: args.policy.unwrap_or_default(),
+        seeds,
+        breakdowns: !args.no_breakdown,
+    };
+    match compare(bundle, runner, spec) {
+        Ok(c) => {
+            print!("{}", report::render_comparison(&c));
+            if c.report.failures.is_empty() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            ExitCode::FAILURE
+        }
     }
 }

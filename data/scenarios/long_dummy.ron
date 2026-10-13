@@ -1,0 +1,17 @@
+// The target dummy at ten times the health, for tuning policies: a single
+// target fight of a few minutes, so the opener doesn't dominate.
+(
+    name: "long_dummy",
+    forces_required: None,
+    pulls: [
+        (
+            name: "dummy",
+            travel_in: fixed(10000),
+            prepull: 3000,
+            timeout: 900000,
+            // +-20% per run (SimC's vary_combat_length).
+            health: jitter(base: 10.0, jitter: 0.2),
+            waves: [(mobs: [("target_dummy", 1)], engage: now)],
+        ),
+    ],
+)
