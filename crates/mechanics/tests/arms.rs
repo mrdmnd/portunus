@@ -1,17 +1,18 @@
-//! The checked-in Arms data (SimC's reference build, spec tree only)
-//! through the real mechanics and kernel.
+//! The checked-in Arms data (SimC's reference build, its spec tree alone
+//! and then with Slayer) through the real mechanics and kernel.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use portunus_core::{ActorId, AuraId, Dist, Seat, Seed, SimDuration, SimTime, SpellId};
 use portunus_engine::mechanics::{whole_points, HitKind};
+use portunus_engine::state::AuraInstance;
 use portunus_engine::trace::TraceEvent;
 use portunus_engine::{
     CastOpts, Choice, Engine, Externals, Kernel, Latency, MoveGoal, Outcome, Readiness, RunSetup,
     SeatSetup, StateView, Step, TargetSel, TraceRecord, Wait,
 };
-use portunus_gamedata::effect::Coefficient;
+use portunus_gamedata::effect::{Coefficient, ProcChance};
 use portunus_gamedata::spec::MELEE_RANGE;
 use portunus_gamedata::stats::{ResourceKind, SchoolMask};
 use portunus_gamedata::{EnemyData, GameData};
@@ -49,6 +50,32 @@ const HEROIC_MIGHT_ACC: AuraId = AuraId(1292058);
 const HEROIC_MIGHT: AuraId = AuraId(910101);
 const BLOODSURGE: AuraId = AuraId(384361);
 
+const SLAYERS_STRIKE: SpellId = SpellId(445579);
+const REAP_THE_STORM: SpellId = SpellId(446005);
+const UNHINGED_MS: SpellId = SpellId(910102);
+const EXECUTIONER: AuraId = AuraId(445584);
+const IMMINENT_DEMISE: AuraId = AuraId(445606);
+const OVERWHELMED: AuraId = AuraId(445836);
+const FIERCE_FOLLOWTHROUGH: AuraId = AuraId(458689);
+const VIOLENT_EUPHORIA: AuraId = AuraId(1270731);
+const SUDDEN_DEATH_TALENT: AuraId = AuraId(29725);
+const SLAYERS_DOMINANCE: AuraId = AuraId(444767);
+const SHOW_NO_MERCY: AuraId = AuraId(444771);
+const CULLING_CYCLONE: AuraId = AuraId(444778);
+const DEADLY_FOCUS: AuraId = AuraId(1270718);
+/// The hits Slayer's Dominance rolls on.
+const SLAYER_SOURCES: [SpellId; 9] = [
+    MORTAL_STRIKE,
+    UNHINGED_MS,
+    SLAM,
+    HEROIC_STRIKE,
+    CLEAVE,
+    OVERPOWER,
+    EXECUTE,
+    EXECUTE_MASSACRE,
+    EXECUTE_FREE,
+];
+
 /// The spec aura and the two talents that give autos rage.
 const AUTO_RAGE: [AuraId; 3] = [AuraId(137049), AuraId(279423), AuraId(262231)];
 
@@ -59,12 +86,24 @@ struct Fixture {
     spec: ScenarioSpec,
 }
 
-/// The reference build on a dummy of exactly the listed health.
+/// The reference build's spec tree on a dummy of exactly the listed
+/// health.
 fn fixture() -> Fixture {
+    fixture_with("arms.ron")
+}
+
+/// The whole reference build, Slayer and all, on a dummy that lasts.
+fn slayer() -> Fixture {
+    let mut f = fixture_with("arms_slayer.ron");
+    f.dummy_health(30_000_000);
+    f
+}
+
+fn fixture_with(loadout: &str) -> Fixture {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data");
     let data: GameData = GameDataSource::load(&RonFile::new(dir.join("game.ron"))).unwrap();
     let enemies: EnemyData = EnemyDataSource::load(&RonFile::new(dir.join("enemies.ron"))).unwrap();
-    let loadout: Loadout = read_ron(&dir.join("loadouts/arms.ron")).unwrap();
+    let loadout: Loadout = read_ron(&dir.join("loadouts").join(loadout)).unwrap();
     let template = Compiler.compile(&data, &loadout).unwrap();
     let mut spec: ScenarioSpec = read_ron(&dir.join("scenarios/target_dummy.ron")).unwrap();
     spec.pulls[0].health = Dist::Fixed(1.0);
@@ -122,6 +161,11 @@ impl Fixture {
             .unwrap();
         r.initial = rage;
         r.out_of_combat = None;
+    }
+
+    /// The talent's aura gone from the build.
+    fn without(&mut self, aura: AuraId) {
+        self.template.passive_auras.retain(|&a| a != aura);
     }
 
     fn dummy_health(&mut self, health: u64) {
@@ -844,4 +888,410 @@ fn bladestorm_strikes_seven_times_and_autos_go_on() {
         })
         .count();
     assert!(autos >= 1);
+}
+
+fn aura_instance(k: &Kernel<PartyMechanics>, holder: ActorId, aura: AuraId) -> AuraInstance {
+    *k.state()
+        .auras(holder)
+        .iter()
+        .find(|a| a.aura == aura)
+        .unwrap()
+}
+
+fn bladestorm_ready_at(k: &Kernel<PartyMechanics>) -> SimTime {
+    k.state()
+        .cooldown(me(k), BLADESTORM)
+        .and_then(|c| c.next_charge_at)
+        .unwrap()
+}
+
+#[test]
+fn slayers_strike_procs_off_the_listed_hits_with_executioner() {
+    let f = slayer();
+    let mut d = Driver::new(&f, 1);
+    assert!(d.until(first_of(CORE), |_| false).is_some());
+    let strikes = hits(&d.trace, SLAYERS_STRIKE);
+    let sources: Vec<SimTime> = SLAYER_SOURCES
+        .iter()
+        .flat_map(|&s| hits(&d.trace, s))
+        .map(|h| h.0)
+        .collect();
+    assert!(strikes.len() > 50, "{}", strikes.len());
+    // Each on a hit from the list, at least 0.5 s apart.
+    for s in &strikes {
+        assert!(sources.contains(&s.0), "{s:?}");
+    }
+    assert!(strikes
+        .windows(2)
+        .all(|w| w[1].0 - w[0].0 >= SimDuration(500)));
+    // Arms's 25%, with bad-luck protection, on a little under every hit
+    // the cooldown lets through.
+    let rate = strikes.len() as f64 / sources.len() as f64;
+    assert!((0.2..0.3).contains(&rate), "{rate}");
+    assert_eq!(gains(&d.trace, EXECUTIONER, 0), strikes.len());
+}
+
+#[test]
+fn executioner_lasts_longer_with_deadly_focus_and_stacks_apart() {
+    for (deadly_focus, lasts) in [(true, 18_000), (false, 12_000)] {
+        let mut f = slayer();
+        if !deadly_focus {
+            f.without(DEADLY_FOCUS);
+        }
+        let mut d = Driver::new(&f, 2);
+        d.in_combat();
+        let two = |k: &Kernel<PartyMechanics>| buff(k, EXECUTIONER) >= 2;
+        assert!(d.until(first_of(CORE), two).is_none());
+        let strikes = hits(&d.trace, SLAYERS_STRIKE);
+        let ex = aura_instance(&d.k, me(&d.k), EXECUTIONER);
+        assert_eq!(ex.expires, Some(strikes[1].0 + SimDuration(lasts)));
+        // The first stack keeps its own timer.
+        assert_eq!(
+            ex.next_stack_expires,
+            Some(strikes[0].0 + SimDuration(lasts))
+        );
+    }
+}
+
+#[test]
+fn slayer_talents_land_on_their_spells() {
+    let core = fixture();
+    let mc = core.mechanics();
+    let mut dc = Driver::new(&core, 0);
+    dc.in_combat();
+    let f = slayer();
+    let m = f.mechanics();
+    let mut d = Driver::new(&f, 0);
+    d.in_combat();
+    // Each spell's multiplier over the spec tree's, Charge's ratio taken
+    // out.
+    let over = |s: SpellId| {
+        let mine = per_ap(&m, &d.k, s, HitKind::Direct) / per_ap(&m, &d.k, CHARGE, HitKind::Direct);
+        let theirs =
+            per_ap(&mc, &dc.k, s, HitKind::Direct) / per_ap(&mc, &dc.k, CHARGE, HitKind::Direct);
+        mine / theirs
+    };
+    // Slayer's Malice.
+    for s in [OVERPOWER, EXECUTE_MASSACRE, EXECUTE_FREE] {
+        assert!(close(over(s), 1.15), "{s:?}");
+    }
+    // Unrelenting Onslaught.
+    assert!(close(over(BLADESTORM_HIT), 1.20));
+    assert!(close(over(MORTAL_STRIKE), 1.0));
+    // Unhinged's Mortal Strike is Mortal Strike's twin.
+    assert_eq!(
+        f.data.spells[&UNHINGED_MS].effects,
+        f.data.spells[&MORTAL_STRIKE].effects
+    );
+    assert!(close(
+        per_ap(&m, &d.k, UNHINGED_MS, HitKind::Direct),
+        per_ap(&m, &d.k, MORTAL_STRIKE, HitKind::Direct)
+    ));
+    assert_eq!(crit(&m, &d.k, UNHINGED_MS), crit(&m, &d.k, MORTAL_STRIKE));
+}
+
+#[test]
+fn executioner_sharpens_execute_and_show_no_mercy_its_crits() {
+    for show_no_mercy in [true, false] {
+        let mut f = slayer();
+        if !show_no_mercy {
+            f.without(SHOW_NO_MERCY);
+        }
+        let m = f.mechanics();
+        let mut d = Driver::new(&f, 3);
+        d.in_combat();
+        let execute = |k: &Kernel<PartyMechanics>| {
+            let (c, mult) = crit(&m, k, EXECUTE_MASSACRE);
+            let (cc, cmult) = crit(&m, k, CHARGE);
+            (
+                per_ap(&m, k, EXECUTE_MASSACRE, HitKind::Direct)
+                    / per_ap(&m, k, CHARGE, HitKind::Direct),
+                c - cc,
+                mult / 2.0 - cmult / 2.0,
+            )
+        };
+        let (base, base_c, base_m) = execute(&d.k);
+        let three = |k: &Kernel<PartyMechanics>| buff(k, EXECUTIONER) >= 3;
+        let order: &[SpellId] = &[MORTAL_STRIKE, OVERPOWER, SLAM];
+        assert!(d.until(first_of(order), three).is_none());
+        let n = f64::from(buff(&d.k, EXECUTIONER));
+        let (now, c, mult) = execute(&d.k);
+        assert!(close(now / base, 1.0 + 0.03 * n));
+        let more = if show_no_mercy { 0.03 * n } else { 0.0 };
+        assert!(close(c - base_c, more), "{c} {base_c}");
+        assert!(close(mult - base_m, more), "{mult} {base_m}");
+    }
+}
+
+#[test]
+fn imminent_demise_turns_three_slayers_strikes_into_sudden_death() {
+    let mut f = slayer();
+    // Only Imminent Demise's Sudden Death.
+    f.data
+        .auras
+        .get_mut(&SUDDEN_DEATH_TALENT)
+        .unwrap()
+        .listeners
+        .clear();
+    let mut d = Driver::new(&f, 4);
+    d.in_combat();
+    let start = d.k.state().now();
+    let order: &[SpellId] = &[MORTAL_STRIKE, OVERPOWER, SLAM];
+    let later = |k: &Kernel<PartyMechanics>| k.state().now() >= start + SimDuration(90_000);
+    assert!(d.until(first_of(order), later).is_none());
+    let strikes = hits(&d.trace, SLAYERS_STRIKE).len();
+    assert!(strikes >= 6, "{strikes}");
+    assert_eq!(gains(&d.trace, SUDDEN_DEATH, 0), strikes / 3);
+}
+
+/// Sudden Death up, and Execute ready, on the Slayer build.
+fn until_sudden_death(d: &mut Driver) {
+    let proc = |k: &Kernel<PartyMechanics>| buff(k, SUDDEN_DEATH) > 0 && ready(k, EXECUTE_MASSACRE);
+    let order: &[SpellId] = &[MORTAL_STRIKE, OVERPOWER, SLAM];
+    assert!(d.until(first_of(order), proc).is_none());
+}
+
+#[test]
+fn sudden_death_executes_reap_the_storm_and_cut_bladestorm() {
+    let f = slayer();
+    let mut seen = 0;
+    for seed in 0..8 {
+        let mut d = Driver::new(&f, seed);
+        d.in_combat();
+        d.press(BLADESTORM);
+        let after = d.k.state().now() + SimDuration(7000);
+        assert!(d.until(idle, |k| k.state().now() >= after).is_none());
+        until_sudden_death(&mut d);
+        let executioner = buff(&d.k, EXECUTIONER);
+        let overwhelmed = debuff(&d.k, OVERWHELMED);
+        let demise = buff(&d.k, IMMINENT_DEMISE);
+        let ready_at = bladestorm_ready_at(&d.k);
+        let mark = d.trace.len();
+        d.press(EXECUTE_MASSACRE);
+        let window = &d.trace[mark..];
+        assert_eq!(hits(window, EXECUTE_FREE).len(), 1);
+        assert_eq!(hits(window, REAP_THE_STORM).len(), 1);
+        assert_eq!(buff(&d.k, IMMINENT_DEMISE), demise + 1);
+        // A Slayer's Strike off the Execute would add a stack first.
+        if !hits(window, SLAYERS_STRIKE).is_empty() || executioner == 0 {
+            continue;
+        }
+        seen += 1;
+        let n = u32::from(executioner);
+        assert_eq!(
+            ready_at - bladestorm_ready_at(&d.k),
+            SimDuration(5000 * n),
+            "{seed}"
+        );
+        // A stack per Executioner stack, and one from Reap the Storm.
+        assert_eq!(
+            debuff(&d.k, OVERWHELMED),
+            (overwhelmed + executioner + 1).min(5)
+        );
+    }
+    assert!(seen >= 2, "{seen}");
+}
+
+#[test]
+fn only_sudden_death_executes_reap_the_storm() {
+    let mut f = slayer();
+    f.dummy_health(20_000_000);
+    let mut d = Driver::new(&f, 5);
+    assert!(d.until(first_of(CORE), |_| false).is_some());
+    let free = hits(&d.trace, EXECUTE_FREE).len();
+    assert!(free > 10 && !hits(&d.trace, EXECUTE_MASSACRE).is_empty());
+    assert_eq!(hits(&d.trace, REAP_THE_STORM).len(), free);
+}
+
+#[test]
+fn imminent_demise_fits_more_bladestorm_into_the_same_time() {
+    let f = slayer();
+    let m = f.mechanics();
+    let mut d = Driver::new(&f, 6);
+    d.in_combat();
+    for _ in 0..2 {
+        until_sudden_death(&mut d);
+        d.press(EXECUTE_MASSACRE);
+    }
+    assert!(d.until(idle, |k| ready(k, BLADESTORM)).is_none());
+    let stacks = buff(&d.k, IMMINENT_DEMISE);
+    assert!(stacks >= 2, "{stacks}");
+    let haste = m.math().haste_mult(d.k.state(), me(&d.k));
+    let mark = d.trace.len();
+    let t = d.press(BLADESTORM);
+    let done = |k: &Kernel<PartyMechanics>| k.state().now() >= t + SimDuration(7000);
+    assert!(d.until(idle, done).is_none());
+    let window = &d.trace[mark..];
+    let strikes = hits(window, BLADESTORM_HIT);
+    let ticks = 7 + usize::from(stacks);
+    assert_eq!(strikes.len(), ticks);
+    let span = f64::from((strikes[ticks - 1].0 - t).millis());
+    assert!((span - 6000.0 / haste).abs() <= 2.0, "{span} {haste}");
+    assert_eq!(buff(&d.k, IMMINENT_DEMISE), 0);
+    // Unhinged's Mortal Strike on every other tick after the first.
+    let unhinged: Vec<SimTime> = hits(window, UNHINGED_MS).iter().map(|h| h.0).collect();
+    let odd: Vec<SimTime> = strikes.iter().skip(1).step_by(2).map(|h| h.0).collect();
+    assert_eq!(unhinged, odd);
+}
+
+#[test]
+fn bladestorm_overwhelms_and_leaves_violent_euphoria() {
+    let f = slayer();
+    let m = f.mechanics();
+    let mut d = Driver::new(&f, 7);
+    d.in_combat();
+    let haste = m.math().haste_mult(d.k.state(), me(&d.k));
+    let taken = |k: &Kernel<PartyMechanics>, spell: Option<SpellId>| {
+        let hit = IncomingHit {
+            attacker: Some(me(k)),
+            spell,
+            ..IncomingHit::direct(SchoolMask::PHYSICAL)
+        };
+        m.math().mitigate(k.state(), boss(k), 1000.0, hit)
+    };
+    let before = taken(&d.k, Some(MORTAL_STRIKE)) / taken(&d.k, None);
+    let mark = d.trace.len();
+    let t = d.press(BLADESTORM);
+    let done = |k: &Kernel<PartyMechanics>| buff(k, VIOLENT_EUPHORIA) > 0;
+    assert!(d.until(idle, done).is_none());
+    let window = &d.trace[mark..];
+    assert_eq!(hits(window, UNHINGED_MS).len(), 3);
+    assert_eq!(debuff(&d.k, OVERWHELMED), 5);
+    let after = taken(&d.k, Some(MORTAL_STRIKE)) / taken(&d.k, None);
+    assert!(close(after / before, 1.05));
+    assert!(close(
+        m.math().haste_mult(d.k.state(), me(&d.k)) / haste,
+        1.15
+    ));
+    let euphoria = aura_instance(&d.k, me(&d.k), VIOLENT_EUPHORIA);
+    let last = hits(&d.trace, BLADESTORM_HIT).last().unwrap().0;
+    assert!(last - t < SimDuration(6000));
+    assert_eq!(euphoria.expires, Some(last + SimDuration(8000)));
+}
+
+#[test]
+fn culling_cyclone_sharpens_bladestorm_against_one_target() {
+    let strikes = |cyclone: bool| {
+        let mut f = slayer();
+        if !cyclone {
+            f.without(CULLING_CYCLONE);
+        }
+        let mut d = Driver::new(&f, 8);
+        d.in_combat();
+        let t = d.press(BLADESTORM);
+        let done = |k: &Kernel<PartyMechanics>| k.state().now() >= t + SimDuration(7000);
+        assert!(d.until(idle, done).is_none());
+        hits(&d.trace, BLADESTORM_HIT)
+    };
+    let (with, without) = (strikes(true), strikes(false));
+    assert_eq!(with.len(), without.len());
+    for (a, b) in with.iter().zip(&without) {
+        assert_eq!((a.0, a.1), (b.0, b.1));
+        assert!((a.2 as f64 / b.2 as f64 - 1.2).abs() < 1e-4, "{a:?} {b:?}");
+    }
+}
+
+#[test]
+fn fierce_followthrough_follows_a_mortal_strike_crit() {
+    let order: &[SpellId] = &[MORTAL_STRIKE, OVERPOWER, SLAM];
+    let up =
+        |k: &Kernel<PartyMechanics>| buff(k, FIERCE_FOLLOWTHROUGH) > 0 && ready(k, MORTAL_STRIKE);
+    let mut misses = 0;
+    for seed in 0..6 {
+        let f = slayer();
+        let m = f.mechanics();
+        let mut d = Driver::new(&f, seed);
+        d.in_combat();
+        assert!(d.until(first_of(order), up).is_none());
+        // It came with a Mortal Strike crit.
+        let granted = applied(&d.trace, FIERCE_FOLLOWTHROUGH);
+        let crits: Vec<SimTime> = hits(&d.trace, MORTAL_STRIKE)
+            .iter()
+            .filter(|h| h.1)
+            .map(|h| h.0)
+            .collect();
+        assert_eq!(granted, crits[..granted.len()].to_vec());
+        // 20% on the next, and gone with it unless that crits too.
+        let mut plain = slayer();
+        plain
+            .data
+            .auras
+            .get_mut(&FIERCE_FOLLOWTHROUGH)
+            .unwrap()
+            .modifiers
+            .clear();
+        let pm = plain.mechanics();
+        let mut p = Driver::new(&plain, seed);
+        p.in_combat();
+        assert!(p.until(first_of(order), up).is_none());
+        let ms = |m: &PartyMechanics, k: &Kernel<PartyMechanics>| {
+            per_ap(m, k, MORTAL_STRIKE, HitKind::Direct)
+        };
+        assert!(close(ms(&m, &d.k) / ms(&pm, &p.k), 1.2));
+        let unhinged = |m: &PartyMechanics, k: &Kernel<PartyMechanics>| {
+            per_ap(m, k, UNHINGED_MS, HitKind::Direct)
+        };
+        assert!(close(unhinged(&m, &d.k) / unhinged(&pm, &p.k), 1.2));
+        let mark = d.trace.len();
+        d.press(MORTAL_STRIKE);
+        let crit = hits(&d.trace[mark..], MORTAL_STRIKE)[0].1;
+        assert_eq!(buff(&d.k, FIERCE_FOLLOWTHROUGH), u8::from(crit));
+        misses += usize::from(!crit);
+    }
+    assert!(misses >= 2, "{misses}");
+}
+
+#[test]
+fn unhinged_counts_afresh_each_bladestorm() {
+    const ORDER: &[SpellId] = &[
+        CHARGE,
+        BLADESTORM,
+        COLOSSUS_SMASH,
+        EXECUTE_MASSACRE,
+        MORTAL_STRIKE,
+        OVERPOWER,
+        SLAM,
+    ];
+    let f = slayer();
+    let mut d = Driver::new(&f, 9);
+    let later = |k: &Kernel<PartyMechanics>| k.state().now() >= SimTime(300_000);
+    assert!(d.until(first_of(ORDER), later).is_none());
+    let strikes = hits(&d.trace, BLADESTORM_HIT);
+    let mut storms: Vec<Vec<SimTime>> = Vec::new();
+    for s in strikes {
+        match storms.last_mut() {
+            Some(storm) if s.0 - *storm.last().unwrap() < SimDuration(2000) => storm.push(s.0),
+            _ => storms.push(vec![s.0]),
+        }
+    }
+    assert!(storms.len() >= 4, "{}", storms.len());
+    let unhinged: Vec<SimTime> = hits(&d.trace, UNHINGED_MS).iter().map(|h| h.0).collect();
+    let odd: Vec<SimTime> = storms
+        .iter()
+        .flat_map(|storm| storm.iter().skip(1).step_by(2).copied())
+        .collect();
+    assert_eq!(unhinged, odd);
+}
+
+#[test]
+fn cleave_rolls_slayers_strike_on_each_target_half_a_second_apart() {
+    let mut f = slayer();
+    f.spec.pulls[0].waves[0].mobs[0].1 = 3;
+    // Every roll lands, so only the cooldown holds them back.
+    for l in &mut f.data.auras.get_mut(&SLAYERS_DOMINANCE).unwrap().listeners {
+        l.chance = ProcChance::Flat(1.0);
+    }
+    let mut d = Driver::new(&f, 10);
+    d.in_combat();
+    let start = d.k.state().now();
+    let later = |k: &Kernel<PartyMechanics>| k.state().now() >= start + SimDuration(120_000);
+    assert!(d.until(first_of(&[CLEAVE]), later).is_none());
+    let cleaves = hits(&d.trace, CLEAVE);
+    let strikes = hits(&d.trace, SLAYERS_STRIKE);
+    // Three hits a Cleave, one Slayer's Strike.
+    assert!(cleaves.len() > 30);
+    assert_eq!(strikes.len() * 3, cleaves.len());
+    assert!(strikes
+        .windows(2)
+        .all(|w| w[1].0 - w[0].0 >= SimDuration(500)));
 }

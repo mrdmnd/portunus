@@ -16,11 +16,11 @@
 // takes its mechanics from SimC and its percentages from the 12.0 dump; its
 // coefficients are the dump's scaled by this file's Bolt (1.15 / 1.7).
 //
-// Arms (12.1, spec tree only; Slayer and Colossus aren't here yet) takes
+// Arms (12.1, the spec tree and Slayer; Colossus isn't here yet) takes
 // its mechanics from SimC's `sc_warrior.cpp` and its attack power
 // coefficients and percentages straight from the dump, unscaled. The
 // class tree isn't modelled: the reference build's damage talents in it
-// are baseline auras of the spec.
+// are baseline auras of the spec. Ids from 910101 up are made up.
 (
     build: (version: "placeholder", build: 0),
     specs: {
@@ -814,8 +814,8 @@
         ),
         // Arms Warrior (12.1). Coefficients are the dump's attack power
         // coefficients, UNCALIBRATED like the rest of this file.
-        // Executioner's Precision goes once the strike has landed (SimC's
-        // `mortal_strike_t::execute`).
+        // Executioner's Precision and Fierce Followthrough go once the
+        // strike has landed (SimC's `mortal_strike_t::execute`).
         12294: (
             id: 12294,
             name: "Mortal Strike",
@@ -830,6 +830,7 @@
             effects: [
                 damage(amount: attack_power(5.20121), school: 1, target: target),
                 remove_aura(aura: 386633, target: caster),
+                remove_aura(aura: 458689, target: caster),
             ],
         ),
         7384: (
@@ -970,20 +971,39 @@
         // SimC's Bladestorm is a 6 s dot with a tick as it starts, each tick
         // a main-hand strike (50622) on every enemy around; autos keep going
         // (`interrupt_auto_attack = false`). Arms gets no rage from it.
+        // Unhinged's Mortal Strike comes on SimC's odd ticks (the 1st, 3rd,
+        // 5th... after the one as it starts), before that tick's strike: the
+        // made-up 910104 marks the even ones. As it ends, Violent Euphoria
+        // and Imminent Demise's stacks go (SimC's `last_tick`). Unrelenting
+        // Onslaught's Bladestorm (446035) is the same for Arms but for its
+        // 20%, which is on the strike.
         227847: (
             id: 227847,
             name: "Bladestorm",
             school: 1,
-            cast: channel(duration: 6000, ticks: 6, hasted: true, swings: true, tick_zero: true),
+            cast: channel(
+                duration: 6000,
+                ticks: 6,
+                hasted: true,
+                swings: true,
+                tick_zero: true,
+                on_end: [
+                    if(when: caster_has_aura(1270717), then: [apply_aura(aura: 1270731, target: caster)]),
+                    remove_aura(aura: 445606, target: caster),
+                ],
+            ),
             gcd: Some((base: 1500, hasted: true, floor: 750)),
             cooldown: Some((duration: 90000, charges: 1, hasted: false, category: Some(2270))),
             targeting: enemy,
             hostile: true,
             range: Some(8.0),
             effects: [
+                if(when: caster_has_aura(386628), then: [if(when: target_has_aura(aura: 910104, from_self: true), then: [remove_aura(aura: 910104, target: target), trigger_spell(spell: 910102, target: target)], otherwise: [apply_aura(aura: 910104, target: target)])]),
                 trigger_spell(spell: 50622, target: target),
             ],
         ),
+        // Culling Cyclone: 20% more, split across every enemy in the fight
+        // (SimC's `target_non_sleeping_list`).
         50622: (
             id: 50622,
             name: "Bladestorm",
@@ -993,7 +1013,11 @@
             targeting: enemy,
             hostile: true,
             effects: [
-                damage(amount: attack_power(2.71635), school: 1, target: all_enemies, aoe: Some((max_targets: None, sqrt_cap: Some(8), secondary: 1.0))),
+                if(
+                    when: caster_has_aura(444778),
+                    then: [damage(amount: attack_power(2.71635), school: 1, target: all_enemies, aoe: Some((max_targets: None, sqrt_cap: Some(8), secondary: 1.0)), per_count: Some((count: enemies, pct: 20.0, form: inverse)))],
+                    otherwise: [damage(amount: attack_power(2.71635), school: 1, target: all_enemies, aoe: Some((max_targets: None, sqrt_cap: Some(8), secondary: 1.0)))],
+                ),
             ],
         ),
         772: (
@@ -1114,6 +1138,68 @@
             effects: [
                 resource((kind: rage, amount: 20.0)),
                 damage(amount: attack_power(0.21), school: 1, target: target),
+            ],
+        ),
+        // Slayer (12.1). Slayer's Strike's damage, triggered by Slayer's
+        // Dominance, which grants its Executioner stack itself.
+        445579: (
+            id: 445579,
+            name: "Slayer's Strike",
+            school: 1,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            effects: [
+                damage(amount: attack_power(8.4042), school: 1, target: target),
+            ],
+        ),
+        // Made up: Unhinged's Mortal Strike, SimC's background
+        // `mortal_strike_bladestorm_unhinged` at 100% (386628's second
+        // effect). Free, and as a background action it rolls no Sudden
+        // Death, Frothing Berserker, or Master of Warfare proc; it still
+        // consumes Executioner's Precision and Fierce Followthrough, and
+        // whatever reads Mortal Strike reads it too.
+        910102: (
+            id: 910102,
+            name: "Mortal Strike (Unhinged)",
+            school: 1,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            effects: [
+                damage(amount: attack_power(5.20121), school: 1, target: target),
+                remove_aura(aura: 386633, target: caster),
+                remove_aura(aura: 458689, target: caster),
+            ],
+        ),
+        // Fierce Followthrough's buff, triggered once the critting Mortal
+        // Strike has resolved (SimC's `make_event`), so that strike's
+        // removal doesn't take it.
+        458689: (
+            id: 458689,
+            name: "Fierce Followthrough",
+            school: 1,
+            cast: instant,
+            gcd: None,
+            targeting: self_only,
+            hostile: false,
+            effects: [
+                apply_aura(aura: 458689, target: caster),
+            ],
+        ),
+        // Strikes every enemy within 8 yards, past 8 of them at sqrt(8 / n).
+        446005: (
+            id: 446005,
+            name: "Reap the Storm",
+            school: 1,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            effects: [
+                damage(amount: attack_power(7.71909), school: 1, target: all_enemies, aoe: Some((max_targets: None, sqrt_cap: Some(8), secondary: 1.0))),
             ],
         ),
     },
@@ -2967,11 +3053,13 @@
             modifiers: [
                 (scope: spell(845), kind: damage_done_pct, value: 5.0, per_stack: true),
                 (scope: spell(12294), kind: damage_done_pct, value: 5.0, per_stack: true),
+                (scope: spell(910102), kind: damage_done_pct, value: 5.0, per_stack: true),
                 (scope: spell(163201), kind: damage_done_pct, value: 5.0, per_stack: true),
                 (scope: spell(281000), kind: damage_done_pct, value: 5.0, per_stack: true),
                 (scope: spell(260798), kind: damage_done_pct, value: 5.0, per_stack: true),
                 (scope: spell(845), kind: crit_damage_pct, value: 5.0, per_stack: true),
                 (scope: spell(12294), kind: crit_damage_pct, value: 5.0, per_stack: true),
+                (scope: spell(910102), kind: crit_damage_pct, value: 5.0, per_stack: true),
                 (scope: spell(163201), kind: crit_damage_pct, value: 5.0, per_stack: true),
                 (scope: spell(281000), kind: crit_damage_pct, value: 5.0, per_stack: true),
                 (scope: spell(260798), kind: crit_damage_pct, value: 5.0, per_stack: true),
@@ -3063,6 +3151,12 @@
                     condition: Some(target_hp_below(0.35)),
                     effects: [apply_aura(aura: 388539, target: target)],
                 ),
+                (
+                    on: damage_dealt(spell: Some(910102), school: None, crit_only: false),
+                    chance: always,
+                    condition: Some(target_hp_below(0.35)),
+                    effects: [apply_aura(aura: 388539, target: target)],
+                ),
             ],
         ),
         386634: (
@@ -3097,6 +3191,7 @@
             max_stacks: 2,
             modifiers: [
                 (scope: spell(12294), kind: damage_done_pct, value: 35.0, per_stack: true),
+                (scope: spell(910102), kind: damage_done_pct, value: 35.0, per_stack: true),
             ],
         ),
         // Mortal Strike's hit: 50% for a Fatal Mark. Execute's hit sets the
@@ -3111,6 +3206,11 @@
             listeners: [
                 (
                     on: damage_dealt(spell: Some(12294), school: None, crit_only: false),
+                    chance: flat(0.5),
+                    effects: [apply_aura(aura: 383704, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(910102), school: None, crit_only: false),
                     chance: flat(0.5),
                     effects: [apply_aura(aura: 383704, target: target)],
                 ),
@@ -3148,6 +3248,11 @@
             listeners: [
                 (
                     on: damage_dealt(spell: Some(12294), school: None, crit_only: true),
+                    chance: always,
+                    effects: [trigger_spell(spell: 262115, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(910102), school: None, crit_only: true),
                     chance: always,
                     effects: [trigger_spell(spell: 262115, target: target)],
                 ),
@@ -3268,9 +3373,11 @@
             modifiers: [
                 (scope: all, kind: armor_pen_pct, value: 3.0, per_stack: true),
                 (scope: spell(12294), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(1269306))),
+                (scope: spell(910102), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(1269306))),
                 (scope: spell(845), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(1269306))),
                 (scope: spell(7384), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(1269306))),
                 (scope: spell(12294), kind: crit_damage_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(1269306))),
+                (scope: spell(910102), kind: crit_damage_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(1269306))),
                 (scope: spell(845), kind: crit_damage_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(1269306))),
                 (scope: spell(7384), kind: crit_damage_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(1269306))),
             ],
@@ -3292,6 +3399,311 @@
             modifiers: [
                 (scope: all, kind: damage_done_pct, value: 2.3076923, per_stack: true, condition: Some(target_has_aura(aura: 208086, from_self: true))),
             ],
+        ),
+        // Slayer (12.1), from SimC's `sc_warrior.cpp` and the 12.1 dump.
+        // Slayer's Dominance: hits on the primary target (on every target, for
+        // Cleave) by Mortal Strike, Slam and Heroic Strike, Overpower, and
+        // Execute's hit roll SimC's `prd::find_constant(0.25)` (Arms reads the
+        // second effect in 12.1), at most once each 0.5 s, for a Slayer's
+        // Strike. As in SimC's `slayers_strike_t::execute`, each grants a stack
+        // of Executioner (18 s with Deadly Focus) and counts toward Imminent
+        // Demise's Sudden Death. The strike's damage lands as its own event,
+        // just after the hit.
+        444767: (
+            id: 444767,
+            name: "Slayer's Dominance",
+            duration: None,
+            listeners: [
+                (
+                    on: damage_dealt(spell: Some(12294), school: None, crit_only: false),
+                    chance: prd(chance: 0.25),
+                    internal_cooldown: Some(500),
+                    condition: Some(target_is_current),
+                    effects: [trigger_spell(spell: 445579, target: target), if(when: caster_has_aura(1270718), then: [apply_aura(aura: 445584, target: caster, duration: Some(18000))], otherwise: [apply_aura(aura: 445584, target: caster)]), if(when: caster_has_aura(444769), then: [add_aura_value(aura: 910103, target: caster, amount: flat(1.0))])],
+                ),
+                (
+                    on: damage_dealt(spell: Some(910102), school: None, crit_only: false),
+                    chance: prd(chance: 0.25),
+                    shared_with: Some(0),
+                    condition: Some(target_is_current),
+                    effects: [trigger_spell(spell: 445579, target: target), if(when: caster_has_aura(1270718), then: [apply_aura(aura: 445584, target: caster, duration: Some(18000))], otherwise: [apply_aura(aura: 445584, target: caster)]), if(when: caster_has_aura(444769), then: [add_aura_value(aura: 910103, target: caster, amount: flat(1.0))])],
+                ),
+                (
+                    on: damage_dealt(spell: Some(1464), school: None, crit_only: false),
+                    chance: prd(chance: 0.25),
+                    shared_with: Some(0),
+                    condition: Some(target_is_current),
+                    effects: [trigger_spell(spell: 445579, target: target), if(when: caster_has_aura(1270718), then: [apply_aura(aura: 445584, target: caster, duration: Some(18000))], otherwise: [apply_aura(aura: 445584, target: caster)]), if(when: caster_has_aura(444769), then: [add_aura_value(aura: 910103, target: caster, amount: flat(1.0))])],
+                ),
+                (
+                    on: damage_dealt(spell: Some(1269383), school: None, crit_only: false),
+                    chance: prd(chance: 0.25),
+                    shared_with: Some(0),
+                    condition: Some(target_is_current),
+                    effects: [trigger_spell(spell: 445579, target: target), if(when: caster_has_aura(1270718), then: [apply_aura(aura: 445584, target: caster, duration: Some(18000))], otherwise: [apply_aura(aura: 445584, target: caster)]), if(when: caster_has_aura(444769), then: [add_aura_value(aura: 910103, target: caster, amount: flat(1.0))])],
+                ),
+                (
+                    on: damage_dealt(spell: Some(845), school: None, crit_only: false),
+                    chance: prd(chance: 0.25),
+                    shared_with: Some(0),
+                    effects: [trigger_spell(spell: 445579, target: target), if(when: caster_has_aura(1270718), then: [apply_aura(aura: 445584, target: caster, duration: Some(18000))], otherwise: [apply_aura(aura: 445584, target: caster)]), if(when: caster_has_aura(444769), then: [add_aura_value(aura: 910103, target: caster, amount: flat(1.0))])],
+                ),
+                (
+                    on: damage_dealt(spell: Some(7384), school: None, crit_only: false),
+                    chance: prd(chance: 0.25),
+                    shared_with: Some(0),
+                    condition: Some(target_is_current),
+                    effects: [trigger_spell(spell: 445579, target: target), if(when: caster_has_aura(1270718), then: [apply_aura(aura: 445584, target: caster, duration: Some(18000))], otherwise: [apply_aura(aura: 445584, target: caster)]), if(when: caster_has_aura(444769), then: [add_aura_value(aura: 910103, target: caster, amount: flat(1.0))])],
+                ),
+                (
+                    on: damage_dealt(spell: Some(163201), school: None, crit_only: false),
+                    chance: prd(chance: 0.25),
+                    shared_with: Some(0),
+                    condition: Some(target_is_current),
+                    effects: [trigger_spell(spell: 445579, target: target), if(when: caster_has_aura(1270718), then: [apply_aura(aura: 445584, target: caster, duration: Some(18000))], otherwise: [apply_aura(aura: 445584, target: caster)]), if(when: caster_has_aura(444769), then: [add_aura_value(aura: 910103, target: caster, amount: flat(1.0))])],
+                ),
+                (
+                    on: damage_dealt(spell: Some(281000), school: None, crit_only: false),
+                    chance: prd(chance: 0.25),
+                    shared_with: Some(0),
+                    condition: Some(target_is_current),
+                    effects: [trigger_spell(spell: 445579, target: target), if(when: caster_has_aura(1270718), then: [apply_aura(aura: 445584, target: caster, duration: Some(18000))], otherwise: [apply_aura(aura: 445584, target: caster)]), if(when: caster_has_aura(444769), then: [add_aura_value(aura: 910103, target: caster, amount: flat(1.0))])],
+                ),
+                (
+                    on: damage_dealt(spell: Some(260798), school: None, crit_only: false),
+                    chance: prd(chance: 0.25),
+                    shared_with: Some(0),
+                    condition: Some(target_is_current),
+                    effects: [trigger_spell(spell: 445579, target: target), if(when: caster_has_aura(1270718), then: [apply_aura(aura: 445584, target: caster, duration: Some(18000))], otherwise: [apply_aura(aura: 445584, target: caster)]), if(when: caster_has_aura(444769), then: [add_aura_value(aura: 910103, target: caster, amount: flat(1.0))])],
+                ),
+            ],
+        ),
+        // Each stack lasts on its own (SimC's `ASYNCHRONOUS`). With Show No
+        // Mercy each also gives Execute 3% critical strike chance and damage.
+        445584: (
+            id: 445584,
+            name: "Executioner",
+            duration: Some(12000),
+            max_stacks: 5,
+            refresh: ironfur,
+            modifiers: [
+                (scope: spell(163201), kind: damage_done_pct, value: 3.0, per_stack: true),
+                (scope: spell(281000), kind: damage_done_pct, value: 3.0, per_stack: true),
+                (scope: spell(260798), kind: damage_done_pct, value: 3.0, per_stack: true),
+                (scope: spell(163201), kind: crit_chance_add, value: 3.0, per_stack: true, condition: Some(caster_has_aura(444771))),
+                (scope: spell(281000), kind: crit_chance_add, value: 3.0, per_stack: true, condition: Some(caster_has_aura(444771))),
+                (scope: spell(260798), kind: crit_chance_add, value: 3.0, per_stack: true, condition: Some(caster_has_aura(444771))),
+                (scope: spell(163201), kind: crit_damage_pct, value: 3.0, per_stack: true, condition: Some(caster_has_aura(444771))),
+                (scope: spell(281000), kind: crit_damage_pct, value: 3.0, per_stack: true, condition: Some(caster_has_aura(444771))),
+                (scope: spell(260798), kind: crit_damage_pct, value: 3.0, per_stack: true, condition: Some(caster_has_aura(444771))),
+            ],
+        ),
+        // Read by Executioner's stacks.
+        444771: (
+            id: 444771,
+            name: "Show No Mercy",
+            duration: None,
+        ),
+        // Read as Executioner goes on.
+        1270718: (
+            id: 1270718,
+            name: "Deadly Focus",
+            duration: None,
+        ),
+        // Spending Sudden Death readies Bladestorm to strike once more, up to
+        // three times. Every third Slayer's Strike grants a Sudden Death
+        // through the made-up counter 910103 (SimC's `imminent_demise_tracker`).
+        444769: (
+            id: 444769,
+            name: "Imminent Demise",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(260798), school: None),
+                    chance: always,
+                    effects: [apply_aura(aura: 445606, target: caster)],
+                ),
+            ],
+        ),
+        445606: (
+            id: 445606,
+            name: "Imminent Demise",
+            duration: Some(60000),
+            max_stacks: 3,
+            modifiers: [
+                (scope: spell(227847), kind: channel_ticks_add, value: 1.0, per_stack: true),
+            ],
+        ),
+        910103: (
+            id: 910103,
+            name: "Imminent Demise",
+            duration: None,
+            value: Some((kind: counter, initial: None, cap: None, threshold: Some(flat(3.0)), on_threshold: [apply_aura(aura: 52437, target: target)])),
+        ),
+        // Bladestorm's strikes, and Reap the Storm's, leave a stack of
+        // Overwhelmed on what they hit, after the hit.
+        444772: (
+            id: 444772,
+            name: "Overwhelming Blades",
+            duration: None,
+            listeners: [
+                (
+                    on: damage_dealt(spell: Some(50622), school: None, crit_only: false),
+                    chance: always,
+                    effects: [apply_aura(aura: 445836, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(446005), school: None, crit_only: false),
+                    chance: always,
+                    effects: [apply_aura(aura: 445836, target: target)],
+                ),
+            ],
+        ),
+        // 1% a stack more from the warrior's attacks (the dump's list, as this
+        // file names them: Execute's hit is each Execute, Charge's is Charge).
+        445836: (
+            id: 445836,
+            name: "Overwhelmed",
+            duration: Some(20000),
+            max_stacks: 5,
+            modifiers: [
+                (scope: spell(772), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(845), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(1464), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(7384), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(12294), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(910102), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(50622), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(107570), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(100), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(167105), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(163201), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(281000), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(260798), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(262115), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(383706), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(384110), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(388539), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(445579), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(446005), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+                (scope: spell(1269383), kind: source_damage_taken_pct, value: 1.0, per_stack: true),
+            ],
+        ),
+        // Bladestorm's 20% is on its strike (446035 is otherwise 227847 for
+        // Arms). Spending Sudden Death takes 5 s off Bladestorm and puts a
+        // stack of Overwhelmed on the target per stack of Executioner. Storm
+        // Bolt while Bladestorming isn't modelled.
+        444780: (
+            id: 444780,
+            name: "Unrelenting Onslaught",
+            duration: None,
+            modifiers: [
+                (scope: spell(50622), kind: damage_done_pct, value: 20.0),
+            ],
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(260798), school: None),
+                    chance: always,
+                    effects: [if(when: caster_stacks_at_least(aura: 445584, stacks: 1), then: [adjust_cooldown(spell: 227847, change: reduce(5000)), apply_aura(aura: 445836, target: target)]), if(when: caster_stacks_at_least(aura: 445584, stacks: 2), then: [adjust_cooldown(spell: 227847, change: reduce(5000)), apply_aura(aura: 445836, target: target)]), if(when: caster_stacks_at_least(aura: 445584, stacks: 3), then: [adjust_cooldown(spell: 227847, change: reduce(5000)), apply_aura(aura: 445836, target: target)]), if(when: caster_stacks_at_least(aura: 445584, stacks: 4), then: [adjust_cooldown(spell: 227847, change: reduce(5000)), apply_aura(aura: 445836, target: target)]), if(when: caster_stacks_at_least(aura: 445584, stacks: 5), then: [adjust_cooldown(spell: 227847, change: reduce(5000)), apply_aura(aura: 445836, target: target)])],
+                ),
+            ],
+        ),
+        // With Imminent Demise, every Sudden Death Execute unleashes it (its
+        // second effect's 100%), at most once each 0.5 s. Cleave's 20% at
+        // three or more targets comes with multiple targets.
+        444775: (
+            id: 444775,
+            name: "Reap the Storm",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(260798), school: None),
+                    chance: always,
+                    internal_cooldown: Some(500),
+                    condition: Some(caster_has_aura(444769)),
+                    effects: [trigger_spell(spell: 446005, target: target)],
+                ),
+            ],
+        ),
+        // Read by Bladestorm's strike.
+        444778: (
+            id: 444778,
+            name: "Culling Cyclone",
+            duration: None,
+        ),
+        // A Mortal Strike crit on the primary target (SimC's `chain_target ==
+        // 0`) makes the next one 20% harder.
+        444773: (
+            id: 444773,
+            name: "Fierce Followthrough",
+            duration: None,
+            listeners: [
+                (
+                    on: damage_dealt(spell: Some(12294), school: None, crit_only: true),
+                    chance: always,
+                    condition: Some(target_is_current),
+                    effects: [trigger_spell(spell: 458689, target: caster)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(910102), school: None, crit_only: true),
+                    chance: always,
+                    condition: Some(target_is_current),
+                    effects: [trigger_spell(spell: 458689, target: caster)],
+                ),
+            ],
+        ),
+        458689: (
+            id: 458689,
+            name: "Fierce Followthrough",
+            duration: Some(12000),
+            modifiers: [
+                (scope: spell(12294), kind: damage_done_pct, value: 20.0),
+                (scope: spell(910102), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
+        // Read as Bladestorm ends.
+        1270717: (
+            id: 1270717,
+            name: "Violent Euphoria",
+            duration: None,
+        ),
+        1270731: (
+            id: 1270731,
+            name: "Violent Euphoria",
+            duration: Some(8000),
+            modifiers: [
+                (scope: all, kind: haste_pct, value: 15.0),
+            ],
+        ),
+        // Dreadnaught isn't taken.
+        444779: (
+            id: 444779,
+            name: "Slayer's Malice",
+            duration: None,
+            modifiers: [
+                (scope: spell(7384), kind: damage_done_pct, value: 15.0),
+                (scope: spell(163201), kind: damage_done_pct, value: 15.0),
+                (scope: spell(281000), kind: damage_done_pct, value: 15.0),
+                (scope: spell(260798), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        // Bladestorm starts its count afresh (see Bladestorm).
+        386628: (
+            id: 386628,
+            name: "Unhinged",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(227847), school: None),
+                    chance: always,
+                    effects: [remove_aura(aura: 910104, target: target)],
+                ),
+            ],
+        ),
+        910104: (
+            id: 910104,
+            name: "Unhinged",
+            duration: None,
         ),
     },
     items: {
@@ -3460,6 +3872,25 @@
         1261062: (id: 1261062, name: "Mortal Wounds", ranks: [[passive_aura(1261062)]]),
         107574: (id: 107574, name: "Avatar", ranks: [[spell(107574)]]),
         1269314: (id: 1269314, name: "Master of Warfare", ranks: [[passive_aura(1269314)], [passive_aura(1269306)], [passive_aura(1269306)], [passive_aura(1269307)]]),
+        // Slayer. Death Drive and Relentless Pursuit aren't in SimC either;
+        // talents the reference build skips grant nothing.
+        444767: (id: 444767, name: "Slayer's Dominance", ranks: [[passive_aura(444767)]]),
+        444769: (id: 444769, name: "Imminent Demise", ranks: [[passive_aura(444769)]]),
+        444772: (id: 444772, name: "Overwhelming Blades", ranks: [[passive_aura(444772)]]),
+        444776: (id: 444776, name: "Relentless Pursuit", ranks: [[]]),
+        444777: (id: 444777, name: "Vicious Agility", ranks: [[]]),
+        1270717: (id: 1270717, name: "Violent Euphoria", ranks: [[passive_aura(1270717)]]),
+        444770: (id: 444770, name: "Death Drive", ranks: [[]]),
+        444778: (id: 444778, name: "Culling Cyclone", ranks: [[passive_aura(444778)]]),
+        446085: (id: 446085, name: "Brutal Finish", ranks: [[]]),
+        444773: (id: 444773, name: "Fierce Followthrough", ranks: [[passive_aura(444773)]]),
+        444774: (id: 444774, name: "Opportunist", ranks: [[]]),
+        1270718: (id: 1270718, name: "Deadly Focus", ranks: [[passive_aura(1270718)]]),
+        444771: (id: 444771, name: "Show No Mercy", ranks: [[passive_aura(444771)]]),
+        444775: (id: 444775, name: "Reap the Storm", ranks: [[passive_aura(444775)]]),
+        444779: (id: 444779, name: "Slayer's Malice", ranks: [[passive_aura(444779)]]),
+        386628: (id: 386628, name: "Unhinged", ranks: [[passive_aura(386628)]]),
+        444780: (id: 444780, name: "Unrelenting Onslaught", ranks: [[passive_aura(444780)]]),
     },
     // Rows and choice nodes follow the 12.0 tree; the links between nodes
     // aren't in the spell dump, so none are required yet.
@@ -3513,6 +3944,33 @@
                     (row: 3, choices: [443446], max_rank: 1),
                     (row: 3, choices: [1270450], max_rank: 1),
                     (row: 4, choices: [448861], max_rank: 1),
+                ],
+            ),
+        ),
+        // The 12.1 tree from SimC's trait data (sub-tree 60), rows from 0.
+        60: (
+            id: 60,
+            name: "Slayer",
+            specs: [71],
+            keystone: 444767,
+            tree: (
+                name: "Slayer",
+                points: 14,
+                nodes: [
+                    (row: 0, choices: [444767], max_rank: 1),
+                    (row: 1, choices: [444769], max_rank: 1),
+                    (row: 1, choices: [444772], max_rank: 1),
+                    (row: 1, choices: [444776, 444777], max_rank: 1),
+                    (row: 1, choices: [1270717], max_rank: 1),
+                    (row: 2, choices: [444770], max_rank: 1),
+                    (row: 2, choices: [444778, 446085], max_rank: 1),
+                    (row: 2, choices: [444773, 444774], max_rank: 1),
+                    (row: 2, choices: [1270718], max_rank: 1),
+                    (row: 3, choices: [444771], max_rank: 1),
+                    (row: 3, choices: [444775], max_rank: 1),
+                    (row: 3, choices: [444779], max_rank: 1),
+                    (row: 3, choices: [386628], max_rank: 1),
+                    (row: 4, choices: [444780], max_rank: 1),
                 ],
             ),
         ),

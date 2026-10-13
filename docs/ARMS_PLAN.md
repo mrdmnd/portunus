@@ -116,7 +116,7 @@ As built:
   minute) scales with the data's 1.7.
 - 271 tests in total, all passing. Elemental is unchanged.
 
-## Phase C: Slayer
+## Phase C: Slayer (done)
 
 Slayer's Dominance and Strike, Executioner, Imminent Demise, Overwhelming
 Blades / Overwhelmed, Culling Cyclone, Fierce Followthrough, Deadly
@@ -124,10 +124,52 @@ Focus, Violent Euphoria, Show No Mercy, Slayer's Malice, Unhinged,
 Unrelenting Onslaught. Relentless Pursuit and Death Drive aren't in SimC
 either.
 
+As built:
+
+- Data: hero tree 60 in `game.ron` (SimC's 12.1 trait rows, keystone
+  Slayer's Dominance, 14 points), and `data/loadouts/arms_slayer.ron`:
+  the whole reference build. `arms.ron` stays the spec tree alone, for
+  checking the core kit; both run files now use `arms_slayer`.
+- Slayer's Dominance: one shared PRD (Arms's 25%, effect 2) with a 0.5 s
+  cooldown, rolled on hits on the primary target by Mortal Strike (and
+  Unhinged's), Slam, Heroic Strike, Overpower, and each Execute; on any
+  target for Cleave. The listener applies Executioner (18 s with Deadly
+  Focus, each stack timed alone) and counts toward Imminent Demise,
+  then Slayer's Strike lands as its own event.
+- Imminent Demise: every third Slayer's Strike gives Sudden Death
+  (counter 910103), and each Sudden Death Execute a stack that adds a
+  Bladestorm tick in the same duration. Phase A's note had this as a
+  longer channel; SimC shortens the tick time, and the kernel now does
+  too. The stacks go at Bladestorm's last tick.
+- Every Sudden Death Execute: Reap the Storm (Imminent Demise's 100%,
+  0.5 s cooldown), and Unrelenting Onslaught's 5 s off Bladestorm and a
+  stack of Overwhelmed per Executioner stack. Executioner isn't consumed
+  (SimC never expires it).
+- Unhinged: a background Mortal Strike (made-up 910102, the same
+  effects) on Bladestorm's odd ticks, tracked by the made-up toggle
+  910104 and reset as each Bladestorm starts. It shares Mortal Strike's
+  modifiers and consumes Executioner's Precision and Fierce Followthrough,
+  but rolls no Sudden Death, Frothing Berserker, or Master of Warfare
+  (SimC's `!background` checks).
+- Fierce Followthrough's buff comes through a triggered spell, so the
+  Mortal Strike that crits doesn't remove it as it resolves.
+- Policy: `arms` is now SimC's Slayer lists as written (`slayer_execute`
+  in the execute phase, `slayer_st` otherwise). The old tuning's two
+  big wins were these lists' own Slayer lines; see `ARMS_TUNING.md`.
+- Tests: 13 more in `arms.rs`, one loadout check in `data_files.rs`, the
+  kit check on `arms_long` with the Slayer rows, and a policy check that
+  holding Bladestorm for Imminent Demise loses. Each Slayer encoding
+  was mutation-checked.
+- `arms_long` DPS: 37.7k for the spec tree alone, 85.5k with Slayer
+  under the port. Slayer's Strike, Reap the Storm, and Unhinged's
+  Mortal Strike come to about 30% of the damage; the rest is Overwhelmed,
+  Executioner, Slayer's Malice, more Sudden Death, and more Bladestorms.
+
 ## Phase D: multiple targets
 
-Sweeping Strikes, Cleave's Rend spread, Reap the Storm, the AoE and
-two-target lines of the policy, and a pack run file.
+Sweeping Strikes, Cleave's Rend spread, Reap the Storm off Cleave (20% at
+three or more targets), the AoE and two-target lines of the policy, and a
+pack run file.
 
 ## Known divergences (kept up to date)
 
@@ -156,3 +198,13 @@ two-target lines of the policy, and a pack run file.
   the dump.
 - Bladestorm's strike (50622) shows up in the breakdown under the same
   name as the cast.
+- Storm Bolt during Bladestorm (Unrelenting Onslaught) isn't modelled.
+- Slayer's Strike lands as its own event just after the hit that procs
+  it, at the same time.
+- Fierce Followthrough's `chain_target == 0` is read as "on the current
+  target".
+- Unrelenting Onslaught's Bladestorm (446035) is folded into 227847, its
+  20% onto the strike.
+- With certain rolls, nothing tells Cleave's any-target Slayer's
+  Dominance from a primary-only one on three dummies; Phase D's pack
+  runs will.

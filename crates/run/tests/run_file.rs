@@ -233,10 +233,10 @@ fn full_builds_press_their_whole_kit() {
 
 #[test]
 fn arms_policy_uses_the_kit() {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/runs/arms_dummy.ron");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/runs/arms_long.ron");
     let bd = Bundle::load(&path)
         .unwrap()
-        .breakdown(SeedSet { first: 0, count: 4 })
+        .breakdown(SeedSet { first: 0, count: 2 })
         .unwrap();
     let casts = |name: &str| {
         bd.rows
@@ -258,6 +258,16 @@ fn arms_policy_uses_the_kit() {
         "Cleave",
     ] {
         assert!(casts(name) > 0.0, "casts {name}");
+    }
+    for name in [
+        "Slayer's Strike",
+        "Reap the Storm",
+        "Mortal Strike (Unhinged)",
+    ] {
+        assert!(
+            bd.rows.iter().any(|r| r.name == name && r.damage > 0.0),
+            "{name}"
+        );
     }
     // Cleave keeps Rend up, so Rend itself is never pressed.
     assert!(bd.rows.iter().any(|r| r.name == "Rend" && r.damage > 0.0));
@@ -304,11 +314,12 @@ fn a_policy_against_itself_changes_nothing() {
 }
 
 #[test]
-fn the_tuned_arms_beats_the_simc_port() {
-    let c = compare_arms("arms_h4", false);
+fn holding_bladestorm_for_imminent_demise_loses() {
+    // Three stacks never come in the dummy's few seconds.
+    let c = compare_arms("arms_demise3", false);
     assert!(c.report.failures.is_empty());
-    assert_eq!(c.verdict(), Verdict::Better);
-    assert!(c.dps_change().unwrap().ci95.0 > 0.05 * c.baseline_dps().unwrap());
+    assert_eq!(c.verdict(), Verdict::Worse);
+    assert!(c.dps_change().unwrap().ci95.1 < -0.05 * c.baseline_dps().unwrap());
 }
 
 #[test]

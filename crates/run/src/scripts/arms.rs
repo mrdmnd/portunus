@@ -1,8 +1,8 @@
 //! Arms Warrior.
 //!
-//! [`arms`] is the port of SimC's list. The other policies here are
-//! candidates, each the best so far plus one change; `arms_h4` is the
-//! current best, and `docs/ARMS_TUNING.md` records how each did.
+//! [`arms`] is the port of SimC's Slayer lists. The other policies here
+//! are candidates, each the best so far plus one change, and
+//! `docs/ARMS_TUNING.md` records how each did.
 
 use portunus_core::{AuraId, SimDuration, SpellId};
 use portunus_engine::{ActionMask, Choice, MoveGoal, Wait};
@@ -33,26 +33,13 @@ const AVATAR_BUFF: AuraId = AuraId(107574);
 const MASTER_OF_WARFARE_PROC: AuraId = AuraId(1269391);
 const EXECUTIONERS_PRECISION: AuraId = AuraId(386633);
 const BLOODLETTING: AuraId = AuraId(383154);
+const EXECUTIONER: AuraId = AuraId(445584);
+const IMMINENT_DEMISE: AuraId = AuraId(445606);
 
 /// The changes a candidate makes to the SimC port, one per field, all off
 /// for [`arms`].
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 struct Tweaks {
-    /// Run `slayer_execute` in the execute phase.
-    execute_list: bool,
-    /// Outside the execute phase, spend Sudden Death whenever it's up, at
-    /// this point in the list.
-    free_execute: Option<FreeExecute>,
-    /// In the execute phase, a free Execute right after Colossus Smash.
-    free_execute_first: bool,
-    /// Slam (not Heroic Strike) only above this much rage.
-    slam_rage: Option<f64>,
-    /// No Slam once the target is below this health percent and not yet
-    /// in the execute phase, to start it with rage.
-    pool_below: Option<f64>,
-    /// Overpower ahead of Mortal Strike: only with both charges (`true`),
-    /// or always.
-    overpower_first: Option<bool>,
     /// In the execute phase, Overpower with both charges ahead of Execute.
     execute_overpower_capped: bool,
     /// Avatar, Bladestorm, and Colossus Smash as soon as ready, ignoring
@@ -60,8 +47,23 @@ struct Tweaks {
     avatar_on_cd: bool,
     bladestorm_on_cd: bool,
     smash_on_cd: bool,
-    /// Cleave for Rend only when it's about to fall off, or never.
-    rend_upkeep: Option<RendUpkeep>,
+    /// Bladestorm only with at least this many Imminent Demise stacks.
+    bladestorm_demise: Option<u8>,
+    /// Spend Sudden Death after Mortal Strike with no Executioner up too.
+    free_execute_ungated: bool,
+    /// Outside the execute phase, no Execute ahead of Colossus Smash to
+    /// make way for Bladestorm's Imminent Demise.
+    no_demise_execute: bool,
+    /// Cleave for Rend only when it's about to fall off.
+    rend_last_gcd: bool,
+    /// Overpower with both charges ahead of Mortal Strike.
+    overpower_capped_first: bool,
+    /// Outside the execute phase, spend Sudden Death ahead of Mortal
+    /// Strike.
+    free_execute_early: bool,
+    /// In the execute phase, spend Sudden Death right after Colossus
+    /// Smash.
+    execute_free_first: bool,
     /// In the execute phase, Mortal Strike with at least this many
     /// Executioner's Precision stacks instead of SimC's 2.
     execute_ms_precision: Option<u8>,
@@ -70,19 +72,21 @@ struct Tweaks {
     execute_rage: Option<f64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RendUpkeep {
-    LastGcd,
-    Never,
-}
-
-/// Where the free Execute goes: just ahead of this ability.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FreeExecute {
-    HeroicStrike,
-    MortalStrike,
-    Overpower,
-}
+const PORT: Tweaks = Tweaks {
+    execute_overpower_capped: false,
+    avatar_on_cd: false,
+    bladestorm_on_cd: false,
+    smash_on_cd: false,
+    bladestorm_demise: None,
+    free_execute_ungated: false,
+    no_demise_execute: false,
+    rend_last_gcd: false,
+    overpower_capped_first: false,
+    free_execute_early: false,
+    execute_free_first: false,
+    execute_ms_precision: None,
+    execute_rage: None,
+};
 
 /// What the lists read, worked out once per decision.
 struct Arms<'a> {
@@ -95,6 +99,7 @@ struct Arms<'a> {
     smashed: bool,
     cs_cd: SimDuration,
     sudden_death: u8,
+    executioner: u8,
     cleave: bool,
     tweaks: Tweaks,
 }
@@ -116,6 +121,7 @@ impl<'a> Arms<'a> {
             smashed: obs.target_aura(COLOSSUS_SMASH_DEBUFF).is_some(),
             cs_cd: SimDuration::ZERO,
             sudden_death: obs.buff_stacks(SUDDEN_DEATH),
+            executioner: obs.buff_stacks(EXECUTIONER),
             cleave: legal.abilities.contains_key(&CLEAVE),
             tweaks,
         };
@@ -150,6 +156,15 @@ impl<'a> Arms<'a> {
         hp < 20.0 || self.known(EXECUTE_MASSACRE) && hp < 35.0
     }
 
+    /// Bladestorm's own condition, then the tweaks' on top.
+    fn bladestorm(&self, simc: bool) -> Option<SpellId> {
+        let t = self.tweaks;
+        let demise = t
+            .bladestorm_demise
+            .is_none_or(|n| self.obs.buff_stacks(IMMINENT_DEMISE) >= n);
+        self.pick(BLADESTORM, (t.bladestorm_on_cd || simc) && demise)
+    }
+
     /// Into melee range of the target, ahead of any list.
     fn approach(&self) -> Option<Choice> {
         let t = self.obs.target.as_ref()?;
@@ -176,7 +191,7 @@ fn play(d: &Decision<SeatObs>, tweaks: Tweaks) -> Choice {
     if let Some(m) = a.approach() {
         return m;
     }
-    let list = if tweaks.execute_list && a.execute_phase() {
+    let list = if a.execute_phase() {
         slayer_execute(&a)
     } else {
         slayer_st(&a)
@@ -186,32 +201,24 @@ fn play(d: &Decision<SeatObs>, tweaks: Tweaks) -> Choice {
         .map_or(Choice::Wait(Wait::NextEvent), Choice::cast)
 }
 
-/// SimC's `slayer_st` (12.1) without the Slayer talents: their buffs never
-/// come up, so Imminent Demise's `stack<1` always holds and the
-/// Executioner and Opportunist lines never fire. Sweeping Strikes,
-/// Ravager, and the bladestorming Storm Bolt aren't modelled. Heroic
-/// Strike is Slam while Master of Warfare's proc is up.
+/// SimC's `slayer_st` (12.1). Sweeping Strikes, Ravager, and the
+/// bladestorming Storm Bolt aren't modelled, and the Opportunist and
+/// Collateral Damage lines are for talents the build skips. Heroic Strike
+/// is Slam while Master of Warfare's proc is up.
 fn slayer_st(a: &Arms<'_>) -> Option<SpellId> {
     let soon = SimDuration(2000);
     let t = a.tweaks;
-    let rend_soon = match t.rend_upkeep {
-        None => a.rend <= GCD || a.cs_cd < soon && a.rend <= SimDuration(10_000),
-        Some(RendUpkeep::LastGcd) => a.rend <= GCD,
-        Some(RendUpkeep::Never) => false,
+    let rend_soon = if t.rend_last_gcd {
+        a.rend <= GCD
+    } else {
+        a.rend <= GCD || a.cs_cd < soon && a.rend <= SimDuration(10_000)
     };
-    let rend_late = t.rend_upkeep.is_none() && a.rend <= SimDuration(5000);
-    let op_capped = a.obs.charges(OVERPOWER) >= 2;
-    let op_first = match t.overpower_first {
-        None => false,
-        Some(true) => op_capped,
-        Some(false) => true,
-    };
-    let free = a.sudden_death > 0;
-    let free_execute = a.tweaks.free_execute;
+    let rend_late = !t.rend_last_gcd && a.rend <= SimDuration(5000);
     let warfare = a.obs.has_buff(MASTER_OF_WARFARE_PROC);
-    let hp = a.obs.target_health_pct().unwrap_or(100.0);
-    let slam_ok = a.tweaks.slam_rage.is_none_or(|r| a.rage() > r)
-        && a.tweaks.pool_below.is_none_or(|p| hp >= p);
+    let free_execute = a.sudden_death > 0 && (a.executioner > 0 || t.free_execute_ungated);
+    let demise_execute = !t.no_demise_execute
+        && a.cd(BLADESTORM) == SimDuration::ZERO
+        && a.obs.buff_stacks(IMMINENT_DEMISE) < 1;
     [
         a.pick(CLEAVE, rend_soon),
         a.pick(REND, !a.cleave && a.enemies < 2 && rend_soon),
@@ -219,34 +226,21 @@ fn slayer_st(a: &Arms<'_>) -> Option<SpellId> {
             AVATAR,
             t.avatar_on_cd || a.smashed || a.cs_cd < SimDuration(10_000) && a.cs_cd > GCD,
         ),
-        a.pick(
-            a.execute,
-            a.sudden_death == 2 || a.cd(BLADESTORM) == SimDuration::ZERO,
-        ),
+        a.pick(a.execute, a.sudden_death == 2 || demise_execute),
         a.pick(COLOSSUS_SMASH, t.smash_on_cd || a.sudden_death < 2),
-        a.pick(
-            BLADESTORM,
-            t.bladestorm_on_cd || a.smashed || a.obs.has_buff(AVATAR_BUFF),
-        ),
-        a.pick(
-            a.execute,
-            free && free_execute == Some(FreeExecute::HeroicStrike),
-        ),
+        a.bladestorm(a.smashed || a.obs.has_buff(AVATAR_BUFF)),
         a.pick(SLAM, warfare),
         a.pick(
-            a.execute,
-            free && free_execute == Some(FreeExecute::MortalStrike),
+            OVERPOWER,
+            t.overpower_capped_first && a.obs.charges(OVERPOWER) >= 2,
         ),
-        a.pick(OVERPOWER, op_first),
+        a.pick(a.execute, free_execute && t.free_execute_early),
         a.pick(MORTAL_STRIKE, true),
-        a.pick(
-            a.execute,
-            free && free_execute == Some(FreeExecute::Overpower),
-        ),
+        a.pick(a.execute, free_execute),
         a.pick(OVERPOWER, true),
         a.pick(CLEAVE, a.enemies == 2 || rend_late),
         a.pick(REND, !a.cleave && rend_late),
-        a.pick(SLAM, warfare || slam_ok),
+        a.pick(SLAM, true),
         a.pick(WRECKING_THROW, a.enemies == 1),
     ]
     .into_iter()
@@ -254,23 +248,23 @@ fn slayer_st(a: &Arms<'_>) -> Option<SpellId> {
     .next()
 }
 
-/// SimC's `slayer_execute` (12.1) without the Slayer lines (Executioner,
-/// Opportunist, Collateral Damage) and without `target.time_to_die`.
+/// SimC's `slayer_execute` (12.1) without the Opportunist and Collateral
+/// Damage lines and without `target.time_to_die`.
 fn slayer_execute(a: &Arms<'_>) -> Option<SpellId> {
+    let t = a.tweaks;
     let bloodletting = a.obs.has_buff(BLOODLETTING);
     let rend_low = a.rend < SimDuration(2000) && !bloodletting;
     let precision = a.obs.buff_stacks(EXECUTIONERS_PRECISION);
-    let ms_precision = a.tweaks.execute_ms_precision.unwrap_or(2);
-    let execute_rage = a.tweaks.execute_rage.unwrap_or(40.0);
+    let ms_precision = t.execute_ms_precision.unwrap_or(2);
+    let execute_rage = t.execute_rage.unwrap_or(40.0);
     [
         a.pick(CLEAVE, rend_low),
         a.pick(REND, rend_low && !a.cleave),
-        a.pick(AVATAR, a.smashed || a.cs_cd > GCD),
+        a.pick(AVATAR, t.avatar_on_cd || a.smashed || a.cs_cd > GCD),
         a.pick(COLOSSUS_SMASH, true),
-        a.pick(a.execute, a.tweaks.free_execute_first && a.sudden_death > 0),
+        a.pick(a.execute, t.execute_free_first && a.sudden_death > 0),
         a.pick(SLAM, a.obs.has_buff(MASTER_OF_WARFARE_PROC)),
-        a.pick(
-            BLADESTORM,
+        a.bladestorm(
             a.smashed
                 || a.cs_cd > SimDuration(25_000)
                 || a.obs.has_buff(AVATAR_BUFF)
@@ -279,8 +273,9 @@ fn slayer_execute(a: &Arms<'_>) -> Option<SpellId> {
         a.pick(MORTAL_STRIKE, precision >= ms_precision),
         a.pick(
             OVERPOWER,
-            a.tweaks.execute_overpower_capped && a.obs.charges(OVERPOWER) >= 2,
+            t.execute_overpower_capped && a.obs.charges(OVERPOWER) >= 2,
         ),
+        a.pick(a.execute, a.sudden_death > 0 && a.executioner > 0),
         a.pick(a.execute, a.rage() > execute_rage),
         a.pick(OVERPOWER, true),
         a.pick(a.execute, true),
@@ -291,119 +286,129 @@ fn slayer_execute(a: &Arms<'_>) -> Option<SpellId> {
     .next()
 }
 
-/// SimulationCraft's Arms `slayer_st` list for the whole fight. Its
-/// default list runs it below three targets when Slayer is talented; this
-/// build has no hero tree, so SimC itself would run no list at all.
+/// SimulationCraft's Arms Slayer lists: `slayer_execute` in the execute
+/// phase and `slayer_st` otherwise, as its default list runs them below
+/// three targets.
 pub fn arms(d: &Decision<SeatObs>) -> Choice {
-    play(d, Tweaks::default())
+    play(d, PORT)
 }
-
-const H1: Tweaks = Tweaks {
-    execute_list: true,
-    free_execute: None,
-    free_execute_first: false,
-    slam_rage: None,
-    pool_below: None,
-    overpower_first: None,
-    execute_overpower_capped: false,
-    avatar_on_cd: false,
-    bladestorm_on_cd: false,
-    smash_on_cd: false,
-    rend_upkeep: None,
-    execute_ms_precision: None,
-    execute_rage: None,
-};
-
-const H2: Tweaks = Tweaks {
-    free_execute: Some(FreeExecute::Overpower),
-    ..H1
-};
-
-const H3: Tweaks = Tweaks {
-    execute_overpower_capped: true,
-    ..H2
-};
-
-const H4: Tweaks = Tweaks {
-    bladestorm_on_cd: true,
-    ..H3
-};
 
 /// The candidates, by name: each is the best so far plus one change.
 pub const CANDIDATES: &[(&str, super::Script)] = &[
-    ("arms_h1", |d| play(d, H1)),
-    ("arms_h2", |d| play(d, H2)),
-    ("arms_h3", |d| play(d, H3)),
-    ("arms_h4", |d| play(d, H4)),
-    ("arms_h10a", |d| {
-        play(
-            d,
-            Tweaks {
-                overpower_first: Some(true),
-                ..H2
-            },
-        )
-    }),
-    ("arms_h10b", |d| {
-        play(
-            d,
-            Tweaks {
-                overpower_first: Some(false),
-                ..H2
-            },
-        )
-    }),
-    ("arms_h11", |d| {
+    ("arms_op_capped", |d| {
         play(
             d,
             Tweaks {
                 execute_overpower_capped: true,
-                ..H2
+                ..PORT
             },
         )
     }),
-    ("arms_h12", |d| {
+    ("arms_avatar_cd", |d| {
         play(
             d,
             Tweaks {
                 avatar_on_cd: true,
-                ..H2
+                ..PORT
             },
         )
     }),
-    ("arms_h13", |d| {
+    ("arms_bladestorm_cd", |d| {
         play(
             d,
             Tweaks {
                 bladestorm_on_cd: true,
-                ..H2
+                ..PORT
             },
         )
     }),
-    ("arms_h14", |d| {
+    ("arms_smash_cd", |d| {
         play(
             d,
             Tweaks {
                 smash_on_cd: true,
-                ..H2
+                ..PORT
             },
         )
     }),
-    ("arms_h15a", |d| {
+    ("arms_demise3", |d| {
         play(
             d,
             Tweaks {
-                rend_upkeep: Some(RendUpkeep::LastGcd),
-                ..H2
+                bladestorm_demise: Some(3),
+                ..PORT
             },
         )
     }),
-    ("arms_h15b", |d| {
+    ("arms_ungated", |d| {
         play(
             d,
             Tweaks {
-                rend_upkeep: Some(RendUpkeep::Never),
-                ..H2
+                free_execute_ungated: true,
+                ..PORT
+            },
+        )
+    }),
+    ("arms_no_demise_execute", |d| {
+        play(
+            d,
+            Tweaks {
+                no_demise_execute: true,
+                ..PORT
+            },
+        )
+    }),
+    ("arms_rend_last", |d| {
+        play(
+            d,
+            Tweaks {
+                rend_last_gcd: true,
+                ..PORT
+            },
+        )
+    }),
+    ("arms_op_first", |d| {
+        play(
+            d,
+            Tweaks {
+                overpower_capped_first: true,
+                ..PORT
+            },
+        )
+    }),
+    ("arms_execute_early", |d| {
+        play(
+            d,
+            Tweaks {
+                free_execute_early: true,
+                ..PORT
+            },
+        )
+    }),
+    ("arms_execute_free_first", |d| {
+        play(
+            d,
+            Tweaks {
+                execute_free_first: true,
+                ..PORT
+            },
+        )
+    }),
+    ("arms_ms_precision1", |d| {
+        play(
+            d,
+            Tweaks {
+                execute_ms_precision: Some(1),
+                ..PORT
+            },
+        )
+    }),
+    ("arms_execute_rage20", |d| {
+        play(
+            d,
+            Tweaks {
+                execute_rage: Some(20.0),
+                ..PORT
             },
         )
     }),

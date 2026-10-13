@@ -12,7 +12,7 @@
 //! A channel succeeds as it starts (costs, cooldown, `cast_completed`),
 //! then ticks at times fixed at its start, the last as it ends (plus one
 //! as it starts with `tick_zero`, and more for its `ChannelTicksAdd`
-//! modifiers, read then, each lengthening it by a tick's time, as SimC's
+//! modifiers, read then, fitted into the same duration, as SimC's
 //! Imminent Demise does Bladestorm); `channel_ended` follows a last tick.
 //! An empower
 //! pays as it starts and goes off (`cast_completed` with the stage) when
@@ -699,13 +699,11 @@ impl<M: Mechanics> Kernel<M> {
                 .mod_sum(actor, spell, ModKind::ChannelTicksAdd, target)
                 .round()
                 .clamp(0.0, f64::from(u8::MAX));
-            let base = ticks.max(1);
-            let spread = base.saturating_add(added as u8);
-            let ms = u64::from(cast_time.millis()) * u64::from(spread) / u64::from(base);
+            let spread = ticks.max(1).saturating_add(added as u8);
             let ch = ChannelState {
                 ticks: spread.saturating_add(u8::from(tick_zero)),
                 done: 0,
-                duration: SimDuration(u32::try_from(ms).unwrap_or(u32::MAX / 2)),
+                duration: cast_time,
                 tick_zero,
                 tick_wakes: opts.tick_wakes,
                 swings,

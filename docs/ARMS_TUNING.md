@@ -2,15 +2,53 @@
 
 Hand-driven hill climbing on the Arms policies in
 `crates/run/src/scripts/arms.rs`. Each candidate is the best so far plus
-one change, expressed as a `Tweaks` field; `arms` (all off) is the SimC
-`slayer_st` port.
+one change, expressed as a `Tweaks` field; `arms` (all off) is the port
+of SimC's Slayer lists.
 
 Method: `portunus-run compare data/runs/arms_long.ron --policy CAND
 --baseline BEST`. Tuning seeds are 0–199 (0–599 to settle close calls);
 the final check runs on the held-out seeds (`--holdout`, from 1,000,000).
 Intervals are 95% on the paired per-seed DPS difference.
 
-## Best so far: `arms_h4`
+## With Slayer (current)
+
+`arms` now runs `slayer_execute` in the execute phase and spends Sudden
+Death after Mortal Strike while Executioner is up: SimC's own Slayer
+lines, and the old round's h1 and h2. On `arms_long` it does 85.5k.
+
+Round one, each against `arms`:
+
+| candidate | change | result |
+|---|---|---|
+| `arms_bladestorm_cd` | Bladestorm as soon as it's ready | +0.49% [+0.24, +0.74] (600 seeds); holdout +0.25% [−0.00, +0.49] |
+| `arms_execute_free_first` | execute: free Execute right after Colossus Smash | +0.06%, unclear |
+| `arms_ungated` | Sudden Death after Mortal Strike without Executioner | −0.05%, unclear |
+| `arms_execute_early` | Sudden Death ahead of Mortal Strike | −0.14%, unclear |
+| `arms_execute_rage20` | execute: Execute ahead of Overpower above 20 rage | −0.15%, unclear |
+| `arms_ms_precision1` | execute: Mortal Strike at 1 Executioner's Precision | −0.40%, worse |
+| `arms_op_first` | Overpower at 2 charges ahead of Mortal Strike | −0.66%, unclear |
+| `arms_avatar_cd` | Avatar on cooldown | −0.70%, worse |
+| `arms_rend_last` | Cleave for Rend only in its last GCD | −0.86%, worse |
+| `arms_no_demise_execute` | no Execute for Imminent Demise before Bladestorm | −0.86%, worse |
+| `arms_op_capped` | execute: Overpower at 2 charges ahead of Execute (old h3) | −1.17%, worse |
+| `arms_demise3` | Bladestorm only at 3 Imminent Demise stacks | −3.02%, worse |
+| `arms_smash_cd` | Colossus Smash ignoring Sudden Death stacks | exactly 0, as before |
+
+Best so far: `arms_bladestorm_cd`, by the method above, but only just.
+The port is close to a local optimum for these changes. Bladestorm on
+cooldown is the one gain on the tuning seeds, but on the held-out seeds
+its interval reaches zero, and on `arms_dummy` it's identical (that
+fight ends before a second Bladestorm). The old h3 now loses: with
+Slayer's Malice and Executioner, Execute outweighs a capped Overpower.
+`arms_ungated` barely differs because Executioner is almost always up.
+
+## Before Slayer (b7d450e)
+
+The round below ran on the spec tree alone (`arms.ron`, no hero tree),
+with `arms` as `slayer_st` read without Slayer. Its candidates were
+removed with the Slayer port; commit b7d450e has them.
+
+### Best: `arms_h4`
 
 | step | change over the previous step | vs previous |
 |---|---|---|
@@ -23,7 +61,7 @@ Holdout, `arms_h4` vs `arms`, 600 seeds:
 - `arms_long`: +11.81% [+11.42, +12.19]
 - `arms_dummy` (not used for tuning): +12.72% [+12.05, +13.39]
 
-## Why the winners win
+### Why the winners win
 
 - **h1:** the port ran `slayer_st` all fight, so in the execute phase it
   kept Slamming. The execute list cut Slams from 33 to 20 casts per run
@@ -34,7 +72,7 @@ Holdout, `arms_h4` vs `arms`, 600 seeds:
   Overpower gain more. The Bladestorm channel no longer takes up the
   Colossus Smash window.
 
-## Rejected
+### Rejected
 
 Results are against the step named in the "base" column. "Unclear" means
 the interval includes zero.

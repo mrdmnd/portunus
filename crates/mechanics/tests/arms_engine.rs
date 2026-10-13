@@ -628,7 +628,7 @@ fn channels_can_tick_as_they_start_gain_ticks_and_act_as_they_end() {
     let (at, rage) = channel_run(&channeler());
     assert_eq!(at, secs(&[0, 1000, 2000, 3000]));
     assert_eq!(rage, 100.0);
-    // Two more ticks, each a tick's time longer.
+    // Two more ticks in the same 3 s.
     let mut f = channeler();
     passive(
         &mut f,
@@ -639,6 +639,6 @@ fn channels_can_tick_as_they_start_gain_ticks_and_act_as_they_end() {
         )],
     );
     let (at, rage) = channel_run(&f);
-    assert_eq!(at, secs(&[0, 1000, 2000, 3000, 4000, 5000]));
+    assert_eq!(at, secs(&[0, 600, 1200, 1800, 2400, 3000]));
     assert_eq!(rage, 100.0);
 }

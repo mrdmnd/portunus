@@ -1,6 +1,6 @@
 // SimC's MID2 Arms reference build (profiles/MID2/MID2_Warrior_Arms.simc),
-// spec tree only: its class tree's damage talents are baseline, and
-// Slayer comes later.
+// spec tree only, for checking the core kit on its own: its class tree's
+// damage talents are baseline. `arms_slayer.ron` is the whole build.
 (
     spec: 71,
     gear: {

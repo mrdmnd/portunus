@@ -376,7 +376,8 @@ effect's cooldown group (or the spell's category cooldown), started on use
 like any action's. Nothing waits for combat to end, so there's no
 `starts_after_combat`. Documented on
 `CooldownDef.category`. `DataIssue::CategoryMismatch` also checks `hasted`.
-No DPS change: no spell in the data has a category. Tests:
+No DPS change at the time: no spell in the data had a category (Arms's
+Bladestorm now has 2270). Tests:
 `crates/engine/tests/cooldown.rs`,
 `melee.rs::adjusting_one_spells_category_cooldown_adjusts_them_all`,
 `data_files.rs::categories_whose_spells_disagree_are_reported`.

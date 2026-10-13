@@ -140,6 +140,26 @@ fn arms_loadout_compiles() {
 }
 
 #[test]
+fn arms_slayer_loadout_compiles() {
+    let game = game();
+    let loadout: Loadout = read_ron(&data_dir().join("loadouts/arms_slayer.ron")).expect("loadout");
+    assert_eq!(Compiler.validate(&game, &loadout), vec![]);
+    let template = Compiler.compile(&game, &loadout).expect("compiles");
+    assert_eq!(template.hero_tree, Some(HeroTreeId(60)));
+    // The keystone comes free; Brutal Finish and Opportunist lose their
+    // choice nodes.
+    for aura in [
+        444767, 444769, 444772, 1270717, 444778, 444773, 1270718, 444771, 444775, 444779, 386628,
+        444780,
+    ] {
+        assert!(template.passive_auras.contains(&AuraId(aura)), "{aura}");
+    }
+    let core: Loadout = read_ron(&data_dir().join("loadouts/arms.ron")).expect("loadout");
+    let core = Compiler.compile(&game, &core).expect("compiles");
+    assert_eq!(template.abilities, core.abilities);
+}
+
+#[test]
 fn dummy_scenario_samples_deterministically() {
     let spec: ScenarioSpec =
         read_ron(&data_dir().join("scenarios/target_dummy.ron")).expect("scenario");

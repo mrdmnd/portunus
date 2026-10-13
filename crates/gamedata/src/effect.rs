@@ -596,9 +596,10 @@ pub enum ModKind {
     /// `1 + value / 100`. SimC's "Modify Damage Taken% from Caster's
     /// Spells" (Colossus Smash, Overwhelmed).
     SourceDamageTakenPct,
-    /// A channel in scope ticks this many more times, each lengthening it
-    /// by a tick's time (whole numbers; Imminent Demise on Bladestorm, whose
-    /// SimC duration is `tick_time × (ticks + stacks)`). Read as it starts.
+    /// A channel in scope ticks this many more times in the same duration
+    /// (whole numbers; Imminent Demise on Bladestorm: SimC shortens its
+    /// `tick_time` by `ticks / (ticks + stacks)` and sets its duration to
+    /// `tick_time × (ticks + stacks)`). Read as it starts.
     ChannelTicksAdd,
     /// A single-target damage effect of a spell in scope also hits this
     /// many more engaged enemies (whole numbers), each for
