@@ -51,9 +51,22 @@ pub struct SpellDef {
     /// `WeaponHit` listeners (poisons) react to.
     #[serde(default)]
     pub weapon: Option<WeaponHand>,
+    /// Excluded from `StateView::recent_casts` (`Predicate::DiffersFromLastCast`
+    /// and `Predicate::RecentCasts`), e.g. off-GCD cooldowns, trinkets,
+    /// potions, and interrupts that don't count toward Windwalker's
+    /// Combo Strikes.
+    #[serde(default)]
+    pub unrecorded: bool,
     /// All must hold for the spell to be usable.
     #[serde(default)]
     pub requires: Vec<Requirement>,
+    /// Run as the cast succeeds (`Mechanics::cast_completed`), even for
+    /// spells that travel or channel: resource generation and buff
+    /// consumption that happen at launch rather than on missile impact.
+    /// For travelling spells, direct damage in `effects` is snapshotted
+    /// before `on_cast` runs.
+    #[serde(default)]
+    pub on_cast: Vec<Effect>,
     #[serde(default)]
     pub effects: Vec<Effect>,
 }
@@ -214,7 +227,9 @@ mod tests {
             castable_while_moving: false,
             usable_while_casting: false,
             weapon: None,
+            unrecorded: false,
             requires: Vec::new(),
+            on_cast: Vec::new(),
             effects: Vec::new(),
         }
     }

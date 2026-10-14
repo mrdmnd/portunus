@@ -116,6 +116,16 @@ pub trait StateView {
     fn distance(&self, seat: Seat, enemy: ActorId) -> Option<f64>;
     /// Yards the seat has moved, by any means, since the run began.
     fn yards_travelled(&self, seat: Seat) -> f64;
+    /// How long the seat has stood still (`SimDuration::ZERO` while moving).
+    fn stationary_for(&self, seat: Seat) -> SimDuration {
+        let _ = seat;
+        SimDuration::ZERO
+    }
+    /// Damage `actor` took in `[now - window, now]`.
+    fn recent_damage_taken(&self, actor: ActorId, window: SimDuration) -> u64 {
+        let _ = (actor, window);
+        0
+    }
     /// The group's battle resurrection charges.
     fn battle_res(&self) -> BattleResView;
     /// Whether the dead seat has a resurrection on its way to it.
@@ -443,10 +453,22 @@ pub fn predicate(
         ActorKind::Player(seat) => Some(seat),
         ActorKind::Enemy { .. } | ActorKind::Pet { .. } => None,
     };
+    let owner = match caster_view().map(|a| a.kind) {
+        Some(ActorKind::Pet { owner, .. }) => view.seats().get(usize::from(owner.0)).copied(),
+        _ => None,
+    };
+    let has_from = |holder: ActorId,
+                    aura: AuraId,
+                    from_self: bool,
+                    ok: &dyn Fn(&AuraInstance) -> bool| {
+        view.auras(holder).iter().any(|i| {
+            i.aura == aura && (!from_self || i.source == caster || owner == Some(i.source)) && ok(i)
+        })
+    };
     let any = |_: &AuraInstance| true;
     match p {
         Predicate::TargetHasAura { aura, from_self } => {
-            target.is_some_and(|t| has(t, aura, from_self.then_some(caster), &any))
+            target.is_some_and(|t| has_from(t, aura, from_self, &any))
         }
         Predicate::CasterHasAura(aura) => has(caster, aura, None, &any),
         Predicate::CasterLacksAura(aura) => !has(caster, aura, None, &any),
@@ -473,11 +495,7 @@ pub fn predicate(
             aura,
             stacks,
             from_self,
-        } => target.is_some_and(|t| {
-            has(t, aura, from_self.then_some(caster), &|i| {
-                i.stacks >= stacks
-            })
-        }),
+        } => target.is_some_and(|t| has_from(t, aura, from_self, &|i| i.stacks >= stacks)),
         Predicate::CasterStacksAtLeast { aura, stacks } => {
             has(caster, aura, None, &|i| i.stacks >= stacks)
         }
@@ -516,6 +534,9 @@ pub fn predicate(
             engaged >= usize::from(n)
         }
         Predicate::TargetIsCurrent => target.is_some() && target == view.target(caster),
+        Predicate::Stationary { for_at_least } => {
+            seat().is_some_and(|s| view.stationary_for(s) >= for_at_least)
+        }
     }
 }
 

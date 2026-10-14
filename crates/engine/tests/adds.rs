@@ -200,10 +200,21 @@ fn adds_fight_and_must_die_for_the_pull_to_clear() {
             })
             .find(|&(_, taken)| 2 * taken > ADD_HEALTH)
             .map(|(t, _)| t);
-        let howl = times(
-            &trace,
-            |e| matches!(e, TraceEvent::EnemyRule { actor, rule } if *actor == add && rule.0 == 1),
-        );
+        let howl_index = u16::try_from(
+            f.enemies.enemies[&imp()]
+                .rules
+                .iter()
+                .position(|r| r.name.0 == "howl")
+                .expect("the imp has a howl rule"),
+        )
+        .expect("rule index fits");
+        let howl = times(&trace, |e| {
+            matches!(
+                e,
+                TraceEvent::EnemyRule { actor, rule }
+                    if *actor == add && rule.0 == howl_index
+            )
+        });
         assert_eq!(howl.first().copied(), half);
     }
     assert!(state.enemy_info(boss).unwrap().spawner.is_none());

@@ -79,6 +79,7 @@ fn executioner(dummies: u32) -> Fixture {
             period: SimDuration(1000),
             hasted: false,
             partial_final_tick: false,
+            tick_zero: false,
             effects: vec![hit(HEALTH as f64 / 20.0)],
         }),
         value: None,

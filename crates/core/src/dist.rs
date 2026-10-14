@@ -11,12 +11,16 @@ use crate::time::SimDuration;
 #[serde(rename_all = "snake_case")]
 pub enum Dist<T> {
     Fixed(T),
-    /// Uniform on `[base - jitter, base + jitter]`.
+    /// Uniform between `base - jitter` and `base + jitter`.
+    ///
+    /// Endpoint behavior is defined by the [`Sample`] implementation.
     Jitter {
         base: T,
         jitter: T,
     },
-    /// Uniform on `[lo, hi]`.
+    /// Uniform between `lo` and `hi`.
+    ///
+    /// Endpoint behavior is defined by the [`Sample`] implementation.
     Uniform {
         lo: T,
         hi: T,
@@ -32,6 +36,7 @@ pub trait Sample<T> {
     fn bounds(&self) -> (T, T);
 }
 
+/// Continuous samples include the lower bound and exclude the upper bound.
 impl Sample<f64> for Dist<f64> {
     fn sample(&self, seed: Seed, domain: Domain, index: u64) -> f64 {
         let (lo, hi) = self.bounds();

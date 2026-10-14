@@ -354,3 +354,310 @@ fn a_death_save_holds_once_then_its_lockout_lets_the_next_hit_kill() {
         vec![(COMBAT_START + SimDuration(3000), ActorId(0))]
     );
 }
+
+#[test]
+fn chained_listeners_hear_resource_gains_and_extra_swings_without_self_looping() {
+    use portunus_gamedata::item::{WeaponDef, WeaponHand};
+
+    let mut on_energy = listener(
+        ListenFor::ResourceGained(ResourceKind::Energy),
+        vec![rage(10.0)],
+    );
+    on_energy.chain = true;
+    let mut on_hit = listener(
+        ListenFor::WeaponHit {
+            hand: Some(WeaponHand::MainHand),
+        },
+        vec![rage(1.0)],
+    );
+    on_hit.chain = true;
+
+    let mut f = fixture(vec![
+        // Grants Energy on CastStart (depth 1), which `on_energy` (`chain: true`) hears.
+        listener(
+            ListenFor::CastStart {
+                spell: Some(HARD),
+                school: None,
+            },
+            vec![Effect::Resource(ResourceAmount {
+                kind: ResourceKind::Energy,
+                amount: 50.0,
+            })],
+        ),
+        on_energy,
+        on_hit,
+    ]);
+    // Put ExtraSwing on a separate aura so `on_hit` on `KIT` hears the extra
+    // swing, while ExtraSwing itself never loops.
+    let mut windfury = aura(STACKY);
+    let mut wf_listener = listener(
+        ListenFor::Swing {
+            hand: Some(WeaponHand::MainHand),
+            crit_only: false,
+        },
+        vec![Effect::ExtraSwing],
+    );
+    wf_listener.chain = true;
+    windfury.listeners = vec![wf_listener];
+    f.data.auras.insert(STACKY, windfury);
+    f.template.passive_auras.push(STACKY);
+
+    f.template.main_hand = Some(WeaponDef {
+        speed: SimDuration(10_000),
+        min_damage: 100.0,
+        max_damage: 100.0,
+        ranged: false,
+    });
+    f.template.resources.push(ResourceDef {
+        kind: ResourceKind::Energy,
+        max: 100.0,
+        initial: 0.0,
+        regen_per_sec: 0.0,
+        regen_hasted: false,
+        recharge: None,
+        out_of_combat: None,
+    });
+    let mut hard = spell(HARD, Vec::new());
+    hard.cast = CastKind::Cast {
+        time: SimDuration(1500),
+        hasted: false,
+    };
+    add_spell(&mut f, hard);
+
+    let mut k = f.kernel();
+    play(&mut k, &[(HARD, 0)], COMBAT_START + SimDuration(3000));
+    // 10 rage from `on_energy` hearing the listener's Energy gain + 2 rage
+    // from `on_hit` hearing both the initial swing and the one ExtraSwing.
+    assert_eq!(rage_of(&k), 12.0);
+}
+
+#[test]
+fn damage_dealt_filters_direct_versus_periodic_and_by_aura() {
+    use portunus_gamedata::aura::Periodic;
+
+    const DOT_AURA: AuraId = AuraId(900_850);
+    const INFECT: SpellId = SpellId(900_850);
+
+    let mut f = fixture(vec![
+        listener(
+            ListenFor::DamageDealt {
+                spell: Some(INFECT),
+                school: None,
+                crit_only: false,
+                killing_blow: false,
+                direct: Some(true),
+                aura: None,
+            },
+            vec![rage(100.0)],
+        ),
+        listener(
+            ListenFor::DamageDealt {
+                spell: None,
+                school: None,
+                crit_only: false,
+                killing_blow: false,
+                direct: Some(false),
+                aura: Some(DOT_AURA),
+            },
+            vec![rage(1.0)],
+        ),
+    ]);
+    let mut dot = aura(DOT_AURA);
+    dot.duration = Some(SimDuration(3000));
+    dot.periodic = Some(Periodic {
+        period: SimDuration(1000),
+        hasted: false,
+        partial_final_tick: false,
+        tick_zero: false,
+        effects: vec![damage(50.0, EffectTarget::Target)],
+    });
+    f.data.auras.insert(DOT_AURA, dot);
+    add_spell(
+        &mut f,
+        spell(
+            INFECT,
+            vec![
+                damage(200.0, EffectTarget::Target),
+                apply(DOT_AURA, EffectTarget::Target),
+            ],
+        ),
+    );
+    let mut k = f.kernel();
+    play(&mut k, &[(INFECT, 0)], COMBAT_START + SimDuration(4000));
+    // 100 from the single direct hit + 3 from the three periodic ticks.
+    assert_eq!(rage_of(&k), 103.0);
+}
+
+#[test]
+fn tick_zero_tick_period_modifiers_extra_ticks_and_stack_consumption_work_together() {
+    use portunus_gamedata::aura::Periodic;
+    use portunus_gamedata::effect::{ModKind, ModScope, Modifier, Predicate};
+
+    const DOT_AURA: AuraId = AuraId(900_860);
+    const EXSANGUINATE: AuraId = AuraId(900_861);
+    const STEALTH_SNAPSHOT: AuraId = AuraId(900_862);
+    const APPLY_DOT: SpellId = SpellId(900_860);
+    const SPEED_UP: SpellId = SpellId(900_863);
+    const PULSE_NOW: SpellId = SpellId(900_864);
+    const BURST_STACKS: SpellId = SpellId(900_865);
+
+    let mut f = fixture(vec![listener(
+        ListenFor::PeriodicTick(DOT_AURA),
+        vec![rage(1.0)],
+    )]);
+
+    let mut dot = aura(DOT_AURA);
+    dot.duration = Some(SimDuration(4000));
+    dot.max_stacks = 5;
+    dot.periodic = Some(Periodic {
+        period: SimDuration(2000),
+        hasted: false,
+        partial_final_tick: false,
+        tick_zero: true,
+        effects: vec![damage(100.0, EffectTarget::Target)],
+    });
+    f.data.auras.insert(DOT_AURA, dot);
+
+    let mut fast = aura(EXSANGUINATE);
+    fast.duration = Some(SimDuration(10_000));
+    fast.modifiers = vec![Modifier {
+        scope: ModScope::Spell(APPLY_DOT),
+        kind: ModKind::TickPeriodPct,
+        value: -50.0,
+        per_stack: false,
+        condition: None,
+    }];
+    f.data.auras.insert(EXSANGUINATE, fast);
+
+    // Conditional PersistentPct: only applies when CasterHasAura(EXSANGUINATE).
+    let mut cond_snap = aura(STEALTH_SNAPSHOT);
+    cond_snap.modifiers = vec![Modifier {
+        scope: ModScope::Spell(APPLY_DOT),
+        kind: ModKind::PersistentPct,
+        value: 100.0,
+        per_stack: false,
+        condition: Some(Predicate::CasterHasAura(EXSANGUINATE)),
+    }];
+    f.data.auras.insert(STEALTH_SNAPSHOT, cond_snap);
+    f.template.passive_auras.push(STEALTH_SNAPSHOT);
+
+    let mut apply_three = apply(DOT_AURA, EffectTarget::Target);
+    if let Effect::ApplyAura { stacks, .. } = &mut apply_three {
+        *stacks = 3;
+    }
+    add_spell(&mut f, spell(APPLY_DOT, vec![apply_three]));
+    add_spell(
+        &mut f,
+        spell(SPEED_UP, vec![apply(EXSANGUINATE, EffectTarget::Caster)]),
+    );
+    add_spell(
+        &mut f,
+        spell(
+            PULSE_NOW,
+            vec![Effect::TickAura {
+                aura: DOT_AURA,
+                target: EffectTarget::Target,
+                fraction: 0.5,
+            }],
+        ),
+    );
+    add_spell(
+        &mut f,
+        spell(
+            BURST_STACKS,
+            vec![Effect::ConsumeStacks {
+                aura: DOT_AURA,
+                target: EffectTarget::Target,
+                max: Some(2),
+                then: vec![damage(1000.0, EffectTarget::Target)],
+            }],
+        ),
+    );
+
+    let mut k = f.kernel();
+    // At 10s: APPLY_DOT (without EXSANGUINATE, so pmultiplier = 1.0; tick_zero fires at 10s).
+    // At 11s: SPEED_UP (-50% tick period -> rescales remaining tick from 12s to 11.5s, then every 1s).
+    // At 12s: PULSE_NOW (extra 0.5 tick).
+    // At 13s: BURST_STACKS (consumes 2 of the 3 stacks -> 2000 damage, leaves 1 stack).
+    play(
+        &mut k,
+        &[
+            (APPLY_DOT, 0),
+            (SPEED_UP, 0),
+            (PULSE_NOW, 0),
+            (BURST_STACKS, 0),
+        ],
+        COMBAT_START + SimDuration(4500),
+    );
+    let trace = k.drain_trace();
+    let boss = k.state().enemies()[0];
+    let burst_hits = hits(&trace, BURST_STACKS, boss);
+    assert_eq!(burst_hits.len(), 1);
+    let dot_hits = hits(&trace, APPLY_DOT, boss);
+    // tick_zero (10s), rescaled tick at 11.5s, PULSE_NOW at 12s (0.5x),
+    // and rescaled ticks at 12.5s and 13.5s = 5 ticks!
+    assert_eq!(dot_hits.len(), 5, "{dot_hits:?}");
+    assert_eq!(rage_of(&k), 5.0);
+    // PULSE_NOW dealt half a normal tick; BURST_STACKS dealt 20x a normal tick (2 stacks * 1000 vs 100).
+    assert!(close(dot_hits[2], dot_hits[0] as f64 * 0.5));
+    assert!(close(burst_hits[0], dot_hits[0] as f64 * 20.0));
+}
+
+#[test]
+fn recent_damage_windows_and_stationary_predicates_track_recent_hits_and_movement() {
+    use portunus_gamedata::effect::Predicate;
+
+    const DEATH_STRIKE: SpellId = SpellId(900_870);
+    const STILL_STRIKE: SpellId = SpellId(900_871);
+
+    let mut f = fixture(Vec::new());
+    // Boss hits for 1000 at +1s, +4s, +6s (relative to combat start at 10s: 11s, 14s, 16s).
+    f.boss(vec![
+        hits_seat(1000.0, SimDuration(1000), SimDuration(100_000)),
+        hits_seat(1000.0, SimDuration(4000), SimDuration(100_000)),
+        hits_seat(1000.0, SimDuration(6000), SimDuration(100_000)),
+    ]);
+    let mut ds = spell(
+        DEATH_STRIKE,
+        vec![Effect::GainResource {
+            kind: ResourceKind::Rage,
+            amount: Coefficient::RecentDamageTaken {
+                window: SimDuration(5000),
+                share: 0.5,
+            },
+        }],
+    );
+    ds.gcd = None;
+    add_spell(&mut f, ds);
+    let mut still = spell(
+        STILL_STRIKE,
+        vec![Effect::If {
+            when: Predicate::Stationary {
+                for_at_least: SimDuration(3000),
+            },
+            then: vec![rage(10.0)],
+            otherwise: Vec::new(),
+        }],
+    );
+    still.gcd = None;
+    add_spell(&mut f, still);
+
+    let mut k = f.kernel();
+    let script = [
+        // At 10s, seat has stood still since 0s (>= 3s) -> +10 rage.
+        Choice::cast(STILL_STRIKE),
+        Choice::Move(MoveGoal::Yards(7.0)),
+        Choice::StopMove,
+        // Just moved at 10s (< 3s stationary) -> +0 rage.
+        Choice::cast(STILL_STRIKE),
+        Choice::Wait(Wait::Until(COMBAT_START + SimDuration(7000))),
+        // At 17s: hits at 11s (-6s), 14s (-3s), 16s (-1s); 5s window sums last two.
+        Choice::cast(DEATH_STRIKE),
+    ];
+    steer(&mut k, &script, COMBAT_START + SimDuration(8000));
+    // At 18s, only the 16s hit is within 2.5s.
+    let single_hit_taken = k.state().recent_damage_taken(ActorId(0), SimDuration(2500));
+    assert!(single_hit_taken > 0);
+    // 10 rage from STILL_STRIKE + 0.5 * (2 * single_hit_taken) = 10 + single_hit_taken.
+    assert_eq!(rage_of(&k), 10.0 + single_hit_taken as f64);
+}

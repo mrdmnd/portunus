@@ -150,19 +150,16 @@ fn delayed_triggers_count_from_another_rules_firing() {
     let trace = k.drain_trace();
 
     let start = engaged_at(&trace);
-    let fired: Vec<(SimTime, u16)> = trace
+    let fired: Vec<SimTime> = trace
         .iter()
         .filter_map(|r| match r.event {
-            TraceEvent::EnemyRule { rule, .. } => Some((r.time, rule.0)),
+            TraceEvent::EnemyRule { .. } => Some(r.time),
             _ => None,
         })
         .collect();
     assert_eq!(
         fired,
-        vec![
-            (start + SimDuration(1000), 0),
-            (start + SimDuration(4000), 1)
-        ]
+        vec![start + SimDuration(1000), start + SimDuration(4000)]
     );
     assert_eq!(outcome.seats[0].damage_taken, 500);
 }

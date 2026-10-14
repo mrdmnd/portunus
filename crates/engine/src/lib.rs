@@ -13,9 +13,9 @@
 //! primary target, and can be commanded by the owner's spells. Every actor
 //! with a weapon (or a pet with melee) swings at its primary target on its
 //! own timer while in combat. A seat's melee swings need the target within
-//! melee range (seats of melee specs open each pull there), and its hard
-//! casts and channels hold a swing that comes due until they end; pets
-//! swing through theirs.
+//! melee range (seats of melee specs open each pull there). A hard cast
+//! holds a swing that comes due until the cast ends; a channel wastes the
+//! swing unless it allows swings. Pets swing through their casts.
 //!
 //! # When seats decide
 //!

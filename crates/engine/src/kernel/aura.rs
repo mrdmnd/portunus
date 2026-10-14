@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use portunus_core::{ActorId, AuraId, SimDuration, SpellId};
 use portunus_gamedata::aura::{AuraDef, AuraValueKind, Periodic, RefreshRule};
-use portunus_gamedata::effect::ProcChance;
+use portunus_gamedata::effect::{ModKind, ProcChance};
 use portunus_gamedata::item::WeaponHand;
 use portunus_gamedata::spell::{Requirement, SpellDef};
 
@@ -40,8 +40,8 @@ fn sync_stacks(inst: &mut AuraInstance, meta: &AuraMeta) {
     inst.next_stack_expires = (oldest < newest).then_some(oldest);
 }
 
-fn period(p: &Periodic, haste: f64) -> SimDuration {
-    let ms = f64::from(p.period.millis());
+fn period(p: &Periodic, haste: f64, mult: f64) -> SimDuration {
+    let ms = f64::from(p.period.millis()) * mult;
     let ms = if p.hasted { ms / haste } else { ms };
     millis_round(ms).max(SimDuration(1))
 }
@@ -56,6 +56,101 @@ impl World {
 
     pub(crate) fn source_haste(&self, r: AuraRef) -> f64 {
         self.actor_ref(r.source).map_or(1.0, |a| a.haste)
+    }
+
+    pub(crate) fn aura_period(&self, r: AuraRef, p: &Periodic) -> SimDuration {
+        let haste = self.source_haste(r);
+        let mult = self.mod_product(
+            r.source,
+            SpellId(r.aura.0),
+            ModKind::TickPeriodPct,
+            Some(r.holder),
+        );
+        period(p, haste, mult)
+    }
+
+    fn affects_cooldown_rate(&self, aura: AuraId) -> bool {
+        self.s.setup.data.auras.get(&aura).is_some_and(|d| {
+            d.modifiers
+                .iter()
+                .any(|m| m.kind == ModKind::CooldownRatePct)
+        })
+    }
+
+    fn affects_tick_period(&self, aura: AuraId) -> bool {
+        self.s
+            .setup
+            .data
+            .auras
+            .get(&aura)
+            .is_some_and(|d| d.modifiers.iter().any(|m| m.kind == ModKind::TickPeriodPct))
+    }
+
+    /// Rescale active periodic ticks on auras sourced by `source` after
+    /// one of `source`'s `ModKind::TickPeriodPct` auras changed.
+    fn rescale_aura_ticks(&mut self, source: ActorId) {
+        let now = self.now;
+        let s = Arc::clone(&self.s);
+        let mut updates = Vec::new();
+        for (h, actor) in self.actors.iter().enumerate() {
+            let holder = ActorId(h as u16);
+            for (i, inst) in actor.auras.iter().enumerate() {
+                if inst.source != source {
+                    continue;
+                }
+                let Some(p) = s
+                    .setup
+                    .data
+                    .auras
+                    .get(&inst.aura)
+                    .and_then(|d| d.periodic.as_ref())
+                else {
+                    continue;
+                };
+                let r = AuraRef {
+                    holder,
+                    aura: inst.aura,
+                    source,
+                };
+                let new_period = self.aura_period(r, p);
+                if let Some(tick) = &actor.meta[i].tick {
+                    if tick.period != new_period {
+                        updates.push((r, i, new_period, inst.expires));
+                    }
+                }
+            }
+        }
+        for (r, i, new_period, expires) in updates {
+            let Some(a) = self.actor_mut(r.holder) else {
+                continue;
+            };
+            let uid = a.meta[i].uid;
+            let Some(tick) = &mut a.meta[i].tick else {
+                continue;
+            };
+            let old_period = f64::from(tick.period.millis()).max(1.0);
+            tick.period = new_period;
+            if let Some(next) = tick.next_at.filter(|&t| t > now) {
+                let left = f64::from(next.saturating_since(now).millis());
+                let scaled = millis_round(left * f64::from(new_period.millis()) / old_period);
+                let new_next = now + scaled;
+                if expires.is_none_or(|e| new_next < e) {
+                    tick.next_at = Some(new_next);
+                    self.queue.push(new_next, Event::AuraTick { aura: r, uid });
+                } else {
+                    tick.next_at = None;
+                }
+            }
+        }
+    }
+
+    fn after_timing_aura(&mut self, holder: ActorId, aura: AuraId) {
+        if self.affects_cooldown_rate(aura) {
+            self.refresh_cooldown_rates(holder);
+        }
+        if self.affects_tick_period(aura) {
+            self.rescale_aura_ticks(holder);
+        }
     }
 
     pub(crate) fn apply_aura(&mut self, app: AuraApplication) {
@@ -102,8 +197,8 @@ impl World {
         };
         let pmultiplier = app
             .pmultiplier
-            .unwrap_or_else(|| self.pmultiplier_of(r.source, r.aura));
-        let haste = self.source_haste(r);
+            .unwrap_or_else(|| self.pmultiplier_of_target(r.source, r.aura, Some(r.holder)));
+        let step = def.periodic.as_ref().map(|p| self.aura_period(r, p));
         let ground = def.ground.map(|g| GroundView {
             centre: app.anchor.or_else(|| {
                 StateView::target(&*self, r.holder).and_then(|t| self.pack_position(t))
@@ -133,10 +228,11 @@ impl World {
                 }
                 let uid = self.fresh_id();
                 let stacks = app.stacks.clamp(1, max_stacks);
-                let tick = def.periodic.as_ref().map(|p| Tick {
+                let tick_zero = def.periodic.as_ref().is_some_and(|p| p.tick_zero);
+                let tick = step.map(|period| Tick {
                     last_at: now,
-                    period: period(p, haste),
-                    next_at: None,
+                    period,
+                    next_at: tick_zero.then_some(now),
                     index: 0,
                 });
                 let decks: Vec<Option<DeckView>> = (0..def.listeners.len())
@@ -173,7 +269,11 @@ impl World {
                         attempts: 0,
                     });
                 }
+                if tick_zero {
+                    self.queue.push(now, Event::AuraTick { aura: r, uid });
+                }
                 self.schedule_aura(r);
+                self.after_timing_aura(r.holder, r.aura);
                 self.changed(r, 0, stacks);
                 if let Some(seat) = self.player_seat(r.holder) {
                     self.notify(seat, WakeReason::AuraGained(r.aura), false, None, now);
@@ -196,6 +296,11 @@ impl World {
                 if ground.is_some() {
                     holder.auras[i].ground = ground;
                 }
+                if let (Some(period), Some(tick)) = (step, &mut holder.meta[i].tick) {
+                    if tick.next_at.is_none() {
+                        tick.period = period;
+                    }
+                }
                 let added = timed_stacks(app.stacks);
                 if !added.is_empty() {
                     // At the cap, each new stack replaces the oldest.
@@ -207,6 +312,7 @@ impl World {
                     sync_stacks(&mut holder.auras[i], &holder.meta[i]);
                     let stacks = holder.auras[i].stacks;
                     self.schedule_aura(r);
+                    self.after_timing_aura(r.holder, r.aura);
                     self.changed(r, previous, stacks);
                     return;
                 }
@@ -228,6 +334,7 @@ impl World {
                 inst.pmultiplier = pmultiplier;
                 let stacks = inst.stacks;
                 self.schedule_aura(r);
+                self.after_timing_aura(r.holder, r.aura);
                 self.changed(r, previous, stacks);
             }
         }
@@ -312,6 +419,7 @@ impl World {
         if movement {
             self.after_movement_aura(holder);
         }
+        self.after_timing_aura(holder, aura);
         let s = Arc::clone(&self.s);
         let Some(def) = s.setup.data.auras.get(&aura) else {
             return;
@@ -475,6 +583,7 @@ impl World {
                 sync_stacks(&mut a.auras[i], &a.meta[i]);
             }
             let now = a.auras[i].stacks;
+            self.after_timing_aura(r.holder, r.aura);
             self.changed(r, previous, now);
         }
     }
@@ -506,6 +615,7 @@ impl World {
         if let Some(t) = a.auras[i].next_stack_expires {
             self.queue.push(t, Event::AuraStackExpire { aura: r, uid });
         }
+        self.after_timing_aura(r.holder, r.aura);
         self.changed(r, previous, stacks);
     }
 
@@ -664,7 +774,7 @@ impl World {
         let a = self.actor_ref(r.holder)?;
         let expires = a.auras[i].expires?;
         let last = a.meta[i].tick?.last_at;
-        let step = f64::from(period(p, self.source_haste(r)).millis());
+        let step = f64::from(self.aura_period(r, p).millis());
         let after = f64::from(expires.saturating_since(last).millis()) / step;
         Some(if p.partial_final_tick {
             1.0 + after
@@ -686,7 +796,7 @@ impl World {
         else {
             return;
         };
-        let haste = self.source_haste(r);
+        let step = self.aura_period(r, p);
         let Some(i) = self.find_aura(r) else { return };
         let Some(a) = self.actor_mut(r.holder) else {
             return;
@@ -695,7 +805,7 @@ impl World {
             return;
         }
         if let Some(tick) = &mut a.meta[i].tick {
-            tick.period = period(p, haste);
+            tick.period = step;
         }
         self.schedule_aura(r);
     }

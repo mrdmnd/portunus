@@ -438,7 +438,7 @@ hand (a two-hander, or in Cat Form), an off-hand effect does nothing.
 **Tests:** a spell with an MH and an OH damage effect deals two hits, each
 scaled to its weapon, and a main-hand-only poison procs only off the MH hit.
 
-### 1.5 Swing-timer interactions (Tier B)
+### 1.5 Swing-timer interactions (Tier B) (done)
 
 - `Effect::ResetSwing { hand: Option<WeaponHand> }`: restart that hand's
   timer from now (abilities that reset the swing).
@@ -446,14 +446,14 @@ scaled to its weapon, and a main-hand-only poison procs only off the MH hit.
   `StatCurves::dual_wield_miss_pct`'s neighbourhood.
 - **Test:** reset at mid-swing; the next swing is a full interval later.
 
-### 1.6 Channels that change mid-channel (Tier B, after 1.1)
+### 1.6 Channels that change mid-channel (Tier B, after 1.1) (done)
 
 - Mind Flay → Mind Flay: Insanity is an aura override at cast start; it
   already works through `overrides` once channels exist.
 - A buff that changes a channel already in progress (rare): leave to kits.
 - Haste is locked at channel start (1.1). Document.
 
-### 1.7 Forms: follow-ups
+### 1.7 Forms: follow-ups (done)
 
 - **Form GCDs.** Energy users in a form (Cat Form) use a 1.0 s unhasted
   GCD. Add `#[serde(default)] gcd: Option<GcdDef>` to `FormDef`; while the
@@ -468,7 +468,7 @@ scaled to its weapon, and a main-hand-only poison procs only off the MH hit.
   through `overrides`. Nothing new needed; add one test of an `allows_all`
   form if not covered.
 
-### 1.8 Stealth: follow-ups
+### 1.8 Stealth: follow-ups (done)
 
 - **Shadowmeld:** a stealth aura castable in combat that drops combat for
   the caster in game. Without threat, treat it as "stealth in combat":
@@ -1285,7 +1285,7 @@ Test: `a_death_save_holds_once_then_its_lockout_lets_the_next_hit_kill`.
 - **Test:** lethal hit leaves the seat alive once; the second lethal hit
   during the lockout kills.
 
-### 6.2 Rolling windows (Tier B)
+### 6.2 Rolling windows (Tier B) (done)
 
 Death Strike heals for a share of damage taken in the last 5 s.
 - Kernel keeps a per-player ring buffer of `(time, amount)` damage taken,
@@ -1294,7 +1294,7 @@ Death Strike heals for a share of damage taken in the last 5 s.
 - Expose the window total in `StateView` (a player can see recent damage).
 - **Test:** hits at −6 s, −3 s, −1 s; a 5 s window sums the last two.
 
-### 6.3 Standing still (Tier B)
+### 6.3 Standing still (Tier B) (done)
 
 `Predicate::Stationary { for_at_least: SimDuration }` from the seat's
 movement state, and `MoveStart`/`MoveEnd` listeners for buffs that build
@@ -1678,7 +1678,7 @@ damage dealers:
 
 After the engine work, each class needs real data (`data/game.ron`), a spec
 kit for one-offs (`crates/mechanics/src/kits.rs`), a loadout
-(`data/loadouts/`), a scripted policy (`crates/run/src/scripts.rs`) and a
+(`data/loadouts/`), a scripted policy (`crates/run/src/scripts/`) and a
 SimC comparison. That data work is a separate track per spec; this table
 says which phases each needs first.
 
@@ -1724,3 +1724,207 @@ message listing what was added and what is still refused.
   least one test that would fail if the feature were removed.
 - The kernel header doc lists exactly what is still unsupported.
 - All four lint and test gates pass.
+
+---
+
+## 18. Phase 12: Kernel and engine blind-spot fixes (done)
+
+Fixes for the 16 kernel, timing, math, and effect-vocabulary blind spots
+identified in the follow-up audit against World of Warcraft and SimC,
+plus the remaining Tier B follow-ups (1.5–1.8, 6.2, 6.3). All 12 items
+are implemented, validated in `check.rs`, and covered by tests.
+
+### 12.1 `Wait::Condition` and off-cast readiness while `SeatPhase::Committed`
+- **Problem:** `Kernel::rearm` and `Kernel::recheck` ignored
+  `SeatPhase::Committed`, so a casting, channeling, or empowering seat
+  that chose `Wait::Condition(c)` was never woken when `c` became true,
+  and a `usable_while_casting` ability coming off cooldown mid-cast never
+  woke the committed seat.
+- **Plan:**
+  - In `Kernel::rearm` and `Kernel::recheck`, arm and check
+    `(SeatPhase::Committed, Some(Wait::Condition(c)))` using
+    `World::solve(seat, c)`, keeping `SeatPhase::Committed` while the cast
+    continues.
+  - For `(SeatPhase::Committed, None | Some(Wait::NextEvent))`, arm on the
+    earliest ability readiness strictly before `casting.ends` (i.e. a
+    `usable_while_casting` ability becoming ready mid-cast).
+  - **Test:** a channeling seat waiting on a resource condition wakes mid-channel
+    to clip; a `usable_while_casting` spell coming off cooldown mid-cast
+    wakes the seat before the cast ends.
+
+### 12.2 Cast-completion effects on projectiles (`SpellDef.on_cast`) and untargeted launches
+- **Problem:** Travelling spells ran nothing at `cast_completed` beyond
+  `roll_direct`, deferring launch-time resource generation and buff
+  consumption until impact; `World::launch` dropped projectiles with
+  `ev.target == None`; `roll_direct` skipped `Chance` and `RandomOf`.
+- **Plan:**
+  - Add `#[serde(default)] pub on_cast: Vec<Effect>` to `SpellDef`: run at
+    `cast_completed` (after `roll_direct` snapshots direct hits, so buffs
+    consumed by `on_cast` still apply to the launched missile).
+  - In `World::launch`, fall back to `ev.actor` when `ev.target` is `None`
+    so untargeted spells with `min_travel` or `prerolled` still fly and
+    land.
+  - Walk `spell.on_cast` in `kits.rs` and `check.rs`.
+  - **Test:** a travelling spell grants resources and consumes a caster
+    buff at launch while its missile lands with the buff's damage bonus;
+    an untargeted delayed spell lands after `min_travel`.
+
+### 12.3 Opt-in nested listener reactions (`Listener.chain`)
+- **Problem:** `Interpreter::fire` dropped every `Occurrence` with
+  `depth > 0`, preventing `ListenFor::ResourceGained` from hearing
+  resources granted by `Swing`/`PeriodicTick`/`DamageDealt` listeners and
+  preventing on-hit listeners (poisons, rage) from firing on `ExtraSwing`
+  or `Blade Flurry` copies.
+- **Plan:**
+  - Add `#[serde(default)] pub chain: bool` to `Listener`.
+  - Track the originating `source: Option<ListenerRef>` on `Occurrence`
+    and `EffectCtx`.
+  - Allow listeners with `chain: true` to fire at `depth <= 1` as long as
+    they are not the originating listener itself (`Some(listener) !=
+    ev.source`), preventing self-loops while preserving `chain: false`
+    defaults everywhere else.
+  - **Test:** a `ResourceGained` listener with `chain: true` reacts to rage
+    granted by a `Swing` listener; a `WeaponHit` listener with `chain:
+    true` procs off an `ExtraSwing`.
+
+### 12.4 Channeled spells in `CommandPet` and `TriggerSpell`
+- **Problem:** `Kernel::resolve_triggered` called `cast_completed`
+  directly, which is a no-op for `CastKind::Channel` effects, so pets
+  commanded to channel (e.g. *Storm, Earth, and Fire* spirits echoing
+  *Fists of Fury*) dealt zero ticks.
+- **Plan:**
+  - In `Kernel::resolve_triggered`, when `def.cast` is
+    `CastKind::Channel`, start the channel on `caster` (cancelling any
+    prior cast, computing `ChannelState` with `ChannelTicksAdd`, and
+    queueing `Event::ChannelTick`) without charging costs or cooldowns.
+  - **Test:** a guardian commanded via `CommandPet` to cast a channeled
+    spell ticks for each channel tick and deals its scaled damage.
+
+### 12.5 Periodic tick period refresh, `Periodic.tick_zero`, `ModKind::TickPeriodPct`, and `Effect::TickAura`
+- **Problem:** Refreshing a DoT during its final partial-tick window kept
+  the old `tick.period`; DoTs could not tick immediately on application
+  (`tick_zero`), be accelerated by aura modifiers (`TickPeriodPct`), or be
+  pulsed for an immediate extra tick (`Effect::TickAura`).
+- **Plan:**
+  - Add `#[serde(default)] pub tick_zero: bool` to `Periodic`, queueing
+    the initial `Event::AuraTick` at `now` on application.
+  - Add `ModKind::TickPeriodPct` to scale periodic tick intervals by
+    `1 + value / 100`, rescaling active periodic ticks when such an aura
+    changes on the source, and refreshing `tick.period` whenever an aura
+    is refreshed with `tick.next_at.is_none()`.
+  - Add `Effect::TickAura { aura, target, fraction }` to run an immediate
+    extra periodic tick (scaled by `fraction`) on each target holding the
+    caster's `aura`.
+  - Validate in `check.rs`.
+  - **Test:** `tick_zero` ticks on application; `TickPeriodPct` halves the
+    tick period mid-aura; `TickAura` fires an immediate extra tick.
+
+### 12.6 Cooldown adjustments before first cast, dynamic charges/duration, and `ModKind::CooldownRatePct`
+- **Problem:** `World::adjust_cooldown` ignored spells not yet in
+  `Actor.cooldowns`; `consume_charge` only updated `cd.base` when at full
+  charges and never updated `cd.max`; no aura modifier existed for
+  cooldown recovery rate (`Shifting Power`, `Blessing of Autumn`,
+  `Adrenaline Rush`).
+- **Plan:**
+  - In `World::adjust_cooldown`, initialize from `fresh_cooldown` when
+    `Restart` or `RateMult` targets an uncast spell.
+  - In `World::consume_charge`, update `cd.max` (granting newly added
+    charges) and rescale `cd.progress` when `cd.base` changes.
+  - Add `ModKind::CooldownRatePct` on `Cooldown` (`mod_rate`), settling
+    and rescheduling affected cooldowns whenever a `CooldownRatePct` aura
+    changes on the holder.
+  - Validate in `check.rs`.
+  - **Test:** `Restart` before first cast starts the cooldown;
+    `CooldownRatePct` doubles recovery speed while active and reverts on
+    expiry.
+
+### 12.7 RPPM bad-luck protection interval, multi-pull reset, and crit scaling
+- **Problem:** `Interpreter::chance` computed RPPM bad-luck protection
+  using unhasted `60.0 / rate` instead of `60.0 / eff_rate`, leaked
+  `last_proc` across pulls in a way that inverted drought time, and lacked
+  crit-scaled RPPM support.
+- **Plan:**
+  - Add `#[serde(default)] pub crit: bool` to `ProcChance::Rppm`.
+  - Use `eff_rate = rate * haste * crit_mult` inside the bad-luck
+    protection denominator `60.0 / eff_rate`, cap drought at `1000.0s`,
+    and reset RPPM `last_attempt` and `last_proc` at combat start.
+  - **Test:** hasted and crit-scaled RPPM proc rates scale with haste/crit
+    and reset cleanly across pulls.
+
+### 12.8 Off-hand `Coefficient::AttackPower` strikes
+- **Problem:** `Formulas::ability_attack_power` ignored `ctx.hand` (only
+  checking `SpellDef.weapon`) and omitted the 50% off-hand penalty
+  (`OFF_HAND_MULT`).
+- **Plan:**
+  - Use `ctx.hand.or_else(|| ...)` in `ability_attack_power` and multiply
+    by `OFF_HAND_MULT` when `hand == WeaponHand::OffHand`.
+  - **Test:** a dual-wield spell with main-hand and off-hand
+    `Coefficient::AttackPower` hits uses each weapon's DPS and halves the
+    off-hand hit.
+
+### 12.9 Pet and guardian `SourceDamageTakenPct`, owner `from_self` predicates, and Mastery
+- **Problem:** Pets and guardians did not benefit from their owner's
+  `SourceDamageTakenPct` debuffs, evaluated `from_self: true` target
+  predicates only against the pet's own `ActorId`, and had `mastery_pct`
+  hardcoded to `0.0` in `pet_derived`.
+- **Plan:**
+  - In `Formulas::source_taken`, match `source == attacker` or
+    `owner == Some(source)`.
+  - In `state::predicate`, treat a pet's owner as matching `from_self:
+    true` on `TargetHasAura` and `TargetStacksAtLeast`.
+  - In `Formulas::pet_derived`, inherit `mastery_pct: o.mastery_pct` so
+    `ModKind::MasteryDamagePct` on pet auras scales with the owner's
+    mastery.
+  - **Test:** a pet's damage increases against a target with the owner's
+    `SourceDamageTakenPct` debuff, sees the owner's aura for `from_self`,
+    and scales with owner mastery via `MasteryDamagePct`.
+
+### 12.10 Primary-exempt AoE falloff (`AoeRule.full_primary`) and refreshing spreads (`SpreadAura.refresh`)
+- **Problem:** `AoeRule.sqrt_cap` reduced damage on the primary target as
+  well as secondary targets; `Effect::SpreadAura` skipped targets that
+  already held the caster's aura instead of refreshing them.
+- **Plan:**
+  - Add `#[serde(default)] pub full_primary: bool` to `AoeRule` to exempt
+    `ctx.target` from `sqrt_cap` falloff.
+  - Add `#[serde(default)] pub refresh: bool` to `Effect::SpreadAura` to
+    also apply to targets that already hold the caster's instance.
+  - **Test:** `full_primary` keeps primary target damage full past
+    `sqrt_cap`; `SpreadAura` with `refresh: true` refreshes an already
+    infected add.
+
+### 12.11 Conditional `PersistentPct` and conditional kernel-pushed stats
+- **Problem:** `World::pmultiplier_of` ignored `m.condition` and
+  `ModScope::School`; `Formulas::haste_mult`, `attack_speed_mult`, and
+  `stat_block_sharing` passed `target: None` to modifier queries, and
+  conditional stat/haste modifiers were not re-pushed on movement or
+  health changes.
+- **Plan:**
+  - Check `m.condition` and `ModScope::School` in `World::pmultiplier_of`
+    (passing the target holder when applying an aura).
+  - Pass `view.target(actor)` in `Query` for `haste_mult`,
+    `attack_speed_mult`, and `stat_block_sharing`, and refresh conditional
+    speed/health stats on `movement_changed` and `health_dropped`.
+  - **Test:** a conditional `PersistentPct` snapshots only when its
+    condition holds; a ground-conditioned haste buff updates the actor's
+    haste when stepping out of the ground area.
+
+### 12.12 `DamageDealt` direct/aura filters, `SpellDef.unrecorded`, and `Effect::ConsumeStacks`
+- **Problem:** `ListenFor::DamageDealt` could not distinguish direct hits
+  from periodic ticks or filter by a specific periodic `AuraId`; off-GCD
+  utility/trinket spells polluted `recent_casts` for combo strikes; no
+  effect existed to consume up to $N$ stacks of an aura and scale an
+  effect list by the count consumed.
+- **Plan:**
+  - Add `#[serde(default)] pub direct: Option<bool>` and
+    `#[serde(default)] pub aura: Option<AuraId>` to
+    `ListenFor::DamageDealt` (carrying `aura` on `RolledHit`).
+  - Add `#[serde(default)] pub unrecorded: bool` to `SpellDef` so
+    `Kernel::remember_cast` skips unrecorded spells.
+  - Add `Effect::ConsumeStacks { aura, target, max, then }`, removing up
+    to `max` stacks of the caster's `aura` from each target and running
+    `then` with `scale` and `event_amount` scaled by the stacks removed.
+  - Validate in `check.rs` and walk `ConsumeStacks.then` in `kits.rs`.
+  - **Test:** `DamageDealt` filters direct vs periodic and by aura;
+    `unrecorded` spells preserve `DiffersFromLastCast` and `RecentCasts`;
+    `ConsumeStacks` removes stacks and scales damage by the count removed.
+

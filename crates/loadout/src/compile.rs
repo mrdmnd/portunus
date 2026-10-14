@@ -665,7 +665,7 @@ mod tests {
     }
 
     #[test]
-    fn reports_every_problem() {
+    fn reports_independent_problems_together() {
         let mut bad = loadout();
         bad.gear.insert(GearSlot::Neck, equipped(10));
         bad.gear.insert(GearSlot::Finger1, equipped(11));

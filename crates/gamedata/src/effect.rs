@@ -101,6 +101,12 @@ pub enum Effect {
     /// hand if none): a full auto-attack whose own listeners don't fire
     /// (Skyfury).
     ExtraSwing,
+    /// Restart the caster's swing timer (`None`: both hands) from now for
+    /// a full interval.
+    ResetSwing {
+        #[serde(default)]
+        hand: Option<WeaponHand>,
+    },
     /// `duration` (or the pet's own, if `None`) is ignored for
     /// [`crate::pet::PetKind::Pet`]. With a `stagger`, one copy arrives
     /// every `stagger`, the first one `stagger` after the effect, as
@@ -185,14 +191,41 @@ pub enum Effect {
     },
     Hook(HookKey),
     /// Copy the caster's `aura` on the event's target to up to `max` of
-    /// `to` that don't have the caster's yet: the same stacks and
-    /// snapshot, for the time it has left, ticking afresh. SimC's
-    /// `dot_t::copy` with `DOT_COPY_START` (disease spread, Contagion).
+    /// `to` that don't have the caster's yet (or, with `refresh`, to
+    /// targets that already hold it as well, refreshing through its
+    /// `RefreshRule`): the same stacks and snapshot, for the time it has
+    /// left, ticking afresh. SimC's `dot_t::copy` with `DOT_COPY_START`
+    /// (disease spread, Contagion, Blood and Thunder).
     SpreadAura {
         aura: AuraId,
         to: EffectTarget,
         #[serde(default)]
         max: Option<u8>,
+        #[serde(default)]
+        refresh: bool,
+    },
+    /// Cause an immediate extra periodic tick of the caster's `aura` on
+    /// each target that holds it, scaled by `fraction` (`1.0` by
+    /// default), without altering its tick schedule (Totemic Rebound,
+    /// Tear Open Wounds, Festering Scythe).
+    TickAura {
+        aura: AuraId,
+        target: EffectTarget,
+        #[serde(default = "full_share")]
+        fraction: f64,
+    },
+    /// Remove up to `max` stacks of the caster's `aura` from each target
+    /// (`None`: all stacks), and for each target where at least one stack
+    /// was removed, run `then` with that target and `scale` (and
+    /// `EventAmount`) multiplied by the stacks removed (Festering Wound
+    /// bursts, Colossus Demolish consuming Colossal Might, Maelstrom
+    /// Weapon spenders).
+    ConsumeStacks {
+        aura: AuraId,
+        target: EffectTarget,
+        #[serde(default)]
+        max: Option<u8>,
+        then: Vec<Effect>,
     },
     /// Stun enemies that aren't `cc_immune`: their cast stops, even one
     /// that can't be interrupted, and their rules wait it out. Repeats
@@ -308,6 +341,12 @@ pub enum Coefficient {
     /// Per second of the unhasted speed of the weapon in play: the swing's
     /// or strike's that triggered the effect, else the main hand.
     WeaponSpeed(f64),
+    /// A share of the damage the caster took in the last `window`
+    /// (Death Strike healing for a share of damage taken in the last 5 s).
+    RecentDamageTaken {
+        window: SimDuration,
+        share: f64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -378,6 +417,10 @@ pub struct AoeRule {
     /// 65%).
     #[serde(default = "full_share")]
     pub secondary: f64,
+    /// The cast's primary target takes full damage, exempt from `sqrt_cap`
+    /// falloff (Eye Beam, Blade Dance, Wake of Ashes).
+    #[serde(default)]
+    pub full_primary: bool,
 }
 
 fn full_share() -> f64 {
@@ -488,6 +531,10 @@ pub enum Predicate {
     /// The target is the caster's current target, its "primary target"
     /// (Slayer's Dominance; SimC's `s->target == p()->target`).
     TargetIsCurrent,
+    /// The caster, a seat, has stood still for at least this long.
+    Stationary {
+        for_at_least: SimDuration,
+    },
 }
 
 /// How many of a seat's casts the engine remembers for
@@ -609,6 +656,14 @@ pub enum ModKind {
     /// The share, in percent, of a chained hit (see `ChainTargetsAdd`);
     /// several multiply. Full damage without one.
     ChainSharePct,
+    /// Cooldown recovery rate of spells in scope, in percent (`100.0` is
+    /// twice as fast: Shifting Power, Blessing of Autumn, Adrenaline
+    /// Rush, Invoker's Delight). Several multiply.
+    CooldownRatePct,
+    /// Periodic tick interval of auras in scope, in percent (`-50.0`
+    /// halves the period so it ticks twice as fast: Exsanguinate, Malefic
+    /// Grasp). Several multiply.
+    TickPeriodPct,
 }
 
 /// A reaction to combat events: procs, on-hit effects, and the like.
@@ -633,6 +688,11 @@ pub struct Listener {
     /// holder as caster and the event's target as target.
     #[serde(default)]
     pub condition: Option<Predicate>,
+    /// May react to events caused by another listener (at depth 1), such
+    /// as `ResourceGained` from a swing listener or poisons from
+    /// `ExtraSwing` and `Blade Flurry`, never re-triggering itself.
+    #[serde(default)]
+    pub chain: bool,
     pub effects: Vec<Effect>,
 }
 
@@ -653,6 +713,13 @@ pub enum ListenFor {
         /// Only hits that kill their target.
         #[serde(default)]
         killing_blow: bool,
+        /// Only direct hits (`Some(true)`), only periodic ticks
+        /// (`Some(false)`), or either (`None`).
+        #[serde(default)]
+        direct: Option<bool>,
+        /// Only hits from this aura's ticks or effects.
+        #[serde(default)]
+        aura: Option<AuraId>,
     },
     DamageTaken,
     /// An auto-attack landed (rage, Windfury). `None` matches both hands.
@@ -756,6 +823,9 @@ pub enum ProcChance {
     Rppm {
         rate: f64,
         hasted: bool,
+        /// Scale the proc rate by `1 + crit_pct / 100`.
+        #[serde(default)]
+        crit: bool,
     },
     /// Chance in percent is `coef` times a rated percentage, e.g.
     /// mastery-driven overloads (`coef: 1.0` at 20% mastery is a 20%

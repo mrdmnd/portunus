@@ -44,6 +44,7 @@ fn with_spend_deck(f: &mut Fixture, successes: u16, size: u16) {
         per_unit: true,
         shared_with: None,
         condition: None,
+        chain: false,
         effects: vec![Effect::ApplyAura {
             aura: SPEND_MARKER,
             target: EffectTarget::Caster,

@@ -261,14 +261,15 @@ impl World {
     }
 
     fn finish_movement(&mut self, seat: Seat) {
+        let now = self.now;
         let st = self.seat_mut(seat);
         if st.moving.take().is_none() {
             return;
         }
+        st.stationary_since = now;
         st.move_gen += 1;
         let actor = self.seat_actor(seat);
         self.record(TraceEvent::MovementEnd { actor });
-        let now = self.now;
         self.notify(seat, WakeReason::MovementEnd, true, None, now);
         self.start_swings(actor);
         self.tell_movement(seat);
@@ -347,8 +348,10 @@ impl World {
 
     pub(crate) fn stop_move(&mut self, seat: Seat) {
         self.settle_movement(seat);
+        let now = self.now;
         let st = self.seat_mut(seat);
         if st.moving.take().is_some() {
+            st.stationary_since = now;
             st.move_gen += 1;
             let actor = self.seat_actor(seat);
             self.record(TraceEvent::MovementEnd { actor });
@@ -403,8 +406,11 @@ impl World {
 
     /// At death or combat's end; mechanics don't hear of it as a stop.
     pub(crate) fn clear_movement(&mut self, seat: Seat) {
+        let now = self.now;
         let st = self.seat_mut(seat);
-        st.moving = None;
+        if st.moving.take().is_some() {
+            st.stationary_since = now;
+        }
         st.demands.clear();
         st.move_gen += 1;
         st.moving_told = false;

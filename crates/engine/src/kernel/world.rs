@@ -562,6 +562,7 @@ pub(crate) struct Cooldown {
     pub base: f64,
     pub hasted: bool,
     pub rate_mult: f64,
+    pub mod_rate: f64,
     pub progress: f64,
     pub at: SimTime,
     pub gen: u32,
@@ -571,7 +572,7 @@ impl Cooldown {
     /// Base milliseconds recovered per real millisecond.
     pub fn rate(&self, haste: f64) -> f64 {
         let hasted = if self.hasted { haste } else { 1.0 };
-        (hasted * self.rate_mult).max(f64::MIN_POSITIVE)
+        (hasted * self.rate_mult * self.mod_rate).max(f64::MIN_POSITIVE)
     }
 
     pub fn settle(&mut self, now: SimTime, haste: f64) {
@@ -623,6 +624,10 @@ pub(crate) struct SeatState {
     pub demands: Vec<Demand>,
     /// Run speed from Speed rating, in percent, as mechanics last set it.
     pub speed_pct: f64,
+    /// When the seat last stopped moving (0 at run start).
+    pub stationary_since: SimTime,
+    /// Damage taken as `(time, amount)` for rolling-window effects.
+    pub damage_log: VecDeque<(SimTime, u64)>,
     /// A resurrection offered to the dead seat, not yet accepted.
     pub res_offer: Option<ResOffer>,
 }
@@ -844,6 +849,17 @@ impl World {
         }
     }
 
+    /// Between pulls, reset RPPM attempt and proc timestamps so a new
+    /// pull's bad-luck protection starts from its own engagement.
+    pub(crate) fn reset_rppm(&mut self) {
+        for a in &mut self.actors {
+            for p in &mut a.procs {
+                p.last_attempt = None;
+                p.last_proc = None;
+            }
+        }
+    }
+
     pub(crate) fn combat_index(&self) -> Option<u16> {
         match self.seg {
             Seg::Combat { combat, .. } => Some(combat),
@@ -1008,6 +1024,22 @@ impl World {
         total
     }
 
+    /// Product of `1 + value / 100` over the caster's modifiers of one
+    /// kind that apply to `spell`.
+    pub(crate) fn mod_product(
+        &self,
+        caster: ActorId,
+        spell: SpellId,
+        kind: ModKind,
+        target: Option<ActorId>,
+    ) -> f64 {
+        let mut total = 1.0;
+        self.each_mod(caster, spell, kind, target, |v| {
+            total *= (1.0 + v / 100.0).max(0.0);
+        });
+        total
+    }
+
     /// Whether any of the caster's modifiers of one kind applies to `spell`.
     pub(crate) fn has_mod(&self, caster: ActorId, spell: SpellId, kind: ModKind) -> bool {
         let mut any = false;
@@ -1094,8 +1126,25 @@ impl World {
         }
     }
 
-    /// The GCD `spell` triggers for `caster` now.
+    /// The GCD `spell` triggers for `caster` now, using the active form's
+    /// GCD if the caster holds a form that defines one.
     pub(crate) fn spell_gcd(&self, caster: ActorId, spell: SpellId, g: &GcdDef) -> SimDuration {
+        let g = self
+            .actor_ref(caster)
+            .and_then(|a| {
+                a.auras.iter().find_map(|x| {
+                    self.s
+                        .setup
+                        .data
+                        .auras
+                        .get(&x.aura)?
+                        .form
+                        .as_ref()?
+                        .gcd
+                        .as_ref()
+                })
+            })
+            .unwrap_or(g);
         let haste = self.actor_ref(caster).map_or(1.0, |a| a.haste);
         let pct = self.mod_sum(caster, spell, ModKind::GcdPct, None);
         gcd_length(g, haste, 1.0 + pct / 100.0)
@@ -1105,32 +1154,17 @@ impl World {
     /// the same numeric id, since that is how DoTs share ids with their
     /// spells.
     pub(crate) fn pmultiplier_of(&self, source: ActorId, aura: AuraId) -> f64 {
-        let data = &self.s.setup.data;
-        let Some(a) = self.actor_ref(source) else {
-            return 1.0;
-        };
-        let mut mult = 1.0;
-        for inst in &a.auras {
-            let Some(def) = data.auras.get(&inst.aura) else {
-                continue;
-            };
-            for m in &def.modifiers {
-                let applies = match m.scope {
-                    ModScope::All | ModScope::Abilities => true,
-                    ModScope::Spell(s) => s.0 == aura.0,
-                    ModScope::School(_) | ModScope::AutoAttack => false,
-                };
-                if m.kind == ModKind::PersistentPct && applies {
-                    let stacks = if m.per_stack {
-                        f64::from(inst.stacks)
-                    } else {
-                        1.0
-                    };
-                    mult *= 1.0 + m.value * stacks / 100.0;
-                }
-            }
-        }
-        mult
+        let target = crate::state::StateView::target(self, source);
+        self.pmultiplier_of_target(source, aura, target)
+    }
+
+    pub(crate) fn pmultiplier_of_target(
+        &self,
+        source: ActorId,
+        aura: AuraId,
+        target: Option<ActorId>,
+    ) -> f64 {
+        self.mod_product(source, SpellId(aura.0), ModKind::PersistentPct, target)
     }
 
     pub(crate) fn add_resource(&mut self, actor: ActorId, kind: ResourceKind, delta: f64) {
@@ -1255,7 +1289,13 @@ impl World {
             self.seat_mut(seat).outcome.damage_done += d.amount.min(before);
         }
         if let Some(seat) = self.player_seat(d.target) {
-            self.seat_mut(seat).outcome.damage_taken += d.amount.min(before);
+            let taken = d.amount.min(before);
+            let now = self.now;
+            let st = self.seat_mut(seat);
+            st.outcome.damage_taken += taken;
+            if taken > 0 {
+                st.damage_log.push_back((now, taken));
+            }
         }
         self.record(TraceEvent::Damage(d));
         if died {
@@ -1666,7 +1706,7 @@ impl World {
             return;
         };
         let hits = std::mem::take(&mut self.stashed);
-        let Some(target) = ev.target else { return };
+        let target = ev.target.unwrap_or(ev.actor);
         let id = self.fresh_id();
         let lands = self.now + travel;
         self.projectiles.push(Projectile {
@@ -1890,6 +1930,32 @@ impl StateView for World {
     fn yards_travelled(&self, seat: Seat) -> f64 {
         self.seat_ref(seat)
             .map_or(0.0, |st| st.travelled + self.unsettled_yards(seat))
+    }
+
+    fn stationary_for(&self, seat: Seat) -> SimDuration {
+        let Some(st) = self.seat_ref(seat) else {
+            return SimDuration::ZERO;
+        };
+        if st.moving.is_some() {
+            SimDuration::ZERO
+        } else {
+            self.now.saturating_since(st.stationary_since)
+        }
+    }
+
+    fn recent_damage_taken(&self, actor: ActorId, window: SimDuration) -> u64 {
+        let Some(seat) = self.player_seat(actor) else {
+            return 0;
+        };
+        let Some(st) = self.seat_ref(seat) else {
+            return 0;
+        };
+        let now = self.now;
+        st.damage_log
+            .iter()
+            .filter(|&&(t, _)| now.saturating_since(t) <= window)
+            .map(|&(_, amt)| amt)
+            .sum()
     }
 
     fn battle_res(&self) -> BattleResView {

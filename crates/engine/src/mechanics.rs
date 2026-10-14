@@ -112,6 +112,9 @@ pub trait EngineIo {
     fn set_haste(&mut self, actor: ActorId, mult: f64);
     /// Rescales swing timers from now on, on top of haste.
     fn set_attack_speed(&mut self, actor: ActorId, mult: f64);
+    /// Restart `actor`'s swing timer (`None`: both hands) from now for a
+    /// full interval.
+    fn reset_swing(&mut self, actor: ActorId, hand: Option<WeaponHand>);
     /// Sets a living actor's max health, keeping the fraction of it the
     /// actor has (Power Word: Fortitude, Stamina procs).
     fn set_max_health(&mut self, actor: ActorId, max: u64);
@@ -361,6 +364,8 @@ pub struct RolledHit {
     pub amount: f64,
     pub school: SchoolMask,
     pub spell: Option<SpellId>,
+    /// The aura whose tick or effect rolled this hit, if any.
+    pub aura: Option<AuraId>,
     pub crit: bool,
     /// The listener depth it was rolled at.
     pub depth: u8,

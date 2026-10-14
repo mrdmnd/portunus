@@ -149,8 +149,8 @@ fn rage_drains_outside_combat_and_stops_at_zero() {
     assert!(walked.iter().all(|&w| w > 15.0), "drained to 0: {walked:?}");
 }
 
-// Mana capped at 300, refilling 50 a second; Drain costs 100 and does
-/// nothing.
+// Mana is capped at 300 and refills 50 a second; Drain costs 100 and has no
+// effect.
 #[test]
 fn a_seat_out_of_mana_waits_for_regen() {
     const DRAIN: SpellId = SpellId(900_953);

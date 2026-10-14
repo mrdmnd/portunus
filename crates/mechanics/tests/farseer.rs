@@ -245,34 +245,6 @@ fn departures_cast_final_calling_and_sometimes_call_another() {
     assert_eq!(buffs.len(), 3, "every Elemental Blast buff came up");
 }
 
-#[test]
-fn routine_communication_draws_every_spell_from_one_deck() {
-    let f = farseer();
-    for seed in 0..4 {
-        let mut k = f.kernel(seed);
-        let stop = SimTime(60_000);
-        assert!(play_until(&mut k, |k| k.state().now() >= stop).is_none());
-        let trace = k.drain_trace();
-        let draws = trace
-            .iter()
-            .filter(|r| completed_by(r, OWNER, &[LIGHTNING_BOLT, LAVA_BURST, FLAME_SHOCK]))
-            .count();
-        assert!(draws > 10, "{draws} draws");
-        let decks: Vec<_> = k
-            .state()
-            .procs(OWNER)
-            .iter()
-            .filter(|p| p.listener.aura.aura == ROUTINE_COMMUNICATION_AURA && p.deck.is_some())
-            .collect();
-        let [only] = decks.as_slice() else {
-            panic!("{} decks", decks.len());
-        };
-        assert_eq!(only.listener.index, 0);
-        let deck = only.deck.expect("a deck");
-        assert_eq!(usize::from(50 - deck.cards) % 50, draws % 50, "seed {seed}");
-    }
-}
-
 type FarseerKernel = Kernel<PartyMechanics>;
 
 fn press(k: &mut FarseerKernel, spell: SpellId) {

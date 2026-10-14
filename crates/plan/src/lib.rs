@@ -1,10 +1,10 @@
 //! The plan: group-level commitments made before the run.
 //!
 //! A decision variable, not part of the world: it can be searched over like a
-//! loadout. Windows are *advice the policy reads* through its observation,
-//! never forced casts; the assigned player may be mid-cast, moving, or dead,
-//! and the policy owns execution. Bloodlust is just a window on the lust
-//! spell.
+//! loadout. Windows are advice, never forced casts; an observer may expose
+//! them to its policy, which owns execution if the assigned player is
+//! mid-cast, moving, or dead. The built-in scripted observer does not expose
+//! them yet. Bloodlust is just a window on the lust spell.
 
 use std::collections::BTreeMap;
 
@@ -83,6 +83,9 @@ pub enum PlanIssue {
     BadDeathLimit,
 }
 
+/// Validation interface for plan-aware loaders.
+///
+/// The built-in run loader does not implement or call this yet.
 pub trait PlanValidator {
     /// Every problem, not just the first. `party` is indexed by seat.
     fn validate(

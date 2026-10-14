@@ -11,12 +11,12 @@ use portunus_engine::mechanics::{
 use portunus_engine::state::{ActorKind, Projectile};
 use portunus_engine::{AuraRef, EngineIo, Mechanics, Readiness, RunSetup, StateView};
 use portunus_gamedata::aura::{AuraDef, AuraValueKind, BankDraw};
-use portunus_gamedata::effect::{Effect, ModKind, RemovalReason};
+use portunus_gamedata::effect::{Effect, RemovalReason};
 use portunus_gamedata::spell::{CastKind, SpellDef};
-use portunus_gamedata::stats::{SpendScaling, Stat};
+use portunus_gamedata::stats::SpendScaling;
 
 use crate::interp::{health_fraction, Happening, Interpreter, Occurrence};
-use crate::math::{instance, owner_seat, player_seat, Formulas};
+use crate::math::{instance, player_seat, Formulas};
 use crate::{CombatMath, EffectCtx, EffectInterpreter, IncomingHit, KitIssue, SpecRegistry};
 
 /// Game semantics for a whole party: data effects through the
@@ -137,113 +137,6 @@ impl PartyMechanics {
             SpendScaling::Extra(_) => 1.0,
         }
     }
-
-    /// Re-push what the kernel keeps of `holder`'s stats after `def`
-    /// changed on it, and of every seat holding a `StatShare` from it: a
-    /// share follows its source's stats, as SimC's `update_stats` on
-    /// Ebon Might.
-    fn refresh_stats(&self, io: &mut dyn EngineIo, holder: ActorId, def: &AuraDef) {
-        self.refresh_speed(io, holder, def);
-        self.refresh_health(io, holder, def);
-        self.refresh_run_speed(io, holder, def);
-        let view = io.view();
-        let mut sharing: Vec<(ActorId, portunus_core::AuraId)> = Vec::new();
-        for &seat in view.seats().iter().filter(|&&s| s != holder) {
-            for inst in view.auras(seat).iter().filter(|i| i.source == holder) {
-                let shares = self.aura_def(inst.aura).is_some_and(|d| {
-                    d.modifiers
-                        .iter()
-                        .any(|m| matches!(m.kind, ModKind::StatShare(_)))
-                });
-                if shares {
-                    sharing.push((seat, inst.aura));
-                }
-            }
-        }
-        for (seat, aura) in sharing {
-            let Some(share) = self.aura_def(aura) else {
-                continue;
-            };
-            self.refresh_speed(io, seat, share);
-            self.refresh_health(io, seat, share);
-            self.refresh_run_speed(io, seat, share);
-        }
-    }
-
-    /// Whether `def` can change `holder`'s `stat`: directly, or through a
-    /// `StatFromStat` the holder has into it.
-    fn touches(&self, view: &dyn StateView, holder: ActorId, def: &AuraDef, stat: Stat) -> bool {
-        let direct = |s: Stat, d: &AuraDef| {
-            d.modifiers.iter().any(|m| match m.kind {
-                ModKind::StatFlat(x) | ModKind::StatPct(x) | ModKind::StatShare(x) => x == s,
-                ModKind::StatFromStat { to, .. } => to == s,
-                _ => false,
-            })
-        };
-        direct(stat, def)
-            || view
-                .auras(holder)
-                .iter()
-                .filter_map(|i| self.aura_def(i.aura))
-                .flat_map(|d| &d.modifiers)
-                .any(|m| {
-                    matches!(m.kind, ModKind::StatFromStat { from, to } if to == stat && direct(from, def))
-                })
-    }
-
-    /// Re-push a seat's run speed from Speed rating if this aura changes it.
-    fn refresh_run_speed(&self, io: &mut dyn EngineIo, holder: ActorId, def: &AuraDef) {
-        let view = io.view();
-        if player_seat(view, holder).is_none() || !self.touches(view, holder, def, Stat::Speed) {
-            return;
-        }
-        let pct = self.math().derived(view, holder).speed_pct;
-        io.set_speed_pct(holder, pct);
-    }
-
-    /// Re-push a seat's max health to the kernel if this aura changes its
-    /// Stamina.
-    fn refresh_health(&self, io: &mut dyn EngineIo, holder: ActorId, def: &AuraDef) {
-        let view = io.view();
-        if player_seat(view, holder).is_none() || !self.touches(view, holder, def, Stat::Stamina) {
-            return;
-        }
-        let max = self.math().derived(io.view(), holder).max_health;
-        io.set_max_health(holder, whole_points(max));
-    }
-
-    /// Re-push haste and attack speed to the kernel if this aura can change
-    /// them. A seat's haste reaches its pets too.
-    fn refresh_speed(&self, io: &mut dyn EngineIo, holder: ActorId, def: &AuraDef) {
-        let touches_haste = def.modifiers.iter().any(|m| m.kind == ModKind::HastePct)
-            || self.touches(io.view(), holder, def, Stat::HasteRating);
-        let touches_attack_speed = def
-            .modifiers
-            .iter()
-            .any(|m| m.kind == ModKind::AttackSpeedPct);
-        let view = io.view();
-        let mut hasted = Vec::new();
-        if touches_haste {
-            if let Some(seat) = player_seat(view, holder) {
-                hasted.push(holder);
-                hasted.extend_from_slice(view.pets(seat));
-            } else if owner_seat(view, holder).is_some() {
-                hasted.push(holder);
-            }
-        }
-        let hasted: Vec<(ActorId, f64)> = hasted
-            .into_iter()
-            .map(|a| (a, self.math().haste_mult(view, a)))
-            .collect();
-        let attack_speed = (touches_attack_speed && owner_seat(view, holder).is_some())
-            .then(|| self.math().attack_speed_mult(view, holder));
-        for (actor, mult) in hasted {
-            io.set_haste(actor, mult);
-        }
-        if let Some(mult) = attack_speed {
-            io.set_attack_speed(holder, mult);
-        }
-    }
 }
 
 impl Mechanics for PartyMechanics {
@@ -286,12 +179,18 @@ impl Mechanics for PartyMechanics {
         if !cast.prerolled && !channel {
             let effects = cast_effects(def, cast);
             if !def.travels() {
+                self.interp.run(io, &ctx, &def.on_cast);
                 self.interp.run(io, &ctx, &effects);
-            } else if !def.rolls_on_impact {
-                for hit in self.interp.roll_direct(io, &ctx, &effects) {
-                    io.stash_hit(hit);
+            } else {
+                if !def.rolls_on_impact {
+                    for hit in self.interp.roll_direct(io, &ctx, &effects) {
+                        io.stash_hit(hit);
+                    }
                 }
+                self.interp.run(io, &ctx, &def.on_cast);
             }
+        } else if channel {
+            self.interp.run(io, &ctx, &def.on_cast);
         }
         let done = Occurrence {
             what: Happening::CastComplete {
@@ -361,7 +260,7 @@ impl Mechanics for PartyMechanics {
     /// A white hit at the swing's target, then `Swing` listeners.
     fn swing(&self, io: &mut dyn EngineIo, swing: &SwingEvent) {
         self.interp
-            .white_hit(io, swing.actor, swing.hand, swing.target, 0);
+            .white_hit(io, swing.actor, swing.hand, swing.target, 0, None);
     }
 
     fn periodic_tick(&self, io: &mut dyn EngineIo, tick: &TickEvent) {
@@ -438,7 +337,7 @@ impl Mechanics for PartyMechanics {
             };
             self.interp.fire(io, ev.aura.holder, stacked);
         }
-        self.refresh_stats(io, ev.aura.holder, def);
+        self.interp.refresh_stats(io, ev.aura.holder, def);
     }
 
     fn aura_removed(&self, io: &mut dyn EngineIo, ev: &AuraEvent) {
@@ -506,7 +405,7 @@ impl Mechanics for PartyMechanics {
             };
             self.interp.fire(io, r.holder, removed);
         }
-        self.refresh_stats(io, r.holder, def);
+        self.interp.refresh_stats(io, r.holder, def);
     }
 
     /// An enemy's death reaches every seat's and pet's listeners.
@@ -657,6 +556,7 @@ impl Mechanics for PartyMechanics {
             depth: 0,
         };
         self.interp.fire(io, me, moved);
+        self.interp.refresh_conditional_stats(io, me);
     }
 
     fn death_prevented(&self, io: &mut dyn EngineIo, aura: AuraRef) {

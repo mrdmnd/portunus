@@ -30,6 +30,8 @@ fn deaths_reach_listeners_by_killer_and_by_what_the_enemy_carried() {
                 school: None,
                 crit_only: false,
                 killing_blow: true,
+                direct: None,
+                aura: None,
             },
             vec![rage(1.0)],
         ),
@@ -62,6 +64,7 @@ fn deaths_reach_listeners_by_killer_and_by_what_the_enemy_carried() {
         period: SimDuration(1000),
         hasted: false,
         partial_final_tick: false,
+        tick_zero: false,
         effects: vec![damage(1000.0, EffectTarget::Target)],
     });
     f.data.auras.insert(BURN, burn);
@@ -258,6 +261,7 @@ fn blade_flurry_copies_a_share_of_each_hit_to_a_few_others_but_never_a_copy() {
             max_targets: Some(4),
             sqrt_cap: None,
             secondary: 1.0,
+            full_primary: false,
         }),
         ignores_armor: true,
         hand: None,
@@ -270,6 +274,8 @@ fn blade_flurry_copies_a_share_of_each_hit_to_a_few_others_but_never_a_copy() {
             school: None,
             crit_only: false,
             killing_blow: false,
+            direct: None,
+            aura: None,
         },
         vec![flurry],
     )]);
@@ -328,6 +334,7 @@ fn spreading_copies_stacks_snapshot_and_time_left_to_enemies_without_it() {
         period: SimDuration(2000),
         hasted: false,
         partial_final_tick: false,
+        tick_zero: false,
         effects: vec![damage(100.0, EffectTarget::Target)],
     });
     f.data.auras.insert(PLAGUE, plague);
@@ -354,6 +361,7 @@ fn spreading_copies_stacks_snapshot_and_time_left_to_enemies_without_it() {
         aura: PLAGUE,
         to: EffectTarget::AllEnemies,
         max: Some(2),
+        refresh: false,
     };
     add_spell(&mut f, spell(SPREAD, vec![spread]));
     f.adds(Vec::from(
@@ -488,4 +496,73 @@ fn areas_reach_the_enemies_near_the_target_by_pack_position() {
     assert_eq!(landed(NOVA), vec![1, 1, 1, 0], "the radius is inclusive");
     assert_eq!(landed(NOVA_FAR), vec![0, 0, 0, 1], "the target alone");
     assert_eq!(landed(NOVA_LATE), vec![1, 1, 1, 1], "the far add came in");
+}
+
+#[test]
+fn aoe_full_primary_exempts_the_primary_target_from_sqrt_falloff_and_spread_can_refresh() {
+    use portunus_gamedata::aura::RefreshRule;
+
+    const BEAM: SpellId = SpellId(900_840);
+    const REFRESH_SPREAD: SpellId = SpellId(900_841);
+
+    let mut f = fixture(Vec::new());
+    three_adds(&mut f);
+    let mut beam_dmg = damage(10_000.0, EffectTarget::AllEnemies);
+    if let Effect::Damage { aoe, .. } = &mut beam_dmg {
+        *aoe = Some(AoeRule {
+            max_targets: None,
+            sqrt_cap: Some(1),
+            secondary: 1.0,
+            full_primary: true,
+        });
+    }
+    add_spell(&mut f, spell(BEAM, vec![beam_dmg]));
+
+    let mut dot = aura(PLAGUE);
+    dot.duration = Some(SimDuration(10_000));
+    dot.refresh = RefreshRule::Pandemic(0.3);
+    f.data.auras.insert(PLAGUE, dot);
+    add_spell(
+        &mut f,
+        spell(INFECT, vec![apply(PLAGUE, EffectTarget::Target)]),
+    );
+    add_spell(
+        &mut f,
+        spell(
+            REFRESH_SPREAD,
+            vec![Effect::SpreadAura {
+                aura: PLAGUE,
+                to: EffectTarget::AllEnemies,
+                max: None,
+                refresh: true,
+            }],
+        ),
+    );
+
+    let mut k = f.kernel();
+    play(
+        &mut k,
+        &[(BEAM, 0), (INFECT, 0), (INFECT, 1), (REFRESH_SPREAD, 0)],
+        COMBAT_START + SimDuration(3500),
+    );
+    let trace = k.drain_trace();
+    let e = k.state().enemies().to_vec();
+    // 4 targets with sqrt_cap 1: primary takes full, 3 adds take 1/sqrt(4) = 0.5.
+    let primary = hits(&trace, BEAM, e[0])[0];
+    let secondary = hits(&trace, BEAM, e[1])[0];
+    assert!(
+        close(secondary, primary as f64 * 0.5),
+        "{primary} {secondary}"
+    );
+
+    // At t = 13s, INFECT on e[0] has 7s left; REFRESH_SPREAD onto e[1] (which
+    // already had PLAGUE) pandemic-extends e[1]'s expiry past 21s!
+    let exp1 = k
+        .state()
+        .auras(e[1])
+        .iter()
+        .find(|a| a.aura == PLAGUE)
+        .and_then(|a| a.expires)
+        .unwrap();
+    assert!(exp1 > COMBAT_START + SimDuration(11_000));
 }

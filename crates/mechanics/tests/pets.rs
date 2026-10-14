@@ -102,7 +102,9 @@ fn spell(id: SpellId, cast: CastKind, gcd: Option<GcdDef>, effects: Vec<Effect>)
         castable_while_moving: false,
         usable_while_casting: false,
         weapon: None,
+        unrecorded: false,
         requires: Vec::new(),
+        on_cast: Vec::new(),
         effects,
     }
 }
@@ -498,6 +500,7 @@ fn with_magma_totem(f: &mut Fixture) {
         period: ms(2000),
         hasted: false,
         partial_final_tick: false,
+        tick_zero: false,
         effects: vec![fire_damage(0.1, EffectTarget::AllEnemies)],
     });
     f.data.auras.insert(pulse.id, pulse);
@@ -628,6 +631,7 @@ fn decks_proc_exactly_once_per_deck() {
         per_unit: false,
         shared_with: None,
         condition: None,
+        chain: false,
         effects: vec![Effect::ApplyAura {
             aura: DECK_MARKER,
             target: EffectTarget::Caster,
@@ -684,6 +688,7 @@ fn malformed_decks_are_rejected() {
         per_unit: false,
         shared_with: None,
         condition: None,
+        chain: false,
         effects: Vec::new(),
     }];
     f.data.auras.insert(bad.id, bad);
@@ -707,6 +712,7 @@ fn decks_persist_across_reapplication() {
         per_unit: false,
         shared_with: None,
         condition: None,
+        chain: false,
         effects: vec![Effect::ApplyAura {
             aura: DECK_MARKER,
             target: EffectTarget::Caster,
@@ -855,6 +861,7 @@ fn pet_melee_and_haste_follow_owner_and_pet_buffs() {
         per_unit: false,
         shared_with: None,
         condition: None,
+        chain: false,
         effects: vec![Effect::ApplyAura {
             aura: SWING_MARKER,
             target: EffectTarget::Caster,
@@ -1278,6 +1285,7 @@ fn spirits_echo_the_owners_casts_for_a_fixed_share() {
         per_unit: false,
         shared_with: None,
         condition: None,
+        chain: false,
         effects: vec![Effect::CommandPet {
             pet: Some(SPIRIT),
             spell: SPIRIT_BOLT,
@@ -1308,5 +1316,98 @@ fn spirits_echo_the_owners_casts_for_a_fixed_share() {
             assert!(!crit);
             assert_eq!(amount, whole_points(SPELL_POWER * vers * 0.45));
         }
+    }
+}
+
+#[test]
+fn commanded_pets_channel_all_ticks_and_benefit_from_owner_debuffs_and_mastery() {
+    use portunus_gamedata::effect::Predicate;
+
+    const FISTS: SpellId = SpellId(900_030);
+    const OWNER_DEBUFF: AuraId = AuraId(900_031);
+    const PET_MASTERY: AuraId = AuraId(900_032);
+
+    let mut f = fixture();
+    let mut debuff = aura(OWNER_DEBUFF, Some(ms(60_000)));
+    debuff.modifiers = vec![modifier(ModKind::SourceDamageTakenPct, 20.0)];
+    f.data.auras.insert(OWNER_DEBUFF, debuff);
+
+    let mut pet_mastery = aura(PET_MASTERY, None);
+    pet_mastery.modifiers = vec![
+        modifier(ModKind::MasteryDamagePct, 1.0),
+        Modifier {
+            scope: ModScope::All,
+            kind: ModKind::DamageDonePct,
+            value: 50.0,
+            per_stack: false,
+            condition: Some(Predicate::TargetHasAura {
+                aura: OWNER_DEBUFF,
+                from_self: true,
+            }),
+        },
+    ];
+    f.data.auras.insert(PET_MASTERY, pet_mastery);
+
+    let mut spirit = pet(SPIRIT, PetKind::Guardian, 1.0);
+    spirit.duration = Some(ms(15_000));
+    spirit.passive_auras = vec![PET_MASTERY];
+    f.data.pets.insert(spirit.id, spirit);
+
+    f.add_spell(spell(
+        FISTS,
+        CastKind::Channel {
+            duration: ms(3000),
+            ticks: 3,
+            hasted: false,
+            swings: false,
+            tick_zero: false,
+            on_end: Vec::new(),
+        },
+        None,
+        vec![fire_damage(1.0, EffectTarget::Target)],
+    ));
+
+    let mut echo = aura(ECHO, None);
+    echo.modifiers = vec![modifier(ModKind::CritChanceAdd, -1000.0)];
+    f.data.auras.insert(ECHO, echo);
+    f.template.passive_auras.push(ECHO);
+
+    let mut cmd = spell(
+        SEF,
+        CastKind::Instant,
+        gcd(),
+        vec![
+            summon(SPIRIT, 1, SimDuration::ZERO),
+            Effect::ApplyAura {
+                aura: OWNER_DEBUFF,
+                target: EffectTarget::Target,
+                stacks: 1,
+                duration: None,
+                per_unit_spent: None,
+            },
+            Effect::CommandPet {
+                pet: Some(SPIRIT),
+                spell: FISTS,
+            },
+        ],
+    );
+    cmd.cooldown = cooldown(600_000);
+    f.add_ability(cmd);
+
+    let k = f.kernel(1);
+    let m = f.mechanics(1);
+    let owner_d = m.math().derived(k.state(), k.state().seats()[0]);
+    let vers = 1.0 + owner_d.versatility_pct / 100.0;
+    let mastery = 1.0 + owner_d.mastery_pct / 100.0;
+    // Base SP * vers * mastery * 1.5 (from_self TargetHasAura) * 1.2 (owner SourceDamageTakenPct).
+    let want = whole_points(SPELL_POWER * vers * mastery * 1.5 * 1.2);
+
+    let (_, trace) = f.rollout(1, &[SEF]);
+    let (&spirit_id, _) = lifetimes(&trace, SPIRIT).iter().next().unwrap();
+    let hits = damage_by(&trace, spirit_id);
+    assert_eq!(hits.len(), 3, "{hits:?}");
+    for (_, s, _, amount) in hits {
+        assert_eq!(s, Some(FISTS));
+        assert_eq!(amount, want);
     }
 }

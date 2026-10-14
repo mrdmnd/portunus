@@ -306,6 +306,8 @@ pub(crate) fn build(setup: RunSetup) -> World {
             travelled: 0.0,
             demands: Vec::new(),
             speed_pct: setup.seats[i].template.derived.speed_pct,
+            stationary_since: SimTime::ZERO,
+            damage_log: VecDeque::new(),
             res_offer: None,
         })
         .collect();

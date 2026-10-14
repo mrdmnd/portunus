@@ -1,10 +1,10 @@
 //! The kernel: [`Kernel`] implements [`Engine`] for any [`Mechanics`].
 //!
 //! The kernel reads the timing modifiers itself (`CastTimePct`, `GcdPct`,
-//! `CooldownPct`, `ChargesAdd`, `CostPct`, `ChannelTicksAdd`), because
-//! cast, GCD, and cooldown
-//! timing are its job, and `ResourceMax` when it builds the seats; every
-//! other modifier is left to the mechanics. Mechanics' calls
+//! `CooldownPct`, `CooldownRatePct`, `ChargesAdd`, `CostPct`,
+//! `ChannelTicksAdd`, `TickPeriodPct`), because
+//! cast, GCD, cooldown, and tick timing are its job, and `ResourceMax` when
+//! it builds the seats; every other modifier is left to the mechanics. Mechanics' calls
 //! into [`EngineIo`] never call back into mechanics directly: the aura
 //! changes and deaths they cause are queued and delivered once the current
 //! callback returns.
@@ -42,9 +42,10 @@
 //! their own rules and must die for the combat to clear. Adds marked
 //! `despawn_with_spawner` leave, without dying, when their spawner dies.
 //!
-//! Not implemented yet. Reported as [`EngineError::Unsupported`] on first
-//! use: spells triggered for enemies, and pet autocast spells with no GCD,
-//! cooldown, or cast time.
+//! Unsupported input is reported as [`EngineError::Unsupported`] on first
+//! use instead of being guessed. Examples include spells triggered for
+//! enemies and pet autocast spells with no GCD, cooldown, cast time, or
+//! interval.
 //!
 //! Between pulls, living seats heal to full and dead ones come back with
 //! full health and their passive auras.
@@ -436,6 +437,9 @@ impl<M: Mechanics> Kernel<M> {
             deadline,
         };
         self.world.set_combat_regen(true);
+        if combat > 0 {
+            self.world.reset_rppm();
+        }
         self.world
             .queue
             .push(deadline, Event::CombatTimeout { combat });
@@ -670,6 +674,30 @@ impl<M: Mechanics> Kernel<M> {
         }
     }
 
+    fn channel_state(
+        &self,
+        ev: &CastEvent,
+        ticks: u8,
+        swings: bool,
+        tick_zero: bool,
+        tick_wakes: bool,
+    ) -> ChannelState {
+        let added = self
+            .world
+            .mod_sum(ev.actor, ev.spell, ModKind::ChannelTicksAdd, ev.target)
+            .round()
+            .clamp(0.0, f64::from(u8::MAX));
+        let spread = ticks.max(1).saturating_add(added as u8);
+        ChannelState {
+            ticks: spread.saturating_add(u8::from(tick_zero)),
+            done: 0,
+            duration: self.world.cast_time_of(ev.actor, ev.spell, ev.target),
+            tick_zero,
+            tick_wakes,
+            swings,
+        }
+    }
+
     /// Start a seat's or pet's cast once its GCD is set: hard casts wait
     /// for their cast time, instants complete now, and channels take
     /// effect now and tick until they end.
@@ -694,20 +722,7 @@ impl<M: Mechanics> Kernel<M> {
             ..
         } = def.cast
         {
-            let added = self
-                .world
-                .mod_sum(actor, spell, ModKind::ChannelTicksAdd, target)
-                .round()
-                .clamp(0.0, f64::from(u8::MAX));
-            let spread = ticks.max(1).saturating_add(added as u8);
-            let ch = ChannelState {
-                ticks: spread.saturating_add(u8::from(tick_zero)),
-                done: 0,
-                duration: cast_time,
-                tick_zero,
-                tick_wakes: opts.tick_wakes,
-                swings,
-            };
+            let ch = self.channel_state(&ev, ticks, swings, tick_zero, opts.tick_wakes);
             self.begin_channel(ev, def, ch);
         } else if let CastKind::Empower {
             stages,
@@ -917,11 +932,21 @@ impl<M: Mechanics> Kernel<M> {
         ev
     }
 
-    /// `cast_completed` has run: the cast joins the seat's recent casts.
-    /// Its own effects saw the casts before it, as SimC's combo strikes
-    /// do (`combo_strikes_trigger` checks, then pushes).
+    /// `cast_completed` has run: the cast joins the seat's recent casts
+    /// unless the spell is `unrecorded`. Its own effects saw the casts
+    /// before it, as SimC's combo strikes do (`combo_strikes_trigger`
+    /// checks, then pushes).
     fn remember_cast(&mut self, ev: &CastEvent) {
-        if self.world.is_pet(ev.actor) {
+        if self.world.is_pet(ev.actor)
+            || self
+                .world
+                .s
+                .setup
+                .data
+                .spells
+                .get(&ev.spell)
+                .is_some_and(|d| d.unrecorded)
+        {
             return;
         }
         let at = self.world.now;
@@ -1074,6 +1099,48 @@ impl<M: Mechanics> Kernel<M> {
             spent: None,
             prerolled: rolled.is_some(),
         };
+        if let CastKind::Channel {
+            ticks,
+            swings,
+            tick_zero,
+            ..
+        } = def.cast
+        {
+            self.world.cancel_cast(caster, CastEndReason::Stopped);
+            self.world.record(TraceEvent::CastStart {
+                actor: caster,
+                spell,
+                target,
+            });
+            self.call(|m, io| m.cast_started(io, &ev));
+            let ch = self.channel_state(&ev, ticks, swings, tick_zero, false);
+            let now = self.world.now;
+            let Some(a) = self.world.actor_mut(caster) else {
+                return;
+            };
+            a.cast_seq += 1;
+            let seq = a.cast_seq;
+            let casting = Casting {
+                ev,
+                ends: now + ch.duration,
+                seq,
+                channel: Some(ch),
+                empower: None,
+            };
+            a.casting = Some(casting);
+            if let Some(at) = casting.next_tick() {
+                self.world.queue.push(
+                    at,
+                    Event::ChannelTick {
+                        actor: caster,
+                        cast: seq,
+                        index: 1,
+                    },
+                );
+            }
+            self.call(|m, io| m.cast_completed(io, &ev));
+            return;
+        }
         self.world.record(TraceEvent::CastEnd {
             actor: caster,
             spell,
@@ -1242,13 +1309,13 @@ impl<M: Mechanics> Kernel<M> {
             return;
         }
         let reason = match (st.phase, &st.wait) {
-            (SeatPhase::Locked, _) | (SeatPhase::Waiting, Some(Wait::NextEvent)) => {
-                match st.armed {
-                    Some((t, reason)) if t <= now => reason,
-                    _ => return,
-                }
-            }
-            (SeatPhase::Waiting, Some(Wait::Condition(c))) => {
+            (SeatPhase::Locked, _)
+            | (SeatPhase::Waiting, Some(Wait::NextEvent))
+            | (SeatPhase::Committed, None | Some(Wait::NextEvent)) => match st.armed {
+                Some((t, reason)) if t <= now => reason,
+                _ => return,
+            },
+            (SeatPhase::Waiting | SeatPhase::Committed, Some(Wait::Condition(c))) => {
                 if !self.world.condition_now(seat, c) {
                     return;
                 }
@@ -1256,7 +1323,9 @@ impl<M: Mechanics> Kernel<M> {
             }
             _ => return,
         };
-        self.world.seat_mut(seat).phase = SeatPhase::Deciding;
+        if st.phase != SeatPhase::Committed {
+            self.world.seat_mut(seat).phase = SeatPhase::Deciding;
+        }
         self.world.notify(seat, reason, true, Some(gen), now);
     }
 
@@ -1540,6 +1609,25 @@ impl<M: Mechanics> Kernel<M> {
             .min_by_key(|&(t, _)| t)
     }
 
+    /// The next wake a committed (casting, channeling, or empowering)
+    /// seat should expect before its current cast ends, e.g. a
+    /// `usable_while_casting` ability coming off cooldown mid-cast.
+    fn arm_committed(&self, seat: Seat) -> Option<(SimTime, WakeReason)> {
+        let now = self.world.now;
+        let ends = self
+            .world
+            .actor_ref(self.world.seat_actor(seat))
+            .and_then(|a| a.casting)
+            .map(|c| c.ends)?;
+        self.world.s.abilities[usize::from(seat.0)]
+            .iter()
+            .filter_map(|&s| match self.readiness(seat, s) {
+                (Readiness::In(d), reason) if now + d < ends => Some((now + d, reason)),
+                _ => None,
+            })
+            .min_by_key(|&(t, _)| t)
+    }
+
     /// Re-predict every armed seat's next wake after the world changed.
     /// For readiness wakes, one already due stands: its recheck is still
     /// queued at this timestamp and will deliver, and re-predicting now
@@ -1551,7 +1639,9 @@ impl<M: Mechanics> Kernel<M> {
             let st = &self.world.seats[i];
             let readiness_wake = matches!(
                 (st.phase, &st.wait),
-                (SeatPhase::Locked, _) | (SeatPhase::Waiting, Some(Wait::NextEvent))
+                (SeatPhase::Locked, _)
+                    | (SeatPhase::Waiting, Some(Wait::NextEvent))
+                    | (SeatPhase::Committed, None | Some(Wait::NextEvent))
             );
             if readiness_wake && st.armed.is_some_and(|(t, _)| t <= now) {
                 continue;
@@ -1559,7 +1649,8 @@ impl<M: Mechanics> Kernel<M> {
             let target = match (st.phase, &st.wait) {
                 (SeatPhase::Locked, _) => self.arm(seat, true),
                 (SeatPhase::Waiting, Some(Wait::NextEvent)) => self.arm(seat, false),
-                (SeatPhase::Waiting, Some(Wait::Condition(c))) => self
+                (SeatPhase::Committed, None | Some(Wait::NextEvent)) => self.arm_committed(seat),
+                (SeatPhase::Waiting | SeatPhase::Committed, Some(Wait::Condition(c))) => self
                     .world
                     .solve(seat, c)
                     .map(|t| (t, WakeReason::ConditionMet)),

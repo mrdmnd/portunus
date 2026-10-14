@@ -73,6 +73,7 @@ fn listener(on: ListenFor, chance: ProcChance, effects: Vec<Effect>) -> Listener
         per_unit: false,
         shared_with: None,
         condition: None,
+        chain: false,
         effects,
     }
 }
@@ -361,7 +362,9 @@ fn weapon_strikes_trigger_weapon_hits_but_not_swings() {
             castable_while_moving: false,
             usable_while_casting: false,
             weapon: Some(WeaponHand::MainHand),
+            unrecorded: false,
             requires: Vec::new(),
+            on_cast: Vec::new(),
             effects: vec![damage(5000.0, SchoolMask::PHYSICAL)],
         },
     );
@@ -571,7 +574,9 @@ fn spell(id: SpellId, cast: CastKind, hostile: bool, effects: Vec<Effect>) -> Sp
         castable_while_moving: false,
         usable_while_casting: false,
         weapon: None,
+        unrecorded: false,
         requires: Vec::new(),
+        on_cast: Vec::new(),
         effects,
     }
 }
@@ -599,6 +604,7 @@ fn druid() -> Fixture {
         allows_all: false,
         allows: vec![PROWL_SPELL, SAP, PRICK],
         weapon: Some(weapon(PAWS, 300.0)),
+        gcd: None,
     });
     let mut bear = aura(BEAR, Vec::new());
     bear.form = Some(FormDef {
@@ -606,6 +612,7 @@ fn druid() -> Fixture {
         allows_all: false,
         allows: Vec::new(),
         weapon: None,
+        gcd: None,
     });
     let mut prowl = aura(
         PROWL,
@@ -910,6 +917,7 @@ fn armor_reduces_direct_physical_hits_but_not_bleeds() {
         period: SimDuration(1000),
         hasted: false,
         partial_final_tick: false,
+        tick_zero: false,
         effects: vec![damage(1000.0, SchoolMask::PHYSICAL)],
     });
     f.data.auras.insert(bleed, rend_bleed);
@@ -1495,6 +1503,8 @@ fn absorbs_soak_their_school_smallest_first_and_go_when_spent() {
             school: None,
             crit_only: false,
             killing_blow: false,
+            direct: None,
+            aura: None,
         },
         ProcChance::Always,
         vec![damage(1.0, SchoolMask::ARCANE)],
@@ -1676,6 +1686,7 @@ fn bank(draw: BankDraw, duration: u32, partial_final_tick: bool) -> AuraDef {
             period: SimDuration(1000),
             hasted: false,
             partial_final_tick,
+            tick_zero: false,
             effects: vec![pay],
         }),
         ..valued(IGNITE, value)
@@ -2030,4 +2041,199 @@ fn durations_grow_with_the_resource_spent() {
     assert_eq!(rupture_lasts(3.0, four), SimDuration(16_000));
     assert_eq!(rupture_lasts(5.0, four), SimDuration(24_000));
     assert_eq!(rupture_lasts(5.0, None), SimDuration(4000));
+}
+
+#[test]
+fn dual_wield_attack_power_strikes_use_each_hand_and_halve_the_off_hand() {
+    let mh = weapon(2000, 1000.0); // 500 dps -> 3000 weapon AP
+    let oh = weapon(2000, 400.0); // 200 dps -> 1200 weapon AP, halved by 0.5 -> 600
+    let mut f = fixture(mh, Some(oh), Vec::new());
+    f.template.melee = false;
+    let hit = |hand| Effect::Damage {
+        amount: Coefficient::AttackPower(1.0),
+        school: SchoolMask::PHYSICAL,
+        target: EffectTarget::Target,
+        aoe: None,
+        ignores_armor: true,
+        hand: Some(hand),
+        per_count: None,
+        unmodified: false,
+    };
+    let s = spell(
+        TWIN,
+        CastKind::Instant,
+        true,
+        vec![hit(WeaponHand::MainHand), hit(WeaponHand::OffHand)],
+    );
+    learn(&mut f, s);
+    let (_, trace) = cast_in_order(&f, &[TWIN], COMBAT_START + SimDuration(2000));
+    let landed: Vec<u64> = dealt(&trace, SchoolMask::PHYSICAL)
+        .into_iter()
+        .filter(|h| h.2 == Some(TWIN))
+        .map(|h| h.1)
+        .collect();
+    assert_eq!(landed.len(), 2);
+    assert!(
+        (landed[0] as f64 / landed[1] as f64 - 5.0).abs() < 0.01,
+        "{landed:?}"
+    );
+}
+
+#[test]
+fn travelling_spells_run_on_cast_at_launch_after_snapshotting_damage_and_untargeted_missiles_land()
+{
+    const SURGE: AuraId = AuraId(900_721);
+    const MISSILE: SpellId = SpellId(900_722);
+    const METEOR: SpellId = SpellId(900_723);
+
+    let mut f = caster(Vec::new());
+    let surge = aura(
+        SURGE,
+        vec![Modifier {
+            scope: ModScope::Spell(MISSILE),
+            ..modifier(ModKind::DamageDonePct, 100.0)
+        }],
+    );
+    f.data.auras.insert(SURGE, surge);
+    f.template.passive_auras.push(SURGE);
+
+    let mut missile = spell(
+        MISSILE,
+        CastKind::Instant,
+        true,
+        vec![damage(1000.0, SchoolMask::FIRE)],
+    );
+    missile.speed = Some(20.0);
+    missile.on_cast = vec![
+        Effect::RemoveAura {
+            aura: SURGE,
+            target: EffectTarget::Caster,
+        },
+        Effect::GainResource {
+            kind: ResourceKind::Rage,
+            amount: Coefficient::Flat(25.0),
+        },
+    ];
+    let mut meteor = spell(
+        METEOR,
+        CastKind::Instant,
+        true,
+        vec![hit_all(500.0, SchoolMask::ARCANE)],
+    );
+    meteor.targeting = Targeting::None;
+    meteor.min_travel = SimDuration(1000);
+    learn(&mut f, missile);
+    learn(&mut f, meteor);
+
+    let (k, trace) = cast_in_order(
+        &f,
+        &[MISSILE, MISSILE, METEOR],
+        COMBAT_START + SimDuration(6000),
+    );
+    // Both missiles generated 25 rage immediately on cast.
+    let rage = k
+        .state()
+        .resource(ActorId(0), ResourceKind::Rage)
+        .unwrap()
+        .value;
+    assert_eq!(rage, 50.0);
+    // The first missile snapshotted SURGE (+100%) before `on_cast` removed
+    // it; the second hit for base damage.
+    let fire = dealt(&trace, SchoolMask::FIRE);
+    assert_eq!(fire.len(), 2);
+    assert!(about(fire[0].1, 2.0 * fire[1].1 as f64), "{fire:?}");
+    // The untargeted meteor landed 1000 ms after its cast.
+    let arcane = dealt(&trace, SchoolMask::ARCANE);
+    assert_eq!(arcane.len(), 1);
+}
+
+#[test]
+fn unrecorded_spells_do_not_overwrite_recent_casts_for_combo_strikes() {
+    const TRINKET: SpellId = SpellId(900_731);
+    let mut f = probing(Predicate::DiffersFromLastCast);
+    let mut trinket = spell(TRINKET, CastKind::Instant, false, Vec::new());
+    trinket.unrecorded = true;
+    learn(&mut f, trinket);
+    // PROBE -> TRINKET (unrecorded) -> PROBE: the second PROBE still sees
+    // the first PROBE as the last cast, so DiffersFromLastCast is false.
+    assert!(!probe_holds(&f, &[PROBE, TRINKET]));
+    assert!(probe_holds(&f, &[PROBE, OTHER, TRINKET]));
+}
+
+#[test]
+fn reset_swing_restarts_the_swing_timer_and_form_gcd_overrides_spell_gcd() {
+    const RESETTER: SpellId = SpellId(900_741);
+    const MOONKIN: AuraId = AuraId(900_742);
+    const MOONKIN_FORM: SpellId = SpellId(900_743);
+
+    let mut f = fixture(weapon(2000, 1000.0), None, Vec::new());
+    let mut reset = spell(
+        RESETTER,
+        CastKind::Instant,
+        true,
+        vec![Effect::ResetSwing {
+            hand: Some(WeaponHand::MainHand),
+        }],
+    );
+    reset.gcd = Some(GcdDef {
+        base: SimDuration(1500),
+        hasted: false,
+        floor: SimDuration(1000),
+    });
+    let mut moonkin = aura(MOONKIN, Vec::new());
+    moonkin.form = Some(FormDef {
+        group: 1,
+        allows_all: true,
+        allows: Vec::new(),
+        weapon: None,
+        gcd: Some(GcdDef {
+            base: SimDuration(1000),
+            hasted: false,
+            floor: SimDuration(1000),
+        }),
+    });
+    f.data.auras.insert(MOONKIN, moonkin);
+    learn(
+        &mut f,
+        spell(
+            MOONKIN_FORM,
+            CastKind::Instant,
+            false,
+            vec![apply_self(MOONKIN)],
+        ),
+    );
+    learn(&mut f, reset);
+
+    let mut k = f.kernel(1);
+    let reset_at = COMBAT_START + SimDuration(1000);
+    let end = COMBAT_START + SimDuration(5000);
+    let mut did_reset = false;
+    let mut gcd_after_reset = None;
+    script(&mut k, end, |now, k| {
+        if now < COMBAT_START {
+            return if !holds(k, MOONKIN) {
+                cast(MOONKIN_FORM)
+            } else {
+                Choice::Wait(Wait::Until(reset_at))
+            };
+        }
+        if now < reset_at {
+            return Choice::Wait(Wait::Until(reset_at));
+        }
+        if !did_reset {
+            did_reset = true;
+            return cast(RESETTER);
+        }
+        gcd_after_reset = k.state().gcd_end(Seat(0)).or(gcd_after_reset);
+        Choice::Wait(Wait::Until(end))
+    });
+    // Form with `allows_all: true` stays up and gives RESETTER its 1.0 s GCD
+    // (ending at reset_at + 1000 ms instead of + 1500 ms).
+    assert!(holds(&k, MOONKIN));
+    assert_eq!(gcd_after_reset, Some(reset_at + SimDuration(1000)));
+    let trace = k.drain_trace();
+    let (mh, _) = white_hits(&trace);
+    // Swung at 10 s, reset at 11 s -> second swing pushed back by 1000 ms!
+    let step = mh[2] - mh[1];
+    assert_eq!(mh[1] - mh[0], step + SimDuration(1000));
 }

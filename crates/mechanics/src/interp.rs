@@ -71,9 +71,11 @@ pub(crate) enum Happening {
     },
     DamageDealt {
         spell: Option<SpellId>,
+        aura: Option<AuraId>,
         school: SchoolMask,
         crit: bool,
         killing_blow: bool,
+        kind: HitKind,
     },
     DamageTaken,
     Swing {
@@ -152,7 +154,17 @@ impl Interpreter {
 
     /// Run the listeners on `holder`'s auras that match `ev`.
     pub(crate) fn fire(&self, io: &mut dyn EngineIo, holder: ActorId, ev: Occurrence) {
-        if ev.depth > 0 {
+        self.fire_nested(io, holder, ev, None);
+    }
+
+    pub(crate) fn fire_nested(
+        &self,
+        io: &mut dyn EngineIo,
+        holder: ActorId,
+        ev: Occurrence,
+        source_aura: Option<AuraId>,
+    ) {
+        if ev.depth > 1 {
             return;
         }
         let data = self.math.data();
@@ -171,6 +183,11 @@ impl Interpreter {
                 continue;
             };
             for (index, l) in def.listeners.iter().enumerate() {
+                let extra_swing_loop = matches!(ev.what, Happening::Swing { .. })
+                    && l.effects.contains(&Effect::ExtraSwing);
+                if ev.depth > 0 && (!l.chain || (source_aura == Some(r.aura) && extra_swing_loop)) {
+                    continue;
+                }
                 let died_with = |aura: AuraId| {
                     ev.target.is_some_and(|t| {
                         io.view()
@@ -246,7 +263,7 @@ impl Interpreter {
                         event_amount: ev.amount,
                         scale,
                         spent: None,
-                        depth: 1,
+                        depth: ev.depth + 1,
                         hand,
                         hit: HitKind::Direct,
                         ground: None,
@@ -273,12 +290,21 @@ impl Interpreter {
             ProcChance::StatScaled { stat, coef } => {
                 coef * self.math.rated_pct(view, holder, stat) / 100.0
             }
-            ProcChance::Rppm { rate, hasted } => {
+            ProcChance::Rppm { rate, hasted, crit } => {
                 let haste = if hasted {
                     self.math.haste_mult(view, holder)
                 } else {
                     1.0
                 };
+                let crit_mult = if crit {
+                    1.0 + self.math.rated_pct(view, holder, RatedStat::Crit) / 100.0
+                } else {
+                    1.0
+                };
+                let eff_rate = rate * haste * crit_mult;
+                if eff_rate <= 0.0 {
+                    return 0.0;
+                }
                 let secs = |t: SimTime| f64::from(now.saturating_since(t).millis()) / 1000.0;
                 let gap = proc
                     .and_then(|p| p.last_attempt)
@@ -288,9 +314,12 @@ impl Interpreter {
                     SegmentView::Combat(c) => c.started,
                     SegmentView::Travel { .. } | SegmentView::Finished => now,
                 };
-                let dry = secs(proc.and_then(|p| p.last_proc).unwrap_or(combat_start));
-                let bad_luck = (1.0 + (dry / (60.0 / rate) - 1.5) * 3.0).max(1.0);
-                rate * haste * gap / 60.0 * bad_luck
+                let since = proc
+                    .and_then(|p| p.last_proc)
+                    .map_or(combat_start, |t| t.max(combat_start));
+                let dry = secs(since).min(1000.0);
+                let bad_luck = (1.0 + (dry / (60.0 / eff_rate) - 1.5) * 3.0).max(1.0);
+                eff_rate * gap / 60.0 * bad_luck
             }
             ProcChance::Deck { successes, size } => {
                 let left = proc
@@ -550,17 +579,23 @@ impl Interpreter {
             .chain(chain.extra)
             .enumerate()
             .map(|(i, t)| {
-                let share = if i >= primary {
-                    chain.share
-                } else if ctx.target == Some(t) {
-                    1.0
+                let is_primary = ctx.target == Some(t);
+                let (eff_falloff, share) = if i >= primary {
+                    (1.0, chain.share)
+                } else if is_primary {
+                    let f = if aoe.is_some_and(|r| r.full_primary) {
+                        1.0
+                    } else {
+                        falloff
+                    };
+                    (f, 1.0)
                 } else {
-                    secondary
+                    (falloff, secondary)
                 };
                 let by_count = d.per_count.map_or(1.0, |s| s.form.apply(s.pct, count(t)));
                 EffectCtx {
                     target: Some(t),
-                    scale: ctx.scale * falloff * share * by_count,
+                    scale: ctx.scale * eff_falloff * share * by_count,
                     ..*ctx
                 }
             })
@@ -620,12 +655,13 @@ impl Interpreter {
                 amount: Some(gained),
                 depth: ctx.depth,
             };
-            self.fire(io, ctx.caster, ev);
+            self.fire_nested(io, ctx.caster, ev, ctx.aura.map(|r| r.aura));
         }
     }
 
     /// After a hit on `holder` from `attacker`: its `HealthBelow`
-    /// listeners, given its health fractions before and after.
+    /// listeners, given its health fractions before and after, and any
+    /// health-conditioned stats.
     pub(crate) fn health_dropped(
         &self,
         io: &mut dyn EngineIo,
@@ -645,6 +681,176 @@ impl Interpreter {
                 depth,
             };
             self.fire(io, holder, ev);
+            self.refresh_conditional_stats(io, holder);
+        }
+    }
+
+    /// Re-push kernel stats for `actor` (and any seat targeting `actor`)
+    /// that holds an aura with a conditional stat or haste modifier.
+    pub(crate) fn refresh_conditional_stats(&self, io: &mut dyn EngineIo, actor: ActorId) {
+        let data = self.math.data();
+        let view = io.view();
+        let mut check: Vec<ActorId> = vec![actor];
+        for &seat in view.seats() {
+            if seat != actor && view.target(seat) == Some(actor) {
+                check.push(seat);
+            }
+        }
+        let mut to_refresh: Vec<(ActorId, AuraId)> = Vec::new();
+        for holder in check {
+            for inst in view.auras(holder) {
+                let conditional = data
+                    .auras
+                    .get(&inst.aura)
+                    .is_some_and(|d| d.modifiers.iter().any(|m| m.condition.is_some()));
+                if conditional {
+                    to_refresh.push((holder, inst.aura));
+                }
+            }
+        }
+        for (holder, aura) in to_refresh {
+            if let Some(def) = data.auras.get(&aura) {
+                self.refresh_stats(io, holder, def);
+            }
+        }
+    }
+
+    /// Re-push what the kernel keeps of `holder`'s stats after `def`
+    /// changed on it, and of every seat holding a `StatShare` from it: a
+    /// share follows its source's stats, as SimC's `update_stats` on
+    /// Ebon Might.
+    pub(crate) fn refresh_stats(
+        &self,
+        io: &mut dyn EngineIo,
+        holder: ActorId,
+        def: &portunus_gamedata::aura::AuraDef,
+    ) {
+        self.refresh_speed(io, holder, def);
+        self.refresh_health(io, holder, def);
+        self.refresh_run_speed(io, holder, def);
+        let data = self.math.data();
+        let view = io.view();
+        let mut sharing: Vec<(ActorId, AuraId)> = Vec::new();
+        for &seat in view.seats().iter().filter(|&&s| s != holder) {
+            for inst in view.auras(seat).iter().filter(|i| i.source == holder) {
+                let shares = data.auras.get(&inst.aura).is_some_and(|d| {
+                    d.modifiers
+                        .iter()
+                        .any(|m| matches!(m.kind, portunus_gamedata::effect::ModKind::StatShare(_)))
+                });
+                if shares {
+                    sharing.push((seat, inst.aura));
+                }
+            }
+        }
+        for (seat, aura) in sharing {
+            let Some(share) = data.auras.get(&aura) else {
+                continue;
+            };
+            self.refresh_speed(io, seat, share);
+            self.refresh_health(io, seat, share);
+            self.refresh_run_speed(io, seat, share);
+        }
+    }
+
+    fn touches(
+        &self,
+        view: &dyn StateView,
+        holder: ActorId,
+        def: &portunus_gamedata::aura::AuraDef,
+        stat: portunus_gamedata::stats::Stat,
+    ) -> bool {
+        use portunus_gamedata::effect::ModKind;
+        let data = self.math.data();
+        let direct = |s: portunus_gamedata::stats::Stat, d: &portunus_gamedata::aura::AuraDef| {
+            d.modifiers.iter().any(|m| match m.kind {
+                ModKind::StatFlat(x) | ModKind::StatPct(x) | ModKind::StatShare(x) => x == s,
+                ModKind::StatFromStat { to, .. } => to == s,
+                _ => false,
+            })
+        };
+        direct(stat, def)
+            || view
+                .auras(holder)
+                .iter()
+                .filter_map(|i| data.auras.get(&i.aura))
+                .flat_map(|d| &d.modifiers)
+                .any(|m| {
+                    matches!(m.kind, ModKind::StatFromStat { from, to } if to == stat && direct(from, def))
+                })
+    }
+
+    fn refresh_run_speed(
+        &self,
+        io: &mut dyn EngineIo,
+        holder: ActorId,
+        def: &portunus_gamedata::aura::AuraDef,
+    ) {
+        let view = io.view();
+        if player_seat(view, holder).is_none()
+            || !self.touches(view, holder, def, portunus_gamedata::stats::Stat::Speed)
+        {
+            return;
+        }
+        let pct = self.math.derived(view, holder).speed_pct;
+        io.set_speed_pct(holder, pct);
+    }
+
+    fn refresh_health(
+        &self,
+        io: &mut dyn EngineIo,
+        holder: ActorId,
+        def: &portunus_gamedata::aura::AuraDef,
+    ) {
+        let view = io.view();
+        if player_seat(view, holder).is_none()
+            || !self.touches(view, holder, def, portunus_gamedata::stats::Stat::Stamina)
+        {
+            return;
+        }
+        let max = self.math.derived(io.view(), holder).max_health;
+        io.set_max_health(holder, whole_points(max));
+    }
+
+    fn refresh_speed(
+        &self,
+        io: &mut dyn EngineIo,
+        holder: ActorId,
+        def: &portunus_gamedata::aura::AuraDef,
+    ) {
+        use portunus_gamedata::effect::ModKind;
+        let touches_haste = def.modifiers.iter().any(|m| m.kind == ModKind::HastePct)
+            || self.touches(
+                io.view(),
+                holder,
+                def,
+                portunus_gamedata::stats::Stat::HasteRating,
+            );
+        let touches_attack_speed = def
+            .modifiers
+            .iter()
+            .any(|m| m.kind == ModKind::AttackSpeedPct);
+        let view = io.view();
+        let mut hasted = Vec::new();
+        if touches_haste {
+            if let Some(seat) = player_seat(view, holder) {
+                hasted.push(holder);
+                hasted.extend_from_slice(view.pets(seat));
+            } else if owner_seat(view, holder).is_some() {
+                hasted.push(holder);
+            }
+        }
+        let hasted: Vec<(ActorId, f64)> = hasted
+            .into_iter()
+            .map(|a| (a, self.math.haste_mult(view, a)))
+            .collect();
+        let attack_speed = (touches_attack_speed && owner_seat(view, holder).is_some())
+            .then(|| self.math.attack_speed_mult(view, holder));
+        for (actor, mult) in hasted {
+            io.set_haste(actor, mult);
+        }
+        if let Some(mult) = attack_speed {
+            io.set_attack_speed(holder, mult);
         }
     }
 
@@ -659,6 +865,7 @@ impl Interpreter {
         hand: WeaponHand,
         target: ActorId,
         depth: u8,
+        source_aura: Option<AuraRef>,
     ) {
         let miss = self.math.white_miss_chance(io.view(), actor);
         if io.roll(actor, MISS_STREAM) < miss {
@@ -669,7 +876,7 @@ impl Interpreter {
             caster: actor,
             target: Some(target),
             spell: None,
-            aura: None,
+            aura: source_aura,
             event_amount: None,
             scale: 1.0,
             spent: None,
@@ -690,6 +897,7 @@ impl Interpreter {
         };
         let hit = self.roll_hit(io, &ctx, d);
         let crit = hit.crit;
+        let aura = source_aura.map(|r| r.aura);
         self.deliver(io, hit);
         for what in [Happening::Swing { hand, crit }, Happening::WeaponHit(hand)] {
             let ev = Occurrence {
@@ -698,7 +906,7 @@ impl Interpreter {
                 amount: None,
                 depth,
             };
-            self.fire(io, actor, ev);
+            self.fire_nested(io, actor, ev, aura);
         }
     }
 
@@ -727,6 +935,7 @@ impl Interpreter {
             amount: if crit { raw * mult } else { raw },
             school: d.school,
             spell: c.spell,
+            aura: c.aura.map(|r| r.aura),
             crit,
             depth: c.depth,
             kind: c.hit,
@@ -759,21 +968,23 @@ impl Interpreter {
             let dealt = Occurrence {
                 what: Happening::DamageDealt {
                     spell: hit.spell,
+                    aura: hit.aura,
                     school: hit.school,
                     crit: hit.crit,
                     killing_blow: was_alive && !alive(io),
+                    kind: hit.kind,
                 },
                 target: Some(t),
                 amount: Some(landed.amount as f64),
                 depth: hit.depth,
             };
-            self.fire(io, hit.source, dealt);
+            self.fire_nested(io, hit.source, dealt, hit.aura);
             let taken = Occurrence {
                 what: Happening::DamageTaken,
                 target: Some(hit.source),
                 ..dealt
             };
-            self.fire(io, t, taken);
+            self.fire_nested(io, t, taken, hit.aura);
             self.health_dropped(io, t, health, hit.source, hit.depth);
             if let Some(hand) = hit.weapon {
                 let struck = Occurrence {
@@ -782,7 +993,7 @@ impl Interpreter {
                     amount: Some(landed.amount as f64),
                     depth: hit.depth,
                 };
-                self.fire(io, hit.source, struck);
+                self.fire_nested(io, hit.source, struck, hit.aura);
             }
         }
     }
@@ -1117,8 +1328,11 @@ impl Interpreter {
                 let target = ctx.target.or_else(|| io.view().target(caster));
                 let armed = self.math.weapon(io.view(), caster, hand).is_some();
                 if let (true, Some(target)) = (armed, target) {
-                    self.white_hit(io, caster, hand, target, ctx.depth);
+                    self.white_hit(io, caster, hand, target, ctx.depth, ctx.aura);
                 }
+            }
+            &Effect::ResetSwing { hand } => {
+                io.reset_swing(caster, hand);
             }
             &Effect::Summon {
                 pet,
@@ -1293,7 +1507,12 @@ impl Interpreter {
                     kit.run_hook(self.tools(), io, ctx, key);
                 }
             }
-            &Effect::SpreadAura { aura, to, max } => {
+            &Effect::SpreadAura {
+                aura,
+                to,
+                max,
+                refresh,
+            } => {
                 let Some(from) = ctx.target else { return };
                 let view = io.view();
                 let Some(&copy) = instance(view, aura_on(from, aura)) else {
@@ -1303,13 +1522,15 @@ impl Interpreter {
                 if duration == Some(SimDuration::ZERO) {
                     return;
                 }
-                let lacking: Vec<ActorId> = self
+                let chosen: Vec<ActorId> = self
                     .targets(io, ctx, to)
                     .into_iter()
-                    .filter(|&t| t != from && !holds_aura(io.view(), t, aura, Some(caster)))
+                    .filter(|&t| {
+                        t != from && (refresh || !holds_aura(io.view(), t, aura, Some(caster)))
+                    })
                     .take(max.map_or(usize::MAX, usize::from))
                     .collect();
-                for t in lacking {
+                for t in chosen {
                     io.apply_aura(AuraApplication {
                         aura: aura_on(t, aura),
                         stacks: copy.stacks,
@@ -1317,6 +1538,79 @@ impl Interpreter {
                         pmultiplier: Some(copy.pmultiplier),
                         anchor: None,
                     });
+                }
+            }
+            &Effect::TickAura {
+                aura,
+                target,
+                fraction,
+            } => {
+                let Some(periodic) = self
+                    .math
+                    .data()
+                    .auras
+                    .get(&aura)
+                    .and_then(|d| d.periodic.clone())
+                else {
+                    return;
+                };
+                let spell = SpellId(aura.0);
+                let spell = self
+                    .math
+                    .data()
+                    .spells
+                    .contains_key(&spell)
+                    .then_some(spell);
+                for t in self.targets(io, ctx, target) {
+                    let r = aura_on(t, aura);
+                    let Some(&inst) = instance(io.view(), r) else {
+                        continue;
+                    };
+                    let tick_ctx = EffectCtx {
+                        caster,
+                        target: Some(t),
+                        spell,
+                        aura: Some(r),
+                        event_amount: None,
+                        scale: ctx.scale * fraction,
+                        spent: None,
+                        depth: ctx.depth,
+                        hand: None,
+                        hit: HitKind::Periodic,
+                        ground: inst.ground,
+                    };
+                    self.run(io, &tick_ctx, &periodic.effects);
+                    let ticked = Occurrence {
+                        what: Happening::PeriodicTick(aura),
+                        target: Some(t),
+                        amount: None,
+                        depth: ctx.depth,
+                    };
+                    self.fire_nested(io, caster, ticked, ctx.aura.map(|a| a.aura));
+                }
+            }
+            Effect::ConsumeStacks {
+                aura,
+                target,
+                max,
+                then,
+            } => {
+                for t in self.targets(io, ctx, *target) {
+                    let r = aura_on(t, *aura);
+                    let have = instance(io.view(), r).map_or(0, |i| i.stacks);
+                    let take = max.map_or(have, |m| have.min(m));
+                    if take == 0 {
+                        continue;
+                    }
+                    io.remove_stacks(r, take);
+                    let n = f64::from(take);
+                    let c = EffectCtx {
+                        target: Some(t),
+                        scale: ctx.scale * n,
+                        event_amount: Some(n),
+                        ..*ctx
+                    };
+                    self.run(io, &c, then);
                 }
             }
         }
@@ -1360,18 +1654,24 @@ fn listens(on: ListenFor, what: Happening, died_with: impl Fn(AuraId) -> bool) -
                 school,
                 crit_only,
                 killing_blow,
+                direct,
+                aura,
             },
             Happening::DamageDealt {
                 spell: got,
+                aura: got_aura,
                 school: got_school,
                 crit,
                 killing_blow: fatal,
+                kind,
             },
         ) => {
             spell.is_none_or(|s| got == Some(s))
+                && aura.is_none_or(|a| got_aura == Some(a))
                 && school_ok(school, got_school)
                 && (crit || !crit_only)
                 && (fatal || !killing_blow)
+                && direct.is_none_or(|d| d == (kind == HitKind::Direct))
         }
         (ListenFor::DamageTaken, Happening::DamageTaken) => true,
         (ListenFor::Swing { hand, crit_only }, Happening::Swing { hand: got, crit }) => {

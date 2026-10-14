@@ -40,7 +40,7 @@ pub use spell::SpellDef;
 pub use stats::StatCurves;
 pub use talent::{HeroTreeDef, TalentDef};
 
-/// The game version a table was extracted from and calibrated against.
+/// The game version a table targets.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct GameBuild {
     /// e.g. `11.2.5`.

@@ -77,12 +77,13 @@ impl PetKind {
 
 /// Shares of the owner's power and health, as SimC's `owner_coeff`.
 ///
-/// Pets and guardians also inherit the owner's crit, haste, and
+/// Pets and guardians also inherit the owner's crit, haste, mastery, and
 /// versatility, including the owner's unscoped crit and haste modifiers,
-/// but not mastery or the owner's damage modifiers: owner auras reach them
-/// only through `ModKind::PetDamagePct` and `GuardianDamagePct`. Totems
-/// ignore this and act with the owner's own stats and modifiers, since
-/// their spells count as the owner's.
+/// though not the owner's `DamageDonePct` modifiers: owner auras reach
+/// their damage through `ModKind::PetDamagePct`, `GuardianDamagePct`, and
+/// `MasteryDamagePct` on the pet's auras. Totems ignore this and act with
+/// the owner's own stats and modifiers, since their spells count as the
+/// owner's.
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct PetScaling {
     #[serde(default)]

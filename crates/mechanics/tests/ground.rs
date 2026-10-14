@@ -69,6 +69,7 @@ fn decay(f: &mut Fixture) {
         period: SimDuration(1000),
         hasted: false,
         partial_final_tick: false,
+        tick_zero: false,
         effects: vec![damage(100.0, EffectTarget::AllEnemies)],
     });
     f.data.auras.insert(DECAY, a);

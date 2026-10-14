@@ -86,7 +86,9 @@ fn hooks_in(data: &GameData) -> BTreeSet<HookKey> {
                     walk(then, out);
                     walk(otherwise, out);
                 }
-                Effect::Chance { then, .. } | Effect::ForEach { then, .. } => walk(then, out),
+                Effect::Chance { then, .. }
+                | Effect::ForEach { then, .. }
+                | Effect::ConsumeStacks { then, .. } => walk(then, out),
                 Effect::HighestSecondary {
                     crit,
                     haste,
@@ -103,6 +105,7 @@ fn hooks_in(data: &GameData) -> BTreeSet<HookKey> {
     }
     let mut out = BTreeSet::new();
     for spell in data.spells.values() {
+        walk(&spell.on_cast, &mut out);
         walk(&spell.effects, &mut out);
         match &spell.cast {
             CastKind::Empower { stage_effects, .. } => {

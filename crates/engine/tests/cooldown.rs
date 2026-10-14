@@ -97,6 +97,84 @@ fn spells_in_a_category_share_one_cooldown_and_its_charges() {
         vec![(0, fs), (1500, es), (6000, fs), (12_000, es), (18_000, fs)]
     );
     // Apart, each has its own two charges.
-    let apart = casts(&shocks(false));
-    assert_eq!(apart[..4], [(0, fs), (1500, es), (3000, fs), (4500, es)]);
+    assert_eq!(
+        casts(&shocks(false)),
+        vec![
+            (0, fs),
+            (1500, es),
+            (3000, fs),
+            (4500, es),
+            (6000, fs),
+            (7500, es),
+            (12_000, fs),
+            (13_500, es),
+            (18_000, fs),
+            (19_500, es),
+        ]
+    );
+}
+
+#[test]
+fn cooldown_rate_modifiers_accelerate_recovery_and_revert_when_removed() {
+    use portunus_core::AuraId;
+    use portunus_gamedata::aura::{AuraDef, RefreshRule};
+    use portunus_gamedata::effect::{ModKind, ModScope, Modifier};
+
+    const HASTEN: AuraId = AuraId(900_991);
+    let run = |fast: bool| {
+        let mut f = shocks(false);
+        let data = Arc::make_mut(&mut f.data);
+        data.spells.get_mut(&FLAME_SHOCK).unwrap().cooldown = Some(CooldownDef {
+            duration: SimDuration(10_000),
+            charges: 1,
+            hasted: false,
+            category: None,
+        });
+        let mut buff = AuraDef {
+            id: HASTEN,
+            name: "hasten".into(),
+            duration: Some(SimDuration(15_000)),
+            max_stacks: 1,
+            refresh: RefreshRule::Replace,
+            periodic: None,
+            value: None,
+            modifiers: vec![Modifier {
+                scope: ModScope::Spell(FLAME_SHOCK),
+                kind: ModKind::CooldownRatePct,
+                value: 100.0,
+                per_stack: false,
+                condition: None,
+            }],
+            listeners: Vec::new(),
+            overrides: Vec::new(),
+            on_expire: Vec::new(),
+            cancelable: true,
+            blocked_by: None,
+            form: None,
+            stealth: None,
+            ends_with: None,
+            persists_through_death: false,
+            unique_per_source: false,
+            prevents_death: None,
+            ground: None,
+            untargetable: false,
+            dispel: None,
+            self_resurrect: None,
+        };
+        if !fast {
+            buff.modifiers.clear();
+        }
+        data.auras.insert(HASTEN, buff);
+        f.template.passive_auras.push(HASTEN);
+        casts(&f)
+            .into_iter()
+            .filter(|&(_, s)| s == FLAME_SHOCK)
+            .collect::<Vec<_>>()
+    };
+    // At +100% rate for the first 5 s (out of combat is 10 s, so 5 s remain
+    // when combat starts at 10 s), the first 5 s cover 10 s of base cooldown!
+    let fast = run(true);
+    let normal = run(false);
+    assert_eq!(fast[1].0, 5_000);
+    assert_eq!(normal[1].0, 10_000);
 }

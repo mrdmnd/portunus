@@ -116,6 +116,35 @@ impl World {
         }
     }
 
+    /// Restart `actor`'s swing timer (`None`: both hands) from now for a
+    /// full interval if it has something to hit.
+    pub(crate) fn reset_swing(&mut self, actor: ActorId, which: Option<WeaponHand>) {
+        let Some(target) = self.swing_target(actor) else {
+            return;
+        };
+        let now = self.now;
+        let Some(a) = self.actor_ref(actor) else {
+            return;
+        };
+        let speed = a.swing_speed();
+        let mut due = Vec::new();
+        for hand in HANDS {
+            if which.is_some_and(|w| w != hand) {
+                continue;
+            }
+            let Some(s) = &a.swings[hand_index(hand)] else {
+                continue;
+            };
+            let Some(reach) = self.reach_at(actor, target, &s.weapon) else {
+                continue;
+            };
+            due.push((hand, (now + s.interval(speed)).max(reach)));
+        }
+        for (hand, at) in due {
+            self.put_swing(actor, hand, Some(at));
+        }
+    }
+
     /// Swings put off by a cast that has now ended early go at once.
     pub(crate) fn resume_swings(&mut self, actor: ActorId) {
         let now = self.now;

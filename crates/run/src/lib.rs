@@ -2,8 +2,10 @@
 //!
 //! A run file ([`RunConfig`]) names the game and enemy data, a scenario, an
 //! optional plan, and per seat a loadout, a policy (a function in
-//! [`scripts`], by name), and a latency model. [`Bundle::load`] reads and checks all of it; the bundle
-//! then builds the pieces the other crates only define:
+//! [`scripts`], by name), and a latency model. [`Bundle::load`] validates
+//! the game, enemies, scenario, kits, loadouts, and policy names. Plans are
+//! currently deserialized but not validated. The bundle then builds the
+//! pieces the other crates only define:
 //!
 //! - [`Source`], the [`portunus_env::EpisodeSource`];
 //! - [`SimEnv`], the [`portunus_env::Env`] over the kernel and

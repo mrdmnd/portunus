@@ -99,7 +99,9 @@ pub fn spell(id: SpellId, effects: Vec<Effect>) -> SpellDef {
         castable_while_moving: false,
         usable_while_casting: false,
         weapon: None,
+        unrecorded: false,
         requires: Vec::new(),
+        on_cast: Vec::new(),
         effects,
     }
 }
@@ -112,6 +114,7 @@ pub fn listener(on: ListenFor, effects: Vec<Effect>) -> Listener {
         per_unit: false,
         shared_with: None,
         condition: None,
+        chain: false,
         effects,
     }
 }

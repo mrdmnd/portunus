@@ -75,6 +75,10 @@ impl EngineIo for Io<'_> {
         self.w.set_attack_speed(actor, mult);
     }
 
+    fn reset_swing(&mut self, actor: ActorId, hand: Option<portunus_gamedata::item::WeaponHand>) {
+        self.w.reset_swing(actor, hand);
+    }
+
     fn set_max_health(&mut self, actor: ActorId, max: u64) {
         self.w.set_max_health(actor, max);
     }

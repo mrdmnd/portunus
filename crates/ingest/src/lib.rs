@@ -1,9 +1,9 @@
 //! Getting data in.
 //!
-//! Sources (client data dumps, the SimulationCraft spell dump, hand-written
-//! files) produce [`GameData`] and [`EnemyData`]; combat logs calibrate
-//! enemy timings and damage. Messy outside formats stop here and never leak
-//! into the simulator.
+//! Sources produce [`GameData`] and [`EnemyData`] without leaking their
+//! outside formats into the simulator. [`RonFile`] is the checked-in source;
+//! [`GameDataSource`], [`EnemyDataSource`], [`LogSource`], and [`Calibrator`]
+//! are extension points for generated tables and combat-log calibration.
 //!
 //! [`RonFile`] reads hand-written tables; [`check_game_data`] and
 //! [`check_enemy_data`] catch dangling references in whatever was loaded.

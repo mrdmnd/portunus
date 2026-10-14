@@ -131,7 +131,7 @@ pub struct PreventDeath {
 
 /// A shapeshift or stance. Gaining a form removes any other of its group
 /// from the holder. Casting a spell the form doesn't allow leaves it first,
-/// as a druid shifts out to cast Wrath.
+/// as a druid shifts out to cast Wrath. Forms are player-only.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FormDef {
     /// Forms of a group exclude each other (a druid's shapeshifts, a
@@ -147,6 +147,10 @@ pub struct FormDef {
     /// hand (Cat Form's 1.0 s paws).
     #[serde(default)]
     pub weapon: Option<WeaponDef>,
+    /// Replaces the GCD of spells that trigger one while held (Cat Form's
+    /// 1.0 s unhasted GCD).
+    #[serde(default)]
+    pub gcd: Option<crate::spell::GcdDef>,
 }
 
 /// While held, the holder doesn't auto-attack. It breaks, running
@@ -195,6 +199,10 @@ pub struct Periodic {
     /// Deal a partial final tick when the duration isn't a whole number of
     /// periods.
     pub partial_final_tick: bool,
+    /// Also tick immediately when first applied, before the periodic
+    /// schedule (SimC's `tick_zero`, e.g. Devouring Plague).
+    #[serde(default)]
+    pub tick_zero: bool,
     pub effects: Vec<Effect>,
 }
 

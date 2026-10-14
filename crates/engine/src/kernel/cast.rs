@@ -95,6 +95,7 @@ impl World {
 
     fn new_cooldown(&self, actor: ActorId, spell: SpellId, def: &CooldownDef) -> Cooldown {
         let pct = self.mod_sum(actor, spell, ModKind::CooldownPct, None);
+        let mod_rate = self.mod_product(actor, spell, ModKind::CooldownRatePct, None);
         let extra = self
             .mod_sum(actor, spell, ModKind::ChargesAdd, None)
             .round();
@@ -105,9 +106,58 @@ impl World {
             base: f64::from(def.duration.millis()) * (1.0 + pct / 100.0).max(0.0),
             hasted: def.hasted,
             rate_mult: 1.0,
+            mod_rate,
             progress: 0.0,
             at: self.now,
             gen: 0,
+        }
+    }
+
+    pub(crate) fn cooldown_mod_rate(&self, actor: ActorId, key: CooldownKey) -> f64 {
+        let spell = match key {
+            CooldownKey::Spell(s) => s,
+            CooldownKey::Category(cat) => self
+                .s
+                .setup
+                .data
+                .spells
+                .values()
+                .find(|d| d.cooldown.as_ref().and_then(|c| c.category) == Some(cat))
+                .map_or(SpellId(0), |d| d.id),
+        };
+        self.mod_product(actor, spell, ModKind::CooldownRatePct, None)
+    }
+
+    /// Re-settle and reschedule `holder`'s active cooldowns after an aura
+    /// carrying `ModKind::CooldownRatePct` changed on it.
+    pub(crate) fn refresh_cooldown_rates(&mut self, holder: ActorId) {
+        let now = self.now;
+        let Some(a) = self.actor_ref(holder) else {
+            return;
+        };
+        let keys: Vec<CooldownKey> = a.cooldowns.keys().copied().collect();
+        if keys.is_empty() {
+            return;
+        }
+        let rates: Vec<(CooldownKey, f64)> = keys
+            .into_iter()
+            .map(|k| (k, self.cooldown_mod_rate(holder, k)))
+            .collect();
+        let mut changed = Vec::new();
+        if let Some(a) = self.actor_mut(holder) {
+            let haste = a.haste;
+            for (key, rate) in rates {
+                if let Some(cd) = a.cooldowns.get_mut(&key) {
+                    if (cd.mod_rate - rate).abs() > 1e-12 {
+                        cd.settle(now, haste);
+                        cd.mod_rate = rate;
+                        changed.push(key);
+                    }
+                }
+            }
+        }
+        for key in changed {
+            self.schedule_cooldown(holder, key);
         }
     }
 
@@ -150,8 +200,22 @@ impl World {
         let haste = a.haste;
         let cd = a.cooldowns.entry(key).or_insert(fresh);
         cd.settle(now, haste);
+        if fresh.max != cd.max {
+            if fresh.max > cd.max {
+                cd.charges = cd.charges.saturating_add(fresh.max - cd.max);
+            } else {
+                cd.charges = cd.charges.min(fresh.max);
+            }
+            cd.max = fresh.max;
+        }
+        cd.mod_rate = fresh.mod_rate;
         if cd.charges == cd.max {
             cd.progress = 0.0;
+            cd.base = fresh.base;
+        } else if (cd.base - fresh.base).abs() > 1e-12 {
+            if cd.base > 0.0 {
+                cd.progress *= fresh.base / cd.base;
+            }
             cd.base = fresh.base;
         }
         cd.charges = cd.charges.saturating_sub(1);
@@ -189,6 +253,20 @@ impl World {
     ) {
         let now = self.now;
         let key = self.cooldown_key(spell);
+        if self
+            .actor_ref(actor)
+            .is_some_and(|a| !a.cooldowns.contains_key(&key))
+            && matches!(
+                change,
+                CooldownChange::Restart | CooldownChange::RateMult(_)
+            )
+        {
+            if let Some(fresh) = self.fresh_cooldown(actor, spell) {
+                if let Some(a) = self.actor_mut(actor) {
+                    a.cooldowns.insert(key, fresh);
+                }
+            }
+        }
         let Some(a) = self.actor_mut(actor) else {
             return;
         };

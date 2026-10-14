@@ -70,7 +70,8 @@ fn elemental_loadout_compiles() {
     // 250 crit rating from the robe at 700 rating per percent.
     let expected_crit = 5.0 + 250.0 / 700.0;
     assert!((template.derived.crit_pct - expected_crit).abs() < 1e-9);
-    assert!(template.derived.spell_power > 2000.0);
+    // 2000 base intellect plus 60% of the robe's 1000-point budget.
+    assert!((template.derived.spell_power - 2600.0).abs() < 1e-9);
 }
 
 #[test]
@@ -81,12 +82,21 @@ fn stormbringer_loadout_compiles() {
     assert_eq!(Compiler.validate(&game, &loadout), vec![]);
     let template = Compiler.compile(&game, &loadout).expect("compiles");
     assert_eq!(template.hero_tree, Some(HeroTreeId(54)));
-    assert!(template.abilities.contains(&SpellId(191634)), "Stormkeeper");
-    for aura in [
-        454009, 454391, 454021, 1264762, 455110, 455096, 454026, 1264691, 455129,
-    ] {
-        assert!(template.passive_auras.contains(&AuraId(aura)), "{aura}");
-    }
+    assert_eq!(
+        template.abilities.iter().copied().collect::<Vec<_>>(),
+        [8042, 51505, 79206, 188196, 188389, 188443, 191634, 192063, 192106, 196840]
+            .map(SpellId)
+            .to_vec()
+    );
+    assert_eq!(
+        template.passive_auras,
+        [
+            168534, 77756, 51505, 60188, 454009, 454021, 454026, 454391, 455096, 455110, 455129,
+            1264688, 1264691, 1264762,
+        ]
+        .map(AuraId)
+        .to_vec()
+    );
 }
 
 #[test]
@@ -97,15 +107,21 @@ fn farseer_loadout_compiles() {
     assert_eq!(Compiler.validate(&game, &loadout), vec![]);
     let template = Compiler.compile(&game, &loadout).expect("compiles");
     assert_eq!(template.hero_tree, Some(HeroTreeId(55)));
-    assert!(
-        template.abilities.contains(&SpellId(443454)),
-        "Ancestral Swiftness"
+    assert_eq!(
+        template.abilities.iter().copied().collect::<Vec<_>>(),
+        [8042, 51505, 79206, 188196, 188389, 188443, 191634, 192063, 192106, 196840, 443454,]
+            .map(SpellId)
+            .to_vec()
     );
-    for aura in [
-        443450, 443423, 443445, 443418, 1270446, 443451, 443448, 1270447, 443447, 443446, 448861,
-    ] {
-        assert!(template.passive_auras.contains(&AuraId(aura)), "{aura}");
-    }
+    assert_eq!(
+        template.passive_auras,
+        [
+            168534, 77756, 51505, 60188, 443418, 443423, 443445, 443446, 443447, 443448, 443450,
+            443451, 448861, 1270446, 1270447,
+        ]
+        .map(AuraId)
+        .to_vec()
+    );
 }
 
 #[test]
@@ -261,6 +277,7 @@ fn pseudo_random_chances_must_be_a_real_chance() {
             per_unit: false,
             shared_with: None,
             condition: None,
+            chain: false,
             effects: Vec::new(),
         }];
         check_game_data(&game).contains(&DataIssue::InvalidChance(owner.clone()))
@@ -658,6 +675,7 @@ fn death_listeners_name_auras_that_exist() {
             per_unit: false,
             shared_with: None,
             condition: None,
+            chain: false,
             effects: Vec::new(),
         });
     assert_eq!(
@@ -698,6 +716,7 @@ fn event_listeners_and_death_saves_must_be_able_to_happen() {
             per_unit: false,
             shared_with: None,
             condition: None,
+            chain: false,
             effects: Vec::new(),
         });
     }
@@ -752,6 +771,7 @@ fn target_sets_and_count_scales_name_auras_that_exist() {
             aura: ghost,
             to: EffectTarget::AllEnemies,
             max: None,
+            refresh: false,
         },
     ];
     let owner = Owner::Spell(bolt);
@@ -891,6 +911,12 @@ fn conversions_need_two_stats_pen_a_share_and_falloff_a_rate() {
     }
     set(&mut game, ModKind::ArmorPenPct, 100.0);
     assert_eq!(check_game_data(&game), Vec::new());
+    set(&mut game, ModKind::CooldownRatePct, -100.0);
+    assert_eq!(check_game_data(&game), invalid);
+    set(&mut game, ModKind::TickPeriodPct, -150.0);
+    assert_eq!(check_game_data(&game), invalid);
+    set(&mut game, ModKind::CooldownRatePct, 50.0);
+    assert_eq!(check_game_data(&game), Vec::new());
 
     fn speed(game: &mut GameData) -> &mut portunus_gamedata::stats::RatingCurve {
         game.curves.ratings.get_mut(&Stat::Speed).expect("speed")
@@ -949,4 +975,25 @@ fn resurrections_need_a_health_share_and_stones_must_survive_death() {
         .expect("aura")
         .persists_through_death = true;
     assert_eq!(check_game_data(&game), Vec::new());
+
+    game.spells.get_mut(&spell).expect("spell").on_cast = vec![
+        Effect::TickAura {
+            aura,
+            target: EffectTarget::Target,
+            fraction: 1.0,
+        },
+        Effect::ConsumeStacks {
+            aura,
+            target: EffectTarget::Target,
+            max: Some(0),
+            then: Vec::new(),
+        },
+    ];
+    assert_eq!(
+        check_game_data(&game),
+        vec![
+            DataIssue::InvalidControl(Owner::Spell(spell)),
+            DataIssue::InvalidControl(Owner::Spell(spell)),
+        ]
+    );
 }

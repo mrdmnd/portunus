@@ -59,6 +59,7 @@ fn an_untargetable_boss_sends_seats_to_its_adds_and_back_but_keeps_its_dots() {
         period: SimDuration(1000),
         hasted: false,
         partial_final_tick: false,
+        tick_zero: false,
         effects: vec![Effect::Damage {
             amount: Coefficient::Flat(100.0),
             school: SchoolMask::FIRE,

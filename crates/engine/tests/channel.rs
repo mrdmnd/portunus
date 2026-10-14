@@ -321,3 +321,65 @@ fn forced_movement_interrupts_a_channel() {
     );
     assert_eq!(ticks(&trace, t0, ms(t0, 2500)), vec![(ms(t0, 1000), 1)]);
 }
+
+#[test]
+fn committed_seats_wake_on_conditions_and_mid_cast_off_gcd_cooldowns() {
+    use portunus_engine::choice::{CmpOp, Condition, Scalar};
+    use portunus_gamedata::spell::CooldownDef;
+
+    let mut f = channel_fixture(0.0, Vec::new());
+    let data = Arc::make_mut(&mut f.data);
+    let burst = data.spells.get_mut(&EARTH_SHOCK).expect("Earth Shock");
+    burst.costs.clear();
+    burst.gcd = None;
+    burst.usable_while_casting = true;
+    burst.cooldown = Some(CooldownDef {
+        duration: SimDuration(1200),
+        charges: 1,
+        hasted: false,
+        category: None,
+    });
+    f.template.abilities = [LIGHTNING_BOLT, EARTH_SHOCK].into();
+
+    let mut k = kernel(&f, 1, 1, instant());
+    let mut t0 = None;
+    let mut off_gcd_at = None;
+    let mut condition_at = None;
+    let mut clipped = false;
+    drive(&mut k, |k, req| {
+        if clipped {
+            return None;
+        }
+        let state = k.state();
+        let me = state.seats()[usize::from(req.seat.0)];
+        let casting = state.actor(me).and_then(|a| a.casting).is_some();
+        if !casting {
+            if t0.is_none() && k.legal(req.seat).abilities[&EARTH_SHOCK] == Readiness::Now {
+                t0 = Some(req.now);
+                return Some(Choice::cast(EARTH_SHOCK));
+            }
+            if k.legal(req.seat).abilities[&LIGHTNING_BOLT] == Readiness::Now {
+                return Some(channel(false));
+            }
+            return Some(Choice::Wait(Wait::NextEvent));
+        }
+        if req.reason == WakeReason::CooldownReady(EARTH_SHOCK) && off_gcd_at.is_none() {
+            off_gcd_at = Some(req.now);
+            let start = t0.unwrap();
+            return Some(Choice::Wait(Wait::Condition(Condition::Cmp {
+                lhs: Scalar::Time,
+                op: CmpOp::Ge,
+                rhs: f64::from(ms(start, 2200).millis()),
+            })));
+        }
+        if req.reason == WakeReason::ConditionMet {
+            condition_at = Some(req.now);
+            clipped = true;
+            return Some(Choice::StopCast);
+        }
+        Some(Choice::Wait(Wait::NextEvent))
+    });
+    let start = t0.expect("started");
+    assert_eq!(off_gcd_at, Some(ms(start, 1200)));
+    assert_eq!(condition_at, Some(ms(start, 2200)));
+}

@@ -97,6 +97,13 @@ impl Query {
             auto: false,
         }
     }
+
+    fn holder_targeted(view: &dyn StateView, holder: ActorId) -> Self {
+        Self {
+            target: view.target(holder),
+            ..Self::holder(holder)
+        }
+    }
 }
 
 impl Formulas {
@@ -202,24 +209,28 @@ impl Formulas {
     /// actor's own plus its weapon's, `floor(dps * 6)` times its
     /// `AttackPowerPct` modifiers (SimC's
     /// `composite_total_attack_power_by_type` with the default
-    /// `WEAPON_MAINHAND`, or `WEAPON_OFFHAND` for an off-hand spell). An
-    /// actor without a weapon there adds none, where SimC counts 0.5 dps
-    /// unarmed; pets add none.
+    /// `WEAPON_MAINHAND`, or `WEAPON_OFFHAND` for an off-hand strike,
+    /// halved by the off-hand penalty). An actor without a weapon there
+    /// adds none, where SimC counts 0.5 dps unarmed; pets add none.
     fn ability_attack_power(&self, view: &dyn StateView, ctx: &EffectCtx) -> f64 {
         let own = self.derived(view, ctx.caster).attack_power;
         if player_seat(view, ctx.caster).is_none() {
             return own;
         }
         let hand = ctx
-            .spell
-            .and_then(|s| self.s.data.spells.get(&s)?.weapon)
+            .hand
+            .or_else(|| self.s.data.spells.get(&ctx.spell?)?.weapon)
             .unwrap_or(WeaponHand::MainHand);
         let weapon = self.weapon(view, ctx.caster, hand).map_or(0.0, |w| {
             let speed = f64::from(w.speed.millis()) / 1000.0;
             let dps = (w.min_damage + w.max_damage) / 2.0 / speed;
             (dps * WEAPON_AP_DIVISOR).floor()
         });
-        own + weapon * self.ap_mult(view, ctx.caster)
+        let total = own + weapon * self.ap_mult(view, ctx.caster);
+        match hand {
+            WeaponHand::MainHand => total,
+            WeaponHand::OffHand => total * OFF_HAND_MULT,
+        }
     }
 
     /// How many more enemies a single-target hit chains to (the sum of its
@@ -260,7 +271,11 @@ impl Formulas {
 
     /// The product of `AttackSpeedPct` modifiers on the actor's own auras.
     pub fn attack_speed_mult(&self, view: &dyn StateView, actor: ActorId) -> f64 {
-        self.mod_product(view, &Query::holder(actor), ModKind::AttackSpeedPct)
+        self.mod_product(
+            view,
+            &Query::holder_targeted(view, actor),
+            ModKind::AttackSpeedPct,
+        )
     }
 
     /// The spec of a seat, if the setup had one there.
@@ -290,8 +305,10 @@ impl Formulas {
         let mut ap_mult = 1.0;
         let mut shares: Vec<(Stat, f64, ActorId)> = Vec::new();
         let mut conversions: Vec<(Stat, Stat, f64)> = Vec::new();
-        self.each_sourced_mod(view, &Query::holder(actor), |m, value, source| {
-            match m.kind {
+        self.each_sourced_mod(
+            view,
+            &Query::holder_targeted(view, actor),
+            |m, value, source| match m.kind {
                 ModKind::AttackPowerPct => ap_mult *= 1.0 + value / 100.0,
                 ModKind::StatFlat(stat) => *stats.0.entry(stat).or_default() += value,
                 ModKind::StatPct(stat) => *pct.entry(stat).or_insert(1.0) *= 1.0 + value / 100.0,
@@ -301,8 +318,8 @@ impl Formulas {
                 }
                 ModKind::StatFromStat { from, to } => conversions.push((from, to, value)),
                 _ => {}
-            }
-        });
+            },
+        );
         for (stat, value, source) in shares {
             let Some(from) = self.stat_block_sharing(view, source, false) else {
                 continue;
@@ -390,7 +407,7 @@ impl Formulas {
         DerivedStats {
             crit_pct: o.crit_pct,
             haste_pct: o.haste_pct,
-            mastery_pct: 0.0,
+            mastery_pct: o.mastery_pct,
             versatility_pct: o.versatility_pct,
             attack_power: o.attack_power * k.ap_from_ap + o.spell_power * k.ap_from_sp,
             spell_power: o.spell_power * k.sp_from_sp + o.attack_power * k.sp_from_ap,
@@ -448,10 +465,15 @@ impl Formulas {
     }
 
     /// The product of the target's `SourceDamageTakenPct` modifiers from
-    /// auras the attacker applied, scoped to the attacker's spell.
+    /// auras the attacker (or its owner, for a pet or guardian) applied,
+    /// scoped to the attacker's spell.
     fn source_taken(&self, view: &dyn StateView, target: ActorId, hit: &IncomingHit) -> f64 {
         let Some(attacker) = hit.attacker else {
             return 1.0;
+        };
+        let owner = match self.role(view, attacker) {
+            Role::Pet { owner, .. } | Role::Totem { owner } => Some(owner),
+            Role::Own => None,
         };
         let attacker = self.modifier_holder(view, attacker);
         let q = Query {
@@ -461,7 +483,9 @@ impl Formulas {
         };
         let mut total = 1.0;
         self.each_sourced_mod(view, &q, |m, v, source| {
-            if m.kind == ModKind::SourceDamageTakenPct && source == attacker {
+            if m.kind == ModKind::SourceDamageTakenPct
+                && (source == attacker || owner == Some(source))
+            {
                 total *= 1.0 + v / 100.0;
             }
         });
@@ -650,6 +674,9 @@ impl CombatMath for Formulas {
                 self.weapon(view, ctx.caster, hand)
                     .map_or(0.0, |w| c * f64::from(w.speed.millis()) / 1000.0)
             }
+            Coefficient::RecentDamageTaken { window, share } => {
+                share * view.recent_damage_taken(ctx.caster, window) as f64
+            }
         };
         raw * ctx.scale
     }
@@ -755,11 +782,20 @@ impl CombatMath for Formulas {
             Role::Totem { owner } => self.haste_mult(view, owner),
             Role::Pet { owner, .. } => {
                 self.haste_mult(view, owner)
-                    * self.mod_product(view, &Query::holder(actor), ModKind::HastePct)
+                    * self.mod_product(
+                        view,
+                        &Query::holder_targeted(view, actor),
+                        ModKind::HastePct,
+                    )
             }
             Role::Own => {
                 let rating = 1.0 + self.derived(view, actor).haste_pct / 100.0;
-                rating * self.mod_product(view, &Query::holder(actor), ModKind::HastePct)
+                rating
+                    * self.mod_product(
+                        view,
+                        &Query::holder_targeted(view, actor),
+                        ModKind::HastePct,
+                    )
             }
         }
     }

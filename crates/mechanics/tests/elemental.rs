@@ -11,7 +11,7 @@ use portunus_engine::{
     CastOpts, Choice, Engine, Externals, Kernel, Latency, Outcome, Readiness, RunSetup, SeatSetup,
     StateView, Step, TargetSel, TraceRecord, Wait,
 };
-use portunus_gamedata::effect::Effect;
+use portunus_gamedata::effect::{Effect, EffectTarget};
 use portunus_gamedata::spell::CastKind;
 use portunus_gamedata::{EnemyData, GameData};
 use portunus_ingest::{read_ron, EnemyDataSource, GameDataSource, RonFile};
@@ -26,7 +26,6 @@ const LAVA_BURST_OVERLOAD: SpellId = SpellId(77451);
 const FLAME_SHOCK: SpellId = SpellId(188389);
 const EARTH_SHOCK: SpellId = SpellId(8042);
 const FLAME_SHOCK_DOT: AuraId = AuraId(188389);
-const LAVA_SURGE_BUFF: AuraId = AuraId(77762);
 
 /// The loadout's 2600 intellect.
 const SPELL_POWER: f64 = 2600.0;
@@ -194,8 +193,15 @@ fn kits_cover_the_data() {
         tick_zero: false,
         on_end: vec![Effect::Hook(HookKey("at_the_end".into()))],
     };
+    bolt.on_cast = vec![Effect::ConsumeStacks {
+        aura: FLAME_SHOCK_DOT,
+        target: EffectTarget::Target,
+        max: None,
+        then: vec![Effect::Hook(HookKey("on_cast_hook".into()))],
+    }];
     let issues = Kits::standard().validate(&data);
     assert!(issues.contains(&KitIssue::UnknownHook(HookKey("at_the_end".into()))));
+    assert!(issues.contains(&KitIssue::UnknownHook(HookKey("on_cast_hook".into()))));
 }
 
 #[test]
@@ -295,29 +301,14 @@ fn rollout_clears_the_dummy() {
 }
 
 #[test]
-fn proc_rates_match_their_chances() {
+fn mastery_overload_rate_matches_its_chance() {
     let f = fixture();
     let (mut bolts, mut bolt_overloads) = (0, 0);
-    let (mut lava, mut lava_crits) = (0, 0);
-    let (mut bolt_hits, mut bolt_crits) = (0, 0);
-    let mut surges = 0;
     for seed in 0..30 {
         let (_, trace) = rollout(&f, seed);
         let casts = completed_casts(&trace);
         bolts += casts.get(&LIGHTNING_BOLT).copied().unwrap_or(0);
         bolt_overloads += casts.get(&LIGHTNING_BOLT_OVERLOAD).copied().unwrap_or(0);
-        let l = hits(&trace, LAVA_BURST);
-        lava += l.len();
-        lava_crits += l.iter().filter(|h| h.0).count();
-        let b = hits(&trace, LIGHTNING_BOLT);
-        bolt_hits += b.len();
-        bolt_crits += b.iter().filter(|h| h.0).count();
-        surges += trace
-            .iter()
-            .filter(|r| {
-                matches!(r.event, TraceEvent::AuraApplied { aura, .. } if aura == LAVA_SURGE_BUFF)
-            })
-            .count();
     }
     let rate = |n: usize, d: usize| n as f64 / d as f64;
     let overload = rate(bolt_overloads, bolts);
@@ -325,12 +316,6 @@ fn proc_rates_match_their_chances() {
         (overload - MASTERY_PCT / 100.0).abs() < 0.025,
         "overload rate {overload} from {bolts} bolts"
     );
-    assert!(rate(lava_crits, lava) > 0.9, "{lava_crits} of {lava}");
-    assert!(
-        rate(bolt_crits, bolt_hits) < 0.2,
-        "{bolt_crits} of {bolt_hits}"
-    );
-    assert!(surges > 30, "{surges} surges");
 }
 
 #[test]

@@ -172,6 +172,13 @@ fn factor(c: Coefficient) -> f64 {
         | Coefficient::EventAmount(x)
         | Coefficient::AuraValue(x)
         | Coefficient::WeaponSpeed(x) => x,
+        Coefficient::RecentDamageTaken { window, share } => {
+            if window > SimDuration::ZERO {
+                share
+            } else {
+                0.0
+            }
+        }
     }
 }
 
@@ -268,6 +275,7 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
     }
     for spell in data.spells.values() {
         let owner = Owner::Spell(spell.id);
+        c.effects(&owner, &spell.on_cast);
         c.effects(&owner, &spell.effects);
         if spell.speed.is_some_and(|s| !positive(s)) {
             c.issues.push(DataIssue::InvalidSpeed(spell.id));
@@ -380,6 +388,9 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
             let meaningless = match m.kind {
                 ModKind::StatFromStat { from, to } => from == to,
                 ModKind::ArmorPenPct => !(m.value > 0.0 && m.value <= 100.0),
+                ModKind::CooldownRatePct | ModKind::TickPeriodPct => {
+                    !m.value.is_finite() || m.value <= -100.0
+                }
                 _ => false,
             };
             if meaningless {
@@ -634,6 +645,9 @@ impl Checker<'_> {
                 self.valid_predicate(owner, ground);
             }
             Predicate::EnemiesAtLeast(n) => self.valid_predicate(owner, n > 0),
+            Predicate::Stationary { for_at_least } => {
+                self.valid_predicate(owner, for_at_least > SimDuration::ZERO);
+            }
             Predicate::DiffersFromLastCast
             | Predicate::TargetHpBelowCasterMaxHp
             | Predicate::TargetIsCurrent => {}
@@ -668,11 +682,17 @@ impl Checker<'_> {
 
     fn listener(&mut self, owner: &Owner, l: &Listener) {
         match l.on {
-            ListenFor::CastComplete { spell, .. }
-            | ListenFor::DamageDealt { spell, .. }
-            | ListenFor::CastStart { spell, .. } => {
+            ListenFor::CastComplete { spell, .. } | ListenFor::CastStart { spell, .. } => {
                 if let Some(s) = spell {
                     self.spell(owner, s);
+                }
+            }
+            ListenFor::DamageDealt { spell, aura, .. } => {
+                if let Some(s) = spell {
+                    self.spell(owner, s);
+                }
+                if let Some(a) = aura {
+                    self.aura(owner, a);
                 }
             }
             ListenFor::PeriodicTick(a)
@@ -718,6 +738,9 @@ impl Checker<'_> {
                 self.issues.push(DataIssue::InvalidDeck(owner.clone()));
             }
             ProcChance::Prd { chance } if !(chance > 0.0 && chance <= 1.0) => {
+                self.issues.push(DataIssue::InvalidChance(owner.clone()));
+            }
+            ProcChance::Rppm { rate, .. } if !positive(rate) => {
                 self.issues.push(DataIssue::InvalidChance(owner.clone()));
             }
             _ => {}
@@ -826,6 +849,35 @@ impl Checker<'_> {
                     self.aura(owner, *aura);
                     self.target(owner, target);
                 }
+                Effect::TickAura {
+                    aura,
+                    target,
+                    fraction,
+                } => {
+                    self.aura(owner, *aura);
+                    self.target(owner, target);
+                    let periodic = self
+                        .data
+                        .auras
+                        .get(aura)
+                        .is_none_or(|a| a.periodic.is_some());
+                    if !positive(*fraction) || !periodic {
+                        self.issues.push(DataIssue::InvalidControl(owner.clone()));
+                    }
+                }
+                Effect::ConsumeStacks {
+                    aura,
+                    target,
+                    max,
+                    then,
+                } => {
+                    self.aura(owner, *aura);
+                    self.target(owner, target);
+                    if *max == Some(0) {
+                        self.issues.push(DataIssue::InvalidControl(owner.clone()));
+                    }
+                    self.effects(owner, then);
+                }
                 Effect::Summon { pet, .. } | Effect::Dismiss { pet, .. } => self.pet(owner, *pet),
                 Effect::CommandPet { pet, spell } => {
                     if let Some(p) = pet {
@@ -892,6 +944,7 @@ impl Checker<'_> {
                 Effect::Resource(_)
                 | Effect::GainResource { .. }
                 | Effect::ExtraSwing
+                | Effect::ResetSwing { .. }
                 | Effect::Hook(_) => {}
             }
         }

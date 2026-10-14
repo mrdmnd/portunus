@@ -87,15 +87,16 @@ Charge, Battle Stance, the spec tree, damage-relevant class talents as
 baseline, and the `arms` policy (SimC's lists). Tests in
 `crates/mechanics/tests/arms.rs` against the shipped data.
 
-As built:
+Phase B snapshot (superseded by the Slayer work below):
 
 - Data: `data/loadouts/arms.ron` (the reference build's 27 spec talents,
-  Master of Warfare at 4), `data/runs/arms_dummy.ron`, a do-nothing
-  `Arms` kit in `Kits::standard()` (everything is data), and the `arms`
-  policy in `crates/run/src/scripts.rs`: `slayer_st` read without
-  Slayer, so the Imminent Demise, Executioner, and Opportunist conditions
-  take their untalented values. Rend's lines are dead with Cleave
-  talented. SimC's `gcd` is read as 1.5 s.
+  Master of Warfare at 4), a do-nothing `Arms` kit in `Kits::standard()`
+  (everything is data), and the policy in
+  `crates/run/src/scripts/arms.rs`. At this stage `slayer_st` was read
+  without Slayer, so the Imminent Demise, Executioner, and Opportunist
+  conditions took their untalented values. Rend's lines were dead with
+  Cleave talented. SimC's `gcd` was read as 1.5 s. The shipped
+  `data/runs/arms_dummy.ron` now uses the Slayer loadout from Phase C.
 - Execute: SimC's `execute_arms_t` spends 20–40 rage and triggers
   `execute_damage_t` at 2 × spent / 40. Here the cast deals the damage
   itself at spent / 20, which reads the same in the breakdown. Sudden
@@ -110,11 +111,9 @@ As built:
   0.03 per stack. Here the buff multiplies by 1 + 0.03 / 1.3 per stack,
   only against the warrior's Colossus Smash target, which comes to the
   same thing.
-- Tests: 14 in `arms.rs`, one loadout check in `data_files.rs`, and one
-  run-file check that the policy presses every button. Each data
-  encoding was mutation-checked; Sudden Death's measured rate (1.9 a
-  minute) scales with the data's 1.7.
-- 271 tests in total, all passing. Elemental is unchanged.
+- The Phase B data encodings were mutation-checked; Sudden Death's measured
+  rate (1.9 a minute) scaled with the data's 1.7. Test counts are omitted
+  because later phases continue to add coverage.
 
 ## Phase C: Slayer (done)
 

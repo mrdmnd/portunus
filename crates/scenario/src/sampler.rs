@@ -506,7 +506,7 @@ mod tests {
     }
 
     #[test]
-    fn reports_every_problem() {
+    fn reports_independent_problems_together() {
         let mut bad = pull(
             "a",
             vec![

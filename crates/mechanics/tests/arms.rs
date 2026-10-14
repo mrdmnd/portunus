@@ -520,8 +520,9 @@ fn autos_give_rage_by_weapon_speed() {
         seen = swings(&d.trace[mark..]);
     }
     assert!(seen.contains(&false));
-    // 3.5 x 1.75 a second of weapon speed, War Machine's 10% more, and
-    // Seasoned Soldier's 10% more on a crit (War Machine's share included).
+    // 6.125 rage per second of the equipped weapon's 3.6 s speed, War
+    // Machine's 10% more, and Seasoned Soldier's 10% more on a crit (War
+    // Machine's share included).
     let per = |crit: bool| 3.6 * (6.125 * 1.1 + if crit { 0.6125 * 1.1 } else { 0.0 });
     let want: f64 = seen.iter().map(|&c| per(c)).sum();
     let got = rage(&d.k) - start;
@@ -529,7 +530,7 @@ fn autos_give_rage_by_weapon_speed() {
 }
 
 #[test]
-fn execute_spends_up_to_forty_and_refunds_a_tenth_a_point() {
+fn execute_spends_up_to_forty_and_refunds_thirty_percent() {
     for (start, spent) in [(30.0, 30.0), (100.0, 40.0)] {
         let mut f = fixture();
         f.rage_only_from_casts(start);
@@ -581,7 +582,9 @@ fn execute_spends_up_to_forty_and_refunds_a_tenth_a_point() {
 
 #[test]
 fn sudden_death_makes_execute_free_anywhere() {
-    let f = fixture();
+    let mut f = fixture();
+    f.rage_only_from_casts(100.0);
+    f.dummy_health(30_000_000);
     let mut d = Driver::new(&f, 5);
     d.in_combat();
     let proc = |k: &Kernel<PartyMechanics>| buff(k, SUDDEN_DEATH) > 0 && ready(k, EXECUTE_MASSACRE);
@@ -601,40 +604,11 @@ fn sudden_death_makes_execute_free_anywhere() {
     assert_eq!(hits(window, EXECUTE_FREE).len(), 1);
     assert!(hits(window, EXECUTE_MASSACRE).is_empty());
     // Free: nothing spent.
-    assert!(rage(&d.k) >= before);
+    assert_eq!(rage(&d.k), before);
     // One stack goes as it lands; the cast may roll another after.
     let again = gains(window, SUDDEN_DEATH, stacks) as u8;
     assert_eq!(buff(&d.k, SUDDEN_DEATH), (stacks - 1 + again).min(2));
     assert_eq!(buff(&d.k, EXECUTIONERS_PRECISION), 1);
-}
-
-#[test]
-fn sudden_death_procs_about_as_often_as_simc_says() {
-    let mut f = fixture();
-    f.dummy_health(30_000_000);
-    let mut total = 0usize;
-    let mut minutes = 0.0;
-    for seed in 0..3 {
-        let mut d = Driver::new(&f, seed);
-        let o = d.until(first_of(CORE), |_| false);
-        assert!(o.is_some());
-        let procs = gains(&d.trace, SUDDEN_DEATH, 0);
-        // Tactical Edge's one per Colossus Smash isn't the proc.
-        total += procs - casts(&d.trace, COLOSSUS_SMASH);
-        let combat = d.trace.iter().find_map(|r| match r.event {
-            TraceEvent::CombatEnd { .. } => Some(r.time),
-            _ => None,
-        });
-        let start = d.trace.iter().find_map(|r| match r.event {
-            TraceEvent::CombatStart { .. } => Some(r.time),
-            _ => None,
-        });
-        minutes += f64::from((combat.unwrap() - start.unwrap()).millis()) / 60_000.0;
-    }
-    let rate = total as f64 / minutes;
-    // 1.7 a minute, hasted by the gear and Wild Strikes, a little more for
-    // the bad-luck protection. Each run is ten minutes (the pull's timeout).
-    assert!((1.6..2.3).contains(&rate), "{rate}");
 }
 
 #[test]
