@@ -1857,3 +1857,58 @@ fn priest_runs_execute_their_hero_kits() {
         }
     }
 }
+
+#[test]
+fn monk_runs_execute_their_hero_kits() {
+    let runs: &[(&str, &[&str])] = &[
+        (
+            "windwalker_celestial_dummy",
+            &[
+                "Invoke Xuen, the White Tiger",
+                "Zenith",
+                "Zenith Stomp",
+                "Celestial Conduit",
+                "Unity Within",
+                "Whirling Dragon Punch",
+                "Strike of the Windlord",
+                "Fists of Fury (Hit)",
+                "Rushing Wind Kick",
+                "Rising Sun Kick",
+                "Tigereye Strike",
+                "Xuen, the White Tiger: Crackling Tiger Lightning",
+            ],
+        ),
+        (
+            "windwalker_shado_pan_dummy",
+            &[
+                "Zenith",
+                "Zenith Stomp",
+                "Whirling Dragon Punch",
+                "Strike of the Windlord",
+                "Fists of Fury (Hit)",
+                "Rushing Wind Kick",
+                "Rising Sun Kick",
+                "Tigereye Strike",
+                "Flurry Strikes",
+                "Wisdom of the Wall (Proc)",
+            ],
+        ),
+    ];
+    for &(run, expected) in runs {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../data/runs/{run}.ron"));
+        let bd = Bundle::load(&path)
+            .unwrap()
+            .breakdown(SeedSet { first: 0, count: 4 })
+            .unwrap();
+        for name in expected {
+            assert!(
+                bd.rows
+                    .iter()
+                    .any(|r| r.name == *name && (r.casts > 0.0 || r.hits > 0.0)),
+                "{run} never used {name}: {:#?}",
+                bd.rows
+            );
+        }
+    }
+}

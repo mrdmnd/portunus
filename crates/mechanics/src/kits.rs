@@ -47,6 +47,7 @@ impl Kits {
             Box::new(Demonology),
             Box::new(Destruction),
             Box::new(Shadow),
+            Box::new(Windwalker),
         ])
     }
 }
@@ -717,6 +718,35 @@ pub struct Shadow;
 impl SpecKit for Shadow {
     fn spec(&self) -> SpecId {
         SpecId(258)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Windwalker Monk. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Windwalker;
+
+impl SpecKit for Windwalker {
+    fn spec(&self) -> SpecId {
+        SpecId(269)
     }
 
     fn hooks(&self) -> &[HookKey] {

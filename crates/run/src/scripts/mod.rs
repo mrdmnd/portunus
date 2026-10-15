@@ -25,6 +25,7 @@ pub mod shadow;
 pub mod subtlety;
 pub mod survival;
 pub mod unholy_dk;
+pub mod windwalker;
 
 use std::sync::Arc;
 
@@ -53,6 +54,7 @@ pub use shadow::shadow;
 pub use subtlety::subtlety;
 pub use survival::survival;
 pub use unholy_dk::unholy_dk;
+pub use windwalker::windwalker;
 
 use crate::observe::SeatObs;
 
@@ -80,6 +82,7 @@ pub const SCRIPTS: &[(&str, Script)] = &[
     ("demonology", demonology),
     ("destruction", destruction),
     ("shadow", shadow),
+    ("windwalker", windwalker),
     ("idle", idle),
 ];
 
