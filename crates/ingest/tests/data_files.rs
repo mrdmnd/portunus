@@ -381,6 +381,87 @@ fn hunter_loadouts_compile() {
 }
 
 #[test]
+fn rogue_loadouts_compile() {
+    let game = game();
+    let cases: &[(&str, SpecId, Option<u32>, &[u32])] = &[
+        (
+            "loadouts/assassination.ron",
+            SpecId(259),
+            None,
+            &[1329, 703, 1943, 32645, 360194, 385627],
+        ),
+        (
+            "loadouts/assassination_deathstalker.ron",
+            SpecId(259),
+            Some(53),
+            &[1329, 703, 1943, 32645, 360194, 385627],
+        ),
+        (
+            "loadouts/assassination_fatebound.ron",
+            SpecId(259),
+            Some(52),
+            &[1329, 703, 1943, 32645, 360194, 385627],
+        ),
+        (
+            "loadouts/outlaw.ron",
+            SpecId(260),
+            None,
+            &[193315, 185763, 315341, 2098, 13750, 271877, 51690, 381989],
+        ),
+        (
+            "loadouts/outlaw_trickster.ron",
+            SpecId(260),
+            Some(51),
+            &[193315, 185763, 315341, 2098, 13750, 271877, 51690, 441776],
+        ),
+        (
+            "loadouts/outlaw_fatebound.ron",
+            SpecId(260),
+            Some(52),
+            &[193315, 185763, 315341, 2098, 13750, 271877, 51690],
+        ),
+        (
+            "loadouts/subtlety.ron",
+            SpecId(261),
+            None,
+            &[
+                200758, 185438, 197835, 196819, 319175, 280719, 185313, 121471, 426591,
+            ],
+        ),
+        (
+            "loadouts/subtlety_deathstalker.ron",
+            SpecId(261),
+            Some(53),
+            &[
+                200758, 185438, 197835, 196819, 319175, 280719, 185313, 121471, 426591,
+            ],
+        ),
+        (
+            "loadouts/subtlety_trickster.ron",
+            SpecId(261),
+            Some(51),
+            &[
+                200758, 185438, 197835, 196819, 319175, 280719, 185313, 121471, 426591, 441776,
+            ],
+        ),
+    ];
+    for &(file, spec, hero, spells) in cases {
+        let loadout: Loadout = read_ron(&data_dir().join(file)).expect(file);
+        assert_eq!(Compiler.validate(&game, &loadout), Vec::new(), "{file}");
+        let template = Compiler.compile(&game, &loadout).expect(file);
+        assert_eq!(template.spec, spec);
+        assert_eq!(template.hero_tree, hero.map(HeroTreeId));
+        for &spell in spells {
+            assert!(
+                template.abilities.contains(&SpellId(spell)),
+                "{file}: {spell}"
+            );
+        }
+        assert!(template.main_hand.is_some() && template.off_hand.is_some());
+    }
+}
+
+#[test]
 fn dummy_scenario_samples_deterministically() {
     let spec: ScenarioSpec =
         read_ron(&data_dir().join("scenarios/target_dummy.ron")).expect("scenario");

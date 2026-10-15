@@ -6,13 +6,16 @@
 //! it in [`SCRIPTS`].
 
 pub mod arms;
+pub mod assassination;
 pub mod beast_mastery;
 pub mod elemental;
 pub mod enhancement;
 pub mod frost_dk;
 pub mod fury;
 pub mod marksmanship;
+pub mod outlaw;
 pub mod retribution;
+pub mod subtlety;
 pub mod survival;
 pub mod unholy_dk;
 
@@ -24,13 +27,16 @@ use portunus_env::Decision;
 use portunus_policy::Policy;
 
 pub use arms::arms;
+pub use assassination::assassination;
 pub use beast_mastery::beast_mastery;
 pub use elemental::elemental;
 pub use enhancement::enhancement;
 pub use frost_dk::frost_dk;
 pub use fury::fury;
 pub use marksmanship::marksmanship;
+pub use outlaw::outlaw;
 pub use retribution::retribution;
+pub use subtlety::subtlety;
 pub use survival::survival;
 pub use unholy_dk::unholy_dk;
 
@@ -50,6 +56,9 @@ pub const SCRIPTS: &[(&str, Script)] = &[
     ("beast_mastery", beast_mastery),
     ("marksmanship", marksmanship),
     ("survival", survival),
+    ("assassination", assassination),
+    ("outlaw", outlaw),
+    ("subtlety", subtlety),
     ("idle", idle),
 ];
 

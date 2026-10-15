@@ -1478,3 +1478,109 @@ fn hunter_runs_execute_their_hero_kits() {
         }
     }
 }
+
+#[test]
+fn rogue_runs_execute_their_hero_kits() {
+    let runs: &[(&str, &[&str])] = &[
+        (
+            "assassination_deathstalker_dummy",
+            &[
+                "Mutilate",
+                "Garrote",
+                "Rupture",
+                "Envenom",
+                "Deathmark",
+                "Kingsbane",
+                "Implacable Strikes",
+                "Deadly Poison (Periodic)",
+                "Deathstalker's Mark",
+            ],
+        ),
+        (
+            "assassination_fatebound_dummy",
+            &[
+                "Mutilate",
+                "Garrote",
+                "Rupture",
+                "Envenom",
+                "Deathmark",
+                "Kingsbane",
+                "Implacable Strikes",
+                "Fatebound Coin (Tails)",
+            ],
+        ),
+        (
+            "outlaw_trickster_dummy",
+            &[
+                "Adrenaline Rush",
+                "Roll the Bones",
+                "Sinister Strike",
+                "Pistol Shot",
+                "Between the Eyes",
+                "Dispatch",
+                "Scoundrel Strike",
+                "Main Gauche",
+                "Unseen Blade",
+                "Coup de Grace",
+            ],
+        ),
+        (
+            "outlaw_fatebound_dummy",
+            &[
+                "Adrenaline Rush",
+                "Roll the Bones",
+                "Sinister Strike",
+                "Pistol Shot",
+                "Between the Eyes",
+                "Dispatch",
+                "Scoundrel Strike",
+                "Main Gauche",
+                "Fatebound Coin (Tails)",
+            ],
+        ),
+        (
+            "subtlety_deathstalker_dummy",
+            &[
+                "Shadow Blades",
+                "Shadow Dance",
+                "Shadowstrike",
+                "Goremaw's Bite",
+                "Secret Technique",
+                "Eviscerate",
+                "Eviscerate (Shadow)",
+                "Deathstalker's Mark",
+                "Corrupt the Blood (Periodic)",
+            ],
+        ),
+        (
+            "subtlety_trickster_dummy",
+            &[
+                "Shadow Blades",
+                "Shadow Dance",
+                "Shadowstrike",
+                "Goremaw's Bite",
+                "Secret Technique",
+                "Eviscerate",
+                "Unseen Blade",
+                "Coup de Grace",
+            ],
+        ),
+    ];
+    for &(run, expected) in runs {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../data/runs/{run}.ron"));
+        let bd = Bundle::load(&path)
+            .unwrap()
+            .breakdown(SeedSet { first: 0, count: 4 })
+            .unwrap();
+        for name in expected {
+            assert!(
+                bd.rows
+                    .iter()
+                    .any(|r| r.name == *name && (r.casts > 0.0 || r.hits > 0.0)),
+                "{run} never used {name}: {:#?}",
+                bd.rows
+            );
+        }
+    }
+}

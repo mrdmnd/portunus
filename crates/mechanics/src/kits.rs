@@ -37,6 +37,9 @@ impl Kits {
             Box::new(BeastMastery),
             Box::new(Marksmanship),
             Box::new(Survival),
+            Box::new(Assassination),
+            Box::new(Outlaw),
+            Box::new(Subtlety),
         ])
     }
 }
@@ -417,6 +420,93 @@ pub struct Survival;
 impl SpecKit for Survival {
     fn spec(&self) -> SpecId {
         SpecId(255)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Assassination Rogue. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Assassination;
+
+impl SpecKit for Assassination {
+    fn spec(&self) -> SpecId {
+        SpecId(259)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Outlaw Rogue. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Outlaw;
+
+impl SpecKit for Outlaw {
+    fn spec(&self) -> SpecId {
+        SpecId(260)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Subtlety Rogue. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Subtlety;
+
+impl SpecKit for Subtlety {
+    fn spec(&self) -> SpecId {
+        SpecId(261)
     }
 
     fn hooks(&self) -> &[HookKey] {
