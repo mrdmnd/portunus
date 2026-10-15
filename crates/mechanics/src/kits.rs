@@ -40,6 +40,9 @@ impl Kits {
             Box::new(Assassination),
             Box::new(Outlaw),
             Box::new(Subtlety),
+            Box::new(Arcane),
+            Box::new(Fire),
+            Box::new(FrostMage),
         ])
     }
 }
@@ -507,6 +510,93 @@ pub struct Subtlety;
 impl SpecKit for Subtlety {
     fn spec(&self) -> SpecId {
         SpecId(261)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Arcane Mage. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Arcane;
+
+impl SpecKit for Arcane {
+    fn spec(&self) -> SpecId {
+        SpecId(62)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Fire Mage. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Fire;
+
+impl SpecKit for Fire {
+    fn spec(&self) -> SpecId {
+        SpecId(63)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Frost Mage. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FrostMage;
+
+impl SpecKit for FrostMage {
+    fn spec(&self) -> SpecId {
+        SpecId(64)
     }
 
     fn hooks(&self) -> &[HookKey] {

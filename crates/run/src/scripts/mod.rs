@@ -5,12 +5,15 @@
 //! live in its own module; to add one, write the function there and list
 //! it in [`SCRIPTS`].
 
+pub mod arcane;
 pub mod arms;
 pub mod assassination;
 pub mod beast_mastery;
 pub mod elemental;
 pub mod enhancement;
+pub mod fire;
 pub mod frost_dk;
+pub mod frost_mage;
 pub mod fury;
 pub mod marksmanship;
 pub mod outlaw;
@@ -26,12 +29,15 @@ use portunus_engine::{CastOpts, Choice, TargetSel, Wait};
 use portunus_env::Decision;
 use portunus_policy::Policy;
 
+pub use arcane::arcane;
 pub use arms::arms;
 pub use assassination::assassination;
 pub use beast_mastery::beast_mastery;
 pub use elemental::elemental;
 pub use enhancement::enhancement;
+pub use fire::fire;
 pub use frost_dk::frost_dk;
+pub use frost_mage::frost_mage;
 pub use fury::fury;
 pub use marksmanship::marksmanship;
 pub use outlaw::outlaw;
@@ -59,6 +65,9 @@ pub const SCRIPTS: &[(&str, Script)] = &[
     ("assassination", assassination),
     ("outlaw", outlaw),
     ("subtlety", subtlety),
+    ("arcane", arcane),
+    ("fire", fire),
+    ("frost_mage", frost_mage),
     ("idle", idle),
 ];
 

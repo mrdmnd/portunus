@@ -68,9 +68,9 @@ Warrior (`docs/ARMS_PLAN.md`, `crates/mechanics/tests/arms.rs`):
 | **P6** | Rogue | Assassination (`259`) | Deathstalker (`53`) | Fatebound (`52`) | **Done** |
 | **P6** | Rogue | Outlaw (`260`) | Trickster (`51`) | Fatebound (`52`) | **Done** |
 | **P6** | Rogue | Subtlety (`261`) | Deathstalker (`53`) | Trickster (`51`) | **Done** |
-| **P7** | Mage | Arcane (`62`) | Sunfury (`39`) | Spellslinger (`40`) | Planned |
-| **P7** | Mage | Fire (`63`) | Sunfury (`39`) | Frostfire (`41`) | Planned |
-| **P7** | Mage | Frost (`64`) | Spellslinger (`40`) | Frostfire (`41`) | Planned |
+| **P7** | Mage | Arcane (`62`) | Sunfury (`39`) | Spellslinger (`40`) | **Done** |
+| **P7** | Mage | Fire (`63`) | Sunfury (`39`) | Frostfire (`41`) | **Done** |
+| **P7** | Mage | Frost (`64`) | Spellslinger (`40`) | Frostfire (`41`) | **Done** |
 | **P8** | Warlock | Affliction (`265`) | Hellcaller (`58`) | Soul Harvester (`57`) | Planned |
 | **P8** | Warlock | Demonology (`266`) | Diabolist (`59`) | Soul Harvester (`57`) | Planned |
 | **P8** | Warlock | Destruction (`267`) | Diabolist (`59`) | Hellcaller (`58`) | Planned |

@@ -1584,3 +1584,108 @@ fn rogue_runs_execute_their_hero_kits() {
         }
     }
 }
+
+#[test]
+fn mage_runs_execute_their_hero_kits() {
+    let runs: &[(&str, &[&str])] = &[
+        (
+            "arcane_spellslinger_dummy",
+            &[
+                "Arcane Surge",
+                "Touch of the Magi",
+                "Prismatic Bolt",
+                "Arcane Orb",
+                "Arcane Blast",
+                "Arcane Missiles",
+                "Arcane Barrage",
+                "Arcane Splinter",
+                "Splinterstorm",
+            ],
+        ),
+        (
+            "arcane_sunfury_dummy",
+            &[
+                "Arcane Surge",
+                "Touch of the Magi",
+                "Prismatic Bolt",
+                "Arcane Orb",
+                "Arcane Blast",
+                "Arcane Missiles",
+                "Arcane Barrage",
+                "Meteorite",
+                "Arcane Phoenix: Spellfire Bolt",
+            ],
+        ),
+        (
+            "fire_sunfury_dummy",
+            &[
+                "Combustion",
+                "Meteor",
+                "Fire Blast",
+                "Pyroblast",
+                "Ignite (Periodic)",
+                "Meteorite",
+                "Arcane Phoenix: Spellfire Bolt",
+            ],
+        ),
+        (
+            "fire_frostfire_dummy",
+            &[
+                "Combustion",
+                "Meteor",
+                "Frostfire Bolt",
+                "Fire Blast",
+                "Pyroblast",
+                "Ignite (Periodic)",
+                "Frostfire Infusion",
+                "Comet Storm (Isothermic Core)",
+            ],
+        ),
+        (
+            "frost_spellslinger_dummy",
+            &[
+                "Frozen Orb",
+                "Comet Storm",
+                "Ray of Frost",
+                "Flurry",
+                "Ice Lance",
+                "Glacial Spike",
+                "Frost Splinter",
+                "Splinterstorm",
+                "Shatter",
+                "Hand of Frost",
+            ],
+        ),
+        (
+            "frost_frostfire_dummy",
+            &[
+                "Frozen Orb",
+                "Comet Storm",
+                "Meteor (Impact)",
+                "Ray of Frost",
+                "Ice Lance",
+                "Glacial Spike",
+                "Shatter",
+                "Hand of Frost",
+                "Frostfire Infusion",
+            ],
+        ),
+    ];
+    for &(run, expected) in runs {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../data/runs/{run}.ron"));
+        let bd = Bundle::load(&path)
+            .unwrap()
+            .breakdown(SeedSet { first: 0, count: 4 })
+            .unwrap();
+        for name in expected {
+            assert!(
+                bd.rows
+                    .iter()
+                    .any(|r| r.name == *name && (r.casts > 0.0 || r.hits > 0.0)),
+                "{run} never used {name}: {:#?}",
+                bd.rows
+            );
+        }
+    }
+}
