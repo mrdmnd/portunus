@@ -43,6 +43,9 @@ impl Kits {
             Box::new(Arcane),
             Box::new(Fire),
             Box::new(FrostMage),
+            Box::new(Affliction),
+            Box::new(Demonology),
+            Box::new(Destruction),
         ])
     }
 }
@@ -597,6 +600,93 @@ pub struct FrostMage;
 impl SpecKit for FrostMage {
     fn spec(&self) -> SpecId {
         SpecId(64)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Affliction Warlock. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Affliction;
+
+impl SpecKit for Affliction {
+    fn spec(&self) -> SpecId {
+        SpecId(265)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Demonology Warlock. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Demonology;
+
+impl SpecKit for Demonology {
+    fn spec(&self) -> SpecId {
+        SpecId(266)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Destruction Warlock. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Destruction;
+
+impl SpecKit for Destruction {
+    fn spec(&self) -> SpecId {
+        SpecId(267)
     }
 
     fn hooks(&self) -> &[HookKey] {

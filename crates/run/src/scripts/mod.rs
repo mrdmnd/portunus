@@ -5,10 +5,13 @@
 //! live in its own module; to add one, write the function there and list
 //! it in [`SCRIPTS`].
 
+pub mod affliction;
 pub mod arcane;
 pub mod arms;
 pub mod assassination;
 pub mod beast_mastery;
+pub mod demonology;
+pub mod destruction;
 pub mod elemental;
 pub mod enhancement;
 pub mod fire;
@@ -29,10 +32,13 @@ use portunus_engine::{CastOpts, Choice, TargetSel, Wait};
 use portunus_env::Decision;
 use portunus_policy::Policy;
 
+pub use affliction::affliction;
 pub use arcane::arcane;
 pub use arms::arms;
 pub use assassination::assassination;
 pub use beast_mastery::beast_mastery;
+pub use demonology::demonology;
+pub use destruction::destruction;
 pub use elemental::elemental;
 pub use enhancement::enhancement;
 pub use fire::fire;
@@ -68,6 +74,9 @@ pub const SCRIPTS: &[(&str, Script)] = &[
     ("arcane", arcane),
     ("fire", fire),
     ("frost_mage", frost_mage),
+    ("affliction", affliction),
+    ("demonology", demonology),
+    ("destruction", destruction),
     ("idle", idle),
 ];
 

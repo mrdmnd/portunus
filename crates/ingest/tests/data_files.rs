@@ -537,6 +537,93 @@ fn mage_loadouts_compile() {
 }
 
 #[test]
+fn warlock_loadouts_compile() {
+    let game = game();
+    let cases: &[(&str, SpecId, Option<u32>, &[u32])] = &[
+        (
+            "loadouts/affliction.ron",
+            SpecId(265),
+            None,
+            &[980, 172, 1259790, 27243, 48181, 198590, 1257052, 205180],
+        ),
+        (
+            "loadouts/affliction_hellcaller.ron",
+            SpecId(265),
+            Some(58),
+            &[
+                980, 445468, 1259790, 27243, 48181, 198590, 1257052, 205180, 442726,
+            ],
+        ),
+        (
+            "loadouts/affliction_soul_harvester.ron",
+            SpecId(265),
+            Some(57),
+            &[980, 172, 1259790, 27243, 48181, 198590, 1257052, 205180],
+        ),
+        (
+            "loadouts/demonology.ron",
+            SpecId(266),
+            None,
+            &[
+                686, 264178, 1250273, 104316, 264130, 265187, 1276452, 1276672,
+            ],
+        ),
+        (
+            "loadouts/demonology_diabolist.ron",
+            SpecId(266),
+            Some(59),
+            &[
+                686, 264178, 1250273, 104316, 264130, 265187, 1276452, 1276672, 434635, 434506,
+            ],
+        ),
+        (
+            "loadouts/demonology_soul_harvester.ron",
+            SpecId(266),
+            Some(57),
+            &[
+                686, 264178, 1250273, 104316, 264130, 265187, 1276452, 1276672,
+            ],
+        ),
+        (
+            "loadouts/destruction.ron",
+            SpecId(267),
+            None,
+            &[29722, 348, 17962, 116858, 5740, 17877, 152108, 1122, 6353],
+        ),
+        (
+            "loadouts/destruction_hellcaller.ron",
+            SpecId(267),
+            Some(58),
+            &[
+                29722, 445468, 17962, 116858, 5740, 17877, 152108, 1122, 6353, 442726,
+            ],
+        ),
+        (
+            "loadouts/destruction_diabolist.ron",
+            SpecId(267),
+            Some(59),
+            &[
+                29722, 348, 17962, 116858, 5740, 17877, 152108, 1122, 6353, 434635, 434506,
+            ],
+        ),
+    ];
+    for &(file, spec, hero, spells) in cases {
+        let loadout: Loadout = read_ron(&data_dir().join(file)).expect(file);
+        assert_eq!(Compiler.validate(&game, &loadout), Vec::new(), "{file}");
+        let template = Compiler.compile(&game, &loadout).expect(file);
+        assert_eq!(template.spec, spec);
+        assert_eq!(template.hero_tree, hero.map(HeroTreeId));
+        for &spell in spells {
+            assert!(
+                template.abilities.contains(&SpellId(spell)),
+                "{file}: {spell}"
+            );
+        }
+        assert!(template.main_hand.is_some());
+    }
+}
+
+#[test]
 fn dummy_scenario_samples_deterministically() {
     let spec: ScenarioSpec =
         read_ron(&data_dir().join("scenarios/target_dummy.ron")).expect("scenario");

@@ -1689,3 +1689,115 @@ fn mage_runs_execute_their_hero_kits() {
         }
     }
 }
+
+#[test]
+fn warlock_runs_execute_their_hero_kits() {
+    let runs: &[(&str, &[&str])] = &[
+        (
+            "affliction_hellcaller_dummy",
+            &[
+                "Haunt",
+                "Agony",
+                "Wither",
+                "Wither (Periodic)",
+                "Wither (Burst)",
+                "Malevolence",
+                "Dark Harvest",
+                "Summon Darkglare",
+                "Unstable Affliction",
+                "Shadow of Nathreza (Bolt)",
+                "Sayaad: Lash of Pain",
+            ],
+        ),
+        (
+            "affliction_soul_harvester_dummy",
+            &[
+                "Haunt",
+                "Agony",
+                "Corruption",
+                "Corruption (Periodic)",
+                "Dark Harvest",
+                "Summon Darkglare",
+                "Unstable Affliction",
+                "Kouros's Cleave",
+                "Soul Anathema (Periodic)",
+                "Sayaad: Lash of Pain",
+            ],
+        ),
+        (
+            "demonology_diabolist_dummy",
+            &[
+                "Power Siphon",
+                "Grimoire: Imp Lord",
+                "Summon Doomguard",
+                "Call Dreadstalkers",
+                "Summon Demonic Tyrant",
+                "Hand of Gul'dan",
+                "Demonbolt",
+                "Felguard: Legion Strike",
+                "Wild Imp: Fel Firebolt",
+            ],
+        ),
+        (
+            "demonology_soul_harvester_dummy",
+            &[
+                "Power Siphon",
+                "Grimoire: Imp Lord",
+                "Summon Doomguard",
+                "Call Dreadstalkers",
+                "Summon Demonic Tyrant",
+                "Hand of Gul'dan",
+                "Demonbolt",
+                "Kouros's Cleave",
+                "Soul Anathema (Periodic)",
+                "Felguard: Legion Strike",
+                "Wild Imp: Fel Firebolt",
+            ],
+        ),
+        (
+            "destruction_hellcaller_dummy",
+            &[
+                "Summon Infernal",
+                "Malevolence",
+                "Cataclysm",
+                "Wither (Periodic)",
+                "Wither (Burst)",
+                "Soul Fire",
+                "Conflagrate",
+                "Chaos Bolt",
+                "Embers of Nihilam (Volley)",
+                "Imp: Firebolt",
+            ],
+        ),
+        (
+            "destruction_diabolist_dummy",
+            &[
+                "Summon Infernal",
+                "Cataclysm",
+                "Immolate (Periodic)",
+                "Soul Fire",
+                "Conflagrate",
+                "Chaos Bolt",
+                "Embers of Nihilam (Volley)",
+                "Imp: Firebolt",
+            ],
+        ),
+    ];
+    for &(run, expected) in runs {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../data/runs/{run}.ron"));
+        let bd = Bundle::load(&path)
+            .unwrap()
+            .breakdown(SeedSet { first: 0, count: 4 })
+            .unwrap();
+        for name in expected {
+            assert!(
+                bd.rows
+                    .iter()
+                    .any(|r| r.name == *name && (r.casts > 0.0 || r.hits > 0.0)),
+                "{run} never used {name}: {:#?}",
+                bd.rows
+            );
+        }
+    }
+}

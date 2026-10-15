@@ -71,9 +71,9 @@ Warrior (`docs/ARMS_PLAN.md`, `crates/mechanics/tests/arms.rs`):
 | **P7** | Mage | Arcane (`62`) | Sunfury (`39`) | Spellslinger (`40`) | **Done** |
 | **P7** | Mage | Fire (`63`) | Sunfury (`39`) | Frostfire (`41`) | **Done** |
 | **P7** | Mage | Frost (`64`) | Spellslinger (`40`) | Frostfire (`41`) | **Done** |
-| **P8** | Warlock | Affliction (`265`) | Hellcaller (`58`) | Soul Harvester (`57`) | Planned |
-| **P8** | Warlock | Demonology (`266`) | Diabolist (`59`) | Soul Harvester (`57`) | Planned |
-| **P8** | Warlock | Destruction (`267`) | Diabolist (`59`) | Hellcaller (`58`) | Planned |
+| **P8** | Warlock | Affliction (`265`) | Hellcaller (`58`) | Soul Harvester (`57`) | **Done** |
+| **P8** | Warlock | Demonology (`266`) | Diabolist (`59`) | Soul Harvester (`57`) | **Done** |
+| **P8** | Warlock | Destruction (`267`) | Diabolist (`59`) | Hellcaller (`58`) | **Done** |
 | **P9** | Priest | Shadow (`258`) | Archon (`19`) | Voidweaver (`18`) | Planned |
 | **P10** | Monk | Windwalker (`269`) | Conduit of the Celestials (`64`) | Shado-Pan (`65`) | Planned |
 | **P11** | Druid | Balance (`102`) | Elune's Chosen (`24`) | Keeper of the Grove (`23`) | Planned |
