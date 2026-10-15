@@ -21,6 +21,7 @@ pub mod fury;
 pub mod marksmanship;
 pub mod outlaw;
 pub mod retribution;
+pub mod shadow;
 pub mod subtlety;
 pub mod survival;
 pub mod unholy_dk;
@@ -48,6 +49,7 @@ pub use fury::fury;
 pub use marksmanship::marksmanship;
 pub use outlaw::outlaw;
 pub use retribution::retribution;
+pub use shadow::shadow;
 pub use subtlety::subtlety;
 pub use survival::survival;
 pub use unholy_dk::unholy_dk;
@@ -77,6 +79,7 @@ pub const SCRIPTS: &[(&str, Script)] = &[
     ("affliction", affliction),
     ("demonology", demonology),
     ("destruction", destruction),
+    ("shadow", shadow),
     ("idle", idle),
 ];
 

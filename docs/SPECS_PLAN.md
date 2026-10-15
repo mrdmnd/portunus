@@ -74,7 +74,7 @@ Warrior (`docs/ARMS_PLAN.md`, `crates/mechanics/tests/arms.rs`):
 | **P8** | Warlock | Affliction (`265`) | Hellcaller (`58`) | Soul Harvester (`57`) | **Done** |
 | **P8** | Warlock | Demonology (`266`) | Diabolist (`59`) | Soul Harvester (`57`) | **Done** |
 | **P8** | Warlock | Destruction (`267`) | Diabolist (`59`) | Hellcaller (`58`) | **Done** |
-| **P9** | Priest | Shadow (`258`) | Archon (`19`) | Voidweaver (`18`) | Planned |
+| **P9** | Priest | Shadow (`258`) | Archon (`19`) | Voidweaver (`18`) | **Done** |
 | **P10** | Monk | Windwalker (`269`) | Conduit of the Celestials (`64`) | Shado-Pan (`65`) | Planned |
 | **P11** | Druid | Balance (`102`) | Elune's Chosen (`24`) | Keeper of the Grove (`23`) | Planned |
 | **P11** | Druid | Feral (`103`) | Druid of the Claw (`21`) | Wildstalker (`22`) | Planned |

@@ -46,6 +46,7 @@ impl Kits {
             Box::new(Affliction),
             Box::new(Demonology),
             Box::new(Destruction),
+            Box::new(Shadow),
         ])
     }
 }
@@ -687,6 +688,35 @@ pub struct Destruction;
 impl SpecKit for Destruction {
     fn spec(&self) -> SpecId {
         SpecId(267)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Shadow Priest. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Shadow;
+
+impl SpecKit for Shadow {
+    fn spec(&self) -> SpecId {
+        SpecId(258)
     }
 
     fn hooks(&self) -> &[HookKey] {

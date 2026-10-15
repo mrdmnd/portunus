@@ -1801,3 +1801,59 @@ fn warlock_runs_execute_their_hero_kits() {
         }
     }
 }
+
+#[test]
+fn priest_runs_execute_their_hero_kits() {
+    let runs: &[(&str, &[&str])] = &[
+        (
+            "shadow_voidweaver_dummy",
+            &[
+                "Tentacle Slam",
+                "Voidwraith",
+                "Voidform",
+                "Void Torrent",
+                "Void Blast",
+                "Void Volley",
+                "Shadow Word: Madness",
+                "Shadowy Apparition",
+                "Void Apparition",
+                "Entropic Rift: Entropic Rift (Pulse)",
+                "Voidwraith: Void Flay (Voidwraith)",
+            ],
+        ),
+        (
+            "shadow_archon_dummy",
+            &[
+                "Tentacle Slam",
+                "Mindbender",
+                "Halo",
+                "Halo (Damage)",
+                "Voidform",
+                "Void Volley",
+                "Mind Blast",
+                "Mind Flay: Insanity",
+                "Shadow Word: Madness",
+                "Shadowy Apparition",
+                "Void Apparition",
+                "Mindbender: Shadowcrawl",
+            ],
+        ),
+    ];
+    for &(run, expected) in runs {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../data/runs/{run}.ron"));
+        let bd = Bundle::load(&path)
+            .unwrap()
+            .breakdown(SeedSet { first: 0, count: 4 })
+            .unwrap();
+        for name in expected {
+            assert!(
+                bd.rows
+                    .iter()
+                    .any(|r| r.name == *name && (r.casts > 0.0 || r.hits > 0.0)),
+                "{run} never used {name}: {:#?}",
+                bd.rows
+            );
+        }
+    }
+}

@@ -624,6 +624,51 @@ fn warlock_loadouts_compile() {
 }
 
 #[test]
+fn priest_loadouts_compile() {
+    let game = game();
+    let cases: &[(&str, SpecId, Option<u32>, &[u32])] = &[
+        (
+            "loadouts/shadow.ron",
+            SpecId(258),
+            None,
+            &[
+                589, 34914, 8092, 15407, 32379, 335467, 1227280, 228260, 1230339,
+            ],
+        ),
+        (
+            "loadouts/shadow_voidweaver.ron",
+            SpecId(258),
+            Some(18),
+            &[
+                589, 34914, 8092, 15407, 32379, 335467, 1227280, 228260, 451234, 263165, 450405,
+            ],
+        ),
+        (
+            "loadouts/shadow_archon.ron",
+            SpecId(258),
+            Some(19),
+            &[
+                589, 34914, 8092, 15407, 32379, 335467, 1227280, 228260, 1230339, 120644,
+            ],
+        ),
+    ];
+    for &(file, spec, hero, spells) in cases {
+        let loadout: Loadout = read_ron(&data_dir().join(file)).expect(file);
+        assert_eq!(Compiler.validate(&game, &loadout), Vec::new(), "{file}");
+        let template = Compiler.compile(&game, &loadout).expect(file);
+        assert_eq!(template.spec, spec);
+        assert_eq!(template.hero_tree, hero.map(HeroTreeId));
+        for &spell in spells {
+            assert!(
+                template.abilities.contains(&SpellId(spell)),
+                "{file}: {spell}"
+            );
+        }
+        assert!(template.main_hand.is_some());
+    }
+}
+
+#[test]
 fn dummy_scenario_samples_deterministically() {
     let spec: ScenarioSpec =
         read_ron(&data_dir().join("scenarios/target_dummy.ron")).expect("scenario");
