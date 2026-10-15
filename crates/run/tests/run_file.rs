@@ -274,6 +274,46 @@ fn arms_policy_uses_the_kit() {
     assert_eq!(casts("Rend"), 0.0);
 }
 
+#[test]
+fn arms_colossus_and_fury_run_files_work() {
+    for (run, tree) in [
+        ("arms_colossus_dummy.ron", HeroTreeId(62)),
+        ("fury_dummy.ron", HeroTreeId(60)),
+        ("fury_mountain_thane_dummy.ron", HeroTreeId(61)),
+        ("enhancement_stormbringer_dummy.ron", HeroTreeId(54)),
+        ("enhancement_totemic_dummy.ron", HeroTreeId(56)),
+    ] {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../data/runs")
+            .join(run);
+        let mut b = Bundle::load(&path).unwrap();
+        for e in Arc::make_mut(&mut b.enemies).enemies.values_mut() {
+            e.health = 5_000_000;
+        }
+        let arm = b.arm(false);
+        let policy = &arm.policies[0];
+        let mut env = b.env(false);
+        let mut turn = env.reset(Seed(3)).unwrap();
+        for _ in 0..8 {
+            let Turn::Decide(d) = turn else {
+                panic!("ended early in {run}")
+            };
+            assert_eq!(d.obs.hero_tree, Some(tree));
+            turn = env.step(policy.act(&d)).unwrap().next;
+        }
+        let finish = |mut env: portunus_run::SimEnv<_>, mut turn| loop {
+            match turn {
+                Turn::Done(o) => return o,
+                Turn::Decide(d) => turn = env.step(policy.act(&d)).unwrap().next,
+            }
+        };
+        let fork = finish(env.clone(), turn.clone());
+        let main = finish(env, turn);
+        assert_eq!(fork, main);
+        assert_eq!(main, arm.rollout(Seed(3)).unwrap());
+    }
+}
+
 fn arms_bundle() -> Bundle {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/runs/arms_dummy.ron");
     Bundle::load(&path).unwrap()
@@ -1190,4 +1230,147 @@ fn seats_see_how_far_they_can_stray_from_their_area_and_who_is_in_it() {
         turn = env.step(choice).unwrap().next;
     }
     panic!("never saw the area");
+}
+
+#[test]
+fn retribution_runs_execute_their_hero_kits() {
+    hero_forks_agree("retribution_templar_dummy.ron", HeroTreeId(48));
+    hero_forks_agree("retribution_herald_dummy.ron", HeroTreeId(50));
+
+    let runs: [(&str, &[&str]); 2] = [
+        (
+            "retribution_templar_dummy",
+            &[
+                "Wake of Ashes",
+                "Hammer of Light",
+                "Empyrean Hammer",
+                "Execution Sentence",
+                "Divine Toll",
+                "Blade of Justice",
+                "Final Verdict",
+                "Judgment",
+                "Hammer of Wrath",
+                "Crusading Strikes",
+            ],
+        ),
+        (
+            "retribution_herald_dummy",
+            &[
+                "Wake of Ashes",
+                "Dawnlight",
+                "Sun's Avatar",
+                "Execution Sentence",
+                "Divine Toll",
+                "Blade of Justice",
+                "Final Verdict",
+                "Judgment",
+                "Hammer of Wrath",
+                "Crusading Strikes",
+            ],
+        ),
+    ];
+    for (run, expected) in runs {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../data/runs/{run}.ron"));
+        let bd = Bundle::load(&path)
+            .unwrap()
+            .breakdown(SeedSet { first: 0, count: 4 })
+            .unwrap();
+        for name in expected {
+            assert!(
+                bd.rows
+                    .iter()
+                    .any(|r| r.name == *name && (r.casts > 0.0 || r.hits > 0.0)),
+                "{run} never used {name}: {:#?}",
+                bd.rows
+            );
+        }
+    }
+}
+
+#[test]
+fn death_knight_runs_execute_their_hero_kits() {
+    hero_forks_agree("frost_deathbringer_dummy.ron", HeroTreeId(33));
+    hero_forks_agree("frost_rider_dummy.ron", HeroTreeId(32));
+    hero_forks_agree("unholy_rider_dummy.ron", HeroTreeId(32));
+    hero_forks_agree("unholy_sanlayn_dummy.ron", HeroTreeId(31));
+
+    let runs: [(&str, &[&str]); 4] = [
+        (
+            "frost_deathbringer_dummy",
+            &[
+                "Pillar of Frost",
+                "Reaper's Mark",
+                "Wave of Souls",
+                "Reaper's Mark (Explosion)",
+                "Exterminate (First Scythe)",
+                "Obliterate",
+                "Frost Strike",
+                "Howling Blast",
+                "Frost Fever",
+                "Remorseless Winter (Damage)",
+            ],
+        ),
+        (
+            "frost_rider_dummy",
+            &[
+                "Pillar of Frost",
+                "Obliterate",
+                "Frost Strike",
+                "Howling Blast",
+                "Frost Fever",
+                "Remorseless Winter (Damage)",
+                "King Thoras Trollbane: Obliterate (Trollbane)",
+            ],
+        ),
+        (
+            "unholy_rider_dummy",
+            &[
+                "Raise Dead",
+                "Army of the Dead",
+                "Dark Transformation",
+                "Putrefy",
+                "Festering Strike",
+                "Festering Scythe",
+                "Scourge Strike",
+                "Necrotic Coil",
+                "Virulent Plague",
+                "Dread Plague",
+                "High Inquisitor Sally Whitemane: Death Coil (Whitemane)",
+            ],
+        ),
+        (
+            "unholy_sanlayn_dummy",
+            &[
+                "Raise Dead",
+                "Army of the Dead",
+                "Dark Transformation",
+                "Vampiric Strike",
+                "Infliction of Sorrow",
+                "Blood Beast: Corrupted Blood",
+                "Putrefy",
+                "Festering Strike",
+                "Festering Scythe",
+                "Virulent Plague",
+                "Dread Plague",
+            ],
+        ),
+    ];
+    for (run, expected) in runs {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../data/runs/{run}.ron"));
+        let bd = Bundle::load(&path)
+            .unwrap()
+            .breakdown(SeedSet { first: 0, count: 4 })
+            .unwrap();
+        for name in expected {
+            assert!(
+                bd.rows
+                    .iter()
+                    .any(|r| r.name == *name && (r.casts > 0.0 || r.hits > 0.0)),
+                "{run} never used {name}: {:#?}",
+                bd.rows
+            );
+        }
+    }
 }

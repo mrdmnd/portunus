@@ -200,6 +200,10 @@ impl World {
         let haste = a.haste;
         let cd = a.cooldowns.entry(key).or_insert(fresh);
         cd.settle(now, haste);
+        while cd.charges < cd.max && cd.base > 0.0 && cd.progress >= cd.base {
+            cd.charges += 1;
+            cd.progress = (cd.progress - cd.base).max(0.0);
+        }
         if fresh.max != cd.max {
             if fresh.max > cd.max {
                 cd.charges = cd.charges.saturating_add(fresh.max - cd.max);

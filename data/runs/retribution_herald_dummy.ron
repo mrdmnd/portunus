@@ -1,0 +1,20 @@
+// One Retribution Herald of the Sun Paladin on the target dummy.
+(
+    name: "retribution_herald_dummy",
+    game: "../game.ron",
+    enemies: "../enemies.ron",
+    scenario: "../scenarios/target_dummy.ron",
+    seats: [
+        (
+            loadout: "../loadouts/retribution_herald_of_the_sun.ron",
+            policy: "retribution",
+            latency: (
+                anticipated: fixed(0),
+                reaction: jitter(base: 250, jitter: 50),
+                cast_lag: jitter(base: 100, jitter: 10),
+            ),
+        ),
+    ],
+    info: realistic,
+    seeds: 200,
+)

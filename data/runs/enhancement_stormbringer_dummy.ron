@@ -1,0 +1,20 @@
+// One Enhancement Stormbringer Shaman on the target dummy.
+(
+    name: "enhancement_stormbringer_dummy",
+    game: "../game.ron",
+    enemies: "../enemies.ron",
+    scenario: "../scenarios/target_dummy.ron",
+    seats: [
+        (
+            loadout: "../loadouts/enhancement_stormbringer.ron",
+            policy: "enhancement",
+            latency: (
+                anticipated: fixed(0),
+                reaction: jitter(base: 250, jitter: 50),
+                cast_lag: jitter(base: 100, jitter: 10),
+            ),
+        ),
+    ],
+    info: realistic,
+    seeds: 200,
+)

@@ -75,7 +75,7 @@ fn fits(slot: GearSlot, kind: EquipKind) -> bool {
         S::Finger1 | S::Finger2 => kind == K::Finger,
         S::Trinket1 | S::Trinket2 => kind == K::Trinket,
         S::MainHand => matches!(kind, K::OneHand | K::TwoHand | K::MainHandOnly),
-        S::OffHand => matches!(kind, K::OneHand | K::OffHand),
+        S::OffHand => matches!(kind, K::OneHand | K::TwoHand | K::OffHand),
     }
 }
 

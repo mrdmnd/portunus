@@ -26,7 +26,15 @@ impl Kits {
 
     /// Every kit this crate implements.
     pub fn standard() -> Self {
-        Self::new(vec![Box::new(Elemental), Box::new(Arms)])
+        Self::new(vec![
+            Box::new(Elemental),
+            Box::new(Enhancement),
+            Box::new(Arms),
+            Box::new(Fury),
+            Box::new(Retribution),
+            Box::new(FrostDk),
+            Box::new(UnholyDk),
+        ])
     }
 }
 
@@ -167,6 +175,35 @@ impl SpecKit for Elemental {
     }
 }
 
+/// Enhancement Shaman. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Enhancement;
+
+impl SpecKit for Enhancement {
+    fn spec(&self) -> SpecId {
+        SpecId(263)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
 /// Arms Warrior. Everything it does so far is data.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Arms;
@@ -174,6 +211,122 @@ pub struct Arms;
 impl SpecKit for Arms {
     fn spec(&self) -> SpecId {
         SpecId(71)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Fury Warrior. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Fury;
+
+impl SpecKit for Fury {
+    fn spec(&self) -> SpecId {
+        SpecId(72)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Retribution Paladin. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Retribution;
+
+impl SpecKit for Retribution {
+    fn spec(&self) -> SpecId {
+        SpecId(70)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Frost Death Knight. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FrostDk;
+
+impl SpecKit for FrostDk {
+    fn spec(&self) -> SpecId {
+        SpecId(251)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Unholy Death Knight. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UnholyDk;
+
+impl SpecKit for UnholyDk {
+    fn spec(&self) -> SpecId {
+        SpecId(252)
     }
 
     fn hooks(&self) -> &[HookKey] {

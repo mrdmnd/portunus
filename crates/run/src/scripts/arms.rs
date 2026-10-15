@@ -25,6 +25,8 @@ const REND: SpellId = SpellId(772);
 const CLEAVE: SpellId = SpellId(845);
 const WRECKING_THROW: SpellId = SpellId(384110);
 const CHARGE: SpellId = SpellId(100);
+const SWEEPING_STRIKES: SpellId = SpellId(260708);
+const DEMOLISH: SpellId = SpellId(436358);
 
 const SUDDEN_DEATH: AuraId = AuraId(52437);
 const COLOSSUS_SMASH_DEBUFF: AuraId = AuraId(208086);
@@ -35,6 +37,10 @@ const EXECUTIONERS_PRECISION: AuraId = AuraId(386633);
 const BLOODLETTING: AuraId = AuraId(383154);
 const EXECUTIONER: AuraId = AuraId(445584);
 const IMMINENT_DEMISE: AuraId = AuraId(445606);
+const SWEEPING_STRIKES_BUFF: AuraId = AuraId(260708);
+const COLLATERAL_DAMAGE_BUFF: AuraId = AuraId(334783);
+const COLOSSAL_MIGHT: AuraId = AuraId(440989);
+const BROAD_STROKES: AuraId = AuraId(1261049);
 
 /// The changes a candidate makes to the SimC port, one per field, all off
 /// for [`arms`].
@@ -183,6 +189,15 @@ impl<'a> Arms<'a> {
             self.obs.combat_time.is_some_and(|t| t <= SimDuration(500)),
         )
     }
+
+    /// SimC's `sweeping_strikes,if=active_enemies>1&buff.sweeping_strikes.down`.
+    fn sweeping_strikes(&self) -> Option<SpellId> {
+        let broad_cs_ready = self.obs.has_buff(BROAD_STROKES) && self.cs_cd <= SimDuration::ZERO;
+        self.pick(
+            SWEEPING_STRIKES,
+            self.enemies > 1 && !self.obs.has_buff(SWEEPING_STRIKES_BUFF) && !broad_cs_ready,
+        )
+    }
 }
 
 /// Moves in, then plays the first spell the lists pick.
@@ -191,7 +206,18 @@ fn play(d: &Decision<SeatObs>, tweaks: Tweaks) -> Choice {
     if let Some(m) = a.approach() {
         return m;
     }
-    let list = if a.execute_phase() {
+    let colossus = a.known(DEMOLISH);
+    let list = if colossus {
+        if a.enemies > 2 {
+            colossus_aoe(&a)
+        } else if a.execute_phase() {
+            colossus_execute(&a)
+        } else {
+            colossus_st(&a)
+        }
+    } else if a.enemies >= 3 {
+        slayer_aoe(&a)
+    } else if a.execute_phase() {
         slayer_execute(&a)
     } else {
         slayer_st(&a)
@@ -220,6 +246,7 @@ fn slayer_st(a: &Arms<'_>) -> Option<SpellId> {
         && a.cd(BLADESTORM) == SimDuration::ZERO
         && a.obs.buff_stacks(IMMINENT_DEMISE) < 1;
     [
+        a.sweeping_strikes(),
         a.pick(CLEAVE, rend_soon),
         a.pick(REND, !a.cleave && a.enemies < 2 && rend_soon),
         a.pick(
@@ -258,6 +285,7 @@ fn slayer_execute(a: &Arms<'_>) -> Option<SpellId> {
     let ms_precision = t.execute_ms_precision.unwrap_or(2);
     let execute_rage = t.execute_rage.unwrap_or(40.0);
     [
+        a.sweeping_strikes(),
         a.pick(CLEAVE, rend_low),
         a.pick(REND, rend_low && !a.cleave),
         a.pick(AVATAR, t.avatar_on_cd || a.smashed || a.cs_cd > GCD),
@@ -280,6 +308,138 @@ fn slayer_execute(a: &Arms<'_>) -> Option<SpellId> {
         a.pick(OVERPOWER, true),
         a.pick(a.execute, true),
         a.pick(WRECKING_THROW, true),
+    ]
+    .into_iter()
+    .flatten()
+    .next()
+}
+
+/// SimC's `slayer_aoe` (12.1) at 3 or more targets.
+fn slayer_aoe(a: &Arms<'_>) -> Option<SpellId> {
+    let soon = SimDuration(2000);
+    let rend_soon = a.rend <= GCD || a.cs_cd < soon && a.rend <= SimDuration(10_000);
+    let warfare = a.obs.has_buff(MASTER_OF_WARFARE_PROC);
+    [
+        a.sweeping_strikes(),
+        a.pick(CLEAVE, rend_soon),
+        a.pick(REND, !a.cleave && rend_soon),
+        a.pick(
+            AVATAR,
+            a.smashed || a.cs_cd < SimDuration(10_000) && a.cs_cd > GCD,
+        ),
+        a.pick(COLOSSUS_SMASH, true),
+        a.bladestorm(a.smashed || a.cs_cd > SimDuration(25_000) || a.obs.has_buff(AVATAR_BUFF)),
+        a.pick(CLEAVE, true),
+        a.pick(SLAM, warfare),
+        a.pick(a.execute, a.sudden_death > 0),
+        a.pick(
+            MORTAL_STRIKE,
+            a.obs.has_buff(SWEEPING_STRIKES_BUFF) && a.obs.buff_stacks(EXECUTIONERS_PRECISION) == 2,
+        ),
+        a.pick(OVERPOWER, a.obs.has_buff(SWEEPING_STRIKES_BUFF)),
+        a.pick(MORTAL_STRIKE, true),
+        a.pick(OVERPOWER, true),
+        a.pick(a.execute, true),
+        a.pick(SLAM, true),
+    ]
+    .into_iter()
+    .flatten()
+    .next()
+}
+
+/// SimC's `colossus_st` (12.1).
+fn colossus_st(a: &Arms<'_>) -> Option<SpellId> {
+    let soon = SimDuration(2000);
+    let rend_soon = a.rend <= GCD || a.cs_cd < soon && a.rend <= SimDuration(10_000);
+    let rend_late = a.rend <= SimDuration(5000);
+    let warfare = a.obs.has_buff(MASTER_OF_WARFARE_PROC);
+    let cm = a.obs.buff_stacks(COLOSSAL_MIGHT);
+    [
+        a.sweeping_strikes(),
+        a.pick(CLEAVE, rend_soon),
+        a.pick(REND, !a.cleave && rend_soon),
+        a.pick(
+            AVATAR,
+            a.smashed || a.cs_cd < SimDuration(10_000) && a.cs_cd > GCD,
+        ),
+        a.pick(COLOSSUS_SMASH, true),
+        a.pick(DEMOLISH, a.smashed && cm >= 6 || cm == 10),
+        a.pick(SLAM, warfare),
+        a.pick(MORTAL_STRIKE, true),
+        a.pick(a.execute, a.sudden_death > 0),
+        a.pick(OVERPOWER, true),
+        a.pick(CLEAVE, a.enemies == 2 || rend_late),
+        a.pick(REND, !a.cleave && rend_late),
+        a.pick(SLAM, true),
+        a.pick(WRECKING_THROW, a.enemies == 1),
+    ]
+    .into_iter()
+    .flatten()
+    .next()
+}
+
+/// SimC's `colossus_execute` (12.1).
+fn colossus_execute(a: &Arms<'_>) -> Option<SpellId> {
+    let bloodletting = a.obs.has_buff(BLOODLETTING);
+    let rend_low = a.rend < SimDuration(2000) && !bloodletting;
+    let precision = a.obs.buff_stacks(EXECUTIONERS_PRECISION);
+    let warfare = a.obs.has_buff(MASTER_OF_WARFARE_PROC);
+    let cm = a.obs.buff_stacks(COLOSSAL_MIGHT);
+    [
+        a.sweeping_strikes(),
+        a.pick(CLEAVE, rend_low),
+        a.pick(REND, rend_low && !a.cleave),
+        a.pick(AVATAR, a.smashed || a.cs_cd > GCD),
+        a.pick(COLOSSUS_SMASH, true),
+        a.pick(
+            DEMOLISH,
+            a.smashed || cm == 10 && a.cs_cd > SimDuration(15_000),
+        ),
+        a.pick(SLAM, warfare),
+        a.pick(
+            MORTAL_STRIKE,
+            precision == 2 || !a.obs.has_buff(COLOSSAL_MIGHT),
+        ),
+        a.pick(a.execute, a.rage() >= 40.0 || a.sudden_death > 0),
+        a.pick(OVERPOWER, true),
+        a.pick(a.execute, true),
+        a.pick(MORTAL_STRIKE, true),
+        a.pick(CLEAVE, a.enemies == 2),
+        a.pick(SLAM, true),
+    ]
+    .into_iter()
+    .flatten()
+    .next()
+}
+
+/// SimC's `colossus_aoe` (12.1).
+fn colossus_aoe(a: &Arms<'_>) -> Option<SpellId> {
+    let soon = SimDuration(2000);
+    let rend_soon = a.rend <= GCD || a.cs_cd < soon && a.rend <= SimDuration(10_000);
+    let warfare = a.obs.has_buff(MASTER_OF_WARFARE_PROC);
+    let cm = a.obs.buff_stacks(COLOSSAL_MIGHT);
+    [
+        a.sweeping_strikes(),
+        a.pick(CLEAVE, rend_soon || a.obs.has_buff(COLLATERAL_DAMAGE_BUFF)),
+        a.pick(REND, !a.cleave && rend_soon),
+        a.pick(
+            AVATAR,
+            a.smashed || a.cs_cd < SimDuration(10_000) && a.cs_cd > GCD,
+        ),
+        a.pick(COLOSSUS_SMASH, true),
+        a.pick(
+            DEMOLISH,
+            a.smashed || cm >= 8 && a.cs_cd > SimDuration(15_000),
+        ),
+        a.pick(BLADESTORM, a.smashed || a.cs_cd > SimDuration(25_000)),
+        a.pick(CLEAVE, true),
+        a.pick(SLAM, warfare),
+        a.pick(OVERPOWER, a.obs.has_buff(SWEEPING_STRIKES_BUFF)),
+        a.pick(MORTAL_STRIKE, true),
+        a.pick(a.execute, a.sudden_death > 0),
+        a.pick(OVERPOWER, true),
+        a.pick(a.execute, true),
+        a.pick(SLAM, true),
     ]
     .into_iter()
     .flatten()

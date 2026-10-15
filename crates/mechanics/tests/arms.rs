@@ -1269,3 +1269,69 @@ fn cleave_rolls_slayers_strike_on_each_target_half_a_second_apart() {
         .windows(2)
         .all(|w| w[1].0 - w[0].0 >= SimDuration(500)));
 }
+
+#[test]
+fn sweeping_strikes_cleaves_and_spreads_rend_across_two_targets() {
+    const SWEEPING: SpellId = SpellId(260708);
+    const SWEEPING_BUFF: AuraId = AuraId(260708);
+    const REND_CAST: SpellId = SpellId(772);
+    let mut f = fixture();
+    f.dummy_health(30_000_000);
+    f.spec.pulls[0].waves[0].mobs[0].1 = 2;
+    let mut d = Driver::new(&f, 12);
+    d.in_combat();
+    d.press(CHARGE);
+    d.press(SWEEPING);
+    assert_eq!(buff(&d.k, SWEEPING_BUFF), 12);
+    // Rend under Sweeping Strikes hits 2 targets, spreads Rend's bleed to the
+    // second target, and consumes 1 stack of Sweeping Strikes.
+    d.until(idle, |k| ready(k, REND_CAST));
+    d.press(REND_CAST);
+    assert_eq!(buff(&d.k, SWEEPING_BUFF), 11);
+    let enemies = d.k.state().enemies();
+    assert_eq!(enemies.len(), 2);
+    for &e in enemies {
+        assert_eq!(aura_on(&d.k, e, REND_DOT), 1);
+    }
+    // Overpower under Sweeping Strikes hits both targets and consumes 1 stack.
+    d.until(idle, |k| ready(k, OVERPOWER));
+    let mark = d.trace.len();
+    d.press(OVERPOWER);
+    assert_eq!(buff(&d.k, SWEEPING_BUFF), 10);
+    assert_eq!(hits(&d.trace[mark..], OVERPOWER).len(), 2);
+}
+
+#[test]
+fn colossus_builds_colossal_might_and_channels_demolish() {
+    const DEMOLISH: SpellId = SpellId(436358);
+    const DEMOLISH_1: SpellId = SpellId(440884);
+    const DEMOLISH_2: SpellId = SpellId(440886);
+    const DEMOLISH_3: SpellId = SpellId(440888);
+    const COLOSSAL_MIGHT: AuraId = AuraId(440989);
+    const WRECKED: AuraId = AuraId(447513);
+    const CELERITOUS_HASTE: AuraId = AuraId(1270843);
+    const CELERITOUS_MS: AuraId = AuraId(1270846);
+
+    let mut f = fixture_with("arms_colossus.ron");
+    f.dummy_health(30_000_000);
+    let mut d = Driver::new(&f, 15);
+    d.in_combat();
+    d.press(CHARGE);
+    d.press(MORTAL_STRIKE);
+    let stacks = buff(&d.k, COLOSSAL_MIGHT);
+    assert!((1..=2).contains(&stacks), "{stacks}");
+
+    d.until(idle, |k| ready(k, DEMOLISH));
+    let t = d.press(DEMOLISH);
+    let done = |k: &Kernel<PartyMechanics>| k.state().now() >= t + SimDuration(2500);
+    assert!(d.until(idle, done).is_none());
+
+    assert_eq!(hits(&d.trace, DEMOLISH_1).len(), 1);
+    assert_eq!(hits(&d.trace, DEMOLISH_2).len(), 1);
+    assert_eq!(hits(&d.trace, DEMOLISH_3).len(), 1);
+    assert_eq!(buff(&d.k, COLOSSAL_MIGHT), 0);
+    assert_eq!(debuff(&d.k, WRECKED), stacks);
+    assert_eq!(buff(&d.k, CELERITOUS_HASTE), 1);
+    assert_eq!(buff(&d.k, CELERITOUS_MS), 1);
+    assert_eq!(debuff(&d.k, DEEP_WOUNDS_DOT), 1);
+}

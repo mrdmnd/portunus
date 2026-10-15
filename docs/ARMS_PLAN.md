@@ -164,11 +164,10 @@ As built:
   Mortal Strike come to about 30% of the damage; the rest is Overwhelmed,
   Executioner, Slayer's Malice, more Sudden Death, and more Bladestorms.
 
-## Phase D: multiple targets
+## Phase D: multiple targets & Colossus (done)
 
-Sweeping Strikes, Cleave's Rend spread, Reap the Storm off Cleave (20% at
-three or more targets), the AoE and two-target lines of the policy, and a
-pack run file.
+- **Multi-target (Phase D):** Sweeping Strikes (`260708`, 12 stacks, 18 with Powerful Momentum `1261050`; +6 stacks on Colossus Smash with Broad Strokes `1261049`; chains single-target strikes to 1 nearby target at 75% and spreads Rend's bleed `388539` on Rend cast), Collateral Damage (`334779` / `334783`), Dreadnaught (`262150` / `315961`), Fervor of Battle (`202316` / `910105`), Overpowering Finish (`400205`), Mass Execution (`1273075`), Reap the Storm off Cleave (20% at 3+ targets), and SimC's `slayer_aoe` list in `crates/run/src/scripts/arms.rs`.
+- **Colossus (`HeroTreeId(62)`):** Hero tree 62 in `data/game.ron` (`436358` *Demolish* 3-tick hasted channel triggering `440884` / `440886` / `440888`, `440989` *Colossal Might*, `429638` *Martial Expert*, `440992` *Earthquaker*, `1270704` *Decimator*, `429637` *One Against Many*, `440995` *Arterial Bleed*, `429641` *Tide of Battle*, `1270709` *Cut to the Bone*, `429647` *Practiced Strikes*, `431548` *Precise Might*, `429642` *Mountain of Muscle and Scars*, `1270710` *Celeritous Conclusion* / `1270843` / `1270846`, and `429636` *Dominance of the Colossus* / `447513` *Wrecked*), `data/loadouts/arms_colossus.ron`, `data/runs/arms_colossus_dummy.ron`, and SimC's `colossus_st` / `colossus_execute` / `colossus_aoe` lists.
 
 ## Known divergences (kept up to date)
 

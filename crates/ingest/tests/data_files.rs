@@ -176,6 +176,136 @@ fn arms_slayer_loadout_compiles() {
 }
 
 #[test]
+fn arms_colossus_loadout_compiles() {
+    let game = game();
+    let loadout: Loadout =
+        read_ron(&data_dir().join("loadouts/arms_colossus.ron")).expect("loadout");
+    assert_eq!(Compiler.validate(&game, &loadout), vec![]);
+    let template = Compiler.compile(&game, &loadout).expect("compiles");
+    assert_eq!(template.hero_tree, Some(HeroTreeId(62)));
+    assert!(template.abilities.contains(&SpellId(436358)));
+    for aura in [
+        436358, 429638, 440992, 1270704, 440995, 429641, 1270709, 429647, 431548, 429642, 1270710,
+        429636,
+    ] {
+        assert!(template.passive_auras.contains(&AuraId(aura)), "{aura}");
+    }
+}
+
+#[test]
+fn fury_loadouts_compile() {
+    let game = game();
+    for (file, hero) in [
+        ("fury.ron", None),
+        ("fury_slayer.ron", Some(HeroTreeId(60))),
+        ("fury_mountain_thane.ron", Some(HeroTreeId(61))),
+    ] {
+        let loadout: Loadout = read_ron(&data_dir().join("loadouts").join(file)).expect(file);
+        assert_eq!(Compiler.validate(&game, &loadout), vec![], "{file}");
+        let template = Compiler.compile(&game, &loadout).expect(file);
+        assert_eq!(template.hero_tree, hero, "{file}");
+        for spell in [
+            23881, 85288, 184367, 280735, 190411, 1719, 385059, 227847, 107574, 6343,
+        ] {
+            assert!(
+                template.abilities.contains(&SpellId(spell)),
+                "{file}: {spell}"
+            );
+        }
+        assert!(template.main_hand.is_some() && template.off_hand.is_some());
+    }
+}
+
+#[test]
+fn enhancement_loadouts_compile() {
+    let game = game();
+    for (file, hero) in [
+        ("enhancement.ron", None),
+        ("enhancement_stormbringer.ron", Some(HeroTreeId(54))),
+        ("enhancement_totemic.ron", Some(HeroTreeId(56))),
+    ] {
+        let loadout: Loadout = read_ron(&data_dir().join("loadouts").join(file)).expect(file);
+        assert_eq!(Compiler.validate(&game, &loadout), vec![], "{file}");
+        let template = Compiler.compile(&game, &loadout).expect(file);
+        assert_eq!(template.hero_tree, hero, "{file}");
+        for spell in [17364, 60103, 188196, 188443, 188389, 470057, 187874] {
+            assert!(
+                template.abilities.contains(&SpellId(spell)),
+                "{file}: {spell}"
+            );
+        }
+        assert!(template.main_hand.is_some() && template.off_hand.is_some());
+    }
+}
+
+#[test]
+fn retribution_loadouts_compile() {
+    let game = game();
+    for (file, hero) in [
+        ("retribution.ron", None),
+        ("retribution_templar.ron", Some(HeroTreeId(48))),
+        ("retribution_herald_of_the_sun.ron", Some(HeroTreeId(50))),
+    ] {
+        let loadout: Loadout = read_ron(&data_dir().join("loadouts").join(file)).expect(file);
+        assert_eq!(Compiler.validate(&game, &loadout), vec![], "{file}");
+        let template = Compiler.compile(&game, &loadout).expect(file);
+        assert_eq!(template.hero_tree, hero, "{file}");
+        for spell in [
+            35395, 20271, 24275, 184575, 383328, 53385, 255937, 343527, 375576,
+        ] {
+            assert!(
+                template.abilities.contains(&SpellId(spell)),
+                "{file}: {spell}"
+            );
+        }
+        assert!(template.main_hand.is_some());
+    }
+}
+
+#[test]
+fn frost_and_unholy_dk_loadouts_compile() {
+    let game = game();
+    for (file, hero) in [
+        ("frost_dk.ron", None),
+        ("frost_deathbringer.ron", Some(HeroTreeId(33))),
+        ("frost_rider.ron", Some(HeroTreeId(32))),
+    ] {
+        let loadout: Loadout = read_ron(&data_dir().join("loadouts").join(file)).expect(file);
+        assert_eq!(Compiler.validate(&game, &loadout), vec![], "{file}");
+        let template = Compiler.compile(&game, &loadout).expect(file);
+        assert_eq!(template.hero_tree, hero, "{file}");
+        for spell in [
+            49143, 49020, 49184, 47568, 207230, 51271, 279302, 1249658, 196770,
+        ] {
+            assert!(
+                template.abilities.contains(&SpellId(spell)),
+                "{file}: {spell}"
+            );
+        }
+        assert!(template.main_hand.is_some() && template.off_hand.is_some());
+    }
+    for (file, hero) in [
+        ("unholy_dk.ron", None),
+        ("unholy_rider.ron", Some(HeroTreeId(32))),
+        ("unholy_sanlayn.ron", Some(HeroTreeId(31))),
+    ] {
+        let loadout: Loadout = read_ron(&data_dir().join("loadouts").join(file)).expect(file);
+        assert_eq!(Compiler.validate(&game, &loadout), vec![], "{file}");
+        let template = Compiler.compile(&game, &loadout).expect(file);
+        assert_eq!(template.hero_tree, hero, "{file}");
+        for spell in [
+            77575, 85948, 55090, 47541, 207317, 1247378, 1233448, 343294, 42650,
+        ] {
+            assert!(
+                template.abilities.contains(&SpellId(spell)),
+                "{file}: {spell}"
+            );
+        }
+        assert!(template.main_hand.is_some());
+    }
+}
+
+#[test]
 fn dummy_scenario_samples_deterministically() {
     let spec: ScenarioSpec =
         read_ron(&data_dir().join("scenarios/target_dummy.ron")).expect("scenario");

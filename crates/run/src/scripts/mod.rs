@@ -7,6 +7,11 @@
 
 pub mod arms;
 pub mod elemental;
+pub mod enhancement;
+pub mod frost_dk;
+pub mod fury;
+pub mod retribution;
+pub mod unholy_dk;
 
 use std::sync::Arc;
 
@@ -17,13 +22,27 @@ use portunus_policy::Policy;
 
 pub use arms::arms;
 pub use elemental::elemental;
+pub use enhancement::enhancement;
+pub use frost_dk::frost_dk;
+pub use fury::fury;
+pub use retribution::retribution;
+pub use unholy_dk::unholy_dk;
 
 use crate::observe::SeatObs;
 
 type Script = fn(&Decision<SeatObs>) -> Choice;
 
 /// Every named policy.
-pub const SCRIPTS: &[(&str, Script)] = &[("elemental", elemental), ("arms", arms), ("idle", idle)];
+pub const SCRIPTS: &[(&str, Script)] = &[
+    ("elemental", elemental),
+    ("enhancement", enhancement),
+    ("arms", arms),
+    ("fury", fury),
+    ("retribution", retribution),
+    ("frost_dk", frost_dk),
+    ("unholy_dk", unholy_dk),
+    ("idle", idle),
+];
 
 /// Candidates under tuning, looked up like [`SCRIPTS`].
 const CANDIDATES: &[&[(&str, Script)]] = &[arms::CANDIDATES];
