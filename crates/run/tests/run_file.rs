@@ -1374,3 +1374,107 @@ fn death_knight_runs_execute_their_hero_kits() {
         }
     }
 }
+
+#[test]
+fn hunter_runs_execute_their_hero_kits() {
+    let runs: &[(&str, &[&str])] = &[
+        (
+            "beast_mastery_pack_leader_dummy",
+            &[
+                "Bestial Wrath",
+                "Barbed Shot",
+                "Cobra Shot",
+                "Stomp",
+                "Bloodshed (Periodic)",
+                "Stampede",
+                "Hunter Pet: Kill Command (Pet)",
+                "Animal Companion: Kill Command (Pet)",
+            ],
+        ),
+        (
+            "beast_mastery_dark_ranger_dummy",
+            &[
+                "Bestial Wrath",
+                "Barbed Shot",
+                "Cobra Shot",
+                "Black Arrow",
+                "Bleak Powder",
+                "Black Arrow (Withering Fire)",
+                "Wailing Arrow",
+                "Shadow Thrash",
+                "Hunter Pet: Kill Command (Pet)",
+            ],
+        ),
+        (
+            "marksmanship_sentinel_dummy",
+            &[
+                "Trueshot",
+                "Aimed Shot",
+                "Rapid Fire",
+                "Rapid Fire (Shot)",
+                "Explosive Shot",
+                "Volley",
+                "Moonlight Chakram",
+                "Lunar Storm",
+            ],
+        ),
+        (
+            "marksmanship_dark_ranger_dummy",
+            &[
+                "Trueshot",
+                "Aimed Shot",
+                "Rapid Fire (Shot)",
+                "Explosive Shot",
+                "Volley",
+                "Black Arrow",
+                "Bleak Powder",
+                "Wailing Arrow",
+                "Blighted Arrow",
+            ],
+        ),
+        (
+            "survival_pack_leader_dummy",
+            &[
+                "Takedown",
+                "Wildfire Bomb",
+                "Wildfire Bomb (Explosion)",
+                "Boomstick",
+                "Boomstick (Blast)",
+                "Raptor Swipe",
+                "Strike as One",
+                "Stampede",
+                "Hunter Pet: Kill Command (Survival Pet)",
+            ],
+        ),
+        (
+            "survival_sentinel_dummy",
+            &[
+                "Takedown",
+                "Wildfire Bomb",
+                "Boomstick",
+                "Raptor Swipe",
+                "Strike as One",
+                "Moonlight Chakram",
+                "Lunar Storm",
+                "Hunter Pet: Kill Command (Survival Pet)",
+            ],
+        ),
+    ];
+    for &(run, expected) in runs {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../data/runs/{run}.ron"));
+        let bd = Bundle::load(&path)
+            .unwrap()
+            .breakdown(SeedSet { first: 0, count: 4 })
+            .unwrap();
+        for name in expected {
+            assert!(
+                bd.rows
+                    .iter()
+                    .any(|r| r.name == *name && (r.casts > 0.0 || r.hits > 0.0)),
+                "{run} never used {name}: {:#?}",
+                bd.rows
+            );
+        }
+    }
+}

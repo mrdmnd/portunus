@@ -1,0 +1,20 @@
+// One Survival Sentinel Hunter on the target dummy.
+(
+    name: "survival_sentinel_dummy",
+    game: "../game.ron",
+    enemies: "../enemies.ron",
+    scenario: "../scenarios/target_dummy.ron",
+    seats: [
+        (
+            loadout: "../loadouts/survival_sentinel.ron",
+            policy: "survival",
+            latency: (
+                anticipated: fixed(0),
+                reaction: jitter(base: 250, jitter: 50),
+                cast_lag: jitter(base: 100, jitter: 10),
+            ),
+        ),
+    ],
+    info: realistic,
+    seeds: 200,
+)

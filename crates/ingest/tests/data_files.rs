@@ -306,6 +306,81 @@ fn frost_and_unholy_dk_loadouts_compile() {
 }
 
 #[test]
+fn hunter_loadouts_compile() {
+    let game = game();
+    let cases: &[(&str, SpecId, Option<u32>, &[u32])] = &[
+        (
+            "loadouts/beast_mastery.ron",
+            SpecId(253),
+            None,
+            &[34026, 217200, 193455, 19574],
+        ),
+        (
+            "loadouts/beast_mastery_pack_leader.ron",
+            SpecId(253),
+            Some(43),
+            &[34026, 217200, 193455, 19574],
+        ),
+        (
+            "loadouts/beast_mastery_dark_ranger.ron",
+            SpecId(253),
+            Some(44),
+            &[34026, 217200, 193455, 19574, 466930],
+        ),
+        (
+            "loadouts/marksmanship.ron",
+            SpecId(254),
+            None,
+            &[19434, 257044, 212431, 53351, 288613, 260243],
+        ),
+        (
+            "loadouts/marksmanship_sentinel.ron",
+            SpecId(254),
+            Some(42),
+            &[19434, 257044, 212431, 53351, 288613, 260243],
+        ),
+        (
+            "loadouts/marksmanship_dark_ranger.ron",
+            SpecId(254),
+            Some(44),
+            &[19434, 257044, 212431, 466930, 288613, 260243],
+        ),
+        (
+            "loadouts/survival.ron",
+            SpecId(255),
+            None,
+            &[259489, 259495, 186270, 1261193, 1250646],
+        ),
+        (
+            "loadouts/survival_pack_leader.ron",
+            SpecId(255),
+            Some(43),
+            &[259489, 259495, 186270, 1261193, 1250646],
+        ),
+        (
+            "loadouts/survival_sentinel.ron",
+            SpecId(255),
+            Some(42),
+            &[259489, 259495, 186270, 1261193, 1250646],
+        ),
+    ];
+    for &(file, spec, hero, spells) in cases {
+        let loadout: Loadout = read_ron(&data_dir().join(file)).expect(file);
+        assert_eq!(Compiler.validate(&game, &loadout), Vec::new(), "{file}");
+        let template = Compiler.compile(&game, &loadout).expect(file);
+        assert_eq!(template.spec, spec);
+        assert_eq!(template.hero_tree, hero.map(HeroTreeId));
+        for &spell in spells {
+            assert!(
+                template.abilities.contains(&SpellId(spell)),
+                "{file}: {spell}"
+            );
+        }
+        assert!(template.main_hand.is_some());
+    }
+}
+
+#[test]
 fn dummy_scenario_samples_deterministically() {
     let spec: ScenarioSpec =
         read_ron(&data_dir().join("scenarios/target_dummy.ron")).expect("scenario");

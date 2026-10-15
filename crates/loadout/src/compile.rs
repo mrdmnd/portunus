@@ -52,7 +52,7 @@ impl LoadoutCompiler for Compiler {
             resources: spec.resources.clone(),
             main_hand: weapon(GearSlot::MainHand),
             off_hand: weapon(GearSlot::OffHand),
-            permanent_pet: None,
+            permanent_pet: spec.permanent_pet,
             source: loadout.clone(),
         })
     }
@@ -520,6 +520,7 @@ mod tests {
             resources: Vec::new(),
             baseline_spells: vec![SpellId(100), SpellId(101)],
             baseline_auras: vec![AuraId(400)],
+            permanent_pet: None,
             trees: vec![tree],
         };
         GameData {

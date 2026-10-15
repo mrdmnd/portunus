@@ -62,9 +62,9 @@ Warrior (`docs/ARMS_PLAN.md`, `crates/mechanics/tests/arms.rs`):
 | **P3** | Paladin | Retribution (`70`) | Templar (`48`) | Herald of the Sun (`50`) | **Done** |
 | **P4** | Death Knight | Frost (`251`) | Deathbringer (`33`) | Rider of the Apocalypse (`32`) | **Done** |
 | **P4** | Death Knight | Unholy (`252`) | San'layn (`31`) | Rider of the Apocalypse (`32`) | **Done** |
-| **P5** | Hunter | Beast Mastery (`253`) | Pack Leader (`43`) | Dark Ranger (`44`) | Planned |
-| **P5** | Hunter | Marksmanship (`254`) | Sentinel (`42`) | Dark Ranger (`44`) | Planned |
-| **P5** | Hunter | Survival (`255`) | Pack Leader (`43`) | Sentinel (`42`) | Planned |
+| **P5** | Hunter | Beast Mastery (`253`) | Pack Leader (`43`) | Dark Ranger (`44`) | **Done** |
+| **P5** | Hunter | Marksmanship (`254`) | Sentinel (`42`) | Dark Ranger (`44`) | **Done** |
+| **P5** | Hunter | Survival (`255`) | Pack Leader (`43`) | Sentinel (`42`) | **Done** |
 | **P6** | Rogue | Assassination (`259`) | Deathstalker (`53`) | Fatebound (`52`) | Planned |
 | **P6** | Rogue | Outlaw (`260`) | Trickster (`51`) | Fatebound (`52`) | Planned |
 | **P6** | Rogue | Subtlety (`261`) | Deathstalker (`53`) | Trickster (`51`) | Planned |

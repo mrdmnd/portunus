@@ -34,6 +34,9 @@ impl Kits {
             Box::new(Retribution),
             Box::new(FrostDk),
             Box::new(UnholyDk),
+            Box::new(BeastMastery),
+            Box::new(Marksmanship),
+            Box::new(Survival),
         ])
     }
 }
@@ -327,6 +330,93 @@ pub struct UnholyDk;
 impl SpecKit for UnholyDk {
     fn spec(&self) -> SpecId {
         SpecId(252)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Beast Mastery Hunter. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct BeastMastery;
+
+impl SpecKit for BeastMastery {
+    fn spec(&self) -> SpecId {
+        SpecId(253)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Marksmanship Hunter. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Marksmanship;
+
+impl SpecKit for Marksmanship {
+    fn spec(&self) -> SpecId {
+        SpecId(254)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Survival Hunter. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Survival;
+
+impl SpecKit for Survival {
+    fn spec(&self) -> SpecId {
+        SpecId(255)
     }
 
     fn hooks(&self) -> &[HookKey] {

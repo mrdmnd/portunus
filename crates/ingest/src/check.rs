@@ -195,6 +195,9 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
             .iter()
             .for_each(|&s| c.spell(&owner, s));
         spec.baseline_auras.iter().for_each(|&a| c.aura(&owner, a));
+        if let Some(p) = spec.permanent_pet {
+            c.pet(&owner, p);
+        }
         for talent in spec
             .trees
             .iter()

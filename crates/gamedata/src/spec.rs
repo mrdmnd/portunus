@@ -1,6 +1,6 @@
 //! Specializations.
 
-use portunus_core::{AuraId, SpecId, SpellId};
+use portunus_core::{AuraId, PetId, SpecId, SpellId};
 use serde::{Deserialize, Serialize};
 
 use crate::stats::{ResourceDef, Stat, StatBlock};
@@ -37,6 +37,9 @@ pub struct SpecDef {
     pub baseline_spells: Vec<SpellId>,
     /// Always-on spec passives, including mastery.
     pub baseline_auras: Vec<AuraId>,
+    /// Permanent pet summoned before combat begins (Hunter, Unholy, Warlock).
+    #[serde(default)]
+    pub permanent_pet: Option<PetId>,
     /// Class tree and spec tree. Hero trees are shared between specs and
     /// live in `GameData::hero_trees`.
     #[serde(default)]
