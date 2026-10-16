@@ -9,11 +9,13 @@ pub mod affliction;
 pub mod arcane;
 pub mod arms;
 pub mod assassination;
+pub mod balance;
 pub mod beast_mastery;
 pub mod demonology;
 pub mod destruction;
 pub mod elemental;
 pub mod enhancement;
+pub mod feral;
 pub mod fire;
 pub mod frost_dk;
 pub mod frost_mage;
@@ -38,11 +40,13 @@ pub use affliction::affliction;
 pub use arcane::arcane;
 pub use arms::arms;
 pub use assassination::assassination;
+pub use balance::balance;
 pub use beast_mastery::beast_mastery;
 pub use demonology::demonology;
 pub use destruction::destruction;
 pub use elemental::elemental;
 pub use enhancement::enhancement;
+pub use feral::feral;
 pub use fire::fire;
 pub use frost_dk::frost_dk;
 pub use frost_mage::frost_mage;
@@ -83,6 +87,8 @@ pub const SCRIPTS: &[(&str, Script)] = &[
     ("destruction", destruction),
     ("shadow", shadow),
     ("windwalker", windwalker),
+    ("balance", balance),
+    ("feral", feral),
     ("idle", idle),
 ];
 

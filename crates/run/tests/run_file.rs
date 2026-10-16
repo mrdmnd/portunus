@@ -1912,3 +1912,82 @@ fn monk_runs_execute_their_hero_kits() {
         }
     }
 }
+
+#[test]
+fn druid_runs_execute_their_hero_kits() {
+    let runs: &[(&str, &[&str])] = &[
+        (
+            "balance_keeper_dummy",
+            &[
+                "Moonfire",
+                "Sunfire",
+                "Force of Nature",
+                "Fury of Elune",
+                "Celestial Alignment",
+                "Starsurge",
+                "Ascendant Star",
+                "Wrath",
+                "Dream Burst",
+                "Treant: Dream Burst",
+            ],
+        ),
+        (
+            "balance_elunes_chosen_dummy",
+            &[
+                "Moonfire",
+                "Sunfire",
+                "Force of Nature",
+                "Fury of Elune",
+                "Full Moon (Boundless Moonlight)",
+                "Celestial Alignment",
+                "Starsurge",
+                "Ascendant Star",
+                "Starfire",
+            ],
+        ),
+        (
+            "feral_druid_of_the_claw_dummy",
+            &[
+                "Tiger's Fury",
+                "Chomp",
+                "Berserk",
+                "Ravage",
+                "Dreadful Wound (Periodic)",
+                "Frantic Frenzy",
+                "Rip",
+                "Rake",
+                "Unseen Strike",
+            ],
+        ),
+        (
+            "feral_wildstalker_dummy",
+            &[
+                "Tiger's Fury",
+                "Chomp",
+                "Berserk",
+                "Frantic Frenzy",
+                "Rip",
+                "Rake",
+                "Bloodseeker Vines (Periodic)",
+                "Unseen Strike",
+            ],
+        ),
+    ];
+    for &(run, expected) in runs {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../data/runs/{run}.ron"));
+        let bd = Bundle::load(&path)
+            .unwrap()
+            .breakdown(SeedSet { first: 0, count: 4 })
+            .unwrap();
+        for name in expected {
+            assert!(
+                bd.rows
+                    .iter()
+                    .any(|r| r.name == *name && (r.casts > 0.0 || r.hits > 0.0)),
+                "{run} never used {name}: {:#?}",
+                bd.rows
+            );
+        }
+    }
+}

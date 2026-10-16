@@ -715,6 +715,75 @@ fn monk_loadouts_compile() {
 }
 
 #[test]
+fn druid_loadouts_compile() {
+    let game = game();
+    let cases: &[(&str, SpecId, Option<u32>, &[u32])] = &[
+        (
+            "loadouts/balance.ron",
+            SpecId(102),
+            None,
+            &[
+                190984, 194153, 8921, 93402, 78674, 191034, 1239669, 205636, 194223, 202770, 391528,
+            ],
+        ),
+        (
+            "loadouts/balance_keeper.ron",
+            SpecId(102),
+            Some(23),
+            &[
+                190984, 194153, 8921, 93402, 78674, 191034, 1239669, 205636, 194223, 202770, 391528,
+            ],
+        ),
+        (
+            "loadouts/balance_elunes_chosen.ron",
+            SpecId(102),
+            Some(24),
+            &[
+                190984, 194153, 8921, 93402, 78674, 191034, 1239669, 205636, 194223, 202770, 391528,
+            ],
+        ),
+        (
+            "loadouts/feral.ron",
+            SpecId(103),
+            None,
+            &[
+                5221, 1822, 106785, 106830, 1079, 22568, 5217, 106951, 1243807, 1244258,
+            ],
+        ),
+        (
+            "loadouts/feral_druid_of_the_claw.ron",
+            SpecId(103),
+            Some(21),
+            &[
+                5221, 1822, 106785, 106830, 1079, 22568, 441591, 5217, 106951, 1243807, 1244258,
+            ],
+        ),
+        (
+            "loadouts/feral_wildstalker.ron",
+            SpecId(103),
+            Some(22),
+            &[
+                5221, 1822, 106785, 106830, 1079, 22568, 5217, 106951, 1243807, 1244258,
+            ],
+        ),
+    ];
+    for &(file, spec, hero, spells) in cases {
+        let loadout: Loadout = read_ron(&data_dir().join(file)).expect(file);
+        assert_eq!(Compiler.validate(&game, &loadout), Vec::new(), "{file}");
+        let template = Compiler.compile(&game, &loadout).expect(file);
+        assert_eq!(template.spec, spec);
+        assert_eq!(template.hero_tree, hero.map(HeroTreeId));
+        for &spell in spells {
+            assert!(
+                template.abilities.contains(&SpellId(spell)),
+                "{file}: {spell}"
+            );
+        }
+        assert!(template.main_hand.is_some());
+    }
+}
+
+#[test]
 fn dummy_scenario_samples_deterministically() {
     let spec: ScenarioSpec =
         read_ron(&data_dir().join("scenarios/target_dummy.ron")).expect("scenario");

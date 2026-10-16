@@ -48,6 +48,8 @@ impl Kits {
             Box::new(Destruction),
             Box::new(Shadow),
             Box::new(Windwalker),
+            Box::new(Balance),
+            Box::new(Feral),
         ])
     }
 }
@@ -747,6 +749,64 @@ pub struct Windwalker;
 impl SpecKit for Windwalker {
     fn spec(&self) -> SpecId {
         SpecId(269)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Balance Druid. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Balance;
+
+impl SpecKit for Balance {
+    fn spec(&self) -> SpecId {
+        SpecId(102)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Feral Druid. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Feral;
+
+impl SpecKit for Feral {
+    fn spec(&self) -> SpecId {
+        SpecId(103)
     }
 
     fn hooks(&self) -> &[HookKey] {
