@@ -80,8 +80,8 @@ Warrior (`docs/ARMS_PLAN.md`, `crates/mechanics/tests/arms.rs`):
 | **P11** | Druid | Feral (`103`) | Druid of the Claw (`21`) | Wildstalker (`22`) | **Done** |
 | **P12** | Demon Hunter | Havoc (`577`) | Aldrachi Reaver (`35`) | Fel-Scarred (`34`) | **Done** |
 | **P12** | Demon Hunter | Devourer (`1480`) | Void-Scarred (`126`) | Annihilator (`124`) | **Done** |
-| **P13** | Evoker | Devastation (`1467`) | Scalecommander (`36`) | Flameshaper (`37`) | Planned |
-| **P13** | Evoker | Augmentation (`1473`) | Scalecommander (`36`) | Chronowarden (`38`) | Planned |
+| **P13** | Evoker | Devastation (`1467`) | Scalecommander (`36`) | Flameshaper (`37`) | **Done** |
+| **P13** | Evoker | Augmentation (`1473`) | Scalecommander (`36`) | Chronowarden (`38`) | **Done** |
 
 ---
 

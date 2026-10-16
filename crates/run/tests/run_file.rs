@@ -2071,3 +2071,80 @@ fn demon_hunter_runs_execute_their_hero_kits() {
         }
     }
 }
+
+#[test]
+fn evoker_runs_execute_their_hero_kits() {
+    let runs: &[(&str, &[&str])] = &[
+        (
+            "devastation_scalecommander_dummy",
+            &[
+                "Dragonrage",
+                "Eternity Surge",
+                "Fire Breath",
+                "Deep Breath",
+                "Disintegrate",
+                "Rising Fury (Blast)",
+                "Bombardments (Explosion)",
+            ],
+        ),
+        (
+            "devastation_flameshaper_dummy",
+            &[
+                "Dragonrage",
+                "Eternity Surge",
+                "Fire Breath",
+                "Deep Breath",
+                "Disintegrate",
+                "Rising Fury (Blast)",
+                "Consume Flame",
+            ],
+        ),
+        (
+            "augmentation_scalecommander_dummy",
+            &[
+                "Blistering Scales",
+                "Prescience",
+                "Ebon Might",
+                "Breath of Eons",
+                "Fire Breath",
+                "Upheaval",
+                "Deep Breath",
+                "Eruption",
+                "Duplicate (Echo)",
+                "Bombardments (Explosion)",
+            ],
+        ),
+        (
+            "augmentation_chronowarden_dummy",
+            &[
+                "Blistering Scales",
+                "Prescience",
+                "Ebon Might",
+                "Breath of Eons",
+                "Fire Breath",
+                "Upheaval",
+                "Deep Breath",
+                "Eruption",
+                "Duplicate (Echo)",
+                "Afterimage",
+            ],
+        ),
+    ];
+    for &(run, expected) in runs {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../data/runs/{run}.ron"));
+        let bd = Bundle::load(&path)
+            .unwrap()
+            .breakdown(SeedSet { first: 0, count: 4 })
+            .unwrap();
+        for name in expected {
+            assert!(
+                bd.rows
+                    .iter()
+                    .any(|r| r.name == *name && (r.casts > 0.0 || r.hits > 0.0)),
+                "{run} never used {name}: {:#?}",
+                bd.rows
+            );
+        }
+    }
+}

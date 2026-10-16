@@ -857,6 +857,75 @@ fn demon_hunter_loadouts_compile() {
 }
 
 #[test]
+fn evoker_loadouts_compile() {
+    let game = game();
+    let cases: &[(&str, SpecId, Option<u32>, &[u32])] = &[
+        (
+            "loadouts/devastation.ron",
+            SpecId(1467),
+            None,
+            &[
+                361469, 362969, 356995, 357211, 357208, 359073, 375087, 1265867, 357210,
+            ],
+        ),
+        (
+            "loadouts/devastation_scalecommander.ron",
+            SpecId(1467),
+            Some(36),
+            &[
+                361469, 362969, 356995, 357211, 357208, 359073, 375087, 1265867, 357210,
+            ],
+        ),
+        (
+            "loadouts/devastation_flameshaper.ron",
+            SpecId(1467),
+            Some(37),
+            &[
+                361469, 362969, 356995, 357211, 357208, 359073, 375087, 1265867, 357210,
+            ],
+        ),
+        (
+            "loadouts/augmentation.ron",
+            SpecId(1473),
+            None,
+            &[
+                361469, 362969, 357208, 395152, 395160, 396286, 403631, 360827, 409311, 404977,
+            ],
+        ),
+        (
+            "loadouts/augmentation_scalecommander.ron",
+            SpecId(1473),
+            Some(36),
+            &[
+                361469, 362969, 357208, 395152, 395160, 396286, 403631, 360827, 409311, 404977,
+            ],
+        ),
+        (
+            "loadouts/augmentation_chronowarden.ron",
+            SpecId(1473),
+            Some(38),
+            &[
+                361469, 362969, 357208, 395152, 395160, 396286, 403631, 360827, 409311, 404977,
+            ],
+        ),
+    ];
+    for &(file, spec, hero, spells) in cases {
+        let loadout: Loadout = read_ron(&data_dir().join(file)).expect(file);
+        assert_eq!(Compiler.validate(&game, &loadout), Vec::new(), "{file}");
+        let template = Compiler.compile(&game, &loadout).expect(file);
+        assert_eq!(template.spec, spec);
+        assert_eq!(template.hero_tree, hero.map(HeroTreeId));
+        for &spell in spells {
+            assert!(
+                template.abilities.contains(&SpellId(spell)),
+                "{file}: {spell}"
+            );
+        }
+        assert!(template.main_hand.is_some());
+    }
+}
+
+#[test]
 fn dummy_scenario_samples_deterministically() {
     let spec: ScenarioSpec =
         read_ron(&data_dir().join("scenarios/target_dummy.ron")).expect("scenario");

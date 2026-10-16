@@ -52,6 +52,8 @@ impl Kits {
             Box::new(Feral),
             Box::new(Havoc),
             Box::new(Devourer),
+            Box::new(Devastation),
+            Box::new(Augmentation),
         ])
     }
 }
@@ -867,6 +869,64 @@ pub struct Devourer;
 impl SpecKit for Devourer {
     fn spec(&self) -> SpecId {
         SpecId(1480)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Devastation Evoker. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Devastation;
+
+impl SpecKit for Devastation {
+    fn spec(&self) -> SpecId {
+        SpecId(1467)
+    }
+
+    fn hooks(&self) -> &[HookKey] {
+        &[]
+    }
+
+    fn run_hook(
+        &self,
+        _tools: KitTools<'_>,
+        _io: &mut dyn EngineIo,
+        _ctx: &EffectCtx,
+        _key: &HookKey,
+    ) {
+    }
+
+    fn timer(&self, _tools: KitTools<'_>, _io: &mut dyn EngineIo, _timer: &TimerEvent) {}
+
+    fn gate(&self, _view: &dyn StateView, _seat: Seat, _ability: SpellId) -> Readiness {
+        Readiness::Now
+    }
+}
+
+/// Augmentation Evoker. Everything it does so far is data.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Augmentation;
+
+impl SpecKit for Augmentation {
+    fn spec(&self) -> SpecId {
+        SpecId(1473)
     }
 
     fn hooks(&self) -> &[HookKey] {
