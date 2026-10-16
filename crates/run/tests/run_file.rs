@@ -2148,3 +2148,110 @@ fn evoker_runs_execute_their_hero_kits() {
         }
     }
 }
+
+#[test]
+fn mcts_self_play_and_linear_trainer_run_end_to_end_on_combat_bundle() {
+    use portunus_env::{ActionSpace, DenseReward, FlatObserver, SpecActionSpace};
+    use portunus_learn::{
+        Collector, LinearTrainer, MemoryStore, ModelStore, SelfPlayCollector, Trainer,
+    };
+    use portunus_policy::{
+        Featurizer, IdentityFeaturizer, LinearModel, MctsConfig, ModelPolicy, ModelVersion, Policy,
+        SchemaId,
+    };
+    use portunus_run::SeatObsFeaturizer;
+
+    let mut b = bundle();
+    for e in Arc::make_mut(&mut b.enemies).enemies.values_mut() {
+        e.health = 150_000;
+    }
+
+    // All 27 DPS specs build valid SpecActionSpaces, FlatObservers, and SeatObsFeaturizers.
+    for &spec_id in b.data.specs.keys() {
+        let sp = SpecActionSpace::for_spec(&b.data, spec_id).expect("action space");
+        assert!(sp.size() > 14, "{spec_id:?}");
+        let fo = FlatObserver::for_spec(&b.data, spec_id).expect("flat observer");
+        assert!(fo.width() > 10, "{spec_id:?}");
+        let sf = SeatObsFeaturizer::for_spec(&b.data, spec_id).expect("seat obs featurizer");
+        assert_eq!(sf.width(), fo.width());
+    }
+
+    let spec = b.templates[0].spec;
+    let space: Arc<dyn ActionSpace> = Arc::new(SpecActionSpace::for_spec(&b.data, spec).unwrap());
+    let flat_obs = FlatObserver::for_spec(&b.data, spec).unwrap();
+    let width = flat_obs.width();
+    let schema = SchemaId(format!("flat:spec_{}", spec.0));
+    let featurizer: Arc<dyn Featurizer<Vec<f32>>> = Arc::new(IdentityFeaturizer {
+        schema: schema.clone(),
+        width,
+    });
+
+    let init_model = LinearModel::zeros(
+        ModelVersion {
+            name: "elem_rl".into(),
+            step: 0,
+        },
+        schema,
+        width,
+        space.size(),
+    );
+    let mut store = MemoryStore::new();
+    let mut trainer = LinearTrainer::new(init_model, 0.005, 1e-4);
+    store.save(&trainer.checkpoint()).unwrap();
+
+    let mcts_cfg = MctsConfig {
+        simulations: 12,
+        c_puct: 1.25,
+        dirichlet_alpha: 0.3,
+        dirichlet_frac: 0.25,
+        temperature: 0.25,
+        horizon: SimDuration(5_000),
+    };
+    let env = b.env_with(flat_obs, Arc::new(DenseReward::default()), false);
+    let mut collector = SelfPlayCollector::new(
+        env.clone(),
+        mcts_cfg,
+        Arc::clone(&space),
+        Arc::clone(&featurizer),
+    );
+
+    let m0 = store.load(&store.latest("elem_rl").unwrap()).unwrap();
+    let trajs = collector.collect(m0, &[Seed(1)]);
+    assert_eq!(trajs.len(), 1);
+    assert!(trajs[0].outcome.completed);
+    assert!(!trajs[0].samples.is_empty());
+
+    let stats1 = trainer.train(&trajs[0].samples);
+    let mut stats2 = stats1;
+    for _ in 0..5 {
+        stats2 = trainer.train(&trajs[0].samples);
+    }
+    assert!(stats2.samples_seen > stats1.samples_seen);
+    assert!(
+        stats2.value_loss < stats1.value_loss,
+        "{stats2:?} vs {stats1:?}"
+    );
+    assert!(
+        stats2.policy_loss < stats1.policy_loss,
+        "{stats2:?} vs {stats1:?}"
+    );
+
+    store.save(&trainer.checkpoint()).unwrap();
+    let trained = store.load(&store.latest("elem_rl").unwrap()).unwrap();
+    let model_policy = ModelPolicy {
+        space: Arc::clone(&space),
+        featurizer,
+        model: trained,
+        temperature: 1.0,
+    };
+
+    let mut rollout_env = env;
+    let mut turn = rollout_env.reset(Seed(2)).unwrap();
+    let outcome = loop {
+        match turn {
+            Turn::Done(o) => break o,
+            Turn::Decide(d) => turn = rollout_env.step(model_policy.act(&d)).unwrap().next,
+        }
+    };
+    assert!(outcome.completed);
+}

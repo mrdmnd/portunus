@@ -16,6 +16,7 @@ portunus-engine = { workspace = true }
 portunus-mechanics = { workspace = true }
 portunus-env = { workspace = true }
 portunus-policy = { workspace = true }
+portunus-learn = { workspace = true }
 portunus-eval = { workspace = true }
 portunus-ingest = { workspace = true }
 serde = { workspace = true }

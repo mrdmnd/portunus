@@ -2,13 +2,17 @@
 
 use std::collections::BTreeMap;
 
-use portunus_core::{ActorId, AuraId, HeroTreeId, PetId, Seat, SimDuration, SimTime, SpellId};
+use portunus_core::{
+    ActorId, AuraId, HeroTreeId, PetId, Seat, SimDuration, SimTime, SpecId, SpellId,
+};
 use portunus_engine::state::{ActorKind, AuraInstance, CastWhat};
 use portunus_engine::{ActionMask, Readiness, SegmentView, WakeReason};
-use portunus_env::{InfoSet, ObsContext, Observer};
+use portunus_env::{spec_auras, spec_spells, InfoSet, ObsContext, Observer};
 use portunus_gamedata::aura::{AuraValueKind, DispelType};
 use portunus_gamedata::pet::PetKind;
 use portunus_gamedata::stats::ResourceKind;
+use portunus_gamedata::GameData;
+use portunus_policy::{Featurizer, SchemaId};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AuraObs {
@@ -664,5 +668,107 @@ impl Observer for ScriptObserver {
         }
         mask.targets.retain(|t| !hide.enemies.contains(t));
         mask
+    }
+}
+
+/// Encodes [`SeatObs`] into a fixed-width feature vector for `spec`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SeatObsFeaturizer {
+    pub schema: SchemaId,
+    pub resources: Vec<ResourceKind>,
+    pub spells: Vec<SpellId>,
+    pub auras: Vec<AuraId>,
+}
+
+impl SeatObsFeaturizer {
+    pub fn for_spec(data: &GameData, spec: SpecId) -> Option<Self> {
+        let spec_def = data.specs.get(&spec)?;
+        let resources = spec_def.resources.iter().map(|r| r.kind).collect();
+        let spells = spec_spells(data, spec)?;
+        let auras = spec_auras(data, spec)?;
+        Some(Self {
+            schema: SchemaId(format!("seat_obs:v1:spec_{}", spec.0)),
+            resources,
+            spells,
+            auras,
+        })
+    }
+}
+
+impl Featurizer<SeatObs> for SeatObsFeaturizer {
+    fn schema(&self) -> &SchemaId {
+        &self.schema
+    }
+
+    fn width(&self) -> usize {
+        8 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
+    }
+
+    fn featurize(&self, obs: &SeatObs, mask: &ActionMask) -> Vec<f32> {
+        let mut out = Vec::with_capacity(self.width());
+        let in_combat = if obs.combat_time.is_some() { 1.0 } else { 0.0 };
+        let combat_sec = obs.combat_time.map_or(0.0, |t| t.millis() as f32 / 1000.0);
+        let gcd_sec = obs.gcd_remaining.millis() as f32 / 1000.0;
+        let health_frac = (obs.health_pct / 100.0).clamp(0.0, 1.0) as f32;
+        let moving = if obs.movement.is_some() { 1.0 } else { 0.0 };
+        let (enemies, target_hp, target_dist) = match &obs.target {
+            Some(t) => (
+                ((1 + t.neighbours.len()) as f32 / 10.0).clamp(0.0, 2.0),
+                (t.health_pct / 100.0).clamp(0.0, 1.0) as f32,
+                (t.distance as f32 / 40.0).clamp(0.0, 2.0),
+            ),
+            None => (0.0, 0.0, 0.0),
+        };
+
+        out.push(in_combat);
+        out.push((combat_sec / 300.0).clamp(0.0, 2.0));
+        out.push((gcd_sec / 1.5).clamp(0.0, 1.0));
+        out.push(health_frac);
+        out.push(moving);
+        out.push(enemies);
+        out.push(target_hp);
+        out.push(target_dist);
+
+        for &kind in &self.resources {
+            let max = obs
+                .resource_max
+                .get(&kind)
+                .copied()
+                .unwrap_or(100.0)
+                .max(1.0);
+            let cur = (obs.resource(kind) / max).clamp(0.0, 1.0) as f32;
+            out.push(cur);
+            out.push(1.0 - cur);
+        }
+
+        for &spell in &self.spells {
+            let ready = if mask.is_ready(spell) { 1.0 } else { 0.0 };
+            let rem = (obs.cooldown_remaining(spell).millis() as f32 / 60_000.0).clamp(0.0, 2.0);
+            out.push(ready);
+            out.push(rem);
+        }
+
+        for &aura in &self.auras {
+            let b_stacks = f32::from(obs.buff_stacks(aura)) / 10.0;
+            let b_rem = obs.buffs.get(&aura).map_or(0.0, |a| {
+                a.remaining
+                    .map_or(1.0, |r| (r.millis() as f32 / 30_000.0).clamp(0.0, 2.0))
+            });
+            out.push(b_stacks);
+            out.push(b_rem);
+
+            let d_stacks = obs
+                .target_aura(aura)
+                .map_or(0.0, |a| f32::from(a.stacks) / 10.0);
+            let d_rem = obs.target_aura(aura).map_or(0.0, |a| {
+                a.remaining
+                    .map_or(1.0, |r| (r.millis() as f32 / 30_000.0).clamp(0.0, 2.0))
+            });
+            out.push(d_stacks);
+            out.push(d_rem);
+        }
+
+        debug_assert_eq!(out.len(), self.width());
+        out
     }
 }

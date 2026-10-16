@@ -195,10 +195,13 @@ impl Bundle {
     }
 
     pub fn source(&self, record_trace: bool) -> Source {
+        let sampler = Sampler::new(self.sampler.spec().clone(), Arc::clone(&self.enemies))
+            .map(Arc::new)
+            .unwrap_or_else(|_| Arc::clone(&self.sampler));
         Source {
             data: Arc::clone(&self.data),
             enemies: Arc::clone(&self.enemies),
-            sampler: Arc::clone(&self.sampler),
+            sampler,
             seats: self
                 .templates
                 .iter()
@@ -216,12 +219,21 @@ impl Bundle {
     }
 
     pub fn env(&self, record_trace: bool) -> SimEnv<ScriptObserver> {
+        self.env_with(ScriptObserver, Arc::new(NegElapsed), record_trace)
+    }
+
+    pub fn env_with<O: portunus_env::Observer>(
+        &self,
+        observer: O,
+        reward: Arc<dyn portunus_env::Reward + Send + Sync>,
+        record_trace: bool,
+    ) -> SimEnv<O> {
         SimEnv::new(
             Arc::new(self.source(record_trace)),
             Arc::clone(&self.kits),
-            ScriptObserver,
+            observer,
             Arc::new(PartyMeter),
-            Arc::new(NegElapsed),
+            reward,
             self.config.info,
         )
     }

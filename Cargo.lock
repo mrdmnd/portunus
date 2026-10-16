@@ -117,7 +117,10 @@ version = "0.1.0"
 dependencies = [
  "portunus-core",
  "portunus-engine",
+ "portunus-env",
  "portunus-policy",
+ "postcard",
+ "serde",
  "thiserror",
 ]
 
@@ -168,7 +171,9 @@ dependencies = [
  "portunus-core",
  "portunus-engine",
  "portunus-env",
+ "postcard",
  "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -181,6 +186,7 @@ dependencies = [
  "portunus-eval",
  "portunus-gamedata",
  "portunus-ingest",
+ "portunus-learn",
  "portunus-loadout",
  "portunus-mechanics",
  "portunus-plan",

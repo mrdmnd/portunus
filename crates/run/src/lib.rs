@@ -32,5 +32,5 @@ pub use compare::{compare, CompareError, CompareSpec, Comparison, Verdict};
 pub use env::{NegElapsed, PartyMeter, SimEnv, Source};
 pub use observe::{
     AllyObs, AuraObs, BattleResObs, ChannelObs, CooldownObs, DemandObs, EmpowerObs, GroundObs,
-    MovementObs, PetObs, ScriptObserver, SeatObs, TargetObs, FOREVER,
+    MovementObs, PetObs, ScriptObserver, SeatObs, SeatObsFeaturizer, TargetObs, FOREVER,
 };

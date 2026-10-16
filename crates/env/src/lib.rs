@@ -24,10 +24,13 @@ use portunus_core::{Seat, Seed, SimDuration};
 use portunus_engine::{ActionMask, Choice, EngineError, Outcome, WakeReason};
 use thiserror::Error;
 
-pub use action_space::ActionSpace;
+pub use action_space::{
+    spec_spells, ActionSlot, ActionSpace, SpecActionSpace, DEFAULT_CANCEL_SLOTS,
+    DEFAULT_TARGET_SLOTS,
+};
 pub use episode::{Episode, EpisodeSource};
-pub use observe::{InfoSet, ObsContext, Observer};
-pub use reward::{Progress, ProgressMeter, Reward};
+pub use observe::{spec_auras, FlatObserver, InfoSet, ObsContext, Observer};
+pub use reward::{DenseReward, Progress, ProgressMeter, Reward};
 
 #[derive(Debug, Clone)]
 pub struct Decision<O> {

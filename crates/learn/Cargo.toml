@@ -9,7 +9,10 @@ repository.workspace = true
 [dependencies]
 portunus-core = { workspace = true }
 portunus-engine = { workspace = true }
+portunus-env = { workspace = true }
 portunus-policy = { workspace = true }
+postcard = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
 
 [lints]
