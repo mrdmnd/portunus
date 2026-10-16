@@ -13,6 +13,7 @@ pub mod balance;
 pub mod beast_mastery;
 pub mod demonology;
 pub mod destruction;
+pub mod devourer;
 pub mod elemental;
 pub mod enhancement;
 pub mod feral;
@@ -20,6 +21,7 @@ pub mod fire;
 pub mod frost_dk;
 pub mod frost_mage;
 pub mod fury;
+pub mod havoc;
 pub mod marksmanship;
 pub mod outlaw;
 pub mod retribution;
@@ -44,6 +46,7 @@ pub use balance::balance;
 pub use beast_mastery::beast_mastery;
 pub use demonology::demonology;
 pub use destruction::destruction;
+pub use devourer::devourer;
 pub use elemental::elemental;
 pub use enhancement::enhancement;
 pub use feral::feral;
@@ -51,6 +54,7 @@ pub use fire::fire;
 pub use frost_dk::frost_dk;
 pub use frost_mage::frost_mage;
 pub use fury::fury;
+pub use havoc::havoc;
 pub use marksmanship::marksmanship;
 pub use outlaw::outlaw;
 pub use retribution::retribution;
@@ -89,6 +93,8 @@ pub const SCRIPTS: &[(&str, Script)] = &[
     ("windwalker", windwalker),
     ("balance", balance),
     ("feral", feral),
+    ("havoc", havoc),
+    ("devourer", devourer),
     ("idle", idle),
 ];
 

@@ -1991,3 +1991,83 @@ fn druid_runs_execute_their_hero_kits() {
         }
     }
 }
+
+#[test]
+fn demon_hunter_runs_execute_their_hero_kits() {
+    let runs: &[(&str, &[&str])] = &[
+        (
+            "havoc_fel_scarred_dummy",
+            &[
+                "The Hunt",
+                "Eternal Hunt (Strike)",
+                "Essence Break",
+                "Eye Beam",
+                "Metamorphosis",
+                "Death Sweep",
+                "Annihilation",
+                "Demonsurge",
+                "Immolation Aura (Tick)",
+            ],
+        ),
+        (
+            "havoc_aldrachi_reaver_dummy",
+            &[
+                "The Hunt",
+                "Eternal Hunt (Strike)",
+                "Reaver's Glaive",
+                "Fury of the Aldrachi",
+                "Essence Break",
+                "Eye Beam",
+                "Metamorphosis",
+                "Death Sweep",
+                "Annihilation",
+            ],
+        ),
+        (
+            "devourer_annihilator_dummy",
+            &[
+                "Metamorphosis",
+                "The Hunt (Devourer)",
+                "Collapsing Star",
+                "Midnight (Detonation)",
+                "Voidfall Meteor",
+                "World Killer",
+                "Void Ray",
+                "Eradicate",
+                "Cull",
+                "Devour",
+            ],
+        ),
+        (
+            "devourer_void_scarred_dummy",
+            &[
+                "Metamorphosis",
+                "The Hunt (Devourer)",
+                "Collapsing Star",
+                "Midnight (Detonation)",
+                "Demonsurge",
+                "Void Ray",
+                "Eradicate",
+                "Cull",
+                "Devour",
+            ],
+        ),
+    ];
+    for &(run, expected) in runs {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../data/runs/{run}.ron"));
+        let bd = Bundle::load(&path)
+            .unwrap()
+            .breakdown(SeedSet { first: 0, count: 4 })
+            .unwrap();
+        for name in expected {
+            assert!(
+                bd.rows
+                    .iter()
+                    .any(|r| r.name == *name && (r.casts > 0.0 || r.hits > 0.0)),
+                "{run} never used {name}: {:#?}",
+                bd.rows
+            );
+        }
+    }
+}

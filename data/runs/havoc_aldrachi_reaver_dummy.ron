@@ -1,0 +1,20 @@
+// One Havoc Aldrachi Reaver Demon Hunter on the target dummy.
+(
+    name: "havoc_aldrachi_reaver_dummy",
+    game: "../game.ron",
+    enemies: "../enemies.ron",
+    scenario: "../scenarios/target_dummy.ron",
+    seats: [
+        (
+            loadout: "../loadouts/havoc_aldrachi_reaver.ron",
+            policy: "havoc",
+            latency: (
+                anticipated: fixed(0),
+                reaction: jitter(base: 250, jitter: 50),
+                cast_lag: jitter(base: 100, jitter: 10),
+            ),
+        ),
+    ],
+    info: realistic,
+    seeds: 200,
+)
