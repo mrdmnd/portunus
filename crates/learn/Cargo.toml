@@ -11,6 +11,7 @@ portunus-core = { workspace = true }
 portunus-engine = { workspace = true }
 portunus-env = { workspace = true }
 portunus-policy = { workspace = true }
+burn = { workspace = true }
 postcard = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }

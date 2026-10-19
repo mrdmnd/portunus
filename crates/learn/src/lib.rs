@@ -1,19 +1,26 @@
-//! Self-play and training.
+//! Self-play and training through the [Burn](https://burn.dev) deep learning
+//! framework.
 //!
-//! The simulator side collects [`Trajectory`]s; a [`Trainer`] turns them
-//! into new model versions held by a [`ModelStore`]. Samples are plain
-//! numbers so the trainer can live in another language.
+//! The simulator side collects [`Trajectory`]s via [`SelfPlayCollector`]; a
+//! [`BurnTrainer`] trains a Burn [`PolicyValueNet`] using automatic
+//! differentiation and [`burn::optim::AdamWConfig`], and produces checkpoints
+//! held by a [`ModelStore`].
 
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use burn::nn::loss::{MseLoss, Reduction};
+use burn::optim::{AdamWConfig, GradientsParams, LearningRate, ModuleOptimizer};
+use burn::prelude::*;
+use burn::tensor::activation::log_softmax;
 use portunus_core::{Seat, Seed};
 use portunus_engine::Outcome;
 use portunus_env::{ActionSpace, Env, Turn};
 use portunus_policy::{
-    Featurizer, LinearModel, Mcts, MctsConfig, Model, ModelVersion, SchemaId, SearchPolicy,
+    BurnModel, Featurizer, Mcts, MctsConfig, Model, ModelVersion, PolicyValueNet,
+    PolicyValueNetConfig, SchemaId, SearchPolicy,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -51,7 +58,8 @@ pub struct TrainStats {
     pub samples_seen: u64,
 }
 
-/// A trained model, serialized by the trainer in its own format.
+/// A trained Burn model checkpoint, serialized in Burn's `burnpack` record
+/// format alongside model metadata.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Checkpoint {
     pub version: ModelVersion,
@@ -191,33 +199,74 @@ impl<E: Env> Collector for SelfPlayCollector<E> {
     }
 }
 
-/// Mini-batch gradient descent [`Trainer`] for a [`LinearModel`].
-#[derive(Debug, Clone)]
-pub struct LinearTrainer {
-    pub model: LinearModel,
-    pub learning_rate: f32,
-    pub l2_reg: f32,
+/// Burn [`Trainer`] that optimizes a [`PolicyValueNet`] with automatic
+/// differentiation, masked policy cross-entropy loss, value [`MseLoss`], and
+/// [`AdamWConfig`].
+pub struct BurnTrainer {
+    pub version: ModelVersion,
+    pub schema: SchemaId,
+    pub config: PolicyValueNetConfig,
+    pub device: Device,
+    pub net: PolicyValueNet,
+    pub optimizer: ModuleOptimizer,
+    pub learning_rate: LearningRate,
     pub samples_seen: u64,
 }
 
-impl LinearTrainer {
-    pub fn new(model: LinearModel, learning_rate: f32, l2_reg: f32) -> Self {
+impl BurnTrainer {
+    /// Creates a new [`BurnTrainer`] on `device` (enabling Burn's autodiff
+    /// graph decorator) with an `AdamW` optimizer.
+    pub fn new(
+        version: ModelVersion,
+        schema: SchemaId,
+        config: PolicyValueNetConfig,
+        learning_rate: LearningRate,
+        weight_decay: f32,
+        device: Device,
+    ) -> Self {
+        let ad_device = device.autodiff();
+        let net = config.init(&ad_device);
+        let optimizer = AdamWConfig::new().with_weight_decay(weight_decay).init();
         Self {
-            model,
+            version,
+            schema,
+            config,
+            device: ad_device,
+            net,
+            optimizer,
             learning_rate,
-            l2_reg,
             samples_seen: 0,
         }
     }
+
+    /// Exports the current network in validation (inference) mode as a
+    /// [`BurnModel`].
+    pub fn to_burn_model(&self) -> BurnModel {
+        BurnModel::from_net(
+            self.version.clone(),
+            self.schema.clone(),
+            self.config.clone(),
+            Device::default(),
+            self.net.clone(),
+        )
+    }
 }
 
-impl Trainer for LinearTrainer {
+impl Trainer for BurnTrainer {
     fn schema(&self) -> &SchemaId {
-        &self.model.schema
+        &self.schema
     }
 
     fn train(&mut self, batch: &[Sample]) -> TrainStats {
-        if batch.is_empty() {
+        let in_w = self.config.input_width;
+        let out_w = self.config.output_width;
+        let valid: Vec<&Sample> = batch
+            .iter()
+            .filter(|s| {
+                s.features.len() >= in_w && s.legal.len() >= out_w && s.policy_target.len() >= out_w
+            })
+            .collect();
+        if valid.is_empty() {
             return TrainStats {
                 policy_loss: 0.0,
                 value_loss: 0.0,
@@ -225,124 +274,81 @@ impl Trainer for LinearTrainer {
             };
         }
 
-        let in_w = self.model.input_width;
-        let out_w = self.model.output_width;
-        let mut grad_pw = vec![0.0f32; out_w * in_w];
-        let mut grad_pb = vec![0.0f32; out_w];
-        let mut grad_vw = vec![0.0f32; in_w];
-        let mut grad_vb = 0.0f32;
+        let b = valid.len();
+        let mut flat_x = Vec::with_capacity(b * in_w);
+        let mut flat_pi = Vec::with_capacity(b * out_w);
+        let mut flat_illegal = Vec::with_capacity(b * out_w);
+        let mut flat_v = Vec::with_capacity(b);
 
-        let mut total_policy_loss = 0.0f32;
-        let mut total_value_loss = 0.0f32;
-        let mut valid_count = 0usize;
-
-        for sample in batch {
-            if sample.features.len() < in_w
-                || sample.legal.len() < out_w
-                || sample.policy_target.len() < out_w
-            {
-                continue;
-            }
-            let x = &sample.features[..in_w];
-            let logits = self.model.logits(x);
-
-            // Masked softmax over legal actions.
-            let max_z = logits
-                .iter()
-                .zip(&sample.legal[..out_w])
-                .filter_map(|(&z, &ok)| ok.then_some(z))
-                .fold(f32::NEG_INFINITY, f32::max);
-
-            let mut probs = vec![0.0f32; out_w];
-            if max_z.is_finite() {
-                let mut sum_exp = 0.0f32;
-                for a in 0..out_w {
-                    if sample.legal[a] {
-                        let e = (logits[a] - max_z).exp();
-                        probs[a] = e;
-                        sum_exp += e;
-                    }
-                }
-                if sum_exp > 0.0 && sum_exp.is_finite() {
-                    for p in &mut probs {
-                        *p /= sum_exp;
-                    }
-                }
-            }
-
-            let mut p_loss = 0.0f32;
+        for s in &valid {
+            flat_x.extend_from_slice(&s.features[..in_w]);
             for a in 0..out_w {
-                if !sample.legal[a] {
-                    continue;
-                }
-                let target_p = sample.policy_target[a].max(0.0);
-                if target_p > 0.0 {
-                    p_loss -= target_p * probs[a].max(1e-12).ln();
-                }
-                let dz = probs[a] - target_p;
-                grad_pb[a] += dz;
-                let row = &mut grad_pw[a * in_w..(a + 1) * in_w];
-                for (g, &xi) in row.iter_mut().zip(x) {
-                    *g += dz * xi;
-                }
+                let is_legal = s.legal[a];
+                flat_illegal.push(!is_legal);
+                flat_pi.push(if is_legal {
+                    s.policy_target[a].max(0.0)
+                } else {
+                    0.0
+                });
             }
-            total_policy_loss += p_loss;
-
-            let v_pred = self.model.predict_value(x);
-            let diff = v_pred - sample.value_target;
-            total_value_loss += diff * diff;
-            let dv = 2.0 * diff;
-            grad_vb += dv;
-            for (g, &xi) in grad_vw.iter_mut().zip(x) {
-                *g += dv * xi;
-            }
-
-            valid_count += 1;
+            flat_v.push(s.value_target);
         }
 
-        if valid_count == 0 {
-            return TrainStats {
-                policy_loss: 0.0,
-                value_loss: 0.0,
-                samples_seen: self.samples_seen,
-            };
-        }
+        let x = Tensor::<2>::from_data(TensorData::new(flat_x, [b, in_w]), &self.device);
+        let target_pi = Tensor::<2>::from_data(TensorData::new(flat_pi, [b, out_w]), &self.device);
+        let illegal_mask =
+            Tensor::<2, Bool>::from_data(TensorData::new(flat_illegal, [b, out_w]), &self.device);
+        let target_v = Tensor::<2>::from_data(TensorData::new(flat_v, [b, 1]), &self.device);
 
-        let inv_n = 1.0 / valid_count as f32;
-        let lr = self.learning_rate;
-        let l2 = self.l2_reg;
+        let (logits, values) = self.net.forward(x);
+        let masked_logits = logits.mask_fill(illegal_mask, -1e9);
+        let log_probs = log_softmax(masked_logits, 1);
 
-        for (w, g) in self.model.policy_w.iter_mut().zip(&grad_pw) {
-            *w -= lr * (g * inv_n + l2 * *w);
-        }
-        for (b, g) in self.model.policy_b.iter_mut().zip(&grad_pb) {
-            *b -= lr * (g * inv_n);
-        }
-        for (w, g) in self.model.value_w.iter_mut().zip(&grad_vw) {
-            *w -= lr * (g * inv_n + l2 * *w);
-        }
-        self.model.value_b -= lr * (grad_vb * inv_n);
+        let policy_loss = -(target_pi * log_probs).sum_dim(1).mean();
+        let value_loss = MseLoss::new().forward(values, target_v, Reduction::Mean);
+        let total_loss = policy_loss.clone() + value_loss.clone();
 
-        self.model.version.step += 1;
-        self.samples_seen += valid_count as u64;
+        let p_loss_scalar: f32 = policy_loss
+            .clone()
+            .into_data()
+            .try_to_vec()
+            .ok()
+            .and_then(|v: Vec<f32>| v.first().copied())
+            .unwrap_or(0.0);
+        let v_loss_scalar: f32 = value_loss
+            .clone()
+            .into_data()
+            .try_to_vec()
+            .ok()
+            .and_then(|v: Vec<f32>| v.first().copied())
+            .unwrap_or(0.0);
+
+        let grads = GradientsParams::from_grads(total_loss.backward(), &self.net);
+        self.net = self
+            .optimizer
+            .step(self.learning_rate, self.net.clone(), grads);
+
+        self.version.step += 1;
+        self.samples_seen += b as u64;
 
         TrainStats {
-            policy_loss: total_policy_loss * inv_n,
-            value_loss: total_value_loss * inv_n,
+            policy_loss: p_loss_scalar,
+            value_loss: v_loss_scalar,
             samples_seen: self.samples_seen,
         }
     }
 
     fn checkpoint(&mut self) -> Checkpoint {
+        let model = self.to_burn_model();
         Checkpoint {
-            version: self.model.version.clone(),
-            schema: self.model.schema.clone(),
-            weights: self.model.to_bytes().expect("LinearModel serializes"),
+            version: self.version.clone(),
+            schema: self.schema.clone(),
+            weights: model.to_bytes().expect("BurnModel serializes to burnpack"),
         }
     }
 }
 
-/// In-memory [`ModelStore`] for [`LinearModel`] checkpoints.
+/// In-memory [`ModelStore`] for [`BurnModel`] checkpoints.
 #[derive(Debug, Clone, Default)]
 pub struct MemoryStore {
     checkpoints: BTreeMap<ModelVersion, Checkpoint>,
@@ -368,8 +374,8 @@ impl ModelStore for MemoryStore {
             .checkpoints
             .get(version)
             .ok_or_else(|| StoreError::Unknown(version.clone()))?;
-        let model =
-            LinearModel::from_bytes(&ckpt.weights).map_err(|e| StoreError::Io(e.to_string()))?;
+        let model = BurnModel::from_bytes(&ckpt.weights, Device::default())
+            .map_err(|e| StoreError::Io(e.to_string()))?;
         Ok(Arc::new(model))
     }
 
@@ -383,8 +389,8 @@ impl ModelStore for MemoryStore {
     }
 }
 
-/// Directory-backed [`ModelStore`] that persists [`Checkpoint`]s as
-/// `postcard`-encoded files on disk.
+/// Directory-backed [`ModelStore`] that persists [`BurnModel`] [`Checkpoint`]s
+/// on disk.
 #[derive(Debug, Clone)]
 pub struct DirStore {
     dir: PathBuf,
@@ -429,8 +435,8 @@ impl ModelStore for DirStore {
         let bytes = fs::read(&path).map_err(|e| StoreError::Io(e.to_string()))?;
         let ckpt: Checkpoint =
             postcard::from_bytes(&bytes).map_err(|e| StoreError::Io(e.to_string()))?;
-        let model =
-            LinearModel::from_bytes(&ckpt.weights).map_err(|e| StoreError::Io(e.to_string()))?;
+        let model = BurnModel::from_bytes(&ckpt.weights, Device::default())
+            .map_err(|e| StoreError::Io(e.to_string()))?;
         Ok(Arc::new(model))
     }
 
@@ -513,7 +519,7 @@ mod tests {
     }
 
     #[test]
-    fn self_play_collector_trainer_and_store_learn_preferred_action() {
+    fn self_play_collector_burn_trainer_and_store_learn_preferred_action() {
         let space: Arc<dyn ActionSpace> =
             Arc::new(SpecActionSpace::from_spells([STRIKE_A, STRIKE_B], 0, 0));
         let schema = SchemaId("bandit:v1".into());
@@ -521,18 +527,20 @@ mod tests {
             schema: schema.clone(),
             width: 2,
         });
-        let init_model = LinearModel::zeros(
+        let net_cfg = PolicyValueNetConfig::new(2, space.size()).with_hidden_width(16);
+
+        let mut store = MemoryStore::new();
+        let mut trainer = BurnTrainer::new(
             ModelVersion {
                 name: "bandit".into(),
                 step: 0,
             },
-            schema.clone(),
-            2,
-            space.size(),
+            schema,
+            net_cfg,
+            0.05,
+            1e-4,
+            Device::default(),
         );
-
-        let mut store = MemoryStore::new();
-        let mut trainer = LinearTrainer::new(init_model, 0.25, 1e-4);
         store.save(&trainer.checkpoint()).unwrap();
 
         let config = MctsConfig {
@@ -562,7 +570,7 @@ mod tests {
 
         let first_stats = trainer.train(&samples);
         let mut last_stats = first_stats;
-        for _ in 0..20 {
+        for _ in 0..25 {
             last_stats = trainer.train(&samples);
         }
         assert!(
@@ -578,7 +586,7 @@ mod tests {
         store.save(&ckpt).unwrap();
         assert!(matches!(store.save(&ckpt), Err(StoreError::Exists(_))));
         let latest = store.latest("bandit").unwrap();
-        assert_eq!(latest.step, 21);
+        assert_eq!(latest.step, 26);
 
         let trained_model = store.load(&latest).unwrap();
         let deploy = ModelPolicy {

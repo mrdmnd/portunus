@@ -7,8 +7,12 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+portunus-core = { workspace = true }
+portunus-engine = { workspace = true }
 portunus-env = { workspace = true }
 portunus-policy = { workspace = true }
+burn = { workspace = true }
+serde = { workspace = true }
 
 [lints]
 workspace = true

@@ -3,8 +3,9 @@
 //! Two kinds of controller, split by what they can touch:
 //!
 //! - [`Policy`]: sees only its observation. Deployable — hand-written
-//!   rules, the SimulationCraft-style baseline, a network on its own, or a
-//!   distilled student can all run in an addon.
+//!   rules, the SimulationCraft-style baseline, a Burn neural network on its
+//!   own ([`BurnModel`] + [`ModelPolicy`]), or a distilled student can all
+//!   run in an addon.
 //! - [`SearchPolicy`]: also gets the env, so it can fork and play ahead.
 //!   Used for training targets and as an upper bound; never deployable.
 //!
@@ -18,11 +19,16 @@
 
 use std::sync::Arc;
 
+use burn::nn::{Linear, LinearConfig, Relu};
+use burn::prelude::*;
+use burn::store::ModuleRecord;
+use burn::tensor::{activation::softmax, Bytes};
 use portunus_core::rng::{domain, unit, Purpose};
 use portunus_core::{Seat, SimDuration};
 use portunus_engine::{ActionMask, Choice, Wait};
 use portunus_env::{ActionSpace, Decision, DecisionKey, Env, Turn};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 /// Any `fn(&Decision<O>) -> Choice`, or a closure of that shape, is a
 /// policy.
@@ -186,85 +192,157 @@ impl Model for UniformModel {
     }
 }
 
-/// Two-headed linear [`Model`] (policy logits + scalar value) with
-/// `postcard` serialization for checkpoints.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct LinearModel {
-    pub version: ModelVersion,
-    pub schema: SchemaId,
+/// Architecture configuration for the two-headed Burn [`PolicyValueNet`].
+#[derive(Config, Debug, PartialEq, Eq)]
+pub struct PolicyValueNetConfig {
     pub input_width: usize,
+    #[config(default = 64)]
+    pub hidden_width: usize,
     pub output_width: usize,
-    /// Row-major `output_width * input_width`.
-    pub policy_w: Vec<f32>,
-    pub policy_b: Vec<f32>,
-    pub value_w: Vec<f32>,
-    pub value_b: f32,
 }
 
-impl LinearModel {
-    pub fn zeros(
+/// Two-headed Burn [`Module`] with dedicated policy and value MLP towers.
+#[derive(Module, Debug)]
+pub struct PolicyValueNet {
+    pub policy_hidden: Linear,
+    pub policy_head: Linear,
+    pub value_hidden: Linear,
+    pub value_head: Linear,
+    pub activation: Relu,
+}
+
+impl PolicyValueNetConfig {
+    /// Initializes a [`PolicyValueNet`] on `device`.
+    pub fn init(&self, device: &Device) -> PolicyValueNet {
+        PolicyValueNet {
+            policy_hidden: LinearConfig::new(self.input_width, self.hidden_width).init(device),
+            policy_head: LinearConfig::new(self.hidden_width, self.output_width).init(device),
+            value_hidden: LinearConfig::new(self.input_width, self.hidden_width).init(device),
+            value_head: LinearConfig::new(self.hidden_width, 1).init(device),
+            activation: Relu::new(),
+        }
+    }
+}
+
+impl PolicyValueNet {
+    /// Forward pass returning `(policy_logits, value)` of shapes
+    /// `[batch, output_width]` and `[batch, 1]`.
+    pub fn forward(&self, input: Tensor<2>) -> (Tensor<2>, Tensor<2>) {
+        let ph = self
+            .activation
+            .forward(self.policy_hidden.forward(input.clone()));
+        let logits = self.policy_head.forward(ph);
+        let vh = self.activation.forward(self.value_hidden.forward(input));
+        let value = self.value_head.forward(vh);
+        (logits, value)
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum BurnModelError {
+    #[error("burn record: {0}")]
+    Record(String),
+    #[error("serialize: {0}")]
+    Serialize(#[from] postcard::Error),
+}
+
+#[derive(Serialize, Deserialize)]
+struct BurnModelBundle {
+    version: ModelVersion,
+    schema: SchemaId,
+    config: PolicyValueNetConfig,
+    record_bytes: Vec<u8>,
+}
+
+/// Burn-backed [`Model`] wrapping a [`PolicyValueNet`] in inference mode.
+#[derive(Debug, Clone)]
+pub struct BurnModel {
+    pub version: ModelVersion,
+    pub schema: SchemaId,
+    pub config: PolicyValueNetConfig,
+    pub device: Device,
+    pub net: PolicyValueNet,
+}
+
+impl BurnModel {
+    /// Initializes a fresh [`BurnModel`] on `device` in validation (inference)
+    /// mode.
+    pub fn new(
         version: ModelVersion,
         schema: SchemaId,
-        input_width: usize,
-        output_width: usize,
+        config: PolicyValueNetConfig,
+        device: Device,
+    ) -> Self {
+        let net = config.init(&device).valid();
+        Self {
+            version,
+            schema,
+            config,
+            device,
+            net,
+        }
+    }
+
+    /// Wraps an already-constructed [`PolicyValueNet`], switching it to
+    /// validation mode.
+    pub fn from_net(
+        version: ModelVersion,
+        schema: SchemaId,
+        config: PolicyValueNetConfig,
+        device: Device,
+        net: PolicyValueNet,
     ) -> Self {
         Self {
             version,
             schema,
-            input_width,
-            output_width,
-            policy_w: vec![0.0; output_width * input_width],
-            policy_b: vec![0.0; output_width],
-            value_w: vec![0.0; input_width],
-            value_b: 0.0,
+            config,
+            device,
+            net: net.valid(),
         }
     }
 
-    pub fn logits(&self, features: &[f32]) -> Vec<f32> {
-        let n = self.input_width.min(features.len());
-        let mut out = Vec::with_capacity(self.output_width);
-        for a in 0..self.output_width {
-            let row = &self.policy_w[a * self.input_width..a * self.input_width + n];
-            let dot: f32 = row.iter().zip(&features[..n]).map(|(w, x)| w * x).sum();
-            out.push(dot + self.policy_b[a]);
-        }
-        out
+    /// Serializes the model metadata and Burn [`ModuleRecord`] (`burnpack`
+    /// format) into a self-contained byte buffer.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, BurnModelError> {
+        let record_bytes = self
+            .net
+            .clone()
+            .into_record()
+            .into_bytes()
+            .map_err(|e| BurnModelError::Record(e.to_string()))?
+            .to_vec();
+        let bundle = BurnModelBundle {
+            version: self.version.clone(),
+            schema: self.schema.clone(),
+            config: self.config.clone(),
+            record_bytes,
+        };
+        Ok(postcard::to_allocvec(&bundle)?)
     }
 
-    pub fn predict_value(&self, features: &[f32]) -> f32 {
-        let n = self.input_width.min(features.len());
-        let dot: f32 = self.value_w[..n]
-            .iter()
-            .zip(&features[..n])
-            .map(|(w, x)| w * x)
-            .sum();
-        dot + self.value_b
-    }
-
-    pub fn to_bytes(&self) -> Result<Vec<u8>, postcard::Error> {
-        postcard::to_allocvec(self)
-    }
-
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, postcard::Error> {
-        postcard::from_bytes(bytes)
+    /// Reconstructs a [`BurnModel`] on `device` from bytes produced by
+    /// [`Self::to_bytes`].
+    pub fn from_bytes(bytes: &[u8], device: Device) -> Result<Self, BurnModelError> {
+        let bundle: BurnModelBundle = postcard::from_bytes(bytes)?;
+        let record = ModuleRecord::from_bytes(Bytes::from_bytes_vec(bundle.record_bytes))
+            .map_err(|e| BurnModelError::Record(e.to_string()))?;
+        let net = bundle
+            .config
+            .init(&device)
+            .valid()
+            .try_load_record(record)
+            .map_err(|e| BurnModelError::Record(e.to_string()))?;
+        Ok(Self {
+            version: bundle.version,
+            schema: bundle.schema,
+            config: bundle.config,
+            device,
+            net,
+        })
     }
 }
 
-fn softmax(logits: &[f32]) -> Vec<f32> {
-    if logits.is_empty() {
-        return Vec::new();
-    }
-    let max_z = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-    let exps: Vec<f32> = logits.iter().map(|&z| (z - max_z).exp()).collect();
-    let sum: f32 = exps.iter().sum();
-    if sum <= 0.0 || !sum.is_finite() {
-        let u = 1.0 / logits.len() as f32;
-        return vec![u; logits.len()];
-    }
-    exps.into_iter().map(|e| e / sum).collect()
-}
-
-impl Model for LinearModel {
+impl Model for BurnModel {
     fn version(&self) -> ModelVersion {
         self.version.clone()
     }
@@ -274,19 +352,44 @@ impl Model for LinearModel {
     }
 
     fn input_width(&self) -> usize {
-        self.input_width
+        self.config.input_width
     }
 
     fn output_width(&self) -> usize {
-        self.output_width
+        self.config.output_width
     }
 
     fn evaluate(&self, batch: &[&[f32]]) -> Vec<Evaluation> {
-        batch
-            .iter()
-            .map(|x| Evaluation {
-                priors: softmax(&self.logits(x)),
-                value: self.predict_value(x),
+        if batch.is_empty() {
+            return Vec::new();
+        }
+        let b = batch.len();
+        let in_w = self.config.input_width;
+        let out_w = self.config.output_width;
+        let mut flat = Vec::with_capacity(b * in_w);
+        for row in batch {
+            let take = row.len().min(in_w);
+            flat.extend_from_slice(&row[..take]);
+            if take < in_w {
+                flat.resize(flat.len() + (in_w - take), 0.0);
+            }
+        }
+        let x = Tensor::<2>::from_data(TensorData::new(flat, [b, in_w]), &self.device);
+        let (logits, values) = self.net.forward(x);
+        let probs = softmax(logits, 1);
+        let probs_vec: Vec<f32> = probs
+            .into_data()
+            .try_to_vec()
+            .unwrap_or_else(|_| vec![1.0 / out_w.max(1) as f32; b * out_w]);
+        let values_vec: Vec<f32> = values
+            .into_data()
+            .try_to_vec()
+            .unwrap_or_else(|_| vec![0.0; b]);
+
+        (0..b)
+            .map(|i| Evaluation {
+                priors: probs_vec[i * out_w..(i + 1) * out_w].to_vec(),
+                value: values_vec.get(i).copied().unwrap_or(0.0),
             })
             .collect()
     }
@@ -469,6 +572,7 @@ impl<O> Mcts<O> {
             edges,
         }
     }
+
     fn quick_act(&self, decision: &Decision<O>) -> Choice {
         let features = self.featurizer.featurize(&decision.obs, &decision.legal);
         let eval = self
@@ -919,26 +1023,28 @@ mod tests {
     }
 
     #[test]
-    fn linear_model_round_trips_through_postcard() {
-        let mut m = LinearModel::zeros(
+    fn burn_model_round_trips_through_burnpack_record() {
+        let device = Device::default();
+        let cfg = PolicyValueNetConfig::new(3, 4).with_hidden_width(8);
+        let m = BurnModel::new(
             ModelVersion {
-                name: "lin".into(),
+                name: "burn_net".into(),
                 step: 3,
             },
             SchemaId("s".into()),
-            3,
-            2,
+            cfg,
+            device.clone(),
         );
-        m.policy_w = vec![0.5, -0.2, 0.1, -0.3, 0.4, 0.2];
-        m.policy_b = vec![0.1, -0.1];
-        m.value_w = vec![1.0, 2.0, -1.0];
-        m.value_b = 0.5;
+        let sample_in = [1.0f32, 0.5, -1.0];
+        let eval_before = m.evaluate(&[&sample_in]);
+        assert_eq!(eval_before.len(), 1);
+        assert!((eval_before[0].priors.iter().sum::<f32>() - 1.0).abs() < 1e-5);
+
         let bytes = m.to_bytes().unwrap();
-        let decoded = LinearModel::from_bytes(&bytes).unwrap();
-        assert_eq!(m, decoded);
-        let eval = decoded.evaluate(&[&[1.0, 0.5, -1.0]]);
-        assert_eq!(eval.len(), 1);
-        assert!((eval[0].priors.iter().sum::<f32>() - 1.0).abs() < 1e-6);
-        assert!((eval[0].value - 3.5).abs() < 1e-6);
+        let decoded = BurnModel::from_bytes(&bytes, device).unwrap();
+        assert_eq!(decoded.version(), m.version());
+        assert_eq!(decoded.schema(), m.schema());
+        let eval_after = decoded.evaluate(&[&sample_in]);
+        assert_eq!(eval_before, eval_after);
     }
 }

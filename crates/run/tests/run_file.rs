@@ -2150,14 +2150,14 @@ fn evoker_runs_execute_their_hero_kits() {
 }
 
 #[test]
-fn mcts_self_play_and_linear_trainer_run_end_to_end_on_combat_bundle() {
+fn mcts_self_play_and_burn_trainer_run_end_to_end_on_combat_bundle() {
     use portunus_env::{ActionSpace, DenseReward, FlatObserver, SpecActionSpace};
     use portunus_learn::{
-        Collector, LinearTrainer, MemoryStore, ModelStore, SelfPlayCollector, Trainer,
+        BurnTrainer, Collector, MemoryStore, ModelStore, SelfPlayCollector, Trainer,
     };
     use portunus_policy::{
-        Featurizer, IdentityFeaturizer, LinearModel, MctsConfig, ModelPolicy, ModelVersion, Policy,
-        SchemaId,
+        Featurizer, IdentityFeaturizer, MctsConfig, ModelPolicy, ModelVersion, Policy,
+        PolicyValueNetConfig, SchemaId,
     };
     use portunus_run::SeatObsFeaturizer;
 
@@ -2186,17 +2186,19 @@ fn mcts_self_play_and_linear_trainer_run_end_to_end_on_combat_bundle() {
         width,
     });
 
-    let init_model = LinearModel::zeros(
+    let net_cfg = PolicyValueNetConfig::new(width, space.size()).with_hidden_width(32);
+    let mut store = MemoryStore::new();
+    let mut trainer = BurnTrainer::new(
         ModelVersion {
             name: "elem_rl".into(),
             step: 0,
         },
         schema,
-        width,
-        space.size(),
+        net_cfg,
+        0.01,
+        1e-4,
+        Default::default(),
     );
-    let mut store = MemoryStore::new();
-    let mut trainer = LinearTrainer::new(init_model, 0.005, 1e-4);
     store.save(&trainer.checkpoint()).unwrap();
 
     let mcts_cfg = MctsConfig {

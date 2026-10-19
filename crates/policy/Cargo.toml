@@ -10,6 +10,7 @@ repository.workspace = true
 portunus-core = { workspace = true }
 portunus-engine = { workspace = true }
 portunus-env = { workspace = true }
+burn = { workspace = true }
 postcard = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
