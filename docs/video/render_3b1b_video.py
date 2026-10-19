@@ -1,11 +1,14 @@
-"""Render a 3Blue1Brown-style (Manim aesthetic) video of the Portunus Burn RL loop."""
+"""Render a narrated 3Blue1Brown-style video of the Portunus Burn RL loop."""
 
 from __future__ import annotations
 
 import math
 import os
+import shutil
 import subprocess
 import tempfile
+from collections.abc import Callable
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -50,6 +53,102 @@ plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Helvetica"]
 plt.rcParams["font.monospace"] = ["DejaVu Sans Mono", "Menlo", "Courier New"]
 
 
+# ---------------------------------------------------------------------------
+# 5-Act 3Blue1Brown Narrative Voiceover Script
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class ActNarration:
+    """Metadata and spoken voiceover script for one act of the video."""
+
+    act_roman: str
+    title: str
+    still_filename: str
+    narration: str
+
+
+VOICEOVER_ACTS: tuple[ActNarration, ...] = (
+    ActNarration(
+        act_roman="ACT I",
+        title="How Portunus Fits Together: Self-Play RL in Pure Rust + Burn",
+        still_filename="act1_architecture.png",
+        narration=(
+            "How can an agent learn a complex World of Warcraft damage rotation completely from scratch, "
+            "without reading a human guide? "
+            "In Portunus, six Rust crates form a closed AlphaZero-style reinforcement learning loop, "
+            "orchestrated by train R L in crates, run, source, train dot R S. "
+            "First, Sim Env wraps a deterministic, cloneable discrete-event combat kernel. "
+            "Second, Seat Obs Featurizer encodes the player's realistic observation into 132 floats, "
+            "while Spec Action Space maps legal spells into 35 discrete actions. "
+            "Third, Monte Carlo Tree Search forks the combat world 24 times per decision to discover high-damage combos. "
+            "Fourth, Self Play Collector records those search trajectories. "
+            "Fifth, Burn Trainer updates our two-headed Policy Value Network using Autodiff and Adam W. "
+            "And finally, Burn Distiller compresses the trained network into a standalone Lua addon."
+        ),
+    ),
+    ActNarration(
+        act_roman="ACT II",
+        title="From Combat State to Burn Tensors: SeatObs -> PolicyValueNet",
+        still_filename="act2_burn_network.png",
+        narration=(
+            "Let's zoom in on a single decision point for an Elemental Shaman using the Stormbringer hero tree. "
+            "In crates, run, source, observe dot R S, Seat Obs Featurizer reads only what a real player can see: "
+            "65 Maelstrom, an open global cooldown, 4.2 seconds left on Flame Shock, two stacks of Stormkeeper, "
+            "and Voltaic Blaze ready to cast. "
+            "This 132-dimensional vector flows into Policy Value Net, defined in crates, policy, source, lib dot R S. "
+            "Built on Burn 0.22's Flex backend, the network splits into two Multi-Layer Perceptron towers. "
+            "The Policy Tower outputs logits across all 35 actions, where illegal or on-cooldown spells like Ascendance "
+            "are masked to negative infinity before softmax. "
+            "Meanwhile, the Value Tower predicts a single scalar: the expected discounted damage over the next six seconds."
+        ),
+    ),
+    ActNarration(
+        act_roman="ACT III",
+        title="Lookahead Tree Search: PUCT MCTS Over Cloned Combat Worlds",
+        still_filename="act3_puct_mcts.png",
+        narration=(
+            "Why doesn't the network just act on its initial guesses? Because lookahead search acts as a policy amplifier. "
+            "In M C T S search, at line 632 of crates, policy, source, lib dot R S, "
+            "we clone the entire combat simulation 24 times over a six-second lookahead horizon. "
+            "Because raw damage numbers vary wildly across specs, we track the minimum and maximum Q values across the tree "
+            "to normalize every branch into the unit interval, zero to one, and we scale truncated rollouts by horizon over elapsed time "
+            "so fast instants and slow casts are compared by true D P S rate. "
+            "Look at the right branch: when M C T S tests Voltaic Blaze, it sees that it applies Flame Shock immediately, "
+            "turning the next Lava Burst into a guaranteed 100 percent critical strike. "
+            "Q-sharpening concentrates 76 percent of the target probability onto Voltaic Blaze."
+        ),
+    ),
+    ActNarration(
+        act_roman="ACT IV",
+        title="Hillclimbing Single-Target DPS: Elemental Shaman [Stormbringer]",
+        still_filename="act4_dps_hillclimb.png",
+        narration=(
+            "Now watch what happens when we close the loop and hillclimb across six iterations. "
+            "At Iteration 0, the untrained Burn network is completely clueless: it spams Frost Shock 419 times, "
+            "dealing just 1,558 D P S, or 4.3 percent of the hand-written SimulationCraft priority list. "
+            "In crates, learn, source, lib dot R S, Burn Trainer minimizes masked cross-entropy against the M C T S targets "
+            "and mean squared error against the discounted returns. "
+            "After just 107 decisions in Iteration 1, the network leaps to 39,944 D P S, beating the human script. "
+            "By Iteration 6, policy loss drops from 1.25 to 0.60, and the pure neural network—running greedily at temperature zero "
+            "with no tree search at test time—hits 45,797 D P S. "
+            "That is 27.7 percent higher than the baseline script, because RL discovered that casting Voltaic Blaze on cooldown "
+            "unlocks massive Flame Shock and Lava Burst synergy while pruning Frost Shock to zero."
+        ),
+    ),
+    ActNarration(
+        act_roman="ACT V",
+        title="Knowledge Distillation & Zero-Dependency Export to model.lua",
+        still_filename="act5_lua_distillation.png",
+        narration=(
+            "Finally, in crates, export, source, lib dot R S, we prepare the trained policy for the game client. "
+            "Burn Distiller trains a compact, single-tower Student Net with just 32 hidden units to imitate the teacher across held-out combat states, "
+            "achieving 99.1 percent agreement on Stormbringer and 100 percent on Arms Warrior. "
+            "Lua Addon Emitter then serializes the Burn module weights directly into Portunus Rotation, model dot lua: "
+            "a 57-kilobyte, zero-dependency Lua table that executes a pure ReLU forward pass in micro-seconds."
+        ),
+    ),
+)
+
+
 def smoothstep(edge0: float, edge1: float, x: float) -> float:
     """Hermite smoothstep interpolation in [0, 1]."""
     if edge1 <= edge0:
@@ -62,6 +161,14 @@ def ease_out_cubic(t: float) -> float:
     """Cubic ease-out on t in [0, 1]."""
     c = max(0.0, min(1.0, t))
     return 1.0 - (1.0 - c) ** 3
+
+
+def format_mmss(seconds: float) -> str:
+    """Format seconds as MM:SS."""
+    total = max(0, round(seconds))
+    mins = total // 60
+    secs = total % 60
+    return f"{mins:02d}:{secs:02d}"
 
 
 @dataclass(frozen=True)
@@ -116,7 +223,7 @@ def draw_header(
         zorder=10,
     )
     ax.text(
-        2.15,
+        2.35,
         8.50,
         title,
         color=WHITE,
@@ -299,11 +406,16 @@ def draw_curved_arrow(
 # ---------------------------------------------------------------------------
 # ACT I: Full Architecture & Code Map (0.0 .. 1.0 local time)
 # ---------------------------------------------------------------------------
-def render_act1_architecture(ax: Axes, t: float, global_progress: float) -> None:
+def render_act1_architecture(
+    ax: Axes,
+    t: float,
+    global_progress: float,
+    ts_label: str,
+) -> None:
     """Render Act I: closed-loop crate architecture and code pointers."""
     draw_header(
         ax,
-        "ACT I  [00:00]",
+        f"ACT I  [{ts_label}]",
         "How Portunus Fits Together: Self-Play RL in Pure Rust + Burn",
         "Six workspace crates form a closed AlphaZero-style loop orchestrated by train_rl()",
         global_progress,
@@ -401,7 +513,7 @@ def render_act1_architecture(ax: Axes, t: float, global_progress: float) -> None
             rad=rad,
             alpha=ea,
             lw=2.1,
-            pulse_pos=(t * 2.4 + i * 0.17),
+            pulse_pos=(t * 4.0 + i * 0.17),
         )
 
     ax.text(
@@ -543,11 +655,16 @@ def render_act1_architecture(ax: Axes, t: float, global_progress: float) -> None
 # ---------------------------------------------------------------------------
 # ACT II: State Featurization & Two-Headed Burn Network
 # ---------------------------------------------------------------------------
-def render_act2_network(ax: Axes, t: float, global_progress: float) -> None:
+def render_act2_network(
+    ax: Axes,
+    t: float,
+    global_progress: float,
+    ts_label: str,
+) -> None:
     """Render Act II: SeatObs featurization and Burn PolicyValueNet forward pass."""
     draw_header(
         ax,
-        "ACT II [00:06]",
+        f"ACT II [{ts_label}]",
         "From Combat State to Burn Tensors: SeatObs -> PolicyValueNet",
         "Realistic player observation (132 floats) feeds a two-headed Burn 0.22 MLP on the Flex backend",
         global_progress,
@@ -665,7 +782,7 @@ def render_act2_network(ax: Axes, t: float, global_progress: float) -> None:
             zorder=3,
         )
 
-    wave_x = 5.0 + (t * 8.5) % 7.0
+    wave_x = 5.0 + (t * 14.0) % 7.0
     for x_pos, ys, col in [
         (layer_x[0], input_y, BLUE_C),
         (layer_x[1], hid1_y, PURPLE_C),
@@ -877,11 +994,16 @@ def render_act2_network(ax: Axes, t: float, global_progress: float) -> None:
 # ---------------------------------------------------------------------------
 # ACT III: PUCT MCTS Search & Horizon Rate Normalization
 # ---------------------------------------------------------------------------
-def render_act3_mcts(ax: Axes, t: float, global_progress: float) -> None:
+def render_act3_mcts(
+    ax: Axes,
+    t: float,
+    global_progress: float,
+    ts_label: str,
+) -> None:
     """Render Act III: PUCT MCTS search tree and Q-sharpened policy targets."""
     draw_header(
         ax,
-        "ACT III [00:12]",
+        f"ACT III [{ts_label}]",
         "Lookahead Tree Search: PUCT MCTS Over Cloned Combat Worlds",
         "Mcts::search forks SimEnv 24 times, normalizes Q in [0,1], and scales returns by DPS rate (H / dt)",
         global_progress,
@@ -948,7 +1070,7 @@ def render_act3_mcts(ax: Axes, t: float, global_progress: float) -> None:
             rad=0.08 * (idx - 1.5),
             alpha=tree_a,
             lw=lw,
-            pulse_pos=(t * 3.2 + idx * 0.23) if idx >= 2 else None,
+            pulse_pos=(t * 5.0 + idx * 0.23) if idx >= 2 else None,
         )
         draw_box(
             ax,
@@ -995,7 +1117,7 @@ def render_act3_mcts(ax: Axes, t: float, global_progress: float) -> None:
             rad=0.05,
             alpha=gc_a,
             lw=2.0,
-            pulse_pos=t * 2.5,
+            pulse_pos=t * 4.0,
         )
         draw_box(
             ax, gpt[0] - 0.72, gpt[1] - 0.34, 1.44, 0.68, border_color=gcol, alpha=gc_a
@@ -1139,11 +1261,16 @@ def render_act3_mcts(ax: Axes, t: float, global_progress: float) -> None:
 # ---------------------------------------------------------------------------
 # ACT IV: Hillclimbing the Single-Target DPS Landscape (Iter 0 -> Iter 6)
 # ---------------------------------------------------------------------------
-def render_act4_hillclimb(ax: Axes, t: float, global_progress: float) -> None:
+def render_act4_hillclimb(
+    ax: Axes,
+    t: float,
+    global_progress: float,
+    ts_label: str,
+) -> None:
     """Render Act IV: single-target DPS hillclimbing and rotational discovery."""
     draw_header(
         ax,
-        "ACT IV  [00:18]",
+        f"ACT IV  [{ts_label}]",
         "Hillclimbing Single-Target DPS: Elemental Shaman [Stormbringer]",
         "From 1,558 DPS (untrained Frost Shock spam) to 45,797 DPS (+27.7% above the hand-written SimC APL)",
         global_progress,
@@ -1359,11 +1486,16 @@ def render_act4_hillclimb(ax: Axes, t: float, global_progress: float) -> None:
 # ---------------------------------------------------------------------------
 # ACT V: Knowledge Distillation -> Compact BurnStudent & WoW Lua Addon
 # ---------------------------------------------------------------------------
-def render_act5_distillation(ax: Axes, t: float, global_progress: float) -> None:
+def render_act5_distillation(
+    ax: Axes,
+    t: float,
+    global_progress: float,
+    ts_label: str,
+) -> None:
     """Render Act V: BurnDistiller teacher-student compression and Lua emission."""
     draw_header(
         ax,
-        "ACT V   [00:24]",
+        f"ACT V   [{ts_label}]",
         "Knowledge Distillation & Zero-Dependency Export to model.lua",
         "BurnDistiller compresses the trained Teacher into a 32-unit StudentNet (99.1% agreement) for in-game inference",
         global_progress,
@@ -1418,7 +1550,7 @@ def render_act5_distillation(ax: Axes, t: float, global_progress: float) -> None
         rad=0.0,
         alpha=a2,
         lw=2.6,
-        pulse_pos=t * 3.0,
+        pulse_pos=t * 4.0,
     )
     draw_box(ax, 5.9, 2.25, 4.1, 5.1, border_color=TEAL_C, alpha=a2)
     ax.text(
@@ -1469,7 +1601,7 @@ def render_act5_distillation(ax: Axes, t: float, global_progress: float) -> None
         rad=0.0,
         alpha=a3,
         lw=2.6,
-        pulse_pos=t * 3.0 + 0.4,
+        pulse_pos=t * 4.0 + 0.4,
     )
     draw_box(
         ax, 11.15, 2.25, 4.25, 5.1, border_color=GREEN_C, fill_color=BG_CODE, alpha=a3
@@ -1549,60 +1681,204 @@ def render_act5_distillation(ax: Axes, t: float, global_progress: float) -> None
         draw_code_pointer(ax, p, smoothstep(0.40, 0.65, t))
 
 
+def synthesize_voiceover(
+    tmp_dir: Path,
+    voice: str = "Samantha",
+    rate_wpm: int = 182,
+    pad_seconds: float = 0.55,
+) -> tuple[list[float], Path]:
+    """Synthesize per-act TTS audio with macOS `say`, pad with silence, and concat."""
+    act_wavs: list[Path] = []
+    act_durations: list[float] = []
+
+    for idx, act in enumerate(VOICEOVER_ACTS):
+        raw_aiff = tmp_dir / f"act_{idx}_raw.aiff"
+        padded_wav = tmp_dir / f"act_{idx}_padded.wav"
+        subprocess.run(
+            [
+                "say",
+                "-v",
+                voice,
+                "-r",
+                str(rate_wpm),
+                "-o",
+                str(raw_aiff),
+                act.narration,
+            ],
+            check=True,
+        )
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(raw_aiff),
+                "-af",
+                f"apad=pad_dur={pad_seconds:.2f}",
+                "-ar",
+                "44100",
+                "-ac",
+                "1",
+                str(padded_wav),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        probe = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(padded_wav),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        dur = float(probe.stdout.strip())
+        act_durations.append(dur)
+        act_wavs.append(padded_wav)
+
+    concat_txt = tmp_dir / "audio_concat.txt"
+    concat_txt.write_text(
+        "\n".join(f"file '{w.as_posix()}'" for w in act_wavs) + "\n",
+        encoding="utf-8",
+    )
+    full_audio = tmp_dir / "voiceover_full.m4a"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(concat_txt),
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            str(full_audio),
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return act_durations, full_audio
+
+
+def write_voiceover_markdown(out_dir: Path, act_durations: list[float]) -> None:
+    """Write the timestamped voiceover script to docs/video/voiceover_script.md."""
+    lines = [
+        "# Portunus Burn RL — 3Blue1Brown Narrative Voiceover Script",
+        "",
+        "This script is synthesized via TTS and muxed directly into `docs/video/portunus_rl_3b1b.mp4`.",
+        "",
+    ]
+    elapsed = 0.0
+    for act, dur in zip(VOICEOVER_ACTS, act_durations, strict=True):
+        start_ts = format_mmss(elapsed)
+        end_ts = format_mmss(elapsed + dur)
+        lines.append(f"## {act.act_roman} `[{start_ts} - {end_ts}]` — {act.title}")
+        lines.append("")
+        lines.append(f"> {act.narration}")
+        lines.append("")
+        elapsed += dur
+
+    (out_dir / "voiceover_script.md").write_text("\n".join(lines), encoding="utf-8")
+
+
+@dataclass(frozen=True)
+class FrameTask:
+    """Parameters for rendering a single video frame in a worker process."""
+
+    global_frame: int
+    act_idx: int
+    t_local: float
+    global_progress: float
+    ts_label: str
+    frame_path: Path
+    still_path: Path | None
+
+
+def render_single_frame(task: FrameTask) -> None:
+    """Render one frame (and optional act still) to disk."""
+    render_fns: tuple[Callable[[Axes, float, float, str], None], ...] = (
+        render_act1_architecture,
+        render_act2_network,
+        render_act3_mcts,
+        render_act4_hillclimb,
+        render_act5_distillation,
+    )
+    fig = plt.figure(figsize=(16, 9), dpi=120)
+    ax = setup_canvas(fig)
+    render_fns[task.act_idx](ax, task.t_local, task.global_progress, task.ts_label)
+    fig.savefig(task.frame_path, facecolor=BG_DARK)
+    if task.still_path is not None:
+        fig.savefig(task.still_path, facecolor=BG_DARK)
+    plt.close(fig)
+
+
 def main() -> None:
-    """Render all 5 acts into an HD MP4, an inline GIF, and per-act PNG stills."""
+    """Synthesize TTS voiceover, render synced 3b1b video frames, and mux MP4 + audio."""
     out_dir = Path(__file__).resolve().parent
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    fps = 15
-    seconds_per_act = 4.0
-    frames_per_act = int(fps * seconds_per_act)
-    num_acts = 5
-    total_frames = frames_per_act * num_acts
+    fps = 8
 
-    still_names = [
-        "act1_architecture.png",
-        "act2_burn_network.png",
-        "act3_puct_mcts.png",
-        "act4_dps_hillclimb.png",
-        "act5_lua_distillation.png",
-    ]
+    with tempfile.TemporaryDirectory(prefix="portunus_frames_") as tmp_str:
+        tmp_dir = Path(tmp_str)
+        act_durations, full_audio = synthesize_voiceover(tmp_dir)
+        write_voiceover_markdown(out_dir, act_durations)
 
-    with tempfile.TemporaryDirectory(prefix="portunus_frames_") as tmp_frames:
-        frames_dir = Path(tmp_frames)
-        fig = plt.figure(figsize=(16, 9), dpi=120)
+        act_frame_counts = [max(24, round(d * fps)) for d in act_durations]
+        total_frames = sum(act_frame_counts)
 
-        for frame_idx in range(total_frames):
-            fig.clf()
-            ax = setup_canvas(fig)
+        tasks: list[FrameTask] = []
+        global_frame = 0
+        elapsed_sec = 0.0
 
-            act_idx = min(num_acts - 1, frame_idx // frames_per_act)
-            local_frame = frame_idx % frames_per_act
-            t_local = local_frame / float(max(1, frames_per_act - 1))
-            global_progress = (frame_idx + 1) / float(total_frames)
+        for act_idx, (act, n_frames) in enumerate(
+            zip(VOICEOVER_ACTS, act_frame_counts, strict=True)
+        ):
+            ts_label = format_mmss(elapsed_sec)
+            for local_frame in range(n_frames):
+                t_local = local_frame / float(max(1, n_frames - 1))
+                global_progress = (global_frame + 1) / float(total_frames)
+                frame_path = tmp_dir / f"frame_{global_frame:04d}.png"
+                still_path = (
+                    (out_dir / act.still_filename)
+                    if local_frame == n_frames - 3
+                    else None
+                )
+                tasks.append(
+                    FrameTask(
+                        global_frame=global_frame,
+                        act_idx=act_idx,
+                        t_local=t_local,
+                        global_progress=global_progress,
+                        ts_label=ts_label,
+                        frame_path=frame_path,
+                        still_path=still_path,
+                    )
+                )
+                global_frame += 1
+            elapsed_sec += act_durations[act_idx]
 
-            if act_idx == 0:
-                render_act1_architecture(ax, t_local, global_progress)
-            elif act_idx == 1:
-                render_act2_network(ax, t_local, global_progress)
-            elif act_idx == 2:
-                render_act3_mcts(ax, t_local, global_progress)
-            elif act_idx == 3:
-                render_act4_hillclimb(ax, t_local, global_progress)
-            else:
-                render_act5_distillation(ax, t_local, global_progress)
-
-            frame_path = frames_dir / f"frame_{frame_idx:04d}.png"
-            fig.savefig(frame_path, facecolor=BG_DARK)
-
-            if local_frame == frames_per_act - 5:
-                still_path = out_dir / still_names[act_idx]
-                fig.savefig(still_path, facecolor=BG_DARK)
-
-        plt.close(fig)
+        max_workers = min(8, os.cpu_count() or 4)
+        with ProcessPoolExecutor(max_workers=max_workers) as pool:
+            list(pool.map(render_single_frame, tasks, chunksize=8))
 
         mp4_path = out_dir / "portunus_rl_3b1b.mp4"
         gif_path = out_dir / "portunus_rl_3b1b.gif"
+        voiceover_m4a = out_dir / "voiceover.m4a"
+        shutil.copyfile(full_audio, voiceover_m4a)
 
         subprocess.run(
             [
@@ -1611,13 +1887,20 @@ def main() -> None:
                 "-framerate",
                 str(fps),
                 "-i",
-                str(frames_dir / "frame_%04d.png"),
+                str(tmp_dir / "frame_%04d.png"),
+                "-i",
+                str(full_audio),
                 "-c:v",
                 "libx264",
                 "-pix_fmt",
                 "yuv420p",
                 "-crf",
                 "18",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "192k",
+                "-shortest",
                 str(mp4_path),
             ],
             check=True,
@@ -1630,12 +1913,20 @@ def main() -> None:
                 "-i",
                 str(mp4_path),
                 "-vf",
-                "fps=10,scale=960:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer",
+                "fps=3,scale=960:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer",
                 str(gif_path),
             ],
             check=True,
         )
-        print(f"Rendered MP4: {mp4_path} ({mp4_path.stat().st_size} bytes)")
+
+        tmp_video_dir = Path("/tmp/portunus_video")
+        if tmp_video_dir.exists():
+            shutil.copyfile(mp4_path, tmp_video_dir / "portunus_rl_3b1b.mp4")
+
+        total_dur = sum(act_durations)
+        print(
+            f"Rendered narrated MP4 ({total_dur:.1f}s): {mp4_path} ({mp4_path.stat().st_size} bytes)"
+        )
         print(f"Rendered GIF: {gif_path} ({gif_path.stat().st_size} bytes)")
 
 
