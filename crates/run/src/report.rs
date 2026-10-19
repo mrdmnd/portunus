@@ -8,6 +8,7 @@ use portunus_eval::{Estimate, Metric, Report};
 
 use crate::arm::{AbilityRow, Breakdown};
 use crate::compare::{Comparison, Verdict};
+use crate::train::TrainReport;
 
 fn label(m: &Metric) -> String {
     match m {
@@ -168,5 +169,70 @@ fn render_breakdown_change(base: &Breakdown, cand: &Breakdown) -> String {
             dps2 - dps,
         );
     }
+    out
+}
+
+/// Renders a multi-iteration Burn RL training report (`train_rl`).
+pub fn render_training(r: &TrainReport) -> String {
+    let mut out = String::new();
+    let hero = r.hero_tree_name.as_deref().unwrap_or("None");
+    let _ = writeln!(
+        out,
+        "burn rl training: {} (seat {}, {} [{}], {} features -> {} actions)",
+        r.run_name, r.seat.0, r.spec_name, hero, r.feature_width, r.action_space_size
+    );
+    let _ = writeln!(
+        out,
+        "  eval seeds {}..{} (n={})",
+        r.eval_seeds.first,
+        r.eval_seeds.first + u64::from(r.eval_seeds.count),
+        r.eval_seeds.count
+    );
+    let _ = writeln!(
+        out,
+        "  scripted baseline ({}): {:>10.1} dps ± {:<7.1}  time {:>6.2}s",
+        r.scripted_baseline_name,
+        r.scripted_dps.mean,
+        1.96 * r.scripted_dps.std_err,
+        r.scripted_time.mean,
+    );
+    let _ = writeln!(
+        out,
+        "\n  {:>4} {:>8} {:>8} {:>10} {:>10} {:>12} {:>10} {:>9}",
+        "iter", "step", "samples", "pol_loss", "val_loss", "dps", "vs_script", "time(s)"
+    );
+    for it in &r.iterations {
+        let pct_vs_script = if r.scripted_dps.mean > 0.0 {
+            100.0 * it.dps.mean / r.scripted_dps.mean
+        } else {
+            0.0
+        };
+        let _ = writeln!(
+            out,
+            "  {:>4} {:>8} {:>8} {:>10.4} {:>10.2} {:>12.1} {:>8.1}% {:>9.2}",
+            it.iteration,
+            it.version.step,
+            it.samples_total,
+            it.policy_loss,
+            it.value_loss,
+            it.dps.mean,
+            pct_vs_script,
+            it.total_time.mean,
+        );
+    }
+    let _ = writeln!(
+        out,
+        "\ndistilled student agreement: {:.1}% (addon files: {:?})",
+        100.0 * r.distilled_agreement,
+        r.addon_files
+    );
+    let _ = writeln!(out, "\ntrained policy vs untrained (iter 0 -> final):");
+    out += &render_breakdown_change(&r.initial_breakdown, &r.final_breakdown);
+    let _ = writeln!(
+        out,
+        "\ntrained policy vs scripted baseline ({} -> final):",
+        r.scripted_baseline_name
+    );
+    out += &render_breakdown_change(&r.scripted_breakdown, &r.final_breakdown);
     out
 }

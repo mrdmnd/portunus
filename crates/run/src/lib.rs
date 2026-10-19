@@ -25,6 +25,7 @@ mod env;
 mod observe;
 pub mod report;
 pub mod scripts;
+mod train;
 
 pub use arm::{breakdown, AbilityRow, Breakdown, SimArm};
 pub use bundle::{Bundle, RunConfig, RunError, SeatConfig};
@@ -34,3 +35,4 @@ pub use observe::{
     AllyObs, AuraObs, BattleResObs, ChannelObs, CooldownObs, DemandObs, EmpowerObs, GroundObs,
     MovementObs, PetObs, ScriptObserver, SeatObs, SeatObsFeaturizer, TargetObs, FOREVER,
 };
+pub use train::{train_rl, IterationSummary, TrainReport, TrainSpec};

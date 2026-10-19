@@ -573,7 +573,7 @@ impl<O> Mcts<O> {
         }
     }
 
-    fn quick_act(&self, decision: &Decision<O>) -> Choice {
+    fn quick_act(&self, decision: &Decision<O>, substream: u64) -> Choice {
         let features = self.featurizer.featurize(&decision.obs, &decision.legal);
         let eval = self
             .model
@@ -593,7 +593,8 @@ impl<O> Mcts<O> {
         if legal_indices.is_empty() {
             return Choice::Wait(Wait::NextEvent);
         }
-        let chosen_idx = select_by_temperature(&legal_indices, &eval.priors, 1.0, decision.key, 7);
+        let chosen_idx =
+            select_by_temperature(&legal_indices, &eval.priors, 0.5, decision.key, substream);
         self.space
             .decode(chosen_idx, &decision.legal)
             .unwrap_or(Choice::Wait(Wait::NextEvent))
@@ -604,31 +605,26 @@ impl<O> Mcts<O> {
         sim: &mut E,
         mut dec: Decision<O>,
         mut elapsed: SimDuration,
-    ) -> f64 {
+        sim_idx: u32,
+    ) -> (f64, SimDuration, bool) {
         let mut total_reward = 0.0;
-        for _ in 0..16 {
+        for step in 0..16 {
             if self.config.horizon == SimDuration::ZERO || elapsed >= self.config.horizon {
-                let features = self.featurizer.featurize(&dec.obs, &dec.legal);
-                let v = self
-                    .model
-                    .evaluate(&[&features])
-                    .into_iter()
-                    .next()
-                    .map_or(0.0, |e| f64::from(e.value));
-                return total_reward + v;
+                return (total_reward, elapsed, false);
             }
-            let choice = self.quick_act(&dec);
+            let substream = 100 + u64::from(sim_idx) * 31 + step;
+            let choice = self.quick_act(&dec, substream);
             let Ok(tr) = sim.step(choice) else {
                 break;
             };
             total_reward += tr.reward;
             elapsed = elapsed + tr.elapsed;
             match tr.next {
-                Turn::Done(_) => return total_reward,
+                Turn::Done(_) => return (total_reward, elapsed, true),
                 Turn::Decide(next_dec) => dec = next_dec,
             }
         }
-        total_reward
+        (total_reward, elapsed, false)
     }
 }
 
@@ -636,8 +632,10 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
     fn search(&mut self, env: &E, decision: &Decision<E::Obs>) -> SearchResult {
         let mut nodes = vec![self.expand(decision, true)];
         let c_puct = f64::from(self.config.c_puct);
+        let mut min_q = f64::INFINITY;
+        let mut max_q = f64::NEG_INFINITY;
 
-        for _ in 0..self.config.simulations {
+        for sim_idx in 0..self.config.simulations {
             let mut sim = env.clone();
             let mut node_id = 0usize;
             let mut elapsed_total = SimDuration::ZERO;
@@ -647,23 +645,27 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                 let node = &nodes[node_id];
                 let total_visits: u32 = node.edges.iter().map(|e| e.visits).sum();
                 let sqrt_total = f64::from(total_visits.max(1)).sqrt();
-                let parent_q = f64::from(node.initial_value);
+
+                let norm_q = |e: &Edge| -> f64 {
+                    if e.visits == 0 {
+                        0.5
+                    } else {
+                        let q = e.value_sum / f64::from(e.visits);
+                        if max_q > min_q + 1e-6 {
+                            ((q - min_q) / (max_q - min_q)).clamp(0.0, 1.0)
+                        } else {
+                            0.5
+                        }
+                    }
+                };
 
                 let (edge_pos, _) = node
                     .edges
                     .iter()
                     .enumerate()
                     .max_by(|(_, a), (_, b)| {
-                        let qa = if a.visits > 0 {
-                            a.value_sum / f64::from(a.visits)
-                        } else {
-                            parent_q
-                        };
-                        let qb = if b.visits > 0 {
-                            b.value_sum / f64::from(b.visits)
-                        } else {
-                            parent_q
-                        };
+                        let qa = norm_q(a);
+                        let qb = norm_q(b);
                         let ua = qa
                             + c_puct * f64::from(a.prior) * sqrt_total
                                 / (1.0 + f64::from(a.visits));
@@ -688,7 +690,10 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                             && elapsed_total >= self.config.horizon;
                         if let Some(child_id) = nodes[node_id].edges[edge_pos].child {
                             if reached_horizon {
-                                break f64::from(nodes[child_id].initial_value);
+                                let tree_r: f64 = path.iter().map(|(_, _, r)| *r).sum();
+                                let h_ms = f64::from(self.config.horizon.millis());
+                                let e_ms = f64::from(elapsed_total.millis()).max(1.0);
+                                break tree_r * (h_ms / e_ms) - tree_r;
                             }
                             node_id = child_id;
                         } else {
@@ -696,12 +701,22 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                             let child_id = nodes.len();
                             nodes.push(child);
                             nodes[node_id].edges[edge_pos].child = Some(child_id);
-                            let v = if reached_horizon {
-                                f64::from(nodes[child_id].initial_value)
+                            let (roll_r, final_elapsed, done) = if reached_horizon {
+                                (0.0, elapsed_total, false)
                             } else {
-                                self.rollout(&mut sim, next_dec, elapsed_total)
+                                self.rollout(&mut sim, next_dec, elapsed_total, sim_idx)
                             };
-                            break v;
+                            if !done
+                                && self.config.horizon > SimDuration::ZERO
+                                && final_elapsed > SimDuration::ZERO
+                            {
+                                let tree_r: f64 = path.iter().map(|(_, _, r)| *r).sum();
+                                let raw_total = tree_r + roll_r;
+                                let h_ms = f64::from(self.config.horizon.millis());
+                                let e_ms = f64::from(final_elapsed.millis()).max(1.0);
+                                break raw_total * (h_ms / e_ms) - tree_r;
+                            }
+                            break roll_r;
                         }
                     }
                 }
@@ -713,6 +728,9 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                 let edge = &mut nodes[nid].edges[epos];
                 edge.visits += 1;
                 edge.value_sum += g;
+                let q = edge.value_sum / f64::from(edge.visits);
+                min_q = min_q.min(q);
+                max_q = max_q.max(q);
             }
         }
 
@@ -720,9 +738,29 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
         let total_visits: u32 = root.edges.iter().map(|e| e.visits).sum();
         let mut visits = vec![0.0f32; self.space.size()];
         if total_visits > 0 {
+            let mut weights: Vec<(usize, f64)> = Vec::with_capacity(root.edges.len());
             for e in &root.edges {
-                if e.action_idx < visits.len() {
-                    visits[e.action_idx] = e.visits as f32 / total_visits as f32;
+                if e.visits > 0 && e.action_idx < visits.len() {
+                    let q = e.value_sum / f64::from(e.visits);
+                    let nq = if max_q > min_q + 1e-6 {
+                        ((q - min_q) / (max_q - min_q)).clamp(0.0, 1.0)
+                    } else {
+                        0.5
+                    };
+                    let w = f64::from(e.visits) * (2.5 * nq).exp();
+                    weights.push((e.action_idx, w));
+                }
+            }
+            let w_sum: f64 = weights.iter().map(|(_, w)| *w).sum();
+            if w_sum > 0.0 && w_sum.is_finite() {
+                for (idx, w) in weights {
+                    visits[idx] = (w / w_sum) as f32;
+                }
+            } else {
+                for e in &root.edges {
+                    if e.action_idx < visits.len() {
+                        visits[e.action_idx] = e.visits as f32 / total_visits as f32;
+                    }
                 }
             }
         } else {
@@ -744,8 +782,19 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
             root.edges
                 .iter()
                 .max_by(|a, b| {
+                    let qa = if a.visits > 0 {
+                        a.value_sum / f64::from(a.visits)
+                    } else {
+                        f64::NEG_INFINITY
+                    };
+                    let qb = if b.visits > 0 {
+                        b.value_sum / f64::from(b.visits)
+                    } else {
+                        f64::NEG_INFINITY
+                    };
                     a.visits
                         .cmp(&b.visits)
+                        .then_with(|| qa.total_cmp(&qb))
                         .then_with(|| a.prior.total_cmp(&b.prior))
                 })
                 .expect("non-empty root edges")
@@ -754,13 +803,7 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
             let weights: Vec<f32> = root
                 .edges
                 .iter()
-                .map(|e| {
-                    if total_visits > 0 {
-                        e.visits as f32
-                    } else {
-                        e.prior
-                    }
-                })
+                .map(|e| visits.get(e.action_idx).copied().unwrap_or(e.prior))
                 .collect();
             let pos =
                 select_by_temperature(&indices, &weights, self.config.temperature, decision.key, 1);

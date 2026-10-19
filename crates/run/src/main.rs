@@ -5,17 +5,23 @@
 //! plays seat `K` (default 0) with `NAME` against the run file's own policy
 //! (or `--baseline`) on the same seeds. `--holdout` uses the run's held-out
 //! seeds instead of its tuning seeds.
+//!
+//! `portunus-run train <run.ron> [--iterations N] [--episodes E] [--simulations S]
+//! [--epochs K] [--seat K] [--seeds N] [--first-seed S] [--threads T]`
+//! runs a multi-iteration Burn self-play RL loop (`Mcts` + `BurnTrainer` + `BurnDistiller`)
+//! and compares each checkpoint against the bundle's scripted baseline.
 
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use portunus_eval::{LocalRunner, Runner, SeedSet};
-use portunus_run::{compare, report, Bundle, CompareSpec};
+use portunus_run::{compare, report, train_rl, Bundle, CompareSpec, TrainSpec};
 
 #[derive(Default)]
 struct Args {
     compare: bool,
+    train: bool,
     path: PathBuf,
     seeds: Option<u32>,
     first_seed: Option<u64>,
@@ -25,12 +31,19 @@ struct Args {
     baseline: Option<String>,
     seat: usize,
     holdout: bool,
+    iterations: Option<usize>,
+    episodes: Option<u32>,
+    simulations: Option<u32>,
+    epochs: Option<usize>,
+    save_dir: Option<PathBuf>,
 }
 
 const USAGE: &str =
     "usage: portunus-run <run.ron> [--seeds N] [--first-seed S] [--threads T] [--no-breakdown]
        portunus-run compare <run.ron> --policy NAME [--baseline NAME] [--seat K] [--holdout]
-                    [--seeds N] [--first-seed S] [--threads T] [--no-breakdown]";
+                    [--seeds N] [--first-seed S] [--threads T] [--no-breakdown]
+       portunus-run train <run.ron> [--iterations N] [--episodes E] [--simulations S]
+                    [--epochs K] [--seat K] [--save-dir DIR] [--seeds N] [--first-seed S] [--threads T]";
 
 fn number<T: std::str::FromStr>(name: &str, v: String) -> Result<T, String>
 where
@@ -46,6 +59,9 @@ fn parse() -> Result<Args, String> {
     if it.peek().is_some_and(|a| a == "compare") {
         it.next();
         args.compare = true;
+    } else if it.peek().is_some_and(|a| a == "train") {
+        it.next();
+        args.train = true;
     }
     while let Some(a) = it.next() {
         let mut value = |name: &str| it.next().ok_or_else(|| format!("{name} needs a value"));
@@ -58,8 +74,25 @@ fn parse() -> Result<Args, String> {
             "--no-breakdown" => args.no_breakdown = true,
             "--policy" if args.compare => args.policy = Some(value("--policy")?),
             "--baseline" if args.compare => args.baseline = Some(value("--baseline")?),
-            "--seat" if args.compare => args.seat = number("--seat", value("--seat")?)?,
-            "--holdout" if args.compare => args.holdout = true,
+            "--seat" if args.compare || args.train => {
+                args.seat = number("--seat", value("--seat")?)?;
+            }
+            "--holdout" if args.compare || args.train => args.holdout = true,
+            "--iterations" if args.train => {
+                args.iterations = Some(number("--iterations", value("--iterations")?)?);
+            }
+            "--episodes" if args.train => {
+                args.episodes = Some(number("--episodes", value("--episodes")?)?);
+            }
+            "--simulations" if args.train => {
+                args.simulations = Some(number("--simulations", value("--simulations")?)?);
+            }
+            "--epochs" if args.train => {
+                args.epochs = Some(number("--epochs", value("--epochs")?)?);
+            }
+            "--save-dir" if args.train => {
+                args.save_dir = Some(PathBuf::from(value("--save-dir")?));
+            }
             "-h" | "--help" => return Err(USAGE.into()),
             _ if a.starts_with('-') => return Err(format!("unknown flag {a}\n{USAGE}")),
             _ if path.is_none() => path = Some(PathBuf::from(a)),
@@ -105,6 +138,8 @@ fn main() -> ExitCode {
         .map_or_else(LocalRunner::available, |threads| LocalRunner { threads });
     if args.compare {
         run_compare(&bundle, &runner, args, seeds)
+    } else if args.train {
+        run_train(&bundle, &runner, args)
     } else {
         run_one(&bundle, &runner, &args, seeds)
     }
@@ -151,6 +186,42 @@ fn run_compare(bundle: &Bundle, runner: &LocalRunner, args: Args, seeds: SeedSet
             } else {
                 ExitCode::FAILURE
             }
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run_train(bundle: &Bundle, runner: &LocalRunner, args: Args) -> ExitCode {
+    let mut spec = TrainSpec {
+        seat: args.seat,
+        ..TrainSpec::default()
+    };
+    if let Some(it) = args.iterations {
+        spec.iterations = it;
+    }
+    if let Some(ep) = args.episodes {
+        spec.episodes_per_iter = ep;
+    }
+    if let Some(sims) = args.simulations {
+        spec.simulations = sims;
+    }
+    if let Some(epochs) = args.epochs {
+        spec.epochs_per_iter = epochs;
+    }
+    if let Some(first) = args.first_seed {
+        spec.eval_seeds.first = first;
+    }
+    if let Some(count) = args.seeds {
+        spec.eval_seeds.count = count;
+    }
+    spec.save_dir = args.save_dir;
+    match train_rl(bundle, runner, spec) {
+        Ok(rep) => {
+            print!("{}", report::render_training(&rep));
+            ExitCode::SUCCESS
         }
         Err(e) => {
             eprintln!("error: {e}");

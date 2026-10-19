@@ -2257,3 +2257,47 @@ fn mcts_self_play_and_burn_trainer_run_end_to_end_on_combat_bundle() {
     };
     assert!(outcome.completed);
 }
+
+#[test]
+fn train_rl_improves_single_target_dps() {
+    use portunus_run::{train_rl, TrainSpec};
+
+    let mut b = bundle();
+    for e in Arc::make_mut(&mut b.enemies).enemies.values_mut() {
+        e.health = 120_000;
+    }
+    let runner = LocalRunner {
+        threads: NonZeroUsize::new(2).unwrap(),
+    };
+    let spec = TrainSpec {
+        seat: 0,
+        iterations: 2,
+        episodes_per_iter: 2,
+        eval_seeds: SeedSet {
+            first: 500,
+            count: 3,
+        },
+        simulations: 12,
+        horizon: SimDuration(5_000),
+        hidden_width: 32,
+        epochs_per_iter: 16,
+        learning_rate: 0.01,
+        save_dir: None,
+    };
+    let rep = train_rl(&b, &runner, spec).expect("train_rl succeeds");
+    assert_eq!(rep.iterations.len(), 3);
+    let dps0 = rep.iterations[0].dps.mean;
+    let dps_best = rep
+        .iterations
+        .iter()
+        .skip(1)
+        .map(|it| it.dps.mean)
+        .fold(0.0f64, f64::max);
+    assert!(
+        dps_best > dps0,
+        "expected RL loop to improve DPS over iter 0: {dps0} -> {dps_best}"
+    );
+    let rendered = report::render_training(&rep);
+    assert!(rendered.contains("burn rl training: elemental_dummy"));
+    assert!(rendered.contains("distilled student agreement:"));
+}
