@@ -183,7 +183,9 @@ pub fn render_training(r: &TrainReport) -> String {
     );
     let _ = writeln!(
         out,
-        "  eval seeds {}..{} (n={})",
+        "  mcts: {} simulations, {:.1}s lookahead horizon | eval seeds {}..{} (n={})",
+        r.simulations,
+        f64::from(r.horizon.millis()) / 1000.0,
         r.eval_seeds.first,
         r.eval_seeds.first + u64::from(r.eval_seeds.count),
         r.eval_seeds.count

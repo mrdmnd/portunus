@@ -74,12 +74,12 @@ pub struct MctsConfig {
 impl Default for MctsConfig {
     fn default() -> Self {
         Self {
-            simulations: 64,
+            simulations: 96,
             c_puct: 1.5,
             dirichlet_alpha: 0.3,
             dirichlet_frac: 0.25,
             temperature: 1.0,
-            horizon: SimDuration(15_000),
+            horizon: SimDuration(10_000),
         }
     }
 }
@@ -482,6 +482,7 @@ struct Edge {
 #[derive(Debug, Clone)]
 struct Node {
     initial_value: f32,
+    priors: Vec<f32>,
     edges: Vec<Edge>,
 }
 
@@ -569,21 +570,12 @@ impl<O> Mcts<O> {
 
         Node {
             initial_value: eval.value,
+            priors: eval.priors,
             edges,
         }
     }
 
-    fn quick_act(&self, decision: &Decision<O>, substream: u64) -> Choice {
-        let features = self.featurizer.featurize(&decision.obs, &decision.legal);
-        let eval = self
-            .model
-            .evaluate(&[&features])
-            .into_iter()
-            .next()
-            .unwrap_or(Evaluation {
-                priors: vec![1.0; self.space.size()],
-                value: 0.0,
-            });
+    fn quick_act(&self, decision: &Decision<O>, priors: &[f32], substream: u64) -> Choice {
         let legal = self.space.legal(&decision.legal);
         let legal_indices: Vec<usize> = legal
             .iter()
@@ -594,7 +586,7 @@ impl<O> Mcts<O> {
             return Choice::Wait(Wait::NextEvent);
         }
         let chosen_idx =
-            select_by_temperature(&legal_indices, &eval.priors, 0.5, decision.key, substream);
+            select_by_temperature(&legal_indices, priors, 0.5, decision.key, substream);
         self.space
             .decode(chosen_idx, &decision.legal)
             .unwrap_or(Choice::Wait(Wait::NextEvent))
@@ -605,15 +597,16 @@ impl<O> Mcts<O> {
         sim: &mut E,
         mut dec: Decision<O>,
         mut elapsed: SimDuration,
+        priors: &[f32],
         sim_idx: u32,
     ) -> (f64, SimDuration, bool) {
         let mut total_reward = 0.0;
-        for step in 0..16 {
+        for step in 0..32 {
             if self.config.horizon == SimDuration::ZERO || elapsed >= self.config.horizon {
                 return (total_reward, elapsed, false);
             }
             let substream = 100 + u64::from(sim_idx) * 31 + step;
-            let choice = self.quick_act(&dec, substream);
+            let choice = self.quick_act(&dec, priors, substream);
             let Ok(tr) = sim.step(choice) else {
                 break;
             };
@@ -704,7 +697,13 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                             let (roll_r, final_elapsed, done) = if reached_horizon {
                                 (0.0, elapsed_total, false)
                             } else {
-                                self.rollout(&mut sim, next_dec, elapsed_total, sim_idx)
+                                self.rollout(
+                                    &mut sim,
+                                    next_dec,
+                                    elapsed_total,
+                                    &nodes[child_id].priors,
+                                    sim_idx,
+                                )
                             };
                             if !done
                                 && self.config.horizon > SimDuration::ZERO

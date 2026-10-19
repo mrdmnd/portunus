@@ -34,6 +34,7 @@ struct Args {
     iterations: Option<usize>,
     episodes: Option<u32>,
     simulations: Option<u32>,
+    horizon_ms: Option<u32>,
     epochs: Option<usize>,
     save_dir: Option<PathBuf>,
 }
@@ -43,7 +44,8 @@ const USAGE: &str =
        portunus-run compare <run.ron> --policy NAME [--baseline NAME] [--seat K] [--holdout]
                     [--seeds N] [--first-seed S] [--threads T] [--no-breakdown]
        portunus-run train <run.ron> [--iterations N] [--episodes E] [--simulations S]
-                    [--epochs K] [--seat K] [--save-dir DIR] [--seeds N] [--first-seed S] [--threads T]";
+                    [--horizon-ms MS] [--epochs K] [--seat K] [--save-dir DIR]
+                    [--seeds N] [--first-seed S] [--threads T]";
 
 fn number<T: std::str::FromStr>(name: &str, v: String) -> Result<T, String>
 where
@@ -86,6 +88,9 @@ fn parse() -> Result<Args, String> {
             }
             "--simulations" if args.train => {
                 args.simulations = Some(number("--simulations", value("--simulations")?)?);
+            }
+            "--horizon-ms" if args.train => {
+                args.horizon_ms = Some(number("--horizon-ms", value("--horizon-ms")?)?);
             }
             "--epochs" if args.train => {
                 args.epochs = Some(number("--epochs", value("--epochs")?)?);
@@ -207,6 +212,9 @@ fn run_train(bundle: &Bundle, runner: &LocalRunner, args: Args) -> ExitCode {
     }
     if let Some(sims) = args.simulations {
         spec.simulations = sims;
+    }
+    if let Some(ms) = args.horizon_ms {
+        spec.horizon = portunus_core::SimDuration(ms);
     }
     if let Some(epochs) = args.epochs {
         spec.epochs_per_iter = epochs;
