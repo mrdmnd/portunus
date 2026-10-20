@@ -14,6 +14,11 @@
 //! `portunus-run optimize <run.ron> [--rounds R] [--step-rating S] [--seat K]
 //! [--seeds N] [--first-seed S] [--threads T]`
 //! runs adaptive seed-racing (`RacingOptimizer`) over secondary-stat allocations.
+//!
+//! `portunus-run parity <run.ron> [--simc-bin PATH] [--simc-profile PATH] [--dump-dir DIR]
+//! [--no-sync-dump] [--seeds N] [--first-seed S] [--threads T]`
+//! syncs spell coefficients from `SpellDataDump` and runs a side-by-side Patchwerk
+//! comparison against the local `simc` CLI binary.
 
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
@@ -21,13 +26,17 @@ use std::process::ExitCode;
 
 use portunus_eval::{LocalRunner, Runner, SeedSet};
 use portunus_optimize::RacingConfig;
-use portunus_run::{compare, optimize_stats, report, train_rl, Bundle, CompareSpec, TrainSpec};
+use portunus_run::{
+    check_simc_parity, compare, default_simc_profile, optimize_stats, report, train_rl, Bundle,
+    CompareSpec, TrainSpec,
+};
 
 #[derive(Default)]
 struct Args {
     compare: bool,
     train: bool,
     optimize: bool,
+    parity: bool,
     path: PathBuf,
     seeds: Option<u32>,
     first_seed: Option<u64>,
@@ -46,6 +55,10 @@ struct Args {
     save_dir: Option<PathBuf>,
     rounds: Option<usize>,
     step_rating: Option<i64>,
+    simc_bin: Option<PathBuf>,
+    simc_profile: Option<PathBuf>,
+    dump_dir: Option<PathBuf>,
+    no_sync_dump: bool,
 }
 
 const USAGE: &str =
@@ -56,7 +69,9 @@ const USAGE: &str =
                     [--simulations S] [--horizon-ms MS] [--epochs K] [--seat K] [--save-dir DIR]
                     [--seeds N] [--first-seed S] [--threads T]
        portunus-run optimize <run.ron> [--rounds R] [--step-rating S] [--seat K]
-                    [--seeds N] [--first-seed S] [--threads T]";
+                    [--seeds N] [--first-seed S] [--threads T]
+       portunus-run parity <run.ron> [--simc-bin PATH] [--simc-profile PATH] [--dump-dir DIR]
+                    [--no-sync-dump] [--seeds N] [--first-seed S] [--threads T]";
 
 fn number<T: std::str::FromStr>(name: &str, v: String) -> Result<T, String>
 where
@@ -78,6 +93,9 @@ fn parse() -> Result<Args, String> {
     } else if it.peek().is_some_and(|a| a == "optimize") {
         it.next();
         args.optimize = true;
+    } else if it.peek().is_some_and(|a| a == "parity") {
+        it.next();
+        args.parity = true;
     }
     while let Some(a) = it.next() {
         let mut value = |name: &str| it.next().ok_or_else(|| format!("{name} needs a value"));
@@ -121,6 +139,18 @@ fn parse() -> Result<Args, String> {
             "--step-rating" if args.optimize => {
                 args.step_rating = Some(number("--step-rating", value("--step-rating")?)?);
             }
+            "--simc-bin" if args.parity => {
+                args.simc_bin = Some(PathBuf::from(value("--simc-bin")?));
+            }
+            "--simc-profile" if args.parity => {
+                args.simc_profile = Some(PathBuf::from(value("--simc-profile")?));
+            }
+            "--dump-dir" => {
+                args.dump_dir = Some(PathBuf::from(value("--dump-dir")?));
+            }
+            "--no-sync-dump" if args.parity => {
+                args.no_sync_dump = true;
+            }
             "-h" | "--help" => return Err(USAGE.into()),
             _ if a.starts_with('-') => return Err(format!("unknown flag {a}\n{USAGE}")),
             _ if path.is_none() => path = Some(PathBuf::from(a)),
@@ -145,13 +175,21 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let bundle = match Bundle::load(&args.path) {
+    let mut bundle = match Bundle::load(&args.path) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("error: {e}");
             return ExitCode::FAILURE;
         }
     };
+    if let Some(dump_dir) = &args.dump_dir {
+        if !args.parity {
+            if let Err(e) = bundle.sync_with_dump(dump_dir) {
+                eprintln!("error syncing dump: {e}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
     let defaults = if args.holdout {
         bundle.holdout_seeds()
     } else {
@@ -170,6 +208,8 @@ fn main() -> ExitCode {
         run_train(&bundle, &runner, args)
     } else if args.optimize {
         run_optimize(&bundle, &runner, args)
+    } else if args.parity {
+        run_parity(bundle, &runner, args, seeds)
     } else {
         run_one(&bundle, &runner, &args, seeds)
     }
@@ -278,6 +318,63 @@ fn run_optimize(bundle: &Bundle, runner: &LocalRunner, args: Args) -> ExitCode {
     match optimize_stats(bundle, runner, args.seat, cfg, step) {
         Ok(rep) => {
             print!("{}", report::render_optimization(&rep));
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run_parity(mut bundle: Bundle, runner: &LocalRunner, args: Args, seeds: SeedSet) -> ExitCode {
+    let simc_root = PathBuf::from("target/simc");
+    let simc_bin = args
+        .simc_bin
+        .unwrap_or_else(|| simc_root.join("engine/simc"));
+    let dump_dir = args
+        .dump_dir
+        .unwrap_or_else(|| simc_root.join("SpellDataDump"));
+
+    let dump_diffs_applied = if !args.no_sync_dump && dump_dir.exists() {
+        match bundle.sync_with_dump(&dump_dir) {
+            Ok(diffs) => diffs.len(),
+            Err(e) => {
+                eprintln!("warning: dump sync failed: {e}");
+                0
+            }
+        }
+    } else {
+        0
+    };
+
+    let tpl = &bundle.templates[0];
+    let Some(simc_profile) = args
+        .simc_profile
+        .or_else(|| default_simc_profile(tpl.spec, tpl.hero_tree, &simc_root))
+    else {
+        eprintln!(
+            "error: no default SimC profile found for spec {:?}",
+            tpl.spec
+        );
+        return ExitCode::FAILURE;
+    };
+
+    let parity_seeds = SeedSet {
+        first: seeds.first,
+        count: seeds.count.min(30),
+    };
+
+    match check_simc_parity(
+        &bundle,
+        runner,
+        &simc_bin,
+        &simc_profile,
+        parity_seeds,
+        dump_diffs_applied,
+    ) {
+        Ok(rep) => {
+            print!("{}", report::render_parity(&rep));
             ExitCode::SUCCESS
         }
         Err(e) => {

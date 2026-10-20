@@ -9,6 +9,7 @@ use portunus_eval::{Estimate, Metric, Report};
 use crate::arm::{AbilityRow, Breakdown};
 use crate::compare::{Comparison, Verdict};
 use crate::opt::OptimizeReport;
+use crate::parity::SimcParityReport;
 use crate::train::TrainReport;
 
 fn label(m: &Metric) -> String {
@@ -300,6 +301,58 @@ pub fn render_optimization(r: &OptimizeReport) -> String {
             est.mean,
             1.96 * est.std_err,
             est.n
+        );
+    }
+    out
+}
+
+/// Renders a side-by-side Patchwerk parity comparison against SimulationCraft.
+pub fn render_parity(r: &SimcParityReport) -> String {
+    let mut out = String::new();
+    let hero = r.hero_tree_name.as_deref().unwrap_or("None");
+    let _ = writeln!(
+        out,
+        "simc patchwerk parity: {} (spec {} {} [{}])",
+        r.run_name, r.spec_id.0, r.spec_name, hero
+    );
+    let _ = writeln!(
+        out,
+        "  simc profile: {} | dump diffs applied: {}",
+        r.simc_profile.display(),
+        r.dump_diffs_applied
+    );
+    let _ = writeln!(
+        out,
+        "  portunus dps: {:>10.1} ± {:<7.1} ({:.1}s combat, n={})",
+        r.portunus_dps.mean,
+        1.96 * r.portunus_dps.std_err,
+        r.portunus_combat_secs,
+        r.portunus_dps.n
+    );
+    let _ = writeln!(
+        out,
+        "  simc dps:     {:>10.1}           (ratio = {:.1}%, delta = {:+.1}%)",
+        r.simc_dps,
+        100.0 * r.dps_ratio,
+        100.0 * (r.dps_ratio - 1.0)
+    );
+    let _ = writeln!(
+        out,
+        "\n  {:<28} {:>8} {:>8} {:>11} {:>11} {:>9} {:>8} {:>8}",
+        "ability", "p_casts", "s_casts", "portunus", "simc", "dps_diff", "p_share", "s_share"
+    );
+    for row in &r.rows {
+        let _ = writeln!(
+            out,
+            "  {:<28} {:>8.1} {:>8.1} {:>11.1} {:>11.1} {:>+9.1} {:>7.1}% {:>7.1}%",
+            row.name,
+            row.portunus_casts,
+            row.simc_casts,
+            row.portunus_dps,
+            row.simc_dps,
+            row.portunus_dps - row.simc_dps,
+            100.0 * row.portunus_share,
+            100.0 * row.simc_share
         );
     }
     out

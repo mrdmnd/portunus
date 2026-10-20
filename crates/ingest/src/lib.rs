@@ -9,9 +9,14 @@
 //! [`check_enemy_data`] catch dangling references in whatever was loaded.
 
 mod check;
+pub mod dump;
 mod ron_file;
 
 pub use check::{check_enemy_data, check_game_data, DataIssue, Owner};
+pub use dump::{
+    audit_game_data, sync_game_data_with_dump, DumpDiff, DumpEffect, DumpSpell, DumpSyncedSource,
+    SpellDump,
+};
 pub use ron_file::{read_ron, RonFile};
 
 use portunus_core::{EnemyKey, EventName, SimTime};

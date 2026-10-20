@@ -1747,3 +1747,37 @@ fn resurrections_need_a_health_share_and_stones_must_survive_death() {
         ]
     );
 }
+
+#[test]
+fn spell_dump_sync_validates_all_specs_and_loadouts() {
+    use portunus_ingest::{sync_game_data_with_dump, SpellDump};
+    use std::collections::BTreeSet;
+
+    let dump_dir =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/simc/SpellDataDump");
+    if !dump_dir.exists() {
+        return;
+    }
+    let dump = SpellDump::from_dir(&dump_dir).expect("loads SpellDataDump");
+    assert!(dump.spells.len() > 2_000, "spells={}", dump.spells.len());
+
+    let mut game = game();
+    let diffs = sync_game_data_with_dump(&mut game, &dump, &BTreeSet::new());
+    assert!(!diffs.is_empty(), "expected dump diffs");
+    assert_eq!(check_game_data(&game), Vec::new());
+
+    for entry in std::fs::read_dir(data_dir().join("loadouts")).expect("loadouts dir") {
+        let path = entry.expect("entry").path();
+        if path.extension().and_then(|e| e.to_str()) != Some("ron") {
+            continue;
+        }
+        let loadout: Loadout = read_ron(&path).expect("read loadout");
+        assert_eq!(
+            Compiler.validate(&game, &loadout),
+            Vec::new(),
+            "loadout {:?}",
+            path
+        );
+        let _ = Compiler.compile(&game, &loadout).expect("compile loadout");
+    }
+}
