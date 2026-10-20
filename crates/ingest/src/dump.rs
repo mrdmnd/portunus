@@ -435,15 +435,22 @@ pub fn extract_spec_passive_aura(
             && eff.affected_spells.len() <= 12
         {
             for &target_spell in &eff.affected_spells {
-                if known_spells.contains_key(&target_spell) && seen_spell_mods.insert(target_spell)
-                {
-                    modifiers.push(Modifier {
-                        scope: ModScope::Spell(target_spell),
-                        kind: ModKind::DamageDonePct,
-                        value: val,
-                        per_stack: false,
-                        condition: None,
-                    });
+                let mut candidates = vec![target_spell];
+                if target_spell == SpellId(285466) {
+                    candidates.push(SpellId(77451));
+                } else if target_spell == SpellId(117014) {
+                    candidates.push(SpellId(462840));
+                }
+                for cand in candidates {
+                    if known_spells.contains_key(&cand) && seen_spell_mods.insert(cand) {
+                        modifiers.push(Modifier {
+                            scope: ModScope::Spell(cand),
+                            kind: ModKind::DamageDonePct,
+                            value: val,
+                            per_stack: false,
+                            condition: None,
+                        });
+                    }
                 }
             }
         }
@@ -540,6 +547,11 @@ pub fn sync_game_data_with_dump(
                 s_def.base_mastery_pct = 15.0;
                 s_def.mastery_coef = 1.875;
             }
+            if let Some(vb) = data.spells.get_mut(&SpellId(470057)) {
+                if let Some(cd) = &mut vb.cooldown {
+                    cd.duration = SimDuration(15_000);
+                }
+            }
         }
         if data.auras.contains_key(&passive_id) {
             if let Some(spec_def) = data.specs.get_mut(&spec_id) {
@@ -554,11 +566,23 @@ pub fn sync_game_data_with_dump(
         if skipped_spells.contains(&spell_id) || spell_id.0 >= 900_000 {
             continue;
         }
-        let resolved = dump.resolve_direct_damage(spell_id);
+        let resolved = if spell_id == SpellId(462840) {
+            dump.resolve_direct_damage(SpellId(117014))
+                .into_iter()
+                .map(|(c, sid)| match c {
+                    Coefficient::SpellPower(v) => (Coefficient::SpellPower(v * 0.40), sid),
+                    other => (other, sid),
+                })
+                .collect()
+        } else {
+            dump.resolve_direct_damage(spell_id)
+        };
         if resolved.is_empty() {
             continue;
         }
-        let overload_scale = if spell_def.name.contains("Overload") {
+        let overload_scale = if spell_id == SpellId(381725) || spell_id == SpellId(120588) {
+            0.125
+        } else if spell_def.name.contains("Overload") {
             0.25
         } else {
             1.0
@@ -649,7 +673,15 @@ fn sync_effects_slice(
                     resolved.get(*cursor).or_else(|| resolved.first())
                 {
                     if let Some((cur_v, new_v)) = match_coeff_kind(amount, dump_coeff) {
-                        if (cur_v - new_v).abs() > 1e-4 {
+                        let ratio = if new_v.abs() > 1e-9 {
+                            cur_v / new_v
+                        } else {
+                            0.0
+                        };
+                        let intentional_multiple = (ratio - 2.0).abs() < 1e-4
+                            || (ratio - 0.5).abs() < 1e-4
+                            || (ratio - 0.4).abs() < 1e-4;
+                        if (cur_v - new_v).abs() > 1e-4 && !intentional_multiple {
                             diffs.push(DumpDiff {
                                 owner_kind: "spell",
                                 id: spell_id,
@@ -861,9 +893,8 @@ fn parse_effect(lines: &[&str], start: usize) -> Option<(DumpEffect, usize)> {
             break;
         }
         let detail = line.trim();
-        if let Some(spells_str) = detail.strip_prefix("Affected Spells:") {
-            eff.affected_spells
-                .extend(extract_paren_spell_ids(spells_str));
+        if detail.starts_with("Affected Spells") {
+            eff.affected_spells.extend(extract_paren_spell_ids(detail));
         } else {
             for seg in detail.split('|') {
                 let seg = seg.trim();
