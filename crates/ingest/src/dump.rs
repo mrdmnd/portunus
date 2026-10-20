@@ -389,7 +389,7 @@ pub fn extract_spec_passive_aura(
 ) -> Option<AuraDef> {
     let sp = dump.spells.get(&SpellId(aura_id.0))?;
     let mut modifiers: Vec<Modifier> = Vec::new();
-    let mut seen_spell_mods: BTreeSet<SpellId> = BTreeSet::new();
+    let mut direct_spell_mods: BTreeSet<(SpellId, i64)> = BTreeSet::new();
 
     for eff in &sp.effects {
         let val = eff.scaled_value.or(eff.base_value).unwrap_or(0.0);
@@ -432,8 +432,11 @@ pub fn extract_spec_passive_aura(
             || eff.kind.contains("Spell Periodic Amount (22)"))
             && eff.index > 2
             && !eff.affected_spells.is_empty()
-            && eff.affected_spells.len() <= 12
+            && eff.affected_spells.len() <= 55
         {
+            let is_periodic = eff.kind.contains("Spell Periodic Amount (22)");
+            let val_key = (val * 100.0).round() as i64;
+            let mut seen_in_effect: BTreeSet<SpellId> = BTreeSet::new();
             for &target_spell in &eff.affected_spells {
                 let mut candidates = vec![target_spell];
                 if target_spell == SpellId(285466) {
@@ -442,15 +445,22 @@ pub fn extract_spec_passive_aura(
                     candidates.push(SpellId(462840));
                 }
                 for cand in candidates {
-                    if known_spells.contains_key(&cand) && seen_spell_mods.insert(cand) {
-                        modifiers.push(Modifier {
-                            scope: ModScope::Spell(cand),
-                            kind: ModKind::DamageDonePct,
-                            value: val,
-                            per_stack: false,
-                            condition: None,
-                        });
+                    if !known_spells.contains_key(&cand) || !seen_in_effect.insert(cand) {
+                        continue;
                     }
+                    if is_periodic && direct_spell_mods.contains(&(cand, val_key)) {
+                        continue;
+                    }
+                    if !is_periodic {
+                        direct_spell_mods.insert((cand, val_key));
+                    }
+                    modifiers.push(Modifier {
+                        scope: ModScope::Spell(cand),
+                        kind: ModKind::DamageDonePct,
+                        value: val,
+                        per_stack: false,
+                        condition: None,
+                    });
                 }
             }
         }
@@ -512,8 +522,35 @@ pub fn sync_game_data_with_dump(
         let Some(passive_id) = spec_passive_aura_id(spec_id) else {
             continue;
         };
-        if !data.auras.contains_key(&passive_id) {
-            if let Some(aura_def) = extract_spec_passive_aura(passive_id, dump, &data.spells) {
+        // Only add per-spell modifiers from dump if the existing passive aura
+        // doesn't already have hand-authored per-spell modifiers.
+        if let Some(aura_def) = extract_spec_passive_aura(passive_id, dump, &data.spells) {
+            if let Some(existing) = data.auras.get_mut(&passive_id) {
+                let has_hand_spell_mods = existing.modifiers.iter().any(|em| {
+                    matches!(em.scope, ModScope::Spell(_)) && em.kind == ModKind::DamageDonePct
+                });
+                for m in aura_def.modifiers {
+                    if has_hand_spell_mods && matches!(m.scope, ModScope::Spell(_)) {
+                        continue;
+                    }
+                    let already_has = existing
+                        .modifiers
+                        .iter()
+                        .any(|em| em.scope == m.scope && em.kind == m.kind);
+                    if !already_has {
+                        diffs.push(DumpDiff {
+                            owner_kind: "spec_aura",
+                            id: passive_id.0,
+                            name: existing.name.clone(),
+                            field: format!("modifier({:?})", m.scope),
+                            current: 0.0,
+                            dump: m.value,
+                            dump_spell_id: SpellId(passive_id.0),
+                        });
+                        existing.modifiers.push(m);
+                    }
+                }
+            } else {
                 let first_val = aura_def.modifiers.first().map_or(0.0, |m| m.value);
                 diffs.push(DumpDiff {
                     owner_kind: "spec_aura",
@@ -550,6 +587,11 @@ pub fn sync_game_data_with_dump(
             if let Some(vb) = data.spells.get_mut(&SpellId(470057)) {
                 if let Some(cd) = &mut vb.cooldown {
                     cd.duration = SimDuration(15_000);
+                }
+            }
+            if let Some(asc) = data.spells.get_mut(&SpellId(114050)) {
+                if let Some(cd) = &mut asc.cooldown {
+                    cd.duration = SimDuration(120_000);
                 }
             }
         }

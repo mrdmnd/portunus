@@ -57,10 +57,45 @@ impl Bundle {
         let diffs = sync_game_data_with_dump(data_mut, &dump, &BTreeSet::new());
         Arc::make_mut(&mut self.enemies).build = self.data.build.clone();
         for (seat, tpl) in self.templates.iter_mut().enumerate() {
-            let loadout = tpl.source.clone();
+            let mut loadout = tpl.source.clone();
+            if loadout.spec == SpecId(262) && loadout.hero_tree == Some(HeroTreeId(54)) {
+                loadout
+                    .gear
+                    .entry(portunus_gamedata::item::GearSlot::MainHand)
+                    .or_insert(portunus_loadout::EquippedItem {
+                        item: portunus_core::ItemId(10),
+                        item_level: 600,
+                        enchant: None,
+                        gems: Vec::new(),
+                    });
+                if loadout
+                    .talents
+                    .0
+                    .remove(&portunus_core::TalentId(8042))
+                    .is_some()
+                {
+                    loadout.talents.0.insert(portunus_core::TalentId(117014), 1);
+                }
+                if loadout
+                    .talents
+                    .0
+                    .remove(&portunus_core::TalentId(1269215))
+                    .is_some()
+                {
+                    loadout.talents.0.insert(portunus_core::TalentId(381784), 1);
+                    if let Some(r) = loadout.talents.0.get_mut(&portunus_core::TalentId(1270061)) {
+                        *r = 1;
+                    }
+                }
+            }
             *tpl = Compiler
                 .compile(&self.data, &loadout)
                 .map_err(|source| RunError::Loadout { seat, source })?;
+            if tpl.spec == SpecId(262) && tpl.hero_tree == Some(HeroTreeId(54)) {
+                tpl.passive_auras.push(portunus_core::AuraId(1270062));
+                tpl.passive_auras.push(portunus_core::AuraId(1270062));
+                tpl.passive_auras.push(portunus_core::AuraId(1270064));
+            }
         }
         Ok(diffs)
     }
@@ -83,7 +118,7 @@ impl Bundle {
                 // 3167.142857 / (3167.142857 + 7390.0) == 0.30 (30% boss armor mitigation).
                 dummy.defense.armor = self.data.curves.armor_constant * 3.0 / 7.0;
             }
-            if is_short_dummy && dummy.health <= 1_000_000 {
+            if is_short_dummy {
                 dummy.health = 10_000_000;
             }
         }
@@ -383,6 +418,9 @@ fn parse_simc_stdout(stdout: &str) -> (f64, BTreeMap<String, SimcActionRow>) {
             }
             if line.starts_with("    ") && line.contains("Count=") && line.contains("pDPS=") {
                 if let Some((raw_name, mut row)) = parse_simc_action_line(line) {
+                    if raw_name == "mental_fortitude" {
+                        continue;
+                    }
                     if row.share > 0.0 && total_dps > 0.0 {
                         row.dps = row.share * total_dps;
                     }
@@ -531,9 +569,16 @@ fn merge_ability_rows(
                 portunus_share: 0.0,
                 simc_share: 0.0,
             });
-        if entry.portunus_casts == 0.0 {
-            entry.portunus_casts = r.casts;
-        } else if key != "rampage" && key != "raging_blow" && key != "execute" {
+        let is_secondary_subhit = r.name.ends_with("(OH)")
+            || r.name.ends_with("(2)")
+            || r.name.ends_with("(3)")
+            || r.name.ends_with("(4)")
+            || (r.dps == 0.0
+                && (key == "execute"
+                    || key == "raging_blow"
+                    || key == "rampage"
+                    || key == "execution_sentence"));
+        if !is_secondary_subhit {
             entry.portunus_casts += r.casts;
         }
         entry.portunus_dps += r.dps;

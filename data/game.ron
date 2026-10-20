@@ -2353,6 +2353,25 @@
                 apply_aura(aura: 157348, target: caster),
             ],
         ),
+        269005: (
+            id: 269005,
+            name: "Stormfury",
+            school: 8,
+            cast: channel(duration: 4000, ticks: 4, hasted: true),
+            gcd: Some((base: 500, hasted: false, floor: 500)),
+            cooldown: Some((duration: 40000, charges: 1, hasted: false, category: None)),
+            targeting: enemy,
+            hostile: true,
+            range: Some(40.0),
+            effects: [
+                damage(
+                    amount: spell_power(1.48),
+                    school: 8,
+                    target: all_enemies,
+                    aoe: Some((max_targets: None, sqrt_cap: Some(5), secondary: 1.0)),
+                ),
+            ],
+        ),
 
         // Farseer. Every way of calling an Ancestor triggers this.
         445624: (
@@ -3273,7 +3292,7 @@
             school: 1,
             cast: instant,
             gcd: Some((base: 1500, hasted: true, floor: 750)),
-            cooldown: Some((duration: 4500, charges: 1, hasted: true, category: None)),
+            cooldown: Some((duration: 4500, charges: 1, hasted: true, category: Some(280735))),
             targeting: enemy,
             hostile: true,
             range: Some(5.0),
@@ -3291,6 +3310,7 @@
             school: 1,
             cast: instant,
             gcd: Some((base: 1500, hasted: true, floor: 750)),
+            cooldown: Some((duration: 4500, charges: 1, hasted: true, category: Some(280735))),
             targeting: enemy,
             hostile: true,
             range: Some(5.0),
@@ -4828,6 +4848,7 @@
                 ]),
             ],
             effects: [
+                damage(amount: attack_power(3.25), school: 2, target: target),
                 apply_aura(aura: 343527, target: target),
             ],
         ),
@@ -4841,7 +4862,7 @@
             hostile: true,
             range: Some(40.0),
             effects: [
-                damage(amount: attack_power(5.05312), school: 2, target: target),
+                damage(amount: attack_power(11.5), school: 2, target: target),
             ],
         ),
         31884: (
@@ -17923,7 +17944,7 @@
             id: 910103,
             name: "Imminent Demise",
             duration: None,
-            value: Some((kind: counter, initial: None, cap: None, threshold: Some(flat(3.0)), on_threshold: [apply_aura(aura: 52437, target: target)])),
+            value: Some((kind: counter, initial: None, cap: None, threshold: Some(flat(3.0)), on_threshold: [apply_aura(aura: 52437, target: target), adjust_cooldown(spell: 5308, change: reset), adjust_cooldown(spell: 280735, change: reset)])),
         ),
         // Bladestorm's strikes, and Reap the Storm's, leave a stack of
         // Overwhelmed on what they hit, after the hit.
@@ -18549,7 +18570,8 @@
             name: "Fury Warrior",
             duration: None,
             modifiers: [
-                (scope: abilities, kind: damage_done_pct, value: 21.0),
+                (scope: abilities, kind: damage_done_pct, value: 22.0),
+                (scope: auto_attack, kind: damage_done_pct, value: 144.0),
                 (scope: spell(5308), kind: damage_done_pct, value: 13.0),
                 (scope: spell(280735), kind: damage_done_pct, value: 13.0),
                 (scope: spell(280736), kind: damage_done_pct, value: 13.0),
@@ -20641,6 +20663,9 @@
             duration: None,
             modifiers: [
                 (scope: all, kind: stat_from_stat(from: strength, to: intellect), value: 96.0),
+                (scope: auto_attack, kind: damage_done_pct, value: 398.0),
+                (scope: abilities, kind: damage_done_pct, value: 5.0),
+                (scope: spell(20271), kind: damage_done_pct, value: 30.0),
             ],
         ),
         408459: (
@@ -21087,6 +21112,9 @@
             id: 404542,
             name: "Crusading Strikes",
             duration: None,
+            modifiers: [
+                (scope: auto_attack, kind: damage_done_pct, value: -100.0),
+            ],
             listeners: [
                 (
                     on: swing(hand: Some(main_hand), crit_only: false),
@@ -21427,11 +21455,10 @@
                 (
                     on: aura_stacks_reached(aura: 433674, stacks: 50),
                     chance: always,
-                    effects: [
-                        remove_aura(aura: 433674, target: caster),
-                        apply_aura(aura: 433732, target: caster),
-                        apply_aura(aura: 427441, target: caster),
-                    ],
+                effects: [
+                    remove_aura(aura: 433674, target: caster),
+                    apply_aura(aura: 433732, target: caster),
+                ],
                 ),
             ],
         ),
@@ -26987,8 +27014,8 @@
             duration: Some(20000),
             max_stacks: 2,
             modifiers: [
-                (scope: spell(11366), kind: damage_done_pct, value: 230.0),
-                (scope: spell(2120), kind: damage_done_pct, value: 230.0),
+                (scope: spell(11366), kind: damage_done_pct, value: 230.0, condition: Some(caster_lacks_aura(48108))),
+                (scope: spell(2120), kind: damage_done_pct, value: 230.0, condition: Some(caster_lacks_aura(48108))),
             ],
         ),
         1254865: (id: 1254865, name: "Cinderstorm", duration: None),
@@ -34420,14 +34447,14 @@
             name: "Greater Storm Elemental",
             kind: guardian,
             scaling: (sp_from_sp: 1.0),
-            autocast: [157331],
+            autocast: [269005, 157331],
         ),
         77942: (
             id: 77942,
             name: "Primal Storm Elemental",
             kind: guardian,
             scaling: (sp_from_sp: 1.8),
-            autocast: [157348, 157331],
+            autocast: [157348, 269005, 157331],
         ),
         29264: (
             id: 29264,
