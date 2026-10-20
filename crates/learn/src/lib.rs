@@ -8,8 +8,10 @@
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::thread;
 
 use burn::nn::loss::{MseLoss, Reduction};
 use burn::optim::{AdamWConfig, GradientsParams, LearningRate, ModuleOptimizer};
@@ -19,7 +21,7 @@ use portunus_core::{Seat, Seed};
 use portunus_engine::Outcome;
 use portunus_env::{ActionSpace, Env, Turn};
 use portunus_policy::{
-    BurnModel, Featurizer, Mcts, MctsConfig, Model, ModelVersion, PolicyValueNet,
+    BurnModel, Featurizer, Mcts, MctsConfig, Model, ModelVersion, Policy, PolicyValueNet,
     PolicyValueNetConfig, SchemaId, SearchPolicy,
 };
 use serde::{Deserialize, Serialize};
@@ -101,6 +103,8 @@ pub struct SelfPlayCollector<E: Env> {
     pub discount: f32,
     /// Safety cap on decisions per episode.
     pub max_steps: usize,
+    /// Worker threads used to collect episodes in parallel.
+    pub threads: NonZeroUsize,
 }
 
 impl<E: Env> SelfPlayCollector<E> {
@@ -117,19 +121,94 @@ impl<E: Env> SelfPlayCollector<E> {
             featurizer,
             discount: 1.0,
             max_steps: 10_000,
+            threads: thread::available_parallelism().unwrap_or(NonZeroUsize::MIN),
         }
     }
 }
 
-impl<E: Env> Collector for SelfPlayCollector<E> {
-    fn collect(&mut self, model: Arc<dyn Model>, seeds: &[Seed]) -> Vec<Trajectory> {
-        let mut out = Vec::with_capacity(seeds.len());
+impl<E: Env> SelfPlayCollector<E> {
+    fn rollout_mcts_seed(
+        &self,
+        mut env: E,
+        model: Arc<dyn Model>,
+        seed: Seed,
+    ) -> Option<Trajectory> {
         let mut mcts = Mcts::new(
             self.config,
             Arc::clone(&self.space),
             Arc::clone(&self.featurizer),
             Arc::clone(&model),
         );
+        let mut turn = env.reset(seed).ok()?;
+        struct PendingStep {
+            seat: Seat,
+            features: Vec<f32>,
+            legal: Vec<bool>,
+            policy_target: Vec<f32>,
+            reward: f64,
+        }
+        let mut pending: Vec<PendingStep> = Vec::new();
+        let outcome = loop {
+            match turn {
+                Turn::Done(o) => break Some(o),
+                Turn::Decide(d) => {
+                    if pending.len() >= self.max_steps {
+                        break None;
+                    }
+                    let features = self.featurizer.featurize(&d.obs, &d.legal);
+                    let legal = self.space.legal(&d.legal);
+                    let sr = mcts.search(&env, &d);
+                    let Ok(tr) = env.step(sr.choice) else {
+                        break None;
+                    };
+                    pending.push(PendingStep {
+                        seat: d.seat,
+                        features,
+                        legal,
+                        policy_target: sr.visits,
+                        reward: tr.reward,
+                    });
+                    turn = tr.next;
+                }
+            }
+        }?;
+
+        let gamma = f64::from(self.discount.clamp(0.0, 1.0));
+        let mut running_return = 0.0f64;
+        let mut samples: Vec<Sample> = Vec::with_capacity(pending.len());
+        for step in pending.into_iter().rev() {
+            running_return = step.reward + gamma * running_return;
+            samples.push(Sample {
+                seat: step.seat,
+                features: step.features,
+                legal: step.legal,
+                policy_target: step.policy_target,
+                value_target: running_return as f32,
+            });
+        }
+        samples.reverse();
+
+        Some(Trajectory {
+            seed,
+            model: model.version(),
+            schema: self.featurizer.schema().clone(),
+            samples,
+            outcome,
+        })
+    }
+
+    /// Collects expert demonstration trajectories from an arbitrary [`Policy`]
+    /// (such as a scripted SimC priority list) for warm-start imitation
+    /// pre-training before MCTS self-play.
+    pub fn collect_with_policy(
+        &self,
+        policy: &dyn Policy<E::Obs>,
+        version: ModelVersion,
+        seeds: &[Seed],
+    ) -> Vec<Trajectory> {
+        let mut out = Vec::with_capacity(seeds.len());
+        let space_size = self.space.size();
+        let gamma = f64::from(self.discount.clamp(0.0, 1.0));
 
         for &seed in seeds {
             let mut env = self.env.clone();
@@ -153,15 +232,37 @@ impl<E: Env> Collector for SelfPlayCollector<E> {
                         }
                         let features = self.featurizer.featurize(&d.obs, &d.legal);
                         let legal = self.space.legal(&d.legal);
-                        let sr = mcts.search(&env, &d);
-                        let Ok(tr) = env.step(sr.choice) else {
+                        let choice = policy.act(&d);
+                        let mut policy_target = vec![0.0f32; space_size];
+                        let legal_count = legal.iter().filter(|&&b| b).count();
+                        if let Some(chosen_idx) = self.space.encode(&choice, &d.legal) {
+                            if legal_count > 1 {
+                                let smooth = 0.08 / legal_count as f32;
+                                for (i, &ok) in legal.iter().enumerate() {
+                                    if ok {
+                                        policy_target[i] = smooth;
+                                    }
+                                }
+                                policy_target[chosen_idx] += 0.92;
+                            } else {
+                                policy_target[chosen_idx] = 1.0;
+                            }
+                        } else if legal_count > 0 {
+                            let u = 1.0 / legal_count as f32;
+                            for (i, &ok) in legal.iter().enumerate() {
+                                if ok {
+                                    policy_target[i] = u;
+                                }
+                            }
+                        }
+                        let Ok(tr) = env.step(choice) else {
                             break None;
                         };
                         pending.push(PendingStep {
                             seat: d.seat,
                             features,
                             legal,
-                            policy_target: sr.visits,
+                            policy_target,
                             reward: tr.reward,
                         });
                         turn = tr.next;
@@ -172,7 +273,6 @@ impl<E: Env> Collector for SelfPlayCollector<E> {
                 continue;
             };
 
-            let gamma = f64::from(self.discount.clamp(0.0, 1.0));
             let mut running_return = 0.0f64;
             let mut samples: Vec<Sample> = Vec::with_capacity(pending.len());
             for step in pending.into_iter().rev() {
@@ -189,13 +289,81 @@ impl<E: Env> Collector for SelfPlayCollector<E> {
 
             out.push(Trajectory {
                 seed,
-                model: model.version(),
+                model: version.clone(),
                 schema: self.featurizer.schema().clone(),
                 samples,
                 outcome,
             });
         }
         out
+    }
+}
+
+impl<E: Env + Send> Collector for SelfPlayCollector<E> {
+    fn collect(&mut self, model: Arc<dyn Model>, seeds: &[Seed]) -> Vec<Trajectory> {
+        let threads = self.threads.get().min(seeds.len().max(1));
+        if threads <= 1 || seeds.len() <= 1 {
+            return seeds
+                .iter()
+                .filter_map(|&seed| {
+                    self.rollout_mcts_seed(self.env.clone(), Arc::clone(&model), seed)
+                })
+                .collect();
+        }
+
+        let mut slots: Vec<Option<Trajectory>> = (0..seeds.len()).map(|_| None).collect();
+        let config = self.config;
+        let discount = self.discount;
+        let max_steps = self.max_steps;
+        let threads_setting = self.threads;
+
+        thread::scope(|scope| {
+            let workers: Vec<_> = (0..threads)
+                .map(|t| {
+                    let env = self.env.clone();
+                    let space = Arc::clone(&self.space);
+                    let featurizer = Arc::clone(&self.featurizer);
+                    let model = Arc::clone(&model);
+                    scope.spawn(move || {
+                        let worker_collector = SelfPlayCollector {
+                            env,
+                            config,
+                            space,
+                            featurizer,
+                            discount,
+                            max_steps,
+                            threads: threads_setting,
+                        };
+                        seeds
+                            .iter()
+                            .enumerate()
+                            .skip(t)
+                            .step_by(threads)
+                            .filter_map(|(i, &seed)| {
+                                worker_collector
+                                    .rollout_mcts_seed(
+                                        worker_collector.env.clone(),
+                                        Arc::clone(&model),
+                                        seed,
+                                    )
+                                    .map(|traj| (i, traj))
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+
+            for worker in workers {
+                let done = worker
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+                for (i, traj) in done {
+                    slots[i] = Some(traj);
+                }
+            }
+        });
+
+        slots.into_iter().flatten().collect()
     }
 }
 

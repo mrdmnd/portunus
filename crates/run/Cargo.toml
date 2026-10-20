@@ -19,6 +19,7 @@ portunus-policy = { workspace = true }
 portunus-learn = { workspace = true }
 portunus-export = { workspace = true }
 portunus-eval = { workspace = true }
+portunus-optimize = { workspace = true }
 portunus-ingest = { workspace = true }
 burn = { workspace = true }
 serde = { workspace = true }

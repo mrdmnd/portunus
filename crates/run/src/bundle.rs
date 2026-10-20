@@ -90,6 +90,7 @@ pub enum RunError {
 }
 
 /// A loaded, validated run file.
+#[derive(Clone)]
 pub struct Bundle {
     pub config: RunConfig,
     pub data: Arc<GameData>,

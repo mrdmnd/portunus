@@ -23,6 +23,7 @@ mod bundle;
 mod compare;
 mod env;
 mod observe;
+mod opt;
 pub mod report;
 pub mod scripts;
 mod train;
@@ -35,4 +36,5 @@ pub use observe::{
     AllyObs, AuraObs, BattleResObs, ChannelObs, CooldownObs, DemandObs, EmpowerObs, GroundObs,
     MovementObs, PetObs, ScriptObserver, SeatObs, SeatObsFeaturizer, TargetObs, FOREVER,
 };
+pub use opt::{optimize_stats, BundleStatObjective, OptimizeReport, StatPoint, StatSearchSpace};
 pub use train::{train_rl, IterationSummary, TrainReport, TrainSpec};

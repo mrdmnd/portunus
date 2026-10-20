@@ -8,6 +8,7 @@ use portunus_eval::{Estimate, Metric, Report};
 
 use crate::arm::{AbilityRow, Breakdown};
 use crate::compare::{Comparison, Verdict};
+use crate::opt::OptimizeReport;
 use crate::train::TrainReport;
 
 fn label(m: &Metric) -> String {
@@ -183,9 +184,10 @@ pub fn render_training(r: &TrainReport) -> String {
     );
     let _ = writeln!(
         out,
-        "  mcts: {} simulations, {:.1}s lookahead horizon | eval seeds {}..{} (n={})",
+        "  mcts: {} simulations, {:.1}s lookahead horizon, warm-start episodes={} | eval seeds {}..{} (n={})",
         r.simulations,
         f64::from(r.horizon.millis()) / 1000.0,
+        r.warm_start_episodes,
         r.eval_seeds.first,
         r.eval_seeds.first + u64::from(r.eval_seeds.count),
         r.eval_seeds.count
@@ -236,5 +238,69 @@ pub fn render_training(r: &TrainReport) -> String {
         r.scripted_baseline_name
     );
     out += &render_breakdown_change(&r.scripted_breakdown, &r.final_breakdown);
+    out
+}
+
+/// Renders a pre-run secondary-stat racing optimization report (`optimize_stats`).
+pub fn render_optimization(r: &OptimizeReport) -> String {
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "racing stat optimization: {} (seat {}, {})",
+        r.run_name, r.seat.0, r.spec_name
+    );
+    let _ = writeln!(
+        out,
+        "  start: crit={} ({:.1}%) haste={} ({:.1}%) mast={} ({:.1}%) vers={} ({:.1}%) -> {:.1} dps (n={})",
+        r.start_point.ratings[0],
+        r.start_derived.crit_pct,
+        r.start_point.ratings[1],
+        r.start_derived.haste_pct,
+        r.start_point.ratings[2],
+        r.start_derived.mastery_pct,
+        r.start_point.ratings[3],
+        r.start_derived.versatility_pct,
+        r.start_dps.mean,
+        r.start_dps.n
+    );
+    let gain = r.best_dps.mean - r.start_dps.mean;
+    let pct = if r.start_dps.mean > 0.0 {
+        100.0 * gain / r.start_dps.mean
+    } else {
+        0.0
+    };
+    let _ = writeln!(
+        out,
+        "  best:  crit={} ({:.1}%) haste={} ({:.1}%) mast={} ({:.1}%) vers={} ({:.1}%) -> {:.1} dps ({:+.1} dps, {:+.2}%, n={})",
+        r.best_point.ratings[0],
+        r.best_derived.crit_pct,
+        r.best_point.ratings[1],
+        r.best_derived.haste_pct,
+        r.best_point.ratings[2],
+        r.best_derived.mastery_pct,
+        r.best_point.ratings[3],
+        r.best_derived.versatility_pct,
+        r.best_dps.mean,
+        gain,
+        pct,
+        r.best_dps.n
+    );
+    let _ = writeln!(
+        out,
+        "\n  {:>4} {:<44} {:>8} {:>12} {:>10} {:>6}",
+        "id", "allocation", "feasible", "dps", "±95% ci", "seeds"
+    );
+    for (id, desc, feas, est) in r.leaderboard.iter().take(12) {
+        let _ = writeln!(
+            out,
+            "  {:>4} {:<44} {:>8} {:>12.1} {:>10.1} {:>6}",
+            id.0,
+            desc,
+            if *feas { "yes" } else { "no" },
+            est.mean,
+            1.96 * est.std_err,
+            est.n
+        );
+    }
     out
 }

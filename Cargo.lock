@@ -5217,6 +5217,7 @@ dependencies = [
  "portunus-learn",
  "portunus-loadout",
  "portunus-mechanics",
+ "portunus-optimize",
  "portunus-plan",
  "portunus-policy",
  "portunus-scenario",

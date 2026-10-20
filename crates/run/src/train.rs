@@ -29,6 +29,7 @@ pub struct TrainSpec {
     pub seat: usize,
     pub iterations: usize,
     pub episodes_per_iter: u32,
+    pub warm_start_episodes: u32,
     pub eval_seeds: SeedSet,
     pub simulations: u32,
     pub horizon: SimDuration,
@@ -44,6 +45,7 @@ impl Default for TrainSpec {
             seat: 0,
             iterations: 6,
             episodes_per_iter: 3,
+            warm_start_episodes: 0,
             eval_seeds: SeedSet {
                 first: 1_000,
                 count: 10,
@@ -86,6 +88,7 @@ pub struct TrainReport {
     pub action_space_size: usize,
     pub simulations: u32,
     pub horizon: SimDuration,
+    pub warm_start_episodes: u32,
     pub eval_seeds: SeedSet,
     pub scripted_baseline_name: String,
     pub scripted_dps: Estimate,
@@ -186,11 +189,11 @@ pub fn train_rl(
         runner,
         spec.seat,
         scripted_baseline_name.clone(),
-        scripted_policy,
+        Arc::clone(&scripted_policy),
         spec.eval_seeds,
     )?;
 
-    // 2. Initialize Burn PolicyValueNet trainer and checkpoint store.
+    // 2. Initialize Burn PolicyValueNet trainer, collector, and checkpoint store.
     let model_name = format!("{}_burn_rl", bundle.config.name);
     let net_cfg = PolicyValueNetConfig::new(feature_width, action_space_size)
         .with_hidden_width(spec.hidden_width);
@@ -206,48 +209,6 @@ pub fn train_rl(
         Device::default(),
     );
 
-    let mut mem_store = MemoryStore::new();
-    let mut dir_store = spec
-        .save_dir
-        .as_ref()
-        .map(|dir| DirStore::new(dir).expect("create checkpoint dir"));
-    let ckpt0 = trainer.checkpoint();
-    mem_store.save(&ckpt0).expect("save initial checkpoint");
-    if let Some(ds) = &mut dir_store {
-        let _ = ds.save(&ckpt0);
-    }
-
-    // 3. Evaluate Iteration 0 (untrained BurnModel).
-    let m0 = mem_store.load(&ckpt0.version).expect("load m0");
-    let policy0: Arc<dyn Policy<SeatObs>> = Arc::new(ModelPolicy {
-        space: Arc::clone(&space),
-        featurizer: Arc::clone(&featurizer),
-        model: Arc::clone(&m0),
-        temperature: 0.0,
-    });
-    let (dps0, time0, comp0, initial_breakdown) = eval_policy(
-        bundle,
-        runner,
-        spec.seat,
-        "burn_iter_0".into(),
-        policy0,
-        spec.eval_seeds,
-    )?;
-
-    let mut iterations = Vec::with_capacity(spec.iterations + 1);
-    iterations.push(IterationSummary {
-        iteration: 0,
-        version: ckpt0.version,
-        samples_total: 0,
-        policy_loss: 0.0,
-        value_loss: 0.0,
-        dps: dps0,
-        total_time: time0,
-        completion_rate: comp0,
-        top_abilities: initial_breakdown.rows.iter().take(6).cloned().collect(),
-    });
-
-    // 4. Self-play + Burn AdamW training loop.
     let reward = Arc::new(DenseReward {
         per_k_damage: 1.0,
         per_pull_cleared: 50.0,
@@ -270,13 +231,77 @@ pub fn train_rl(
         Arc::clone(&featurizer),
     );
     collector.discount = 0.85;
+    collector.threads = runner.threads;
 
     let mut replay_buffer: Vec<Sample> = Vec::new();
+    let mut iter0_stats = TrainStats::default();
+    if spec.warm_start_episodes > 0 {
+        let warm_seeds: Vec<Seed> = (0..spec.warm_start_episodes)
+            .map(|k| Seed(50_000 + u64::from(k)))
+            .collect();
+        let warm_trajs = collector.collect_with_policy(
+            &*scripted_policy,
+            ModelVersion {
+                name: model_name.clone(),
+                step: 0,
+            },
+            &warm_seeds,
+        );
+        let warm_samples: Vec<Sample> = warm_trajs.into_iter().flat_map(|t| t.samples).collect();
+        let warm_epochs = (spec.epochs_per_iter * 2).max(1);
+        for _ in 0..warm_epochs {
+            iter0_stats = trainer.train(&warm_samples);
+        }
+        replay_buffer.extend(warm_samples);
+    }
+
+    let mut mem_store = MemoryStore::new();
+    let mut dir_store = spec
+        .save_dir
+        .as_ref()
+        .map(|dir| DirStore::new(dir).expect("create checkpoint dir"));
+    let ckpt0 = trainer.checkpoint();
+    mem_store.save(&ckpt0).expect("save initial checkpoint");
+    if let Some(ds) = &mut dir_store {
+        let _ = ds.save(&ckpt0);
+    }
+
+    // 3. Evaluate Iteration 0 (untrained or warm-started BurnModel).
+    let m0 = mem_store.load(&ckpt0.version).expect("load m0");
+    let policy0: Arc<dyn Policy<SeatObs>> = Arc::new(ModelPolicy {
+        space: Arc::clone(&space),
+        featurizer: Arc::clone(&featurizer),
+        model: Arc::clone(&m0),
+        temperature: 0.0,
+    });
+    let (dps0, time0, comp0, initial_breakdown) = eval_policy(
+        bundle,
+        runner,
+        spec.seat,
+        "burn_iter_0".into(),
+        policy0,
+        spec.eval_seeds,
+    )?;
+
+    let mut iterations = Vec::with_capacity(spec.iterations + 1);
+    iterations.push(IterationSummary {
+        iteration: 0,
+        version: ckpt0.version,
+        samples_total: replay_buffer.len(),
+        policy_loss: iter0_stats.policy_loss,
+        value_loss: iter0_stats.value_loss,
+        dps: dps0,
+        total_time: time0,
+        completion_rate: comp0,
+        top_abilities: initial_breakdown.rows.iter().take(6).cloned().collect(),
+    });
+
+    // 4. Self-play + Burn AdamW training loop.
     let mut final_breakdown = initial_breakdown.clone();
     let mut latest_model = m0;
 
     for iter in 1..=spec.iterations {
-        let search_prior_model: Arc<dyn Model> = if iter == 1 {
+        let search_prior_model: Arc<dyn Model> = if iter == 1 && spec.warm_start_episodes == 0 {
             Arc::new(UniformModel {
                 version: ModelVersion {
                     name: model_name.clone(),
@@ -399,6 +424,7 @@ pub fn train_rl(
         action_space_size,
         simulations: spec.simulations,
         horizon: spec.horizon,
+        warm_start_episodes: spec.warm_start_episodes,
         eval_seeds: spec.eval_seeds,
         scripted_baseline_name,
         scripted_dps,

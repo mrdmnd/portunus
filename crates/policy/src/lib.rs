@@ -501,17 +501,7 @@ impl<O> Mcts<O> {
         }
     }
 
-    fn expand(&self, decision: &Decision<O>, root_noise: bool) -> Node {
-        let features = self.featurizer.featurize(&decision.obs, &decision.legal);
-        let eval = self
-            .model
-            .evaluate(&[&features])
-            .into_iter()
-            .next()
-            .unwrap_or(Evaluation {
-                priors: vec![1.0; self.space.size()],
-                value: 0.0,
-            });
+    fn build_node(&self, decision: &Decision<O>, eval: Evaluation, root_noise: bool) -> Node {
         let legal = self.space.legal(&decision.legal);
         let mut raw_edges: Vec<(usize, Choice, f32)> = Vec::new();
         for (idx, is_legal) in legal.into_iter().enumerate() {
@@ -575,6 +565,20 @@ impl<O> Mcts<O> {
         }
     }
 
+    fn expand(&self, decision: &Decision<O>, root_noise: bool) -> Node {
+        let features = self.featurizer.featurize(&decision.obs, &decision.legal);
+        let eval = self
+            .model
+            .evaluate(&[&features])
+            .into_iter()
+            .next()
+            .unwrap_or(Evaluation {
+                priors: vec![1.0; self.space.size()],
+                value: 0.0,
+            });
+        self.build_node(decision, eval, root_noise)
+    }
+
     fn quick_act(&self, decision: &Decision<O>, priors: &[f32], substream: u64) -> Choice {
         let legal = self.space.legal(&decision.legal);
         let legal_indices: Vec<usize> = legal
@@ -628,108 +632,214 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
         let mut min_q = f64::INFINITY;
         let mut max_q = f64::NEG_INFINITY;
 
-        for sim_idx in 0..self.config.simulations {
-            let mut sim = env.clone();
-            let mut node_id = 0usize;
-            let mut elapsed_total = SimDuration::ZERO;
-            let mut path: Vec<(usize, usize, f64)> = Vec::new();
+        type SimPath = Vec<(usize, usize, f64)>;
 
-            let leaf_value = loop {
-                let node = &nodes[node_id];
-                let total_visits: u32 = node.edges.iter().map(|e| e.visits).sum();
-                let sqrt_total = f64::from(total_visits.max(1)).sqrt();
+        struct PendingLeaf<E: Env> {
+            sim_idx: u32,
+            parent_node: usize,
+            edge_pos: usize,
+            sim: E,
+            next_dec: Decision<E::Obs>,
+            features: Vec<f32>,
+            elapsed_total: SimDuration,
+            reached_horizon: bool,
+            path: SimPath,
+        }
 
-                let norm_q = |e: &Edge| -> f64 {
-                    if e.visits == 0 {
-                        0.5
-                    } else {
-                        let q = e.value_sum / f64::from(e.visits);
-                        if max_q > min_q + 1e-6 {
-                            ((q - min_q) / (max_q - min_q)).clamp(0.0, 1.0)
-                        } else {
+        const WAVE_CAP: usize = 8;
+        let mut sim_idx = 0u32;
+        while sim_idx < self.config.simulations {
+            let mut pending_leaves: Vec<PendingLeaf<E>> = Vec::with_capacity(WAVE_CAP);
+            let mut completed_paths: Vec<(SimPath, f64)> = Vec::with_capacity(WAVE_CAP);
+
+            while sim_idx < self.config.simulations
+                && pending_leaves.len() + completed_paths.len() < WAVE_CAP
+            {
+                let mut sim = env.clone();
+                let mut node_id = 0usize;
+                let mut elapsed_total = SimDuration::ZERO;
+                let mut path: Vec<(usize, usize, f64)> = Vec::new();
+                let mut collided = false;
+
+                enum SimStep<E: Env> {
+                    Done(f64),
+                    Expand {
+                        parent_node: usize,
+                        edge_pos: usize,
+                        sim: E,
+                        next_dec: Decision<E::Obs>,
+                        elapsed_total: SimDuration,
+                        reached_horizon: bool,
+                    },
+                }
+
+                let step_outcome = loop {
+                    let node = &nodes[node_id];
+                    let total_visits: u32 = node.edges.iter().map(|e| e.visits).sum();
+                    let sqrt_total = f64::from(total_visits.max(1)).sqrt();
+
+                    let norm_q = |e: &Edge| -> f64 {
+                        if e.visits == 0 {
                             0.5
-                        }
-                    }
-                };
-
-                let (edge_pos, _) = node
-                    .edges
-                    .iter()
-                    .enumerate()
-                    .max_by(|(_, a), (_, b)| {
-                        let qa = norm_q(a);
-                        let qb = norm_q(b);
-                        let ua = qa
-                            + c_puct * f64::from(a.prior) * sqrt_total
-                                / (1.0 + f64::from(a.visits));
-                        let ub = qb
-                            + c_puct * f64::from(b.prior) * sqrt_total
-                                / (1.0 + f64::from(b.visits));
-                        ua.total_cmp(&ub)
-                    })
-                    .expect("expanded node has at least one edge");
-
-                let choice = nodes[node_id].edges[edge_pos].choice.clone();
-                let Ok(tr) = sim.step(choice) else {
-                    break 0.0;
-                };
-                elapsed_total = elapsed_total + tr.elapsed;
-                path.push((node_id, edge_pos, tr.reward));
-
-                match tr.next {
-                    Turn::Done(_) => break 0.0,
-                    Turn::Decide(next_dec) => {
-                        let reached_horizon = self.config.horizon > SimDuration::ZERO
-                            && elapsed_total >= self.config.horizon;
-                        if let Some(child_id) = nodes[node_id].edges[edge_pos].child {
-                            if reached_horizon {
-                                let tree_r: f64 = path.iter().map(|(_, _, r)| *r).sum();
-                                let h_ms = f64::from(self.config.horizon.millis());
-                                let e_ms = f64::from(elapsed_total.millis()).max(1.0);
-                                break tree_r * (h_ms / e_ms) - tree_r;
-                            }
-                            node_id = child_id;
                         } else {
-                            let child = self.expand(&next_dec, false);
-                            let child_id = nodes.len();
-                            nodes.push(child);
-                            nodes[node_id].edges[edge_pos].child = Some(child_id);
-                            let (roll_r, final_elapsed, done) = if reached_horizon {
-                                (0.0, elapsed_total, false)
+                            let q = e.value_sum / f64::from(e.visits);
+                            if max_q > min_q + 1e-6 {
+                                ((q - min_q) / (max_q - min_q)).clamp(0.0, 1.0)
                             } else {
-                                self.rollout(
-                                    &mut sim,
+                                0.5
+                            }
+                        }
+                    };
+
+                    let (edge_pos, _) = node
+                        .edges
+                        .iter()
+                        .enumerate()
+                        .max_by(|(_, a), (_, b)| {
+                            let qa = norm_q(a);
+                            let qb = norm_q(b);
+                            let ua = qa
+                                + c_puct * f64::from(a.prior) * sqrt_total
+                                    / (1.0 + f64::from(a.visits));
+                            let ub = qb
+                                + c_puct * f64::from(b.prior) * sqrt_total
+                                    / (1.0 + f64::from(b.visits));
+                            ua.total_cmp(&ub)
+                        })
+                        .expect("expanded node has at least one edge");
+
+                    if nodes[node_id].edges[edge_pos].child.is_none()
+                        && pending_leaves
+                            .iter()
+                            .any(|p| p.parent_node == node_id && p.edge_pos == edge_pos)
+                    {
+                        collided = true;
+                        break SimStep::Done(0.0);
+                    }
+
+                    let choice = nodes[node_id].edges[edge_pos].choice.clone();
+                    let Ok(tr) = sim.step(choice) else {
+                        break SimStep::Done(0.0);
+                    };
+                    elapsed_total = elapsed_total + tr.elapsed;
+                    nodes[node_id].edges[edge_pos].visits += 1;
+                    path.push((node_id, edge_pos, tr.reward));
+
+                    match tr.next {
+                        Turn::Done(_) => break SimStep::Done(0.0),
+                        Turn::Decide(next_dec) => {
+                            let reached_horizon = self.config.horizon > SimDuration::ZERO
+                                && elapsed_total >= self.config.horizon;
+                            if let Some(child_id) = nodes[node_id].edges[edge_pos].child {
+                                if reached_horizon {
+                                    let tree_r: f64 = path.iter().map(|(_, _, r)| *r).sum();
+                                    let h_ms = f64::from(self.config.horizon.millis());
+                                    let e_ms = f64::from(elapsed_total.millis()).max(1.0);
+                                    break SimStep::Done(tree_r * (h_ms / e_ms) - tree_r);
+                                }
+                                node_id = child_id;
+                            } else {
+                                break SimStep::Expand {
+                                    parent_node: node_id,
+                                    edge_pos,
+                                    sim,
                                     next_dec,
                                     elapsed_total,
-                                    &nodes[child_id].priors,
-                                    sim_idx,
-                                )
-                            };
-                            if !done
-                                && self.config.horizon > SimDuration::ZERO
-                                && final_elapsed > SimDuration::ZERO
-                            {
-                                let tree_r: f64 = path.iter().map(|(_, _, r)| *r).sum();
-                                let raw_total = tree_r + roll_r;
-                                let h_ms = f64::from(self.config.horizon.millis());
-                                let e_ms = f64::from(final_elapsed.millis()).max(1.0);
-                                break raw_total * (h_ms / e_ms) - tree_r;
+                                    reached_horizon,
+                                };
                             }
-                            break roll_r;
                         }
                     }
-                }
-            };
+                };
 
-            let mut g = leaf_value;
-            for (nid, epos, reward) in path.into_iter().rev() {
-                g += reward;
-                let edge = &mut nodes[nid].edges[epos];
-                edge.visits += 1;
-                edge.value_sum += g;
-                let q = edge.value_sum / f64::from(edge.visits);
-                min_q = min_q.min(q);
-                max_q = max_q.max(q);
+                if collided {
+                    for &(nid, epos, _) in &path {
+                        nodes[nid].edges[epos].visits -= 1;
+                    }
+                    break;
+                }
+
+                match step_outcome {
+                    SimStep::Done(leaf_value) => {
+                        completed_paths.push((path, leaf_value));
+                    }
+                    SimStep::Expand {
+                        parent_node,
+                        edge_pos,
+                        sim,
+                        next_dec,
+                        elapsed_total,
+                        reached_horizon,
+                    } => {
+                        let features = self.featurizer.featurize(&next_dec.obs, &next_dec.legal);
+                        pending_leaves.push(PendingLeaf {
+                            sim_idx,
+                            parent_node,
+                            edge_pos,
+                            sim,
+                            next_dec,
+                            features,
+                            elapsed_total,
+                            reached_horizon,
+                            path,
+                        });
+                    }
+                }
+                sim_idx += 1;
+            }
+
+            if !pending_leaves.is_empty() {
+                let batch_refs: Vec<&[f32]> = pending_leaves
+                    .iter()
+                    .map(|l| l.features.as_slice())
+                    .collect();
+                let mut evals = self.model.evaluate(&batch_refs).into_iter();
+                for mut leaf in pending_leaves {
+                    let eval = evals.next().unwrap_or(Evaluation {
+                        priors: vec![1.0; self.space.size()],
+                        value: 0.0,
+                    });
+                    let child = self.build_node(&leaf.next_dec, eval, false);
+                    let child_id = nodes.len();
+                    nodes.push(child);
+                    nodes[leaf.parent_node].edges[leaf.edge_pos].child = Some(child_id);
+                    let (roll_r, final_elapsed, done) = if leaf.reached_horizon {
+                        (0.0, leaf.elapsed_total, false)
+                    } else {
+                        self.rollout(
+                            &mut leaf.sim,
+                            leaf.next_dec,
+                            leaf.elapsed_total,
+                            &nodes[child_id].priors,
+                            leaf.sim_idx,
+                        )
+                    };
+                    let leaf_value = if !done
+                        && self.config.horizon > SimDuration::ZERO
+                        && final_elapsed > SimDuration::ZERO
+                    {
+                        let tree_r: f64 = leaf.path.iter().map(|(_, _, r)| *r).sum();
+                        let raw_total = tree_r + roll_r;
+                        let h_ms = f64::from(self.config.horizon.millis());
+                        let e_ms = f64::from(final_elapsed.millis()).max(1.0);
+                        raw_total * (h_ms / e_ms) - tree_r
+                    } else {
+                        roll_r
+                    };
+                    completed_paths.push((leaf.path, leaf_value));
+                }
+            }
+
+            for (path, leaf_value) in completed_paths {
+                let mut g = leaf_value;
+                for (nid, epos, reward) in path.into_iter().rev() {
+                    g += reward;
+                    let edge = &mut nodes[nid].edges[epos];
+                    edge.value_sum += g;
+                    let q = edge.value_sum / f64::from(edge.visits);
+                    min_q = min_q.min(q);
+                    max_q = max_q.max(q);
+                }
             }
         }
 

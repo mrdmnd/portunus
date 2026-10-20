@@ -2273,6 +2273,7 @@ fn train_rl_improves_single_target_dps() {
         seat: 0,
         iterations: 2,
         episodes_per_iter: 2,
+        warm_start_episodes: 0,
         eval_seeds: SeedSet {
             first: 500,
             count: 3,
@@ -2300,4 +2301,56 @@ fn train_rl_improves_single_target_dps() {
     let rendered = report::render_training(&rep);
     assert!(rendered.contains("burn rl training: elemental_dummy"));
     assert!(rendered.contains("distilled student agreement:"));
+}
+
+#[test]
+fn warm_start_imitation_and_stat_racing_optimizer_work_end_to_end() {
+    use portunus_optimize::RacingConfig;
+    use portunus_run::{optimize_stats, train_rl, TrainSpec};
+
+    let mut b = bundle();
+    for e in Arc::make_mut(&mut b.enemies).enemies.values_mut() {
+        e.health = 100_000;
+    }
+    let runner = LocalRunner {
+        threads: NonZeroUsize::new(2).unwrap(),
+    };
+    let warm_spec = TrainSpec {
+        seat: 0,
+        iterations: 1,
+        episodes_per_iter: 2,
+        warm_start_episodes: 2,
+        eval_seeds: SeedSet {
+            first: 600,
+            count: 2,
+        },
+        simulations: 12,
+        horizon: SimDuration(5_000),
+        hidden_width: 32,
+        epochs_per_iter: 15,
+        learning_rate: 0.01,
+        save_dir: None,
+    };
+    let warm_rep = train_rl(&b, &runner, warm_spec).expect("warm-start train_rl succeeds");
+    assert_eq!(warm_rep.warm_start_episodes, 2);
+    assert!(warm_rep.iterations[0].samples_total > 0);
+    assert!(warm_rep.iterations[0].dps.mean > 1500.0);
+
+    let opt_rep = optimize_stats(
+        &b,
+        &runner,
+        0,
+        RacingConfig {
+            first_seed: 0,
+            initial_seeds: 2,
+            rung_multiplier: 2,
+            rungs_per_round: 2,
+            max_rounds: 2,
+        },
+        400,
+    )
+    .expect("optimize_stats succeeds");
+    assert!(opt_rep.best_dps.mean >= opt_rep.start_dps.mean - 1e-6);
+    let rendered = report::render_optimization(&opt_rep);
+    assert!(rendered.contains("racing stat optimization:"));
 }
