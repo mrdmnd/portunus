@@ -1,0 +1,22 @@
+// Farseer Elemental Shaman with the standard MID2 SimC profile on
+// 10 target dummies with 40M health each (400M total health).
+(
+    name: "elemental_farseer_10t",
+    game: "../game.ron",
+    enemies: "../enemies.ron",
+    scenario: "../scenarios/ten_target_dummy.ron",
+    simc_profile: Some("../../target/simc/profiles/MID2/MID2_Shaman_Elemental.simc"),
+    seats: [
+        (
+            loadout: "../loadouts/elemental_farseer_build.ron",
+            policy: "elemental",
+            latency: (
+                anticipated: fixed(0),
+                reaction: jitter(base: 250, jitter: 50),
+                cast_lag: jitter(base: 100, jitter: 10),
+            ),
+        ),
+    ],
+    info: realistic,
+    seeds: 30,
+)

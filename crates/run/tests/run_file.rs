@@ -1280,7 +1280,7 @@ fn retribution_runs_execute_their_hero_kits() {
             assert!(
                 bd.rows
                     .iter()
-                    .any(|r| r.name == *name && (r.casts > 0.0 || r.hits > 0.0)),
+                    .any(|r| r.name.contains(name) && (r.casts > 0.0 || r.hits > 0.0)),
                 "{run} never used {name}: {:#?}",
                 bd.rows
             );
@@ -2281,6 +2281,7 @@ fn train_rl_improves_single_target_dps() {
         simulations: 12,
         horizon: SimDuration(5_000),
         hidden_width: 32,
+        num_layers: 2,
         epochs_per_iter: 16,
         learning_rate: 0.01,
         save_dir: None,
@@ -2327,6 +2328,7 @@ fn warm_start_imitation_and_stat_racing_optimizer_work_end_to_end() {
         simulations: 12,
         horizon: SimDuration(5_000),
         hidden_width: 32,
+        num_layers: 2,
         epochs_per_iter: 15,
         learning_rate: 0.01,
         save_dir: None,
@@ -2353,4 +2355,33 @@ fn warm_start_imitation_and_stat_racing_optimizer_work_end_to_end() {
     assert!(opt_rep.best_dps.mean >= opt_rep.start_dps.mean - 1e-6);
     let rendered = report::render_optimization(&opt_rep);
     assert!(rendered.contains("racing stat optimization:"));
+}
+
+#[test]
+fn elemental_five_and_ten_target_farseer_and_stormbringer_use_aoe_apl() {
+    for &(run, hero_ability) in &[
+        ("elemental_farseer_5t", "Ancestor: Chain Lightning"),
+        ("elemental_stormbringer_5t", "Tempest"),
+        ("elemental_farseer_10t", "Ancestor: Chain Lightning"),
+        ("elemental_stormbringer_10t", "Tempest"),
+    ] {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../data/runs/{run}.ron"));
+        let mut b = Bundle::load(&path).expect("load multi-target bundle");
+        for e in Arc::make_mut(&mut b.enemies).enemies.values_mut() {
+            e.health = 2_000_000;
+        }
+        let bd = b
+            .breakdown(SeedSet { first: 0, count: 2 })
+            .expect("multi-target breakdown");
+        for expected in ["Chain Lightning", "Earthquake", hero_ability] {
+            assert!(
+                bd.rows
+                    .iter()
+                    .any(|r| r.name == expected && (r.casts > 0.0 || r.hits > 0.0)),
+                "{run} never used {expected}: {:#?}",
+                bd.rows
+            );
+        }
+    }
 }

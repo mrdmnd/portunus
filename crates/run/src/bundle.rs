@@ -34,6 +34,11 @@ pub struct RunConfig {
     pub scenario: PathBuf,
     #[serde(default)]
     pub plan: Option<PathBuf>,
+    /// Optional SimulationCraft `.simc` profile to ingest (full 14-slot gear,
+    /// weapons, gems, enchants, trinkets, 2pc/4pc set bonuses, consumables,
+    /// and `optimal_raid=1` raid buffs + Bloodlust).
+    #[serde(default)]
+    pub simc_profile: Option<PathBuf>,
     pub seats: Vec<SeatConfig>,
     #[serde(default)]
     pub externals: Externals,
@@ -99,7 +104,7 @@ pub struct Bundle {
     /// Index = seat.
     pub policies: Vec<Arc<dyn Policy<SeatObs>>>,
     pub plan: Arc<Plan>,
-    sampler: Arc<Sampler>,
+    pub(crate) sampler: Arc<Sampler>,
     priors: Arc<TimelinePriors>,
     kits: Arc<dyn SpecRegistry>,
 }
@@ -166,7 +171,7 @@ impl Bundle {
             policies.push(policy);
         }
 
-        Ok(Self {
+        let mut bundle = Self {
             priors: Arc::new(sampler.priors()),
             sampler: Arc::new(sampler),
             data: Arc::new(data),
@@ -176,7 +181,34 @@ impl Bundle {
             plan: Arc::new(plan),
             kits,
             config,
-        })
+        };
+        if let Some(rel_prof) = bundle.config.simc_profile.clone() {
+            let prof_path = base.join(&rel_prof);
+            if let Some(simc_root) = prof_path
+                .parent()
+                .and_then(|p| p.parent())
+                .and_then(|p| p.parent())
+            {
+                let dump_dir = simc_root.join("SpellDataDump");
+                if dump_dir.exists() {
+                    let _ = bundle.sync_with_dump(&dump_dir);
+                }
+            }
+            bundle.ingest_simc_profile(&prof_path)?;
+            let key = portunus_core::EnemyKey("target_dummy".into());
+            if let Some(dummy) = Arc::make_mut(&mut bundle.enemies).enemies.get_mut(&key) {
+                if dummy.defense.armor <= 0.0 {
+                    dummy.defense.armor = bundle.data.curves.armor_constant * 3.0 / 7.0;
+                }
+            }
+            if let Ok(new_sampler) =
+                Sampler::new(bundle.sampler.spec().clone(), Arc::clone(&bundle.enemies))
+            {
+                bundle.priors = Arc::new(new_sampler.priors());
+                bundle.sampler = Arc::new(new_sampler);
+            }
+        }
+        Ok(bundle)
     }
 
     pub fn seeds(&self) -> SeedSet {
@@ -256,16 +288,51 @@ impl Bundle {
         policy: &str,
     ) -> Result<SimArm, RunError> {
         let mut arm = self.arm(record_trace);
+        let resolved = if let Some(p) = scripts::by_name(policy) {
+            Some(p)
+        } else {
+            self.load_burn_policy(seat, policy)
+        };
         let slot = arm
             .policies
             .get_mut(seat)
             .ok_or(RunError::NoSuchSeat(seat))?;
-        *slot = scripts::by_name(policy).ok_or_else(|| RunError::UnknownPolicy {
+        *slot = resolved.ok_or_else(|| RunError::UnknownPolicy {
             seat,
             name: policy.to_owned(),
         })?;
         policy.clone_into(&mut arm.name);
         Ok(arm)
+    }
+
+    fn load_burn_policy(
+        &self,
+        seat: usize,
+        policy: &str,
+    ) -> Option<Arc<dyn portunus_policy::Policy<crate::observe::SeatObs>>> {
+        use portunus_env::{ActionSpace, SpecActionSpace};
+        use portunus_learn::{DirStore, ModelStore};
+        use portunus_policy::{Featurizer, ModelPolicy};
+
+        let dir = Path::new(policy);
+        if !dir.is_dir() {
+            return None;
+        }
+        let store = DirStore::new(dir).ok()?;
+        let model_name = format!("{}_burn_rl", self.config.name);
+        let version = store.latest(&model_name)?;
+        let model = store.load(&version).ok()?;
+        let spec_id = self.templates.get(seat)?.spec;
+        let space: Arc<dyn ActionSpace> = Arc::new(SpecActionSpace::for_spec(&self.data, spec_id)?);
+        let feat: Arc<dyn Featurizer<crate::observe::SeatObs>> = Arc::new(
+            crate::observe::SeatObsFeaturizer::for_spec(&self.data, spec_id)?,
+        );
+        Some(Arc::new(ModelPolicy {
+            space,
+            featurizer: feat,
+            model,
+            temperature: 0.0,
+        }))
     }
 
     /// Per-seat damage and DPS, plus party-wide time, completion, deaths,

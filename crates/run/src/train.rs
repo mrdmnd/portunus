@@ -3,6 +3,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 
 use burn::tensor::Device;
 use portunus_core::{Seat, Seed, SimDuration, SpecId};
@@ -15,8 +16,8 @@ use portunus_learn::{
     BurnTrainer, Collector, DirStore, MemoryStore, ModelStore, Sample, SelfPlayCollector, Trainer,
 };
 use portunus_policy::{
-    Featurizer, MctsConfig, Model, ModelPolicy, ModelVersion, Policy, PolicyValueNetConfig,
-    UniformModel,
+    take_mcts_profile_micros, Featurizer, MctsConfig, Model, ModelPolicy, ModelVersion, Policy,
+    PolicyValueNetConfig, UniformModel,
 };
 
 use crate::arm::{AbilityRow, Breakdown, SimArm};
@@ -34,6 +35,7 @@ pub struct TrainSpec {
     pub simulations: u32,
     pub horizon: SimDuration,
     pub hidden_width: usize,
+    pub num_layers: usize,
     pub epochs_per_iter: usize,
     pub learning_rate: f64,
     pub save_dir: Option<PathBuf>,
@@ -53,6 +55,7 @@ impl Default for TrainSpec {
             simulations: 96,
             horizon: SimDuration(10_000),
             hidden_width: 64,
+            num_layers: 2,
             epochs_per_iter: 30,
             learning_rate: 0.01,
             save_dir: None,
@@ -86,6 +89,8 @@ pub struct TrainReport {
     pub hero_tree_name: Option<String>,
     pub feature_width: usize,
     pub action_space_size: usize,
+    pub hidden_width: usize,
+    pub num_layers: usize,
     pub simulations: u32,
     pub horizon: SimDuration,
     pub warm_start_episodes: u32,
@@ -99,6 +104,10 @@ pub struct TrainReport {
     pub iterations: Vec<IterationSummary>,
     pub distilled_agreement: f64,
     pub addon_files: Vec<(String, usize)>,
+    pub mcts_env_secs: f64,
+    pub mcts_nn_secs: f64,
+    pub train_backprop_secs: f64,
+    pub eval_rollout_secs: f64,
 }
 
 fn find_metric(metrics: &[(Metric, Estimate)], wanted: Metric) -> Estimate {
@@ -114,18 +123,18 @@ fn find_metric(metrics: &[(Metric, Estimate)], wanted: Metric) -> Estimate {
         })
 }
 
-fn eval_policy(
+fn eval_policy_metrics(
     bundle: &Bundle,
     runner: &LocalRunner,
     seat: usize,
     name: String,
     policy: Arc<dyn Policy<SeatObs>>,
     seeds: SeedSet,
-) -> Result<(Estimate, Estimate, f64, Breakdown), RunError> {
+) -> Result<(Estimate, Estimate, f64), RunError> {
     let seat_id = Seat(u8::try_from(seat).unwrap_or(0));
     let mut arm: SimArm = bundle.arm(false);
     arm.name = name;
-    arm.policies[seat] = Arc::clone(&policy);
+    arm.policies[seat] = policy;
     let exp = Experiment {
         arms: vec![Arc::new(arm)],
         baseline: 0,
@@ -137,14 +146,35 @@ fn eval_policy(
     let dps = find_metric(&arm_rep.metrics, Metric::SeatDps(seat_id));
     let time = find_metric(&arm_rep.metrics, Metric::TotalTime);
     let comp = find_metric(&arm_rep.metrics, Metric::CompletionRate).mean;
+    Ok((dps, time, comp))
+}
 
+fn eval_policy_breakdown(
+    bundle: &Bundle,
+    seat: usize,
+    policy: Arc<dyn Policy<SeatObs>>,
+    seeds: SeedSet,
+) -> Breakdown {
     let mut trace_arm = bundle.arm(true);
     trace_arm.policies[seat] = policy;
-    let bd = crate::arm::breakdown(&trace_arm, &bundle.data, seeds).unwrap_or(Breakdown {
+    crate::arm::breakdown(&trace_arm, &bundle.data, seeds).unwrap_or(Breakdown {
         runs: 0,
         combat_secs: 0.0,
         rows: Vec::new(),
-    });
+    })
+}
+
+fn eval_policy(
+    bundle: &Bundle,
+    runner: &LocalRunner,
+    seat: usize,
+    name: String,
+    policy: Arc<dyn Policy<SeatObs>>,
+    seeds: SeedSet,
+) -> Result<(Estimate, Estimate, f64, Breakdown), RunError> {
+    let (dps, time, comp) =
+        eval_policy_metrics(bundle, runner, seat, name, Arc::clone(&policy), seeds)?;
+    let bd = eval_policy_breakdown(bundle, seat, policy, seeds);
     Ok((dps, time, comp, bd))
 }
 
@@ -181,9 +211,14 @@ pub fn train_rl(
     let schema = feat_concrete.schema.clone();
     let featurizer: Arc<dyn Featurizer<SeatObs>> = Arc::new(feat_concrete);
 
+    let _ = take_mcts_profile_micros();
+    let mut train_backprop_secs = 0.0f64;
+    let mut eval_rollout_secs = 0.0f64;
+
     // 1. Evaluate scripted SimC baseline on eval_seeds.
     let scripted_baseline_name = bundle.config.seats[spec.seat].policy.clone();
     let scripted_policy = Arc::clone(&bundle.policies[spec.seat]);
+    let t_eval0 = Instant::now();
     let (scripted_dps, scripted_time, _, scripted_breakdown) = eval_policy(
         bundle,
         runner,
@@ -192,11 +227,13 @@ pub fn train_rl(
         Arc::clone(&scripted_policy),
         spec.eval_seeds,
     )?;
+    eval_rollout_secs += t_eval0.elapsed().as_secs_f64();
 
     // 2. Initialize Burn PolicyValueNet trainer, collector, and checkpoint store.
     let model_name = format!("{}_burn_rl", bundle.config.name);
     let net_cfg = PolicyValueNetConfig::new(feature_width, action_space_size)
-        .with_hidden_width(spec.hidden_width);
+        .with_hidden_width(spec.hidden_width)
+        .with_num_layers(spec.num_layers.max(1));
     let mut trainer = BurnTrainer::new(
         ModelVersion {
             name: model_name.clone(),
@@ -209,10 +246,11 @@ pub fn train_rl(
         Device::default(),
     );
 
+    let reward_scale = (10_000.0 / scripted_dps.mean.max(1_000.0)).clamp(0.005, 2.0);
     let reward = Arc::new(DenseReward {
-        per_k_damage: 1.0,
+        per_k_damage: reward_scale,
         per_pull_cleared: 50.0,
-        per_second: (scripted_dps.mean / 2000.0).clamp(5.0, 60.0),
+        per_second: 2.5,
         per_death: 100.0,
     });
     let rl_env = bundle.env_with(crate::observe::ScriptObserver, reward, false);
@@ -231,9 +269,12 @@ pub fn train_rl(
         Arc::clone(&featurizer),
     );
     collector.discount = 0.85;
+    collector.max_steps = 96;
     collector.threads = runner.threads;
 
-    let mut replay_buffer: Vec<Sample> = Vec::new();
+    let mut warm_buffer: Vec<Sample> = Vec::new();
+    let mut mcts_buffer: Vec<Sample> = Vec::new();
+    let mut samples_total = 0usize;
     let mut iter0_stats = TrainStats::default();
     if spec.warm_start_episodes > 0 {
         let warm_seeds: Vec<Seed> = (0..spec.warm_start_episodes)
@@ -249,10 +290,13 @@ pub fn train_rl(
         );
         let warm_samples: Vec<Sample> = warm_trajs.into_iter().flat_map(|t| t.samples).collect();
         let warm_epochs = (spec.epochs_per_iter * 2).max(1);
+        let t_tr = Instant::now();
         for _ in 0..warm_epochs {
             iter0_stats = trainer.train(&warm_samples);
         }
-        replay_buffer.extend(warm_samples);
+        train_backprop_secs += t_tr.elapsed().as_secs_f64();
+        samples_total += warm_samples.len();
+        warm_buffer = warm_samples;
     }
 
     let mut mem_store = MemoryStore::new();
@@ -274,6 +318,7 @@ pub fn train_rl(
         model: Arc::clone(&m0),
         temperature: 0.0,
     });
+    let t_ev = Instant::now();
     let (dps0, time0, comp0, initial_breakdown) = eval_policy(
         bundle,
         runner,
@@ -282,12 +327,17 @@ pub fn train_rl(
         policy0,
         spec.eval_seeds,
     )?;
+    eval_rollout_secs += t_ev.elapsed().as_secs_f64();
+    eprintln!(
+        "[train] baseline={:.1} dps | iter 0={:.1} dps ({} samples)",
+        scripted_dps.mean, dps0.mean, samples_total
+    );
 
     let mut iterations = Vec::with_capacity(spec.iterations + 1);
     iterations.push(IterationSummary {
         iteration: 0,
         version: ckpt0.version,
-        samples_total: replay_buffer.len(),
+        samples_total,
         policy_loss: iter0_stats.policy_loss,
         value_loss: iter0_stats.value_loss,
         dps: dps0,
@@ -296,9 +346,11 @@ pub fn train_rl(
         top_abilities: initial_breakdown.rows.iter().take(6).cloned().collect(),
     });
 
-    // 4. Self-play + Burn AdamW training loop.
+    // 4. Self-play + Burn AdamW hill-climb training loop.
     let mut final_breakdown = initial_breakdown.clone();
-    let mut latest_model = m0;
+    let mut best_dps = dps0.mean;
+    let mut best_net = trainer.net.clone();
+    let mut best_model = m0;
 
     for iter in 1..=spec.iterations {
         let search_prior_model: Arc<dyn Model> = if iter == 1 && spec.warm_start_episodes == 0 {
@@ -312,7 +364,7 @@ pub fn train_rl(
                 output_width: action_space_size,
             })
         } else {
-            Arc::clone(&latest_model)
+            Arc::clone(&best_model)
         };
 
         let base_seed =
@@ -323,46 +375,117 @@ pub fn train_rl(
 
         let trajs = collector.collect(search_prior_model, &train_seeds);
         let new_samples: Vec<Sample> = trajs.into_iter().flat_map(|t| t.samples).collect();
-        replay_buffer.extend(new_samples.clone());
+        samples_total += new_samples.len();
+        mcts_buffer.extend(new_samples.clone());
+        if mcts_buffer.len() > 2_400 {
+            let drain = mcts_buffer.len() - 2_400;
+            mcts_buffer.drain(0..drain);
+        }
 
-        // Train on both the replay buffer and extra passes on the newest samples
-        // so the policy rapidly locks onto the newest MCTS improvements.
-        let mut stats = TrainStats::default();
+        let warm_keep = (warm_buffer.len() / (2 * iter + 1)).min(warm_buffer.len());
+        let mut train_batch: Vec<Sample> =
+            Vec::with_capacity(warm_keep + mcts_buffer.len() + 2 * new_samples.len());
+        train_batch.extend_from_slice(&warm_buffer[..warm_keep]);
+        train_batch.extend_from_slice(&mcts_buffer);
+        train_batch.extend_from_slice(&new_samples);
+        train_batch.extend_from_slice(&new_samples);
+
+        trainer.net = best_net.clone();
         let half_epochs = (spec.epochs_per_iter / 2).max(1);
+        let mut stats_a = TrainStats::default();
+        let t_tr_a = Instant::now();
         for _ in 0..half_epochs {
-            stats = trainer.train(&replay_buffer);
+            stats_a = trainer.train(&train_batch);
         }
-        for _ in 0..(spec.epochs_per_iter - half_epochs).max(1) {
-            stats = trainer.train(&new_samples);
-        }
-
-        let ckpt = trainer.checkpoint();
-        mem_store.save(&ckpt).expect("save checkpoint");
-        if let Some(ds) = &mut dir_store {
-            let _ = ds.save(&ckpt);
-        }
-        latest_model = mem_store.load(&ckpt.version).expect("load latest");
-
-        let deploy_policy: Arc<dyn Policy<SeatObs>> = Arc::new(ModelPolicy {
+        train_backprop_secs += t_tr_a.elapsed().as_secs_f64();
+        let net_a = trainer.net.clone();
+        let ckpt_a = trainer.checkpoint();
+        mem_store.save(&ckpt_a).expect("save checkpoint a");
+        let model_a = mem_store.load(&ckpt_a.version).expect("load model a");
+        let policy_a: Arc<dyn Policy<SeatObs>> = Arc::new(ModelPolicy {
             space: Arc::clone(&space),
             featurizer: Arc::clone(&featurizer),
-            model: Arc::clone(&latest_model),
+            model: Arc::clone(&model_a),
             temperature: 0.0,
         });
-        let (dps, time, comp, bd) = eval_policy(
+        let t_ev_a = Instant::now();
+        let (dps_a, time_a, comp_a) = eval_policy_metrics(
             bundle,
             runner,
             spec.seat,
-            format!("burn_iter_{iter}"),
-            deploy_policy,
+            format!("burn_iter_{iter}a"),
+            Arc::clone(&policy_a),
             spec.eval_seeds,
         )?;
-        final_breakdown = bd.clone();
+        eval_rollout_secs += t_ev_a.elapsed().as_secs_f64();
+
+        let rem_epochs = (spec.epochs_per_iter - half_epochs).max(1);
+        let mut stats_b = stats_a;
+        let t_tr_b = Instant::now();
+        for _ in 0..rem_epochs {
+            stats_b = trainer.train(&new_samples);
+        }
+        train_backprop_secs += t_tr_b.elapsed().as_secs_f64();
+        let net_b = trainer.net.clone();
+        let ckpt_b = trainer.checkpoint();
+        mem_store.save(&ckpt_b).expect("save checkpoint b");
+        let model_b = mem_store.load(&ckpt_b.version).expect("load model b");
+        let policy_b: Arc<dyn Policy<SeatObs>> = Arc::new(ModelPolicy {
+            space: Arc::clone(&space),
+            featurizer: Arc::clone(&featurizer),
+            model: Arc::clone(&model_b),
+            temperature: 0.0,
+        });
+        let t_ev_b = Instant::now();
+        let (dps_b, time_b, comp_b) = eval_policy_metrics(
+            bundle,
+            runner,
+            spec.seat,
+            format!("burn_iter_{iter}b"),
+            Arc::clone(&policy_b),
+            spec.eval_seeds,
+        )?;
+        eval_rollout_secs += t_ev_b.elapsed().as_secs_f64();
+
+        let (stats, ckpt, latest_model, cand_net, dps, time, comp, win_policy) =
+            if dps_b.mean >= dps_a.mean {
+                (
+                    stats_b, ckpt_b, model_b, net_b, dps_b, time_b, comp_b, policy_b,
+                )
+            } else {
+                (
+                    stats_a, ckpt_a, model_a, net_a, dps_a, time_a, comp_a, policy_a,
+                )
+            };
+        let t_bd = Instant::now();
+        let bd = eval_policy_breakdown(bundle, spec.seat, win_policy, spec.eval_seeds);
+        eval_rollout_secs += t_bd.elapsed().as_secs_f64();
+
+        eprintln!(
+            "[train] iter {iter}/{}: {:.1} dps ({:.1}% of baseline, {:.1}s, {} samples)",
+            spec.iterations,
+            dps.mean,
+            100.0 * dps.mean / scripted_dps.mean.max(1.0),
+            time.mean,
+            samples_total
+        );
+        if dps.mean >= best_dps {
+            best_dps = dps.mean;
+            best_net = cand_net;
+            best_model = Arc::clone(&latest_model);
+            final_breakdown = bd.clone();
+            if let Some(ds) = &mut dir_store {
+                let _ = ds.save(&ckpt);
+            }
+        } else {
+            trainer.net = best_net.clone();
+            trainer.learning_rate = (trainer.learning_rate * 0.85).max(0.0015);
+        }
 
         iterations.push(IterationSummary {
             iteration: iter,
             version: ckpt.version,
-            samples_total: replay_buffer.len(),
+            samples_total,
             policy_loss: stats.policy_loss,
             value_loss: stats.value_loss,
             dps,
@@ -372,11 +495,11 @@ pub fn train_rl(
         });
     }
 
-    // 5. Distill final trained BurnModel into a compact BurnStudent and emit Lua addon.
+    // 5. Distill best trained BurnModel into a compact BurnStudent and emit Lua addon.
     let teacher = ModelPolicy {
         space: Arc::clone(&space),
         featurizer: Arc::clone(&featurizer),
-        model: Arc::clone(&latest_model),
+        model: Arc::clone(&best_model),
         temperature: 0.0,
     };
     let mut decisions: Vec<Decision<SeatObs>> = Vec::new();
@@ -414,6 +537,10 @@ pub fn train_rl(
         .map(|(path, content)| (path, content.len()))
         .collect();
 
+    let (mcts_env_us, mcts_nn_us) = take_mcts_profile_micros();
+    let mcts_env_secs = mcts_env_us as f64 / 1_000_000.0;
+    let mcts_nn_secs = mcts_nn_us as f64 / 1_000_000.0;
+
     Ok(TrainReport {
         run_name: bundle.config.name.clone(),
         seat: seat_id,
@@ -422,6 +549,8 @@ pub fn train_rl(
         hero_tree_name,
         feature_width,
         action_space_size,
+        hidden_width: spec.hidden_width,
+        num_layers: spec.num_layers.max(1),
         simulations: spec.simulations,
         horizon: spec.horizon,
         warm_start_episodes: spec.warm_start_episodes,
@@ -435,6 +564,10 @@ pub fn train_rl(
         iterations,
         distilled_agreement,
         addon_files,
+        mcts_env_secs,
+        mcts_nn_secs,
+        train_backprop_secs,
+        eval_rollout_secs,
     })
 }
 

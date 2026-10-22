@@ -98,56 +98,101 @@ struct Tally {
 /// overkill (as in `SeatOutcome::damage_done`). The arm's env must record
 /// traces.
 pub fn breakdown(arm: &SimArm, data: &GameData, seeds: SeedSet) -> Result<Breakdown, ArmError> {
+    let all_seeds: Vec<Seed> = seeds.iter().collect();
+    let n_threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+        .min(all_seeds.len().max(1));
+    let chunk_size = all_seeds.len().div_ceil(n_threads);
+
+    type PartialTally = Result<(f64, BTreeMap<(Option<PetId>, Option<SpellId>), Tally>), ArmError>;
+    let partials: Vec<PartialTally> = std::thread::scope(|s| {
+        let handles: Vec<_> = all_seeds
+            .chunks(chunk_size.max(1))
+            .map(|chunk| {
+                s.spawn(move || {
+                    let mut local_tallies: BTreeMap<(Option<PetId>, Option<SpellId>), Tally> =
+                        BTreeMap::new();
+                    let mut local_combat_ms = 0.0;
+                    let mut env = arm.env.clone();
+                    for &seed in chunk {
+                        let outcome = arm.play(&mut env, seed)?;
+                        local_combat_ms += outcome
+                            .pulls
+                            .iter()
+                            .map(|p| {
+                                f64::from(
+                                    p.cleared.unwrap_or(outcome.end_time).millis()
+                                        - p.started.millis(),
+                                )
+                            })
+                            .sum::<f64>();
+                        let trace = env.drain_trace();
+                        let Some(state) = env.state() else { continue };
+                        let players: Vec<_> = state.seats().to_vec();
+                        let credit = |actor: ActorId| match state.actor(actor).map(|a| a.kind) {
+                            Some(ActorKind::Pet { pet, .. }) => Some(Some(pet)),
+                            _ => players.contains(&actor).then_some(None),
+                        };
+                        let mut health: BTreeMap<ActorId, u64> = BTreeMap::new();
+                        for r in trace {
+                            match r.event {
+                                TraceEvent::Damage(d) => {
+                                    let left = health.entry(d.target).or_insert_with(|| {
+                                        state.actor(d.target).map_or(0, |a| a.max_health)
+                                    });
+                                    let landed = d.amount.min(*left);
+                                    *left -= landed;
+                                    if let Some(pet) = credit(d.source) {
+                                        let t = local_tallies.entry((pet, d.spell)).or_default();
+                                        t.hits += 1;
+                                        t.crits += u64::from(d.crit);
+                                        t.damage += landed;
+                                    }
+                                }
+                                TraceEvent::Heal(h) => {
+                                    if let Some(left) = health.get_mut(&h.target) {
+                                        let max = state.actor(h.target).map_or(0, |a| a.max_health);
+                                        *left = left.saturating_add(h.amount).min(max);
+                                    }
+                                }
+                                TraceEvent::CastEnd {
+                                    actor,
+                                    spell,
+                                    reason: CastEndReason::Completed,
+                                } => {
+                                    if let Some(pet) = credit(actor) {
+                                        local_tallies
+                                            .entry((pet, Some(spell)))
+                                            .or_default()
+                                            .casts += 1;
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    Ok((local_combat_ms, local_tallies))
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| h.join().expect("breakdown worker thread panicked"))
+            .collect()
+    });
+
     let mut tallies: BTreeMap<(Option<PetId>, Option<SpellId>), Tally> = BTreeMap::new();
     let mut combat_ms = 0.0;
-    for seed in seeds.iter() {
-        let mut env = arm.env.clone();
-        let outcome = arm.play(&mut env, seed)?;
-        combat_ms += outcome
-            .pulls
-            .iter()
-            .map(|p| f64::from(p.cleared.unwrap_or(outcome.end_time).millis() - p.started.millis()))
-            .sum::<f64>();
-        let trace = env.drain_trace();
-        let Some(state) = env.state() else { continue };
-        let players: Vec<_> = state.seats().to_vec();
-        let credit = |actor: ActorId| match state.actor(actor).map(|a| a.kind) {
-            Some(ActorKind::Pet { pet, .. }) => Some(Some(pet)),
-            _ => players.contains(&actor).then_some(None),
-        };
-        let mut health: BTreeMap<ActorId, u64> = BTreeMap::new();
-        for r in trace {
-            match r.event {
-                TraceEvent::Damage(d) => {
-                    let left = health
-                        .entry(d.target)
-                        .or_insert_with(|| state.actor(d.target).map_or(0, |a| a.max_health));
-                    let landed = d.amount.min(*left);
-                    *left -= landed;
-                    if let Some(pet) = credit(d.source) {
-                        let t = tallies.entry((pet, d.spell)).or_default();
-                        t.hits += 1;
-                        t.crits += u64::from(d.crit);
-                        t.damage += landed;
-                    }
-                }
-                TraceEvent::Heal(h) => {
-                    if let Some(left) = health.get_mut(&h.target) {
-                        let max = state.actor(h.target).map_or(0, |a| a.max_health);
-                        *left = left.saturating_add(h.amount).min(max);
-                    }
-                }
-                TraceEvent::CastEnd {
-                    actor,
-                    spell,
-                    reason: CastEndReason::Completed,
-                } => {
-                    if let Some(pet) = credit(actor) {
-                        tallies.entry((pet, Some(spell))).or_default().casts += 1;
-                    }
-                }
-                _ => {}
-            }
+    for partial in partials {
+        let (ms, local) = partial?;
+        combat_ms += ms;
+        for (k, v) in local {
+            let entry = tallies.entry(k).or_default();
+            entry.casts += v.casts;
+            entry.hits += v.hits;
+            entry.crits += v.crits;
+            entry.damage += v.damage;
         }
     }
     let runs = seeds.count.max(1);

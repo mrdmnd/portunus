@@ -1,0 +1,16 @@
+// Ten target dummies at 40,000,000 health each (400M total pull health).
+(
+    name: "ten_target_dummy",
+    forces_required: None,
+    pulls: [
+        (
+            name: "ten_dummies",
+            travel_in: fixed(10000),
+            prepull: 3000,
+            timeout: 1800000,
+            // 40.0 * 1,000,000 = 40,000,000 health per target dummy (400M total).
+            health: fixed(40.0),
+            waves: [(mobs: [("target_dummy", 10)], engage: now)],
+        ),
+    ],
+)

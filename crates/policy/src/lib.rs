@@ -17,7 +17,9 @@
 //! to a plan — must exist in the world state as auras, cooldowns, or plan
 //! windows.
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 
 use burn::nn::{Linear, LinearConfig, Relu};
 use burn::prelude::*;
@@ -29,6 +31,18 @@ use portunus_engine::{ActionMask, Choice, Wait};
 use portunus_env::{ActionSpace, Decision, DecisionKey, Env, Turn};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+static MCTS_ENV_MICROS: AtomicU64 = AtomicU64::new(0);
+static MCTS_NN_MICROS: AtomicU64 = AtomicU64::new(0);
+
+/// Returns and resets accumulated `(env_sim_micros, model_eval_micros)` recorded
+/// inside [`Mcts::search`].
+pub fn take_mcts_profile_micros() -> (u64, u64) {
+    (
+        MCTS_ENV_MICROS.swap(0, Ordering::Relaxed),
+        MCTS_NN_MICROS.swap(0, Ordering::Relaxed),
+    )
+}
 
 /// Any `fn(&Decision<O>) -> Choice`, or a closure of that shape, is a
 /// policy.
@@ -198,15 +212,20 @@ pub struct PolicyValueNetConfig {
     pub input_width: usize,
     #[config(default = 64)]
     pub hidden_width: usize,
+    #[config(default = 2)]
+    pub num_layers: usize,
     pub output_width: usize,
 }
 
-/// Two-headed Burn [`Module`] with dedicated policy and value MLP towers.
+/// Two-headed Burn [`Module`] with dedicated residual policy and value MLP
+/// towers of configurable depth (`num_layers`).
 #[derive(Module, Debug)]
 pub struct PolicyValueNet {
     pub policy_hidden: Linear,
+    pub policy_blocks: Vec<Linear>,
     pub policy_head: Linear,
     pub value_hidden: Linear,
+    pub value_blocks: Vec<Linear>,
     pub value_head: Linear,
     pub activation: Relu,
 }
@@ -214,10 +233,17 @@ pub struct PolicyValueNet {
 impl PolicyValueNetConfig {
     /// Initializes a [`PolicyValueNet`] on `device`.
     pub fn init(&self, device: &Device) -> PolicyValueNet {
+        let extra = self.num_layers.max(1).saturating_sub(1);
         PolicyValueNet {
             policy_hidden: LinearConfig::new(self.input_width, self.hidden_width).init(device),
+            policy_blocks: (0..extra)
+                .map(|_| LinearConfig::new(self.hidden_width, self.hidden_width).init(device))
+                .collect(),
             policy_head: LinearConfig::new(self.hidden_width, self.output_width).init(device),
             value_hidden: LinearConfig::new(self.input_width, self.hidden_width).init(device),
+            value_blocks: (0..extra)
+                .map(|_| LinearConfig::new(self.hidden_width, self.hidden_width).init(device))
+                .collect(),
             value_head: LinearConfig::new(self.hidden_width, 1).init(device),
             activation: Relu::new(),
         }
@@ -228,11 +254,18 @@ impl PolicyValueNet {
     /// Forward pass returning `(policy_logits, value)` of shapes
     /// `[batch, output_width]` and `[batch, 1]`.
     pub fn forward(&self, input: Tensor<2>) -> (Tensor<2>, Tensor<2>) {
-        let ph = self
+        let mut ph = self
             .activation
             .forward(self.policy_hidden.forward(input.clone()));
+        for block in &self.policy_blocks {
+            ph = self.activation.forward(block.forward(ph.clone())) + ph;
+        }
         let logits = self.policy_head.forward(ph);
-        let vh = self.activation.forward(self.value_hidden.forward(input));
+
+        let mut vh = self.activation.forward(self.value_hidden.forward(input));
+        for block in &self.value_blocks {
+            vh = self.activation.forward(block.forward(vh.clone())) + vh;
+        }
         let value = self.value_head.forward(vh);
         (logits, value)
     }
@@ -534,6 +567,15 @@ impl<O> Mcts<O> {
             && self.config.dirichlet_frac > 0.0
             && self.config.dirichlet_alpha > 0.0
         {
+            for (_, _, p) in &mut raw_edges {
+                *p = p.max(1e-6).powf(0.75);
+            }
+            let t_sum: f32 = raw_edges.iter().map(|(_, _, p)| *p).sum();
+            if t_sum > 0.0 && t_sum.is_finite() {
+                for (_, _, p) in &mut raw_edges {
+                    *p /= t_sum;
+                }
+            }
             let frac = self.config.dirichlet_frac.clamp(0.0, 1.0);
             let noise = sample_dirichlet(
                 self.config.dirichlet_alpha,
@@ -565,8 +607,9 @@ impl<O> Mcts<O> {
         }
     }
 
-    fn expand(&self, decision: &Decision<O>, root_noise: bool) -> Node {
+    fn expand(&self, decision: &Decision<O>, root_noise: bool, nn_us: &mut u64) -> Node {
         let features = self.featurizer.featurize(&decision.obs, &decision.legal);
+        let t_nn = Instant::now();
         let eval = self
             .model
             .evaluate(&[&features])
@@ -576,6 +619,7 @@ impl<O> Mcts<O> {
                 priors: vec![1.0; self.space.size()],
                 value: 0.0,
             });
+        *nn_us += u64::try_from(t_nn.elapsed().as_micros()).unwrap_or(0);
         self.build_node(decision, eval, root_noise)
     }
 
@@ -590,7 +634,7 @@ impl<O> Mcts<O> {
             return Choice::Wait(Wait::NextEvent);
         }
         let chosen_idx =
-            select_by_temperature(&legal_indices, priors, 0.5, decision.key, substream);
+            select_by_temperature(&legal_indices, priors, 0.15, decision.key, substream);
         self.space
             .decode(chosen_idx, &decision.legal)
             .unwrap_or(Choice::Wait(Wait::NextEvent))
@@ -603,34 +647,57 @@ impl<O> Mcts<O> {
         mut elapsed: SimDuration,
         priors: &[f32],
         sim_idx: u32,
-    ) -> (f64, SimDuration, bool) {
+        nn_us: &mut u64,
+    ) -> (f64, SimDuration, bool, Option<f32>) {
         let mut total_reward = 0.0;
-        for step in 0..32 {
-            if self.config.horizon == SimDuration::ZERO || elapsed >= self.config.horizon {
-                return (total_reward, elapsed, false);
+        let mut cur_priors: Option<Vec<f32>> = None;
+        let mut last_val: Option<f32> = None;
+        let rollout_cap = self.config.horizon.min(SimDuration(6_000));
+        for step in 0..8 {
+            if self.config.horizon == SimDuration::ZERO || elapsed >= rollout_cap {
+                return (total_reward, elapsed, false, last_val);
             }
+            if step == 2 || step == 5 {
+                let feat = self.featurizer.featurize(&dec.obs, &dec.legal);
+                let t_nn = Instant::now();
+                let ev = self.model.evaluate(&[&feat]).into_iter().next();
+                *nn_us += u64::try_from(t_nn.elapsed().as_micros()).unwrap_or(0);
+                if let Some(ev) = ev {
+                    last_val = Some(ev.value);
+                    cur_priors = Some(ev.priors);
+                }
+            }
+            let active_priors = cur_priors.as_deref().unwrap_or(priors);
             let substream = 100 + u64::from(sim_idx) * 31 + step;
-            let choice = self.quick_act(&dec, priors, substream);
+            let choice = self.quick_act(&dec, active_priors, substream);
             let Ok(tr) = sim.step(choice) else {
                 break;
             };
             total_reward += tr.reward;
             elapsed = elapsed + tr.elapsed;
             match tr.next {
-                Turn::Done(_) => return (total_reward, elapsed, true),
+                Turn::Done(_) => return (total_reward, elapsed, true, None),
                 Turn::Decide(next_dec) => dec = next_dec,
             }
         }
-        (total_reward, elapsed, false)
+        (total_reward, elapsed, false, last_val)
     }
 }
 
 impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
     fn search(&mut self, env: &E, decision: &Decision<E::Obs>) -> SearchResult {
-        let mut nodes = vec![self.expand(decision, true)];
+        let t_total = Instant::now();
+        let mut nn_us = 0u64;
+        let mut nodes = vec![self.expand(decision, true, &mut nn_us)];
         let c_puct = f64::from(self.config.c_puct);
         let mut min_q = f64::INFINITY;
         let mut max_q = f64::NEG_INFINITY;
+
+        let root_gumbels = sample_gumbel(
+            nodes[0].edges.len(),
+            decision.key,
+            f64::from(self.config.dirichlet_frac) * 0.35,
+        );
 
         type SimPath = Vec<(usize, usize, f64)>;
 
@@ -678,9 +745,27 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                     let total_visits: u32 = node.edges.iter().map(|e| e.visits).sum();
                     let sqrt_total = f64::from(total_visits.max(1)).sqrt();
 
+                    let completed_v = {
+                        let (mut w_sum, mut q_sum) = (0.0, 0.0);
+                        for e in &node.edges {
+                            if e.visits > 0 && max_q > min_q + 1e-6 {
+                                let q = e.value_sum / f64::from(e.visits);
+                                let nq = ((q - min_q) / (max_q - min_q)).clamp(0.0, 1.0);
+                                let w = f64::from(e.visits);
+                                w_sum += w;
+                                q_sum += w * nq;
+                            }
+                        }
+                        if w_sum > 0.0 {
+                            q_sum / w_sum
+                        } else {
+                            0.5
+                        }
+                    };
+
                     let norm_q = |e: &Edge| -> f64 {
                         if e.visits == 0 {
-                            0.5
+                            completed_v
                         } else {
                             let q = e.value_sum / f64::from(e.visits);
                             if max_q > min_q + 1e-6 {
@@ -691,22 +776,62 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                         }
                     };
 
-                    let (edge_pos, _) = node
-                        .edges
-                        .iter()
-                        .enumerate()
-                        .max_by(|(_, a), (_, b)| {
-                            let qa = norm_q(a);
-                            let qb = norm_q(b);
-                            let ua = qa
-                                + c_puct * f64::from(a.prior) * sqrt_total
-                                    / (1.0 + f64::from(a.visits));
-                            let ub = qb
-                                + c_puct * f64::from(b.prior) * sqrt_total
-                                    / (1.0 + f64::from(b.visits));
-                            ua.total_cmp(&ub)
-                        })
-                        .expect("expanded node has at least one edge");
+                    let edge_pos =
+                        if node_id == 0 && self.config.simulations >= 8 && node.edges.len() > 2 {
+                            // Gumbel AlphaZero Sequential Halving at the root:
+                            // narrow the active root candidate set across 3 halving stages.
+                            let k_edges = node.edges.len();
+                            let active_cap = if sim_idx < self.config.simulations / 2 {
+                                k_edges.min(8)
+                            } else if sim_idx < (self.config.simulations * 3) / 4 {
+                                (k_edges.min(8) / 2).max(2)
+                            } else {
+                                (k_edges.min(8) / 4).max(2)
+                            };
+                            let mut ranked: Vec<(usize, f64)> = node
+                                .edges
+                                .iter()
+                                .enumerate()
+                                .map(|(idx, e)| {
+                                    let logit = f64::from(e.prior.max(1e-6)).ln();
+                                    let g = root_gumbels.get(idx).copied().unwrap_or(0.0);
+                                    let nq = norm_q(e);
+                                    (idx, logit + g + 3.5 * nq)
+                                })
+                                .collect();
+                            ranked.sort_by(|a, b| b.1.total_cmp(&a.1));
+                            let survivors = &ranked[..active_cap.min(ranked.len())];
+                            survivors
+                                .iter()
+                                .map(|&(idx, g_score)| {
+                                    let e = &node.edges[idx];
+                                    let u = norm_q(e)
+                                        + c_puct * f64::from(e.prior) * sqrt_total
+                                            / (1.0 + f64::from(e.visits))
+                                        + 0.08 * g_score / (1.0 + f64::from(e.visits));
+                                    (idx, u)
+                                })
+                                .max_by(|a, b| a.1.total_cmp(&b.1))
+                                .map(|(idx, _)| idx)
+                                .unwrap_or(0)
+                        } else {
+                            node.edges
+                                .iter()
+                                .enumerate()
+                                .max_by(|(_, a), (_, b)| {
+                                    let qa = norm_q(a);
+                                    let qb = norm_q(b);
+                                    let ua = qa
+                                        + c_puct * f64::from(a.prior) * sqrt_total
+                                            / (1.0 + f64::from(a.visits));
+                                    let ub = qb
+                                        + c_puct * f64::from(b.prior) * sqrt_total
+                                            / (1.0 + f64::from(b.visits));
+                                    ua.total_cmp(&ub)
+                                })
+                                .map(|(idx, _)| idx)
+                                .expect("expanded node has at least one edge")
+                        };
 
                     if nodes[node_id].edges[edge_pos].child.is_none()
                         && pending_leaves
@@ -793,7 +918,10 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                     .iter()
                     .map(|l| l.features.as_slice())
                     .collect();
-                let mut evals = self.model.evaluate(&batch_refs).into_iter();
+                let t_nn = Instant::now();
+                let evals_vec = self.model.evaluate(&batch_refs);
+                nn_us += u64::try_from(t_nn.elapsed().as_micros()).unwrap_or(0);
+                let mut evals = evals_vec.into_iter();
                 for mut leaf in pending_leaves {
                     let eval = evals.next().unwrap_or(Evaluation {
                         priors: vec![1.0; self.space.size()],
@@ -803,8 +931,8 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                     let child_id = nodes.len();
                     nodes.push(child);
                     nodes[leaf.parent_node].edges[leaf.edge_pos].child = Some(child_id);
-                    let (roll_r, final_elapsed, done) = if leaf.reached_horizon {
-                        (0.0, leaf.elapsed_total, false)
+                    let (roll_r, final_elapsed, done, roll_val) = if leaf.reached_horizon {
+                        (0.0, leaf.elapsed_total, false, None)
                     } else {
                         self.rollout(
                             &mut leaf.sim,
@@ -812,9 +940,10 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                             leaf.elapsed_total,
                             &nodes[child_id].priors,
                             leaf.sim_idx,
+                            &mut nn_us,
                         )
                     };
-                    let leaf_value = if !done
+                    let mc_leaf = if !done
                         && self.config.horizon > SimDuration::ZERO
                         && final_elapsed > SimDuration::ZERO
                     {
@@ -825,6 +954,12 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                         raw_total * (h_ms / e_ms) - tree_r
                     } else {
                         roll_r
+                    };
+                    let v_pred = f64::from(roll_val.unwrap_or(nodes[child_id].initial_value));
+                    let leaf_value = if !done && v_pred.is_finite() && v_pred.abs() > 1e-3 {
+                        0.78 * mc_leaf + 0.22 * v_pred
+                    } else {
+                        mc_leaf
                     };
                     completed_paths.push((leaf.path, leaf_value));
                 }
@@ -845,6 +980,7 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
 
         let root = &nodes[0];
         let total_visits: u32 = root.edges.iter().map(|e| e.visits).sum();
+        let max_visits: u32 = root.edges.iter().map(|e| e.visits).max().unwrap_or(0);
         let mut visits = vec![0.0f32; self.space.size()];
         if total_visits > 0 {
             let mut weights: Vec<(usize, f64)> = Vec::with_capacity(root.edges.len());
@@ -856,7 +992,10 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                     } else {
                         0.5
                     };
-                    let w = f64::from(e.visits) * (2.5 * nq).exp();
+                    if max_visits > 1 && e.visits == 1 && nq < 0.65 {
+                        continue;
+                    }
+                    let w = f64::from(e.visits) * (5.0 * nq).exp();
                     weights.push((e.action_idx, w));
                 }
             }
@@ -919,6 +1058,11 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
             &root.edges[pos]
         };
 
+        let total_us = u64::try_from(t_total.elapsed().as_micros()).unwrap_or(0);
+        let env_us = total_us.saturating_sub(nn_us);
+        MCTS_ENV_MICROS.fetch_add(env_us, Ordering::Relaxed);
+        MCTS_NN_MICROS.fetch_add(nn_us, Ordering::Relaxed);
+
         SearchResult {
             choice: chosen_edge.choice.clone(),
             visits,
@@ -978,6 +1122,22 @@ fn select_by_temperature(
         }
     }
     *candidates.last().unwrap()
+}
+
+/// Deterministic Gumbel(`0, scale`) draws of length `k` keyed by `key`.
+fn sample_gumbel(k: usize, key: DecisionKey, scale: f64) -> Vec<f64> {
+    if scale <= 1e-9 || k == 0 {
+        return vec![0.0; k];
+    }
+    let seat_name = format!("seat{}", key.seat.0);
+    let dom = domain(Purpose::Policy, &[&seat_name, "gumbel"]);
+    let base = key.index.wrapping_mul(65_536).wrapping_add(200);
+    (0..k)
+        .map(|i| {
+            let u = unit(key.seed, dom, base.wrapping_add(i as u64)).clamp(1e-6, 1.0 - 1e-6);
+            -(-u.ln()).ln() * scale
+        })
+        .collect()
 }
 
 /// Deterministic Dirichlet(`alpha`) draw of length `k` keyed by `key`.

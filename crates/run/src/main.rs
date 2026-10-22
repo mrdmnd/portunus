@@ -51,6 +51,9 @@ struct Args {
     warm_start: Option<u32>,
     simulations: Option<u32>,
     horizon_ms: Option<u32>,
+    hidden_width: Option<usize>,
+    num_layers: Option<usize>,
+    lr: Option<f64>,
     epochs: Option<usize>,
     save_dir: Option<PathBuf>,
     rounds: Option<usize>,
@@ -126,6 +129,15 @@ fn parse() -> Result<Args, String> {
             }
             "--horizon-ms" if args.train => {
                 args.horizon_ms = Some(number("--horizon-ms", value("--horizon-ms")?)?);
+            }
+            "--hidden-width" if args.train => {
+                args.hidden_width = Some(number("--hidden-width", value("--hidden-width")?)?);
+            }
+            "--num-layers" if args.train => {
+                args.num_layers = Some(number("--num-layers", value("--num-layers")?)?);
+            }
+            "--lr" if args.train => {
+                args.lr = Some(number("--lr", value("--lr")?)?);
             }
             "--epochs" if args.train => {
                 args.epochs = Some(number("--epochs", value("--epochs")?)?);
@@ -283,6 +295,15 @@ fn run_train(bundle: &Bundle, runner: &LocalRunner, args: Args) -> ExitCode {
     }
     if let Some(ms) = args.horizon_ms {
         spec.horizon = portunus_core::SimDuration(ms);
+    }
+    if let Some(hw) = args.hidden_width {
+        spec.hidden_width = hw;
+    }
+    if let Some(nl) = args.num_layers {
+        spec.num_layers = nl;
+    }
+    if let Some(lr) = args.lr {
+        spec.learning_rate = lr;
     }
     if let Some(epochs) = args.epochs {
         spec.epochs_per_iter = epochs;

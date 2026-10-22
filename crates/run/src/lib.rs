@@ -38,5 +38,8 @@ pub use observe::{
     MovementObs, PetObs, ScriptObserver, SeatObs, SeatObsFeaturizer, TargetObs, FOREVER,
 };
 pub use opt::{optimize_stats, BundleStatObjective, OptimizeReport, StatPoint, StatSearchSpace};
-pub use parity::{check_simc_parity, default_simc_profile, AbilityParityRow, SimcParityReport};
+pub use parity::{
+    check_simc_parity, default_simc_profile, AbilityParityRow, SimcParityReport,
+    DEFAULT_PARITY_TOLERANCE,
+};
 pub use train::{train_rl, IterationSummary, TrainReport, TrainSpec};

@@ -1996,8 +1996,6 @@
             targeting: enemy,
             hostile: true,
             range: Some(40.0),
-            // SimC gives 2 Maelstrom per target hit; this gives the
-            // single-target amount.
             effects: [
                 damage(
                     amount: spell_power(0.79),
@@ -2005,7 +2003,10 @@
                     target: all_enemies,
                     aoe: Some((max_targets: Some(5), sqrt_cap: None, secondary: 1.0)),
                 ),
-                resource((kind: maelstrom, amount: 2.0)),
+                for_each(
+                    target: all_enemies,
+                    then: [resource((kind: maelstrom, amount: 2.0))],
+                ),
             ],
         ),
         45297: (
@@ -2024,7 +2025,10 @@
                     target: all_enemies,
                     aoe: Some((max_targets: Some(5), sqrt_cap: None, secondary: 1.0)),
                 ),
-                resource((kind: maelstrom, amount: 1.0)),
+                for_each(
+                    target: all_enemies,
+                    then: [resource((kind: maelstrom, amount: 1.0))],
+                ),
             ],
         ),
         196840: (
@@ -2101,7 +2105,10 @@
             hostile: true,
             range: Some(40.0),
             speed: Some(40.0),
-            effects: [damage(amount: spell_power(1.6), school: 28, target: target)],
+            effects: [
+                damage(amount: spell_power(1.6), school: 28, target: target),
+                apply_one_of(auras: [118522, 173183, 173184], target: caster),
+            ],
         ),
         381725: (
             id: 381725,
@@ -2126,7 +2133,10 @@
             hostile: true,
             range: Some(40.0),
             speed: Some(40.0),
-            effects: [damage(amount: spell_power(1.28), school: 28, target: target)],
+            effects: [
+                damage(amount: spell_power(1.28), school: 28, target: target),
+                apply_one_of(auras: [118522, 173183, 173184], target: caster),
+            ],
         ),
         // Overlapping casts don't stack: a recast replaces the quake.
         61882: (
@@ -2409,6 +2419,25 @@
             range: Some(40.0),
             speed: Some(50.0),
             effects: [damage(amount: spell_power(1.1775), school: 4, target: target)],
+        ),
+        // The Ancestor's echo of Chain Lightning, Earthquake, and Ascendance.
+        447425: (
+            id: 447425,
+            name: "Chain Lightning",
+            school: 8,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            range: Some(40.0),
+            effects: [
+                damage(
+                    amount: spell_power(3.0608),
+                    school: 8,
+                    target: all_enemies,
+                    aoe: Some((max_targets: Some(5), sqrt_cap: None, secondary: 1.0)),
+                ),
+            ],
         ),
         // Final Calling's, cast by each Ancestor as it departs.
         465717: (
@@ -3198,8 +3227,13 @@
                 if(
                     when: caster_has_aura(392936),
                     then: [
-                        apply_aura(aura: 335082, target: caster),
-                        apply_aura(aura: 335091, target: caster),
+                        if(
+                            when: caster_has_aura(1719),
+                            then: [
+                                apply_aura(aura: 335082, target: caster),
+                                apply_aura(aura: 335091, target: caster),
+                            ],
+                        ),
                     ],
                 ),
             ],
@@ -15733,10 +15767,15 @@
                     on: cast_complete(spell: Some(188443), school: None),
                     chance: always,
                     effects: [
-                        trigger_spell(spell: 45297, target: target, delay: 400),
-                        if(
-                            when: caster_has_aura(1270064),
-                            then: [chance(chance: 0.25, then: [trigger_spell(spell: 45297, target: target, delay: 400)])],
+                        for_each(
+                            target: all_enemies,
+                            then: [
+                                trigger_spell(spell: 45297, target: target, delay: 400),
+                                if(
+                                    when: caster_has_aura(1270064),
+                                    then: [chance(chance: 0.25, then: [trigger_spell(spell: 45297, target: target, delay: 400)])],
+                                ),
+                            ],
                         ),
                         remove_stacks(aura: 191634, target: caster, stacks: 1),
                     ],
@@ -15798,12 +15837,13 @@
             id: 61882,
             name: "Earthquake",
             duration: Some(6000),
-            refresh: replace,
+            max_stacks: 8,
+            refresh: ironfur,
             periodic: Some((
                 period: 1000,
                 hasted: true,
                 partial_final_tick: false,
-                effects: [damage(amount: spell_power(0.43), school: 8, target: all_enemies)],
+                effects: [damage(amount: spell_power(1.10), school: 8, target: all_enemies)],
             )),
         ),
         // Spent by the next affected spell the player casts, after its
@@ -15819,6 +15859,7 @@
                 (scope: spell(45284), kind: damage_done_pct, value: 15.0),
                 (scope: spell(117014), kind: damage_done_pct, value: 15.0),
                 (scope: spell(120588), kind: damage_done_pct, value: 15.0),
+                (scope: spell(462840), kind: damage_done_pct, value: 15.0),
                 (scope: spell(61882), kind: damage_done_pct, value: 15.0),
                 (scope: spell(8042), kind: damage_done_pct, value: 15.0),
                 (scope: spell(381725), kind: damage_done_pct, value: 15.0),
@@ -15895,6 +15936,11 @@
                 ),
                 (
                     on: cast_complete(spell: Some(188443), school: None),
+                    chance: flat(0.15),
+                    effects: [apply_aura(aura: 191877, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(452201), school: None),
                     chance: flat(0.15),
                     effects: [apply_aura(aura: 191877, target: caster)],
                 ),
@@ -16015,6 +16061,7 @@
                 (scope: spell(381725), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 188389, from_self: true))),
                 (scope: spell(117014), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 188389, from_self: true))),
                 (scope: spell(120588), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 188389, from_self: true))),
+                (scope: spell(462840), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 188389, from_self: true))),
                 (scope: spell(61882), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 188389, from_self: true))),
                 (scope: spell(452201), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 188389, from_self: true))),
                 (scope: spell(463351), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 188389, from_self: true))),
@@ -16124,6 +16171,11 @@
                     chance: stat_scaled(stat: mastery, coef: 1.0),
                     effects: [trigger_spell(spell: 120588, target: target, delay: 400), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 120588, target: target, delay: 400)])]),],
                 ),
+                (
+                    on: cast_complete(spell: Some(462840), school: None),
+                    chance: stat_scaled(stat: mastery, coef: 1.0),
+                    effects: [trigger_spell(spell: 120588, target: target, delay: 400), if(when: caster_has_aura(1270064), then: [chance(chance: 0.25, then: [trigger_spell(spell: 120588, target: target, delay: 400)])]),],
+                ),
             ],
         ),
         // Refunds the whole spend: the effect scales by the amount spent.
@@ -16214,6 +16266,7 @@
                 (scope: spell(381725), kind: damage_done_pct, value: 20.0),
                 (scope: spell(117014), kind: damage_done_pct, value: 20.0),
                 (scope: spell(120588), kind: damage_done_pct, value: 20.0),
+                (scope: spell(462840), kind: damage_done_pct, value: 20.0),
                 (scope: spell(61882), kind: damage_done_pct, value: 20.0),
             ],
         ),
@@ -16238,6 +16291,7 @@
                 (scope: spell(381725), kind: damage_done_pct, value: 5.0),
                 (scope: spell(117014), kind: damage_done_pct, value: 5.0),
                 (scope: spell(120588), kind: damage_done_pct, value: 5.0),
+                (scope: spell(462840), kind: damage_done_pct, value: 5.0),
                 (scope: spell(61882), kind: damage_done_pct, value: 5.0),
             ],
         ),
@@ -16651,7 +16705,13 @@
             modifiers: [
                 (scope: spell(188196), kind: crit_chance_add, value: 5.0),
                 (scope: spell(45284), kind: crit_chance_add, value: 5.0),
+                (scope: spell(188443), kind: crit_chance_add, value: 5.0),
+                (scope: spell(45297), kind: crit_chance_add, value: 5.0),
                 (scope: spell(8042), kind: crit_chance_add, value: 5.0),
+                (scope: spell(117014), kind: crit_chance_add, value: 5.0),
+                (scope: spell(120588), kind: crit_chance_add, value: 5.0),
+                (scope: spell(462840), kind: crit_chance_add, value: 5.0),
+                (scope: spell(61882), kind: crit_chance_add, value: 5.0),
                 (scope: spell(188389), kind: crit_chance_add, value: 5.0),
                 (scope: spell(452201), kind: crit_chance_add, value: 5.0),
                 (scope: spell(463351), kind: crit_chance_add, value: 5.0),
@@ -16660,7 +16720,13 @@
                 (scope: spell(1252431), kind: crit_chance_add, value: 5.0),
                 (scope: spell(188196), kind: crit_damage_pct, value: 5.0),
                 (scope: spell(45284), kind: crit_damage_pct, value: 5.0),
+                (scope: spell(188443), kind: crit_damage_pct, value: 5.0),
+                (scope: spell(45297), kind: crit_damage_pct, value: 5.0),
                 (scope: spell(8042), kind: crit_damage_pct, value: 5.0),
+                (scope: spell(117014), kind: crit_damage_pct, value: 5.0),
+                (scope: spell(120588), kind: crit_damage_pct, value: 5.0),
+                (scope: spell(462840), kind: crit_damage_pct, value: 5.0),
+                (scope: spell(61882), kind: crit_damage_pct, value: 5.0),
                 (scope: spell(188389), kind: crit_damage_pct, value: 5.0),
                 (scope: spell(452201), kind: crit_damage_pct, value: 5.0),
                 (scope: spell(463351), kind: crit_damage_pct, value: 5.0),
@@ -16708,6 +16774,7 @@
             duration: None,
             modifiers: [
                 (scope: spell(45284), kind: damage_done_pct, value: 10.0),
+                (scope: spell(45297), kind: damage_done_pct, value: 10.0),
                 (scope: spell(463351), kind: damage_done_pct, value: 10.0),
             ],
         ),
@@ -16754,7 +16821,13 @@
             modifiers: [
                 (scope: spell(188196), kind: damage_done_pct, value: 2.0),
                 (scope: spell(45284), kind: damage_done_pct, value: 2.0),
+                (scope: spell(188443), kind: damage_done_pct, value: 2.0),
+                (scope: spell(45297), kind: damage_done_pct, value: 2.0),
+                (scope: spell(61882), kind: damage_done_pct, value: 2.0),
                 (scope: spell(8042), kind: damage_done_pct, value: 2.0),
+                (scope: spell(117014), kind: damage_done_pct, value: 2.0),
+                (scope: spell(120588), kind: damage_done_pct, value: 2.0),
+                (scope: spell(462840), kind: damage_done_pct, value: 2.0),
                 (scope: spell(188389), kind: damage_done_pct, value: 2.0),
                 (scope: spell(452201), kind: damage_done_pct, value: 2.0),
                 (scope: spell(463351), kind: damage_done_pct, value: 2.0),
@@ -16762,6 +16835,19 @@
                 (scope: spell(195592), kind: damage_done_pct, value: 6.0),
                 (scope: spell(1252431), kind: damage_done_pct, value: 6.0),
                 (scope: spell(455130), kind: damage_done_pct, value: 6.0),
+            ],
+        ),
+        454919: (
+            id: 454919,
+            name: "Voltaic Surge",
+            duration: None,
+            modifiers: [
+                (scope: spell(188443), kind: damage_done_pct, value: 15.0),
+                (scope: spell(45297), kind: damage_done_pct, value: 15.0),
+                (scope: spell(61882), kind: damage_done_pct, value: 15.0),
+                (scope: spell(187874), kind: damage_done_pct, value: 15.0),
+                (scope: spell(195592), kind: damage_done_pct, value: 15.0),
+                (scope: spell(1252431), kind: damage_done_pct, value: 15.0),
             ],
         ),
 
@@ -16789,6 +16875,11 @@
                     effects: [command_pet(pet: Some(221177), spell: 447419)],
                 ),
                 (
+                    on: damage_dealt(spell: Some(117014), school: None, crit_only: false),
+                    chance: always,
+                    effects: [command_pet(pet: Some(221177), spell: 447419)],
+                ),
+                (
                     on: cast_complete(spell: Some(188389), school: None),
                     chance: always,
                     effects: [command_pet(pet: Some(221177), spell: 447419)],
@@ -16797,6 +16888,21 @@
                     on: cast_complete(spell: Some(8042), school: None),
                     chance: always,
                     effects: [command_pet(pet: Some(221177), spell: 447419)],
+                ),
+                (
+                    on: cast_complete(spell: Some(188443), school: None),
+                    chance: always,
+                    effects: [command_pet(pet: Some(221177), spell: 447425)],
+                ),
+                (
+                    on: cast_complete(spell: Some(61882), school: None),
+                    chance: always,
+                    effects: [command_pet(pet: Some(221177), spell: 447425)],
+                ),
+                (
+                    on: cast_complete(spell: Some(114050), school: None),
+                    chance: always,
+                    effects: [command_pet(pet: Some(221177), spell: 447425)],
                 ),
             ],
         ),
@@ -16827,6 +16933,7 @@
                 (scope: spell(447419), kind: crit_chance_add, value: 100.0),
                 (scope: spell(447419), kind: crit_chance_scales_damage, value: 0.0),
                 (scope: spell(447419), kind: crit_damage_pct, value: 15.0),
+                (scope: spell(447425), kind: crit_damage_pct, value: 15.0),
                 (scope: spell(465717), kind: crit_damage_pct, value: 15.0),
             ],
             listeners: [
@@ -16848,6 +16955,7 @@
             duration: None,
             modifiers: [
                 (scope: spell(447419), kind: guardian_damage_pct, value: 25.0),
+                (scope: spell(447425), kind: guardian_damage_pct, value: 25.0),
                 (scope: spell(465717), kind: guardian_damage_pct, value: 25.0),
             ],
         ),
@@ -16884,6 +16992,18 @@
                 ),
                 (
                     on: cast_complete(spell: Some(188389), school: None),
+                    chance: deck(successes: 4, size: 50),
+                    shared_with: Some(0),
+                    effects: [trigger_spell(spell: 445624, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(188443), school: None),
+                    chance: deck(successes: 4, size: 50),
+                    shared_with: Some(0),
+                    effects: [trigger_spell(spell: 445624, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(470057), school: None),
                     chance: deck(successes: 4, size: 50),
                     shared_with: Some(0),
                     effects: [trigger_spell(spell: 445624, target: caster)],
@@ -16978,6 +17098,8 @@
             modifiers: [
                 (scope: spell(51505), kind: cast_time_pct, value: -100.0),
                 (scope: spell(188196), kind: cast_time_pct, value: -100.0),
+                (scope: spell(188443), kind: cast_time_pct, value: -100.0),
+                (scope: spell(117014), kind: cast_time_pct, value: -100.0),
             ],
         ),
         // The talent's passive spends the buff and only then starts the
@@ -17003,7 +17125,39 @@
                     ],
                 ),
                 (
+                    on: cast_complete(spell: Some(117014), school: None),
+                    chance: always,
+                    effects: [
+                        if(
+                            when: caster_has_aura(443454),
+                            then: [
+                                remove_aura(aura: 443454, target: caster),
+                                adjust_cooldown(spell: 443454, change: restart),
+                            ],
+                        ),
+                    ],
+                ),
+                (
                     on: cast_complete(spell: Some(188196), school: None),
+                    chance: always,
+                    effects: [
+                        if(
+                            when: caster_has_aura(191634),
+                            then: [],
+                            otherwise: [
+                                if(
+                                    when: caster_has_aura(443454),
+                                    then: [
+                                        remove_aura(aura: 443454, target: caster),
+                                        adjust_cooldown(spell: 443454, change: restart),
+                                    ],
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
+                (
+                    on: cast_complete(spell: Some(188443), school: None),
                     chance: always,
                     effects: [
                         if(
@@ -18078,12 +18232,6 @@
                 (
                     on: cast_complete(spell: Some(184367), school: None),
                     chance: flat(0.2),
-                    shared_with: Some(2),
-                    effects: [trigger_spell(spell: 446005, target: target)],
-                ),
-                (
-                    on: cast_complete(spell: Some(184367), school: None),
-                    chance: flat(0.2),
                     internal_cooldown: Some(500),
                     condition: Some(enemies_at_least(3)),
                     effects: [if(when: caster_has_aura(85739), then: [trigger_spell(spell: 446005, target: target)])],
@@ -18572,11 +18720,6 @@
             modifiers: [
                 (scope: abilities, kind: damage_done_pct, value: 22.0),
                 (scope: auto_attack, kind: damage_done_pct, value: 144.0),
-                (scope: spell(5308), kind: damage_done_pct, value: 13.0),
-                (scope: spell(280735), kind: damage_done_pct, value: 13.0),
-                (scope: spell(280736), kind: damage_done_pct, value: 13.0),
-                (scope: spell(280849), kind: damage_done_pct, value: 13.0),
-                (scope: spell(280850), kind: damage_done_pct, value: 13.0),
                 (scope: spell(384110), kind: crit_chance_add, value: -1000.0),
             ],
             listeners: [
@@ -18888,18 +19031,9 @@
             duration: None,
             listeners: [
                 (
-                    on: swing(hand: None),
-                    chance: rppm(rate: 1.7, hasted: true),
-                    effects: [
-                        apply_aura(aura: 52437, target: caster),
-                        adjust_cooldown(spell: 5308, change: reset),
-                        adjust_cooldown(spell: 280735, change: reset),
-                    ],
-                ),
-                (
                     on: cast_complete(spell: Some(23881), school: None),
                     chance: rppm(rate: 1.7, hasted: true),
-                    shared_with: Some(0),
+                    internal_cooldown: Some(3000),
                     effects: [
                         apply_aura(aura: 52437, target: caster),
                         adjust_cooldown(spell: 5308, change: reset),
@@ -24987,7 +25121,6 @@
             name: "Mastery: Potent Assassin",
             duration: None,
             modifiers: [
-                (scope: school(8), kind: mastery_damage_pct, value: 1.0),
                 (scope: school(40), kind: mastery_damage_pct, value: 1.0),
                 (scope: spell(703), kind: mastery_damage_pct, value: 1.0),
                 (scope: spell(1943), kind: mastery_damage_pct, value: 1.0),
@@ -26794,6 +26927,9 @@
             id: 195283,
             name: "Hot Streak (Passive)",
             duration: None,
+            modifiers: [
+                (scope: spell(108853), kind: crit_chance_add, value: 100.0),
+            ],
             listeners: [
                 (
                     on: damage_dealt(spell: None, school: Some(4), crit_only: true, direct: Some(true)),
@@ -30264,9 +30400,6 @@
             duration: None,
             modifiers: [
                 (scope: school(124), kind: mastery_damage_pct, value: 1.0),
-                (scope: school(36), kind: mastery_damage_pct, value: 1.0),
-                (scope: school(4), kind: mastery_damage_pct, value: 1.0),
-                (scope: school(32), kind: mastery_damage_pct, value: 1.0),
             ],
         ),
         203555: (

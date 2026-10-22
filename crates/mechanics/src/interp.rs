@@ -1379,7 +1379,11 @@ impl Interpreter {
                 target,
                 delay,
             } => {
-                let target = self.targets(io, ctx, target).first().copied();
+                let mut target = self.targets(io, ctx, target).first().copied();
+                if target == Some(caster) && io.data().spells.get(&spell).is_some_and(|d| d.hostile)
+                {
+                    target = io.view().target(caster).or(target);
+                }
                 let rolled = self.roll_ahead(io, caster, spell, target, delay);
                 io.trigger_spell(caster, spell, target, delay, rolled);
             }

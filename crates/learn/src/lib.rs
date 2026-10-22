@@ -140,26 +140,82 @@ impl<E: Env> SelfPlayCollector<E> {
             Arc::clone(&model),
         );
         let mut turn = env.reset(seed).ok()?;
+        if seed.0 >= 2 && self.max_steps < 500 {
+            let skip = ((seed.0 as usize).saturating_sub(1) % 5) * (self.max_steps * 2 / 3);
+            if skip > 0 {
+                let ff_policy = portunus_policy::ModelPolicy {
+                    space: Arc::clone(&self.space),
+                    featurizer: Arc::clone(&self.featurizer),
+                    model: Arc::clone(&model),
+                    temperature: 0.0,
+                };
+                let mut finished_early = false;
+                for _ in 0..skip {
+                    match &turn {
+                        Turn::Done(_) => {
+                            finished_early = true;
+                            break;
+                        }
+                        Turn::Decide(d) => {
+                            let ch = ff_policy.act(d);
+                            if let Ok(tr) = env.step(ch) {
+                                turn = tr.next;
+                            } else {
+                                finished_early = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if finished_early || matches!(turn, Turn::Done(_)) {
+                    turn = env.reset(seed).ok()?;
+                }
+            }
+        }
         struct PendingStep {
             seat: Seat,
             features: Vec<f32>,
             legal: Vec<bool>,
             policy_target: Vec<f32>,
             reward: f64,
+            record_sample: bool,
         }
         let mut pending: Vec<PendingStep> = Vec::new();
+        let full_cfg = self.config;
+        let fast_cfg = MctsConfig {
+            simulations: (self.config.simulations / 4).max(4),
+            horizon: portunus_core::SimDuration((self.config.horizon.millis() / 2).max(2_500)),
+            ..self.config
+        };
+        let mut step_idx = 0usize;
         let outcome = loop {
             match turn {
-                Turn::Done(o) => break Some(o),
+                Turn::Done(o) => break o,
                 Turn::Decide(d) => {
                     if pending.len() >= self.max_steps {
-                        break None;
+                        break Outcome {
+                            completed: false,
+                            end_time: portunus_core::SimTime::ZERO,
+                            seats: Vec::new(),
+                            pulls: Vec::new(),
+                        };
                     }
                     let features = self.featurizer.featurize(&d.obs, &d.legal);
                     let legal = self.space.legal(&d.legal);
+                    let legal_count = legal.iter().filter(|&&b| b).count();
+                    // KataGo Playout Cap Oscillation: run full Gumbel MCTS on high-leverage
+                    // steps and fast playout cap on low-branching or alternating filler steps.
+                    let is_full_search = if full_cfg.simulations < 16 {
+                        true
+                    } else if legal_count <= 2 {
+                        false
+                    } else {
+                        (step_idx + seed.0 as usize).is_multiple_of(2)
+                    };
+                    mcts.config = if is_full_search { full_cfg } else { fast_cfg };
                     let sr = mcts.search(&env, &d);
                     let Ok(tr) = env.step(sr.choice) else {
-                        break None;
+                        return None;
                     };
                     pending.push(PendingStep {
                         seat: d.seat,
@@ -167,24 +223,32 @@ impl<E: Env> SelfPlayCollector<E> {
                         legal,
                         policy_target: sr.visits,
                         reward: tr.reward,
+                        record_sample: is_full_search,
                     });
+                    step_idx += 1;
                     turn = tr.next;
                 }
             }
-        }?;
+        };
+        if pending.is_empty() {
+            return None;
+        }
 
         let gamma = f64::from(self.discount.clamp(0.0, 1.0));
         let mut running_return = 0.0f64;
         let mut samples: Vec<Sample> = Vec::with_capacity(pending.len());
+        let any_recorded = pending.iter().any(|p| p.record_sample);
         for step in pending.into_iter().rev() {
             running_return = step.reward + gamma * running_return;
-            samples.push(Sample {
-                seat: step.seat,
-                features: step.features,
-                legal: step.legal,
-                policy_target: step.policy_target,
-                value_target: running_return as f32,
-            });
+            if step.record_sample || !any_recorded {
+                samples.push(Sample {
+                    seat: step.seat,
+                    features: step.features,
+                    legal: step.legal,
+                    policy_target: step.policy_target,
+                    value_target: running_return as f32,
+                });
+            }
         }
         samples.reverse();
 
@@ -223,12 +287,18 @@ impl<E: Env> SelfPlayCollector<E> {
                 reward: f64,
             }
             let mut pending: Vec<PendingStep> = Vec::new();
+            let max_demo_steps = self.max_steps.max(500);
             let outcome = loop {
                 match turn {
-                    Turn::Done(o) => break Some(o),
+                    Turn::Done(o) => break o,
                     Turn::Decide(d) => {
-                        if pending.len() >= self.max_steps {
-                            break None;
+                        if pending.len() >= max_demo_steps {
+                            break Outcome {
+                                completed: false,
+                                end_time: portunus_core::SimTime::ZERO,
+                                seats: Vec::new(),
+                                pulls: Vec::new(),
+                            };
                         }
                         let features = self.featurizer.featurize(&d.obs, &d.legal);
                         let legal = self.space.legal(&d.legal);
@@ -237,13 +307,13 @@ impl<E: Env> SelfPlayCollector<E> {
                         let legal_count = legal.iter().filter(|&&b| b).count();
                         if let Some(chosen_idx) = self.space.encode(&choice, &d.legal) {
                             if legal_count > 1 {
-                                let smooth = 0.08 / legal_count as f32;
+                                let smooth = 0.005 / legal_count as f32;
                                 for (i, &ok) in legal.iter().enumerate() {
                                     if ok {
                                         policy_target[i] = smooth;
                                     }
                                 }
-                                policy_target[chosen_idx] += 0.92;
+                                policy_target[chosen_idx] += 0.995;
                             } else {
                                 policy_target[chosen_idx] = 1.0;
                             }
@@ -256,7 +326,12 @@ impl<E: Env> SelfPlayCollector<E> {
                             }
                         }
                         let Ok(tr) = env.step(choice) else {
-                            break None;
+                            break Outcome {
+                                completed: false,
+                                end_time: portunus_core::SimTime::ZERO,
+                                seats: Vec::new(),
+                                pulls: Vec::new(),
+                            };
                         };
                         pending.push(PendingStep {
                             seat: d.seat,
@@ -269,9 +344,9 @@ impl<E: Env> SelfPlayCollector<E> {
                     }
                 }
             };
-            let Some(outcome) = outcome else {
+            if pending.is_empty() {
                 continue;
-            };
+            }
 
             let mut running_return = 0.0f64;
             let mut samples: Vec<Sample> = Vec::with_capacity(pending.len());
@@ -474,7 +549,7 @@ impl Trainer for BurnTrainer {
 
         let policy_loss = -(target_pi * log_probs).sum_dim(1).mean();
         let value_loss = MseLoss::new().forward(values, target_v, Reduction::Mean);
-        let total_loss = policy_loss.clone() + value_loss.clone();
+        let total_loss = policy_loss.clone() + value_loss.clone().mul_scalar(0.01);
 
         let p_loss_scalar: f32 = policy_loss
             .clone()

@@ -180,8 +180,15 @@ pub fn render_training(r: &TrainReport) -> String {
     let hero = r.hero_tree_name.as_deref().unwrap_or("None");
     let _ = writeln!(
         out,
-        "burn rl training: {} (seat {}, {} [{}], {} features -> {} actions)",
-        r.run_name, r.seat.0, r.spec_name, hero, r.feature_width, r.action_space_size
+        "burn rl training: {} (seat {}, {} [{}], {} features -> {}x{} residual -> {} actions)",
+        r.run_name,
+        r.seat.0,
+        r.spec_name,
+        hero,
+        r.feature_width,
+        r.num_layers,
+        r.hidden_width,
+        r.action_space_size
     );
     let _ = writeln!(
         out,
@@ -192,6 +199,14 @@ pub fn render_training(r: &TrainReport) -> String {
         r.eval_seeds.first,
         r.eval_seeds.first + u64::from(r.eval_seeds.count),
         r.eval_seeds.count
+    );
+    let _ = writeln!(
+        out,
+        "  profile: mcts_env={:.2}s (thread-sum), mcts_nn={:.2}s (thread-sum), burn_backprop={:.2}s (wall), eval_rollout={:.2}s (wall)",
+        r.mcts_env_secs,
+        r.mcts_nn_secs,
+        r.train_backprop_secs,
+        r.eval_rollout_secs
     );
     let _ = writeln!(
         out,
@@ -329,12 +344,15 @@ pub fn render_parity(r: &SimcParityReport) -> String {
         r.portunus_combat_secs,
         r.portunus_dps.n
     );
+    let gate_ok = r.within_tolerance(crate::parity::DEFAULT_PARITY_TOLERANCE);
+    let gate_str = if gate_ok { "PASS" } else { "FAIL" };
     let _ = writeln!(
         out,
-        "  simc dps:     {:>10.1}           (ratio = {:.1}%, delta = {:+.1}%)",
+        "  simc dps:     {:>10.1}           (ratio = {:.1}%, delta = {:+.1}%, ≤0.5% gate = {})",
         r.simc_dps,
         100.0 * r.dps_ratio,
-        100.0 * (r.dps_ratio - 1.0)
+        100.0 * (r.dps_ratio - 1.0),
+        gate_str
     );
     let _ = writeln!(
         out,

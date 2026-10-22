@@ -1,6 +1,5 @@
 //! Stats, modifiers, crits, and mitigation.
 
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use portunus_core::{ActorId, PetId, Seat, SpecId, SpellId};
@@ -19,21 +18,60 @@ use crate::{CombatMath, EffectCtx, IncomingHit, Outgoing};
 /// Attack power per point of weapon DPS.
 const WEAPON_AP_DIVISOR: f64 = 6.0;
 const OFF_HAND_MULT: f64 = 0.5;
+const STAT_COUNT: usize = 12;
+const RATED_COUNT: usize = 4;
+
+#[inline]
+const fn stat_idx(stat: Stat) -> usize {
+    match stat {
+        Stat::Strength => 0,
+        Stat::Agility => 1,
+        Stat::Intellect => 2,
+        Stat::Stamina => 3,
+        Stat::CritRating => 4,
+        Stat::HasteRating => 5,
+        Stat::MasteryRating => 6,
+        Stat::VersatilityRating => 7,
+        Stat::Armor => 8,
+        Stat::Leech => 9,
+        Stat::Avoidance => 10,
+        Stat::Speed => 11,
+    }
+}
+
+#[inline]
+const fn rated_idx(stat: RatedStat) -> usize {
+    match stat {
+        RatedStat::Crit => 0,
+        RatedStat::Haste => 1,
+        RatedStat::Mastery => 2,
+        RatedStat::Versatility => 3,
+    }
+}
+
+fn stat_block_to_array(block: &StatBlock) -> [f64; STAT_COUNT] {
+    let mut out = [0.0; STAT_COUNT];
+    for (&stat, &val) in &block.0 {
+        out[stat_idx(stat)] = val;
+    }
+    out
+}
 
 #[derive(Debug)]
 struct SeatStats {
     spec: SpecId,
     /// The template's stats, before any aura.
-    stats: StatBlock,
+    stats: [f64; STAT_COUNT],
     weapons: [Option<WeaponDef>; 2],
 }
 
 /// A seat's stats at one moment, with its auras applied.
+#[derive(Clone, Copy)]
 struct SeatSnapshot {
     spec: SpecId,
-    stats: StatBlock,
+    stats: [f64; STAT_COUNT],
     /// `RatedPct` points by stat, added after rating conversion.
-    rated: BTreeMap<RatedStat, f64>,
+    rated: [f64; RATED_COUNT],
     /// The product of `AttackPowerPct` modifiers.
     ap_mult: f64,
 }
@@ -54,6 +92,7 @@ enum Role {
 struct Statics {
     data: Arc<GameData>,
     seats: Vec<SeatStats>,
+    curves: [Option<portunus_gamedata::stats::RatingCurve>; STAT_COUNT],
 }
 
 /// The [`CombatMath`] implementation.
@@ -113,14 +152,32 @@ impl Formulas {
             .iter()
             .map(|s| SeatStats {
                 spec: s.template.spec,
-                stats: s.template.stats.clone(),
+                stats: stat_block_to_array(&s.template.stats),
                 weapons: [s.template.main_hand, s.template.off_hand],
             })
             .collect();
+        let curves = std::array::from_fn(|i| {
+            let stat = match i {
+                0 => Stat::Strength,
+                1 => Stat::Agility,
+                2 => Stat::Intellect,
+                3 => Stat::Stamina,
+                4 => Stat::CritRating,
+                5 => Stat::HasteRating,
+                6 => Stat::MasteryRating,
+                7 => Stat::VersatilityRating,
+                8 => Stat::Armor,
+                9 => Stat::Leech,
+                10 => Stat::Avoidance,
+                _ => Stat::Speed,
+            };
+            setup.data.curves.ratings.get(&stat).cloned()
+        });
         Self {
             s: Arc::new(Statics {
                 data: Arc::clone(&setup.data),
                 seats,
+                curves,
             }),
         }
     }
@@ -299,9 +356,10 @@ impl Formulas {
     ) -> Option<SeatSnapshot> {
         let seat = player_seat(view, actor)?;
         let base = self.s.seats.get(usize::from(seat.0))?;
-        let mut stats = base.stats.clone();
-        let mut pct: BTreeMap<Stat, f64> = BTreeMap::new();
-        let mut rated: BTreeMap<RatedStat, f64> = BTreeMap::new();
+        let mut stats = base.stats;
+        let mut pct = [1.0; STAT_COUNT];
+        let mut has_pct = [false; STAT_COUNT];
+        let mut rated = [0.0; RATED_COUNT];
         let mut ap_mult = 1.0;
         let mut shares: Vec<(Stat, f64, ActorId)> = Vec::new();
         let mut conversions: Vec<(Stat, Stat, f64)> = Vec::new();
@@ -310,9 +368,13 @@ impl Formulas {
             &Query::holder_targeted(view, actor),
             |m, value, source| match m.kind {
                 ModKind::AttackPowerPct => ap_mult *= 1.0 + value / 100.0,
-                ModKind::StatFlat(stat) => *stats.0.entry(stat).or_default() += value,
-                ModKind::StatPct(stat) => *pct.entry(stat).or_insert(1.0) *= 1.0 + value / 100.0,
-                ModKind::RatedPct(stat) => *rated.entry(stat).or_default() += value,
+                ModKind::StatFlat(stat) => stats[stat_idx(stat)] += value,
+                ModKind::StatPct(stat) => {
+                    let idx = stat_idx(stat);
+                    pct[idx] *= 1.0 + value / 100.0;
+                    has_pct[idx] = true;
+                }
+                ModKind::RatedPct(stat) => rated[rated_idx(stat)] += value,
                 ModKind::StatShare(stat) if shared && source != actor => {
                     shares.push((stat, value, source));
                 }
@@ -324,19 +386,21 @@ impl Formulas {
             let Some(from) = self.stat_block_sharing(view, source, false) else {
                 continue;
             };
-            let have = from.stats.0.get(&stat).copied().unwrap_or(0.0);
-            *stats.0.entry(stat).or_default() += have * value / 100.0;
+            let have = from.stats[stat_idx(stat)];
+            stats[stat_idx(stat)] += have * value / 100.0;
         }
-        for (stat, mult) in &pct {
-            if let Some(v) = stats.0.get_mut(stat) {
-                *v *= mult;
+        for i in 0..STAT_COUNT {
+            if has_pct[i] {
+                stats[i] *= pct[i];
             }
         }
-        let converted = stats.clone();
-        for (from, to, value) in conversions {
-            let have = converted.0.get(&from).copied().unwrap_or(0.0);
-            let mult = pct.get(&to).copied().unwrap_or(1.0);
-            *stats.0.entry(to).or_default() += have * value / 100.0 * mult;
+        if !conversions.is_empty() {
+            let converted = stats;
+            for (from, to, value) in conversions {
+                let have = converted[stat_idx(from)];
+                let mult = pct[stat_idx(to)];
+                stats[stat_idx(to)] += have * value / 100.0 * mult;
+            }
         }
         Some(SeatSnapshot {
             spec: base.spec,
@@ -344,6 +408,28 @@ impl Formulas {
             rated,
             ap_mult,
         })
+    }
+
+    fn rating_to_pct(&self, stat: Stat, rating: f64) -> f64 {
+        let Some(curve) = &self.s.curves[stat_idx(stat)] else {
+            return 0.0;
+        };
+        let raw = rating / curve.rating_per_pct;
+        let mut out = 0.0;
+        let mut prev = 0.0;
+        let mut keep = 1.0;
+        for &(threshold, fraction) in &curve.diminishing {
+            if raw <= threshold {
+                break;
+            }
+            out += (threshold - prev) * keep;
+            prev = threshold;
+            keep = fraction;
+        }
+        let pct = out + (raw - prev) * keep;
+        curve
+            .falloff
+            .map_or(pct, |f| pct * f.scale * (-f.per_rating * rating).exp())
     }
 
     /// Percentages and derived values with every active aura applied. Pets
@@ -366,17 +452,30 @@ impl Formulas {
             .and_then(|s| Some((self.s.data.specs.get(&s.spec)?, s)));
         match spec {
             Some((spec, s)) => {
-                let mut d = portunus_loadout::derive(&self.s.data.curves, spec, &s.stats);
-                d.attack_power *= s.ap_mult;
-                for (stat, points) in s.rated {
-                    match stat {
-                        RatedStat::Crit => d.crit_pct += points,
-                        RatedStat::Haste => d.haste_pct += points,
-                        RatedStat::Mastery => d.mastery_pct += points * spec.mastery_coef,
-                        RatedStat::Versatility => d.versatility_pct += points,
-                    }
+                let curves = &self.s.data.curves;
+                let stat = |st: Stat| s.stats[stat_idx(st)];
+                let pct = |st: Stat| self.rating_to_pct(st, stat(st));
+                let primary_for_ap = match spec.primary_stat {
+                    Stat::Agility | Stat::Strength => stat(spec.primary_stat),
+                    _ => 0.0,
+                };
+                DerivedStats {
+                    crit_pct: curves.base_crit_pct
+                        + pct(Stat::CritRating)
+                        + s.rated[rated_idx(RatedStat::Crit)],
+                    haste_pct: pct(Stat::HasteRating) + s.rated[rated_idx(RatedStat::Haste)],
+                    mastery_pct: spec.base_mastery_pct
+                        + (pct(Stat::MasteryRating) + s.rated[rated_idx(RatedStat::Mastery)])
+                            * spec.mastery_coef,
+                    versatility_pct: pct(Stat::VersatilityRating)
+                        + s.rated[rated_idx(RatedStat::Versatility)],
+                    attack_power: primary_for_ap * curves.attack_power_per_primary * s.ap_mult,
+                    spell_power: stat(Stat::Intellect) * curves.spell_power_per_intellect,
+                    max_health: stat(Stat::Stamina) * curves.health_per_stamina,
+                    leech_pct: pct(Stat::Leech),
+                    avoidance_pct: pct(Stat::Avoidance),
+                    speed_pct: pct(Stat::Speed),
                 }
-                d
             }
             None => DerivedStats {
                 max_health: view.actor(actor).map_or(0.0, |a| a.max_health as f64),
@@ -427,8 +526,8 @@ impl Formulas {
         let stats = self
             .stat_block(view, who)
             .map(|s| s.stats)
-            .unwrap_or_default();
-        let rating = |s: Stat| stats.0.get(&s).copied().unwrap_or(0.0);
+            .unwrap_or([0.0; STAT_COUNT]);
+        let rating = |s: Stat| stats[stat_idx(s)];
         let mut best = (RatedStat::Versatility, rating(Stat::VersatilityRating));
         for (r, s) in [
             (RatedStat::Mastery, Stat::MasteryRating),
@@ -511,8 +610,7 @@ impl Formulas {
                 .map_or(0.0, |d| d.defense.armor),
             Some(ActorKind::Player(_)) => self
                 .stat_block(view, target)
-                .and_then(|s| s.stats.0.get(&Stat::Armor).copied())
-                .unwrap_or(0.0),
+                .map_or(0.0, |s| s.stats[stat_idx(Stat::Armor)]),
             Some(ActorKind::Pet { .. }) | None => 0.0,
         }
     }
@@ -586,12 +684,6 @@ impl Formulas {
             }
         });
         total
-    }
-
-    fn mod_any(&self, view: &dyn StateView, q: &Query, kind: ModKind) -> bool {
-        let mut any = false;
-        self.each_mod(view, q, |m, _| any |= m.kind == kind);
-        any
     }
 
     fn spell_query(
@@ -688,37 +780,43 @@ impl CombatMath for Formulas {
         amount: Coefficient,
         kind: Outgoing,
     ) -> f64 {
-        let base = self.base(view, ctx, amount);
+        let caster_derived = self.derived(view, ctx.caster);
+        let base = match amount {
+            Coefficient::SpellPower(c) => c * caster_derived.spell_power * ctx.scale,
+            _ => self.base(view, ctx, amount),
+        };
         let done = match kind {
             Outgoing::Damage(school) => {
                 let q = self.spell_query(view, ctx, Some(school));
-                let mut by_crit = if self.mod_any(view, &q, ModKind::CritChanceScalesDamage) {
+                let mastery = caster_derived.mastery_pct / 100.0;
+                let mut crit_scales = false;
+                let mut crit_adds = false;
+                let mut by_mastery = 1.0;
+                let mut damage_done = 1.0;
+                self.each_mod(view, &q, |m, v| match m.kind {
+                    ModKind::CritChanceScalesDamage => crit_scales = true,
+                    ModKind::CritChanceAddsDamage => crit_adds = true,
+                    ModKind::MasteryDamagePct => by_mastery *= 1.0 + v * mastery,
+                    ModKind::DamageDonePct => damage_done *= 1.0 + v / 100.0,
+                    _ => {}
+                });
+                let mut by_crit = if crit_scales {
                     self.uncapped_crit(view, ctx).max(0.0)
                 } else {
                     1.0
                 };
-                if self.mod_any(view, &q, ModKind::CritChanceAddsDamage) {
+                if crit_adds {
                     let untargeted = EffectCtx {
                         target: None,
                         ..*ctx
                     };
                     by_crit *= 1.0 + self.uncapped_crit(view, &untargeted).max(0.0);
                 }
-                let mastery = self.derived(view, ctx.caster).mastery_pct / 100.0;
-                let mut by_mastery = 1.0;
-                self.each_mod(view, &q, |m, v| {
-                    if m.kind == ModKind::MasteryDamagePct {
-                        by_mastery *= 1.0 + v * mastery;
-                    }
-                });
-                self.mod_product(view, &q, ModKind::DamageDonePct)
-                    * self.owner_pet_mult(view, ctx, school)
-                    * by_crit
-                    * by_mastery
+                damage_done * self.owner_pet_mult(view, ctx, school) * by_crit * by_mastery
             }
             Outgoing::Heal => 1.0,
         };
-        let vers = 1.0 + self.derived(view, ctx.caster).versatility_pct / 100.0;
+        let vers = 1.0 + caster_derived.versatility_pct / 100.0;
         let pmult = ctx
             .aura
             .and_then(|r| instance(view, r))
@@ -752,12 +850,17 @@ impl CombatMath for Formulas {
             school: Some(hit.school),
             ..Query::holder(target)
         };
-        if self.mod_any(view, &q, ModKind::Immune) {
+        let mut immune = false;
+        let mut dmg_taken = 1.0;
+        self.each_mod(view, &q, |m, v| match m.kind {
+            ModKind::Immune => immune = true,
+            ModKind::DamageTakenPct => dmg_taken *= 1.0 + v / 100.0,
+            _ => {}
+        });
+        if immune {
             return 0.0;
         }
-        let mut out = amount
-            * self.mod_product(view, &q, ModKind::DamageTakenPct)
-            * self.source_taken(view, target, &hit);
+        let mut out = amount * dmg_taken * self.source_taken(view, target, &hit);
         let armored = hit.kind == HitKind::Direct && !hit.ignores_armor;
         if hit.school == SchoolMask::PHYSICAL && armored {
             let armor = self.armor(view, target) * self.armor_kept(view, &hit);

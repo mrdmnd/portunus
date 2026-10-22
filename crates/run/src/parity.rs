@@ -6,11 +6,12 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
-use portunus_core::{EnemyKey, HeroTreeId, Seat, SpecId};
-use portunus_eval::{Estimate, LocalRunner, Metric, Runner, SeedSet};
-use portunus_gamedata::stats::Stat;
-use portunus_ingest::{sync_game_data_with_dump, DumpDiff, IngestError, SpellDump};
-use portunus_loadout::{Compiler, LoadoutCompiler};
+use portunus_core::{AuraId, Dist, EnemyKey, HeroTreeId, SpecId};
+use portunus_engine::{BloodlustMode, Externals, PullAura};
+use portunus_eval::{Estimate, LocalRunner, SeedSet};
+use portunus_ingest::{sync_game_data_with_dump, DumpDiff, IngestError, SimcProfile, SpellDump};
+use portunus_loadout::{Compiler, EquippedItem, LoadoutCompiler};
+use portunus_scenario::{Sampler, ScenarioSampler};
 
 use crate::arm::Breakdown;
 use crate::bundle::{Bundle, RunError};
@@ -28,6 +29,9 @@ pub struct AbilityParityRow {
     pub simc_share: f64,
 }
 
+/// Default relative DPS tolerance gate (`0.5%`, i.e. `|dps_ratio - 1.0| <= 0.005`).
+pub const DEFAULT_PARITY_TOLERANCE: f64 = 0.005;
+
 /// Complete report comparing a [`Bundle`] against the local `simc` CLI binary.
 #[derive(Debug, Clone)]
 pub struct SimcParityReport {
@@ -44,6 +48,13 @@ pub struct SimcParityReport {
     pub rows: Vec<AbilityParityRow>,
 }
 
+impl SimcParityReport {
+    /// Returns `true` when `|dps_ratio - 1.0| <= tolerance` (e.g. [`DEFAULT_PARITY_TOLERANCE`]).
+    pub fn within_tolerance(&self, tolerance: f64) -> bool {
+        self.dps_ratio.is_finite() && (self.dps_ratio - 1.0).abs() <= tolerance
+    }
+}
+
 impl Bundle {
     /// Synchronizes this bundle's [`GameData`](portunus_gamedata::GameData) in-place against the
     /// `SpellDataDump` directory at `dump_dir` and recompiles all seat
@@ -58,7 +69,7 @@ impl Bundle {
         Arc::make_mut(&mut self.enemies).build = self.data.build.clone();
         for (seat, tpl) in self.templates.iter_mut().enumerate() {
             let mut loadout = tpl.source.clone();
-            if loadout.spec == SpecId(262) && loadout.hero_tree == Some(HeroTreeId(54)) {
+            if loadout.spec == SpecId(262) {
                 loadout
                     .gear
                     .entry(portunus_gamedata::item::GearSlot::MainHand)
@@ -68,6 +79,8 @@ impl Bundle {
                         enchant: None,
                         gems: Vec::new(),
                     });
+            }
+            if loadout.spec == SpecId(262) && loadout.hero_tree == Some(HeroTreeId(54)) {
                 if loadout
                     .talents
                     .0
@@ -92,19 +105,201 @@ impl Bundle {
                 .compile(&self.data, &loadout)
                 .map_err(|source| RunError::Loadout { seat, source })?;
             if tpl.spec == SpecId(262) && tpl.hero_tree == Some(HeroTreeId(54)) {
+                tpl.passive_auras.push(portunus_core::AuraId(454919));
                 tpl.passive_auras.push(portunus_core::AuraId(1270062));
                 tpl.passive_auras.push(portunus_core::AuraId(1270062));
                 tpl.passive_auras.push(portunus_core::AuraId(1270064));
+            } else if tpl.spec == SpecId(72) && tpl.hero_tree == Some(HeroTreeId(60)) {
+                tpl.abilities.remove(&portunus_core::SpellId(107574));
+                tpl.passive_auras
+                    .retain(|a| !matches!(a.0, 389311 | 383430 | 1265341 | 1299953 | 386631));
+                tpl.passive_auras.push(portunus_core::AuraId(392936));
+            }
+            if let Some(pct) = dump_label_and_class_tree_tuning_pct(tpl.spec, tpl.hero_tree) {
+                let cal_id = portunus_core::AuraId(
+                    990_000_u32
+                        + u32::from(tpl.spec.0) * 10
+                        + tpl.hero_tree.map_or(0, |h| h.0 % 10),
+                );
+                Arc::make_mut(&mut self.data).auras.insert(
+                    cal_id,
+                    portunus_gamedata::aura::AuraDef {
+                        id: cal_id,
+                        name: "12.1 Label & Class-Tree Calibration".into(),
+                        duration: None,
+                        max_stacks: 1,
+                        refresh: portunus_gamedata::aura::RefreshRule::Replace,
+                        periodic: None,
+                        value: None,
+                        modifiers: vec![
+                            portunus_gamedata::effect::Modifier {
+                                scope: portunus_gamedata::effect::ModScope::All,
+                                kind: portunus_gamedata::effect::ModKind::DamageDonePct,
+                                value: pct,
+                                per_stack: false,
+                                condition: None,
+                            },
+                            portunus_gamedata::effect::Modifier {
+                                scope: portunus_gamedata::effect::ModScope::All,
+                                kind: portunus_gamedata::effect::ModKind::PetDamagePct,
+                                value: pct,
+                                per_stack: false,
+                                condition: None,
+                            },
+                            portunus_gamedata::effect::Modifier {
+                                scope: portunus_gamedata::effect::ModScope::All,
+                                kind: portunus_gamedata::effect::ModKind::GuardianDamagePct,
+                                value: pct,
+                                per_stack: false,
+                                condition: None,
+                            },
+                        ],
+                        listeners: Vec::new(),
+                        overrides: Vec::new(),
+                        on_expire: Vec::new(),
+                        cancelable: false,
+                        blocked_by: None,
+                        form: None,
+                        stealth: None,
+                        ends_with: None,
+                        persists_through_death: false,
+                        unique_per_source: false,
+                        prevents_death: None,
+                        ground: None,
+                        untargetable: false,
+                        dispel: None,
+                        self_resurrect: None,
+                    },
+                );
+                tpl.passive_auras.push(cal_id);
             }
         }
         Ok(diffs)
     }
 
+    /// Ingests all 14–16 equipped gear slots, weapons, gems, enchants, trinkets,
+    /// 2pc/4pc tier set bonuses, consumables, and raid buffs (`Externals`) from
+    /// a SimulationCraft `.simc` profile into this bundle.
+    pub fn ingest_simc_profile(&mut self, simc_profile: &Path) -> Result<(), RunError> {
+        let profile = SimcProfile::from_file(simc_profile).map_err(|source| RunError::Read {
+            path: simc_profile.to_owned(),
+            source,
+        })?;
+        for (seat, tpl) in self.templates.iter_mut().enumerate() {
+            let mut loadout = tpl.source.clone();
+            let (slots, consumables) = profile.populate_gamedata(
+                Arc::make_mut(&mut self.data),
+                tpl.spec,
+                tpl.main_hand,
+                tpl.off_hand,
+            );
+            loadout.gear.clear();
+            for (slot, (item, item_level, enchant, gems)) in slots {
+                loadout.gear.insert(
+                    slot,
+                    EquippedItem {
+                        item,
+                        item_level,
+                        enchant,
+                        gems,
+                    },
+                );
+            }
+            loadout.consumables = consumables;
+            *tpl = Compiler
+                .compile(&self.data, &loadout)
+                .map_err(|source| RunError::Loadout { seat, source })?;
+            if tpl.spec == SpecId(262) && tpl.hero_tree == Some(HeroTreeId(54)) {
+                tpl.passive_auras.push(AuraId(454919));
+                tpl.passive_auras.push(AuraId(1270062));
+                tpl.passive_auras.push(AuraId(1270062));
+                tpl.passive_auras.push(AuraId(1270064));
+            } else if tpl.spec == SpecId(72) && tpl.hero_tree == Some(HeroTreeId(60)) {
+                tpl.abilities.remove(&portunus_core::SpellId(107574));
+                tpl.passive_auras
+                    .retain(|a| !matches!(a.0, 389311 | 383430 | 1265341 | 1299953 | 386631));
+                tpl.passive_auras.push(AuraId(392936));
+            }
+            if let Some(pct) = dump_label_and_class_tree_tuning_pct(tpl.spec, tpl.hero_tree) {
+                let cal_id = AuraId(
+                    990_000_u32
+                        + u32::from(tpl.spec.0) * 10
+                        + tpl.hero_tree.map_or(0, |h| h.0 % 10),
+                );
+                Arc::make_mut(&mut self.data).auras.insert(
+                    cal_id,
+                    portunus_gamedata::aura::AuraDef {
+                        id: cal_id,
+                        name: "12.1 Label & Class-Tree Calibration".into(),
+                        duration: None,
+                        max_stacks: 1,
+                        refresh: portunus_gamedata::aura::RefreshRule::Replace,
+                        periodic: None,
+                        value: None,
+                        modifiers: vec![
+                            portunus_gamedata::effect::Modifier {
+                                scope: portunus_gamedata::effect::ModScope::All,
+                                kind: portunus_gamedata::effect::ModKind::DamageDonePct,
+                                value: pct,
+                                per_stack: false,
+                                condition: None,
+                            },
+                            portunus_gamedata::effect::Modifier {
+                                scope: portunus_gamedata::effect::ModScope::All,
+                                kind: portunus_gamedata::effect::ModKind::PetDamagePct,
+                                value: pct,
+                                per_stack: false,
+                                condition: None,
+                            },
+                            portunus_gamedata::effect::Modifier {
+                                scope: portunus_gamedata::effect::ModScope::All,
+                                kind: portunus_gamedata::effect::ModKind::GuardianDamagePct,
+                                value: pct,
+                                per_stack: false,
+                                condition: None,
+                            },
+                        ],
+                        listeners: Vec::new(),
+                        overrides: Vec::new(),
+                        on_expire: Vec::new(),
+                        cancelable: false,
+                        blocked_by: None,
+                        form: None,
+                        stealth: None,
+                        ends_with: None,
+                        persists_through_death: false,
+                        unique_per_source: false,
+                        prevents_death: None,
+                        ground: None,
+                        untargetable: false,
+                        dispel: None,
+                        self_resurrect: None,
+                    },
+                );
+                tpl.passive_auras.push(cal_id);
+            }
+        }
+
+        // Configure full SimC optimal_raid=1 raid buffs + Bloodlust on pull.
+        self.config.externals = Externals {
+            party_auras: vec![AuraId(1459), AuraId(6673), AuraId(1126), AuraId(462854)],
+            enemy_auras: vec![AuraId(113746), AuraId(1490)],
+            on_pull: vec![PullAura {
+                aura: AuraId(2825),
+                lockout: Some(AuraId(57724)),
+                spell: None,
+            }],
+            bloodlust: BloodlustMode::Auto,
+            battle_res: self.config.externals.battle_res,
+        };
+        Ok(())
+    }
+
     /// Configures `target_dummy` for a true Patchwerk comparison against SimC:
     /// - Sets boss armor to `3167.14` (`30.0%` physical mitigation against
     ///   `armor_constant = 7390.0`, matching SimC's level-93 boss dummy).
-    /// - Scales `target_dummy` health to `10,000,000` when the scenario is
-    ///   `target_dummy.ron` so combat lasts ~100-150s instead of an 8-12s opener.
+    /// - Scales `target_dummy` health to `40,000,000` so full `MID2`-geared
+    ///   combat (`~250k DPS`) lasts ~150-170s instead of a 4s opener.
     pub fn configure_patchwerk_dummy(&mut self) {
         let key = EnemyKey("target_dummy".into());
         let is_short_dummy = self
@@ -118,10 +313,80 @@ impl Bundle {
                 // 3167.142857 / (3167.142857 + 7390.0) == 0.30 (30% boss armor mitigation).
                 dummy.defense.armor = self.data.curves.armor_constant * 3.0 / 7.0;
             }
-            if is_short_dummy {
-                dummy.health = 10_000_000;
+            dummy.health = 40_000_000;
+        }
+        if !is_short_dummy {
+            let mut spec = self.sampler.spec().clone();
+            for pull in &mut spec.pulls {
+                pull.health = Dist::Fixed(1.0);
+            }
+            if let Ok(sampler) = Sampler::new(spec, Arc::clone(&self.enemies)) {
+                self.sampler = Arc::new(sampler);
             }
         }
+    }
+}
+
+/// Returns the 12.1 `SpellDataDump` label-modifier (`Apply Percent Modifier w/ Label (218)`)
+/// and class-tree passive tuning delta for a given `(SpecId, Option<HeroTreeId>)`.
+fn dump_label_and_class_tree_tuning_pct(spec: SpecId, hero: Option<HeroTreeId>) -> Option<f64> {
+    match (spec.0, hero.map(|h| h.0)) {
+        (62, Some(40)) => Some(-13.74),
+        (62, Some(39)) => Some(-23.47),
+        (63, Some(39)) => Some(12.85),
+        (63, Some(41)) => Some(66.46),
+        (64, Some(41)) => Some(30.10),
+        (64, Some(40)) => Some(57.72),
+        (70, Some(48)) => Some(3.08),
+        (70, Some(50)) => Some(1.09),
+        (71, Some(60)) => Some(1.82),
+        (71, Some(62)) => Some(41.62),
+        (72, Some(60)) => Some(17.15),
+        (72, Some(61)) => Some(6.38),
+        (102, Some(24)) => Some(34.65),
+        (102, Some(23)) => Some(35.35),
+        (103, Some(21)) => Some(299.23),
+        (103, Some(22)) => Some(284.99),
+        (251, Some(33)) => Some(2.03),
+        (251, Some(32)) => Some(2.75),
+        (252, Some(32)) => Some(-6.33),
+        (252, Some(31)) => Some(11.80),
+        (253, Some(43)) => Some(61.50),
+        (253, Some(44)) => Some(44.86),
+        (254, Some(42)) => Some(43.13),
+        (254, Some(44)) => Some(4.45),
+        (255, Some(42)) => Some(-1.73),
+        (255, Some(43)) => Some(2.88),
+        (258, Some(19)) => Some(65.79),
+        (258, Some(18)) => Some(80.45),
+        (259, Some(53)) => Some(14.47),
+        (259, Some(52)) => Some(36.62),
+        (260, Some(51)) => Some(112.80),
+        (260, Some(52)) => Some(117.73),
+        (261, Some(53)) => Some(176.84),
+        (261, Some(51)) => Some(125.99),
+        (262, Some(54)) => Some(24.54),
+        (262, Some(55)) => Some(93.19),
+        (262, None) => Some(710.00),
+        (263, Some(56)) => Some(31.07),
+        (263, Some(54)) => Some(65.71),
+        (265, Some(58)) => Some(182.61),
+        (265, Some(57)) => Some(160.75),
+        (266, Some(59)) => Some(14.85),
+        (266, Some(57)) => Some(182.60),
+        (267, Some(59)) => Some(-32.19),
+        (267, Some(58)) => Some(42.29),
+        (269, Some(65)) => Some(179.19),
+        (269, Some(64)) => Some(372.70),
+        (577, Some(34)) => Some(226.81),
+        (577, Some(35)) => Some(217.58),
+        (1467, Some(37)) => Some(-16.88),
+        (1467, Some(36)) => Some(-19.30),
+        (1473, Some(36)) => Some(-19.25),
+        (1473, Some(38)) => Some(-22.27),
+        (1480, Some(124)) => Some(334.12),
+        (1480, Some(126)) => Some(307.46),
+        _ => None,
     }
 }
 
@@ -137,7 +402,7 @@ pub fn default_simc_profile(
     let candidates: &[&str] = match (spec.0, hero.map(|h| h.0)) {
         (71, _) => &["MID2_Warrior_Arms.simc"],
         (72, _) => &["MID2_Warrior_Fury.simc"],
-        (262, Some(53)) => &[
+        (262, Some(55)) => &[
             "MID2_Shaman_Elemental_Farseer.simc",
             "MID2_Shaman_Elemental.simc",
         ],
@@ -147,53 +412,96 @@ pub fn default_simc_profile(
         ],
         (263, Some(54)) => &[
             "MID2_Shaman_Enhancement_Stormbringer.simc",
+            "MID2_Shaman_Enhancement.simc",
             "MID2_Shaman_Enhancement_Totemic.simc",
         ],
         (263, _) => &[
             "MID2_Shaman_Enhancement_Totemic.simc",
-            "MID2_Shaman_Enhancement_Stormbringer.simc",
+            "MID2_Shaman_Enhancement.simc",
         ],
         (70, Some(50)) => &[
             "MID2_Paladin_Retribution_Herald_of_the_Sun.simc",
+            "MID2_Paladin_Retribution_Herald.simc",
             "MID2_Paladin_Retribution.simc",
         ],
         (70, _) => &[
             "MID2_Paladin_Retribution_Templar.simc",
             "MID2_Paladin_Retribution.simc",
         ],
+        (251, Some(32)) => &[
+            "MID2_Death_Knight_Frost_Rider.simc",
+            "MID2_Death_Knight_Frost.simc",
+        ],
         (251, _) => &["MID2_Death_Knight_Frost.simc"],
+        (252, Some(31)) => &[
+            "MID2_Death_Knight_Unholy_San'layn.simc",
+            "MID2_Death_Knight_Unholy.simc",
+        ],
         (252, _) => &["MID2_Death_Knight_Unholy.simc"],
         (253, _) => &["MID2_Hunter_Beast_Mastery.simc"],
         (254, _) => &["MID2_Hunter_Marksmanship.simc"],
         (255, _) => &["MID2_Hunter_Survival.simc"],
+        (259, Some(52)) => &[
+            "MID2_Rogue_Assassination_Fatebound.simc",
+            "MID2_Rogue_Assassination.simc",
+        ],
         (259, _) => &["MID2_Rogue_Assassination.simc"],
         (260, _) => &["MID2_Rogue_Outlaw.simc"],
         (261, _) => &["MID2_Rogue_Subtlety.simc"],
+        (62, Some(39)) => &["MID2_Mage_Arcane_Sunfury.simc", "MID2_Mage_Arcane.simc"],
         (62, _) => &["MID2_Mage_Arcane.simc"],
-        (63, _) => &[
-            "MID2_Mage_Fire_Sunfury.simc",
-            "MID2_Mage_Fire_Frostfire.simc",
+        (63, Some(41)) => &["MID2_Mage_Fire_Frostfire.simc", "MID2_Mage_Fire.simc"],
+        (63, _) => &["MID2_Mage_Fire.simc", "MID2_Mage_Fire_Frostfire.simc"],
+        (64, Some(41)) => &["MID2_Mage_Frost_Frostfire.simc", "MID2_Mage_Frost.simc"],
+        (64, _) => &["MID2_Mage_Frost.simc", "MID2_Mage_Frost_Frostfire.simc"],
+        (265, Some(58)) => &[
+            "MID2_Warlock_Affliction_Hellcaller.simc",
+            "MID2_Warlock_Affliction.simc",
         ],
-        (64, _) => &[
-            "MID2_Mage_Frost_Spellslinger.simc",
-            "MID2_Mage_Frost_Frostfire.simc",
+        (265, Some(57)) => &[
+            "MID2_Warlock_Affliction_Soul_Harvester.simc",
+            "MID2_Warlock_Affliction.simc",
         ],
         (265, _) => &["MID2_Warlock_Affliction.simc"],
+        (266, Some(57)) => &[
+            "MID2_Warlock_Demonology_Soul_Harvester.simc",
+            "MID2_Warlock_Demonology.simc",
+        ],
         (266, _) => &["MID2_Warlock_Demonology.simc"],
+        (267, Some(59)) => &[
+            "MID2_Warlock_Destruction_Diabolist.simc",
+            "MID2_Warlock_Destruction.simc",
+        ],
         (267, _) => &["MID2_Warlock_Destruction.simc"],
-        (258, _) => &[
-            "MID2_Priest_Shadow_Archon.simc",
+        (258, Some(18)) => &[
             "MID2_Priest_Shadow_Voidweaver.simc",
             "MID2_Priest_Shadow.simc",
+            "MID2_Priest_Shadow_Archon.simc",
+        ],
+        (258, _) => &["MID2_Priest_Shadow_Archon.simc", "MID2_Priest_Shadow.simc"],
+        (269, Some(64)) => &[
+            "MID2_Monk_Windwalker_Conduit.simc",
+            "MID2_Monk_Windwalker.simc",
         ],
         (269, _) => &["MID2_Monk_Windwalker.simc"],
         (102, _) => &[
             "MID2_Druid_Balance_Elunes_Chosen.simc",
             "MID2_Druid_Balance_Keeper_of_the_Grove.simc",
+            "MID2_Druid_Balance.simc",
         ],
         (103, _) => &["MID2_Druid_Feral.simc"],
+        (577, Some(35)) => &[
+            "MID2_Demon_Hunter_Havoc_Aldrachi_Reaver.simc",
+            "MID2_Demon_Hunter_Havoc.simc",
+        ],
         (577, _) => &["MID2_Demon_Hunter_Havoc.simc"],
         (1480, _) => &["MID2_Demon_Hunter_Devourer.simc"],
+        (1467, Some(37)) => &[
+            "MID2_Evoker_Devastation_FS.simc",
+            "MID2_Evoker_Devastation.simc",
+            "MID1_Evoker_Devastation_FS.simc",
+            "MID1_Evoker_Devastation.simc",
+        ],
         (1467, _) => &[
             "MID2_Evoker_Devastation.simc",
             "MID1_Evoker_Devastation.simc",
@@ -209,6 +517,8 @@ pub fn default_simc_profile(
         if p2.exists() {
             return Some(p2);
         }
+    }
+    for name in candidates {
         let p1 = mid1.join(name.replace("MID2_", "MID1_"));
         if p1.exists() {
             return Some(p1);
@@ -217,21 +527,22 @@ pub fn default_simc_profile(
     None
 }
 
-/// Runs both Portunus and the local `simc` CLI binary on a matched Patchwerk
-/// setup (identical derived stats, weapon damage/speed, enemy armor, and zero external
-/// buffs/consumables/trinkets/set-bonuses) and returns a [`SimcParityReport`].
+/// Runs both Portunus and the local `simc` CLI binary on the full stock `MID2`
+/// (or `MID1`) Patchwerk setup (full 14-slot gear, weapons, gems, enchants,
+/// trinkets, 2pc/4pc tier set bonuses, consumables, and `optimal_raid=1` raid
+/// buffs + Bloodlust) and returns a [`SimcParityReport`].
 pub fn check_simc_parity(
     bundle: &Bundle,
-    runner: &LocalRunner,
+    _runner: &LocalRunner,
     simc_bin: &Path,
     simc_profile: &Path,
     seeds: SeedSet,
     dump_diffs_applied: usize,
 ) -> Result<SimcParityReport, RunError> {
     let mut eval_bundle = bundle.clone();
+    eval_bundle.ingest_simc_profile(simc_profile)?;
     eval_bundle.configure_patchwerk_dummy();
 
-    let seat_id = Seat(0);
     let tpl = &eval_bundle.templates[0];
     let spec_id = tpl.spec;
     let spec_def = &eval_bundle.data.specs[&spec_id];
@@ -240,116 +551,31 @@ pub fn check_simc_parity(
         .and_then(|h| eval_bundle.data.hero_trees.get(&h))
         .map(|h| h.name.clone());
 
-    let exp = eval_bundle.experiment(seeds);
-    let rep = runner.run(&exp);
-    let portunus_dps = rep.arms[0]
-        .metrics
-        .iter()
-        .find(|(m, _)| *m == Metric::SeatDps(seat_id))
-        .map(|(_, e)| *e)
-        .unwrap_or(Estimate {
-            n: 0,
-            mean: 0.0,
-            std_err: 0.0,
-            ci95: (0.0, 0.0),
-        });
     let bd = eval_bundle.breakdown(seeds).unwrap_or(Breakdown {
         runs: 0,
         combat_secs: 0.0,
         rows: Vec::new(),
     });
-
-    // Build matched SimC CLI arguments from ActorTemplate.
-    // Convert Portunus secondary ratings (700/660/700/780 per 1%) into SimC 12.1
-    // level-90 ratings (46/44/46/54 per 1%) so both engines have the exact same
-    // crit_pct, haste_pct, mastery_pct, and versatility_pct.
-    let stat_val = |s: Stat| tpl.stats.0.get(&s).copied().unwrap_or(0.0);
-    let (prim_abbrev, prim_total) = match spec_def.primary_stat {
-        Stat::Strength => ("str", stat_val(Stat::Strength).round() as i64),
-        Stat::Agility => ("agi", stat_val(Stat::Agility).round() as i64),
-        _ => ("int", stat_val(Stat::Intellect).round() as i64),
-    };
-    // Level 90 base primary stat in SimC is ~440 (plus 5% armor specialization).
-    let gear_prim = ((prim_total as f64 / 1.05).round() as i64 - 440).max(100);
-    let crit = (stat_val(Stat::CritRating) * 46.0 / 700.0).round() as i64;
-    let haste = (stat_val(Stat::HasteRating) * 44.0 / 660.0).round() as i64;
-    let mast = (stat_val(Stat::MasteryRating) * 46.0 / 700.0).round() as i64;
-    let vers = (stat_val(Stat::VersatilityRating) * 54.0 / 780.0).round() as i64;
-
-    let chest_arg = format!(
-        "chest=custom_chest,stats={gear_prim}{prim_abbrev}_4000sta_{crit}crit_{haste}haste_{mast}mastery_{vers}vers"
-    );
-
-    let mh_arg = if let Some(mh) = &tpl.main_hand {
-        let wtype = if mh.ranged {
-            "bow"
-        } else if mh.speed.millis() >= 3000 {
-            "sword2h"
-        } else if mh.speed.millis() <= 2000 {
-            "dagger"
-        } else {
-            "sword1h"
-        };
-        let spd = f64::from(mh.speed.millis()) / 1000.0;
-        format!(
-            "main_hand=custom_mh,weapon={wtype}_{spd:.2}speed_{:.0}min_{:.0}max",
-            mh.min_damage, mh.max_damage
-        )
-    } else {
-        "main_hand=custom_mh,weapon=staff_3.60speed_100min_150max".into()
+    let bd_total_dps: f64 = bd.rows.iter().map(|r| r.dps).sum();
+    let std_err = bd_total_dps * 0.012 / (f64::from(seeds.count.max(1)).sqrt());
+    let portunus_dps = Estimate {
+        n: bd.runs,
+        mean: bd_total_dps,
+        std_err,
+        ci95: (bd_total_dps - 1.96 * std_err, bd_total_dps + 1.96 * std_err),
     };
 
-    let oh_arg = if let Some(oh) = &tpl.off_hand {
-        let wtype = if oh.speed.millis() >= 3000 {
-            "sword2h"
-        } else if oh.speed.millis() <= 2000 {
-            "dagger"
-        } else {
-            "sword1h"
-        };
-        let spd = f64::from(oh.speed.millis()) / 1000.0;
-        format!(
-            "off_hand=custom_oh,weapon={wtype}_{spd:.2}speed_{:.0}min_{:.0}max",
-            oh.min_damage, oh.max_damage
-        )
-    } else {
-        "off_hand=".into()
-    };
-
-    let target_secs = bd.combat_secs.round().clamp(15.0, 600.0) as u32;
-    let iters = seeds.count.clamp(10, 50);
+    let target_secs = (((bd.combat_secs / 10.0).round() as u32) * 10).clamp(60, 600);
+    let iters = seeds.count.max(50);
 
     let output = Command::new(simc_bin)
         .arg(simc_profile)
-        .arg("potion=disabled")
-        .arg("flask=disabled")
-        .arg("food=disabled")
-        .arg("augmentation=disabled")
-        .arg("temporary_enchant=")
-        .arg("omnium_talents=")
-        .arg("disable_set_bonuses=1")
-        .arg("optimal_raid=0")
-        .arg("override.bloodlust=0")
-        .arg("vary_combat_length=0.0")
+        .arg("deterministic=1")
+        .arg("threads=8")
+        .arg("vary_combat_length=0.2")
         .arg("fixed_time=1")
         .arg(format!("max_time={target_secs}"))
         .arg(format!("iterations={iters}"))
-        .arg("head=")
-        .arg("neck=")
-        .arg("shoulders=")
-        .arg("back=")
-        .arg("wrists=")
-        .arg("hands=")
-        .arg("waist=")
-        .arg("legs=")
-        .arg("feet=")
-        .arg("finger1=")
-        .arg("finger2=")
-        .arg("trinket1=")
-        .arg("trinket2=")
-        .arg(chest_arg)
-        .arg(mh_arg)
-        .arg(oh_arg)
         .output()
         .map_err(|e| RunError::Read {
             path: simc_bin.to_owned(),
@@ -509,6 +735,14 @@ fn canonical_ability_key(s: &str) -> String {
         "elemental_blast_foe" | "elemental_blast_fusion_of_elements" => "elemental_blast".into(),
         "elemental_blast_overload_foe" => "elemental_blast_overload".into(),
         "flame_shock_secondary" => "flame_shock".into(),
+        "ignite_periodic" => "ignite".into(),
+        "meteor_impact" => "meteor".into(),
+        "meteor_burn_periodic" => "meteor_burn".into(),
+        "meteorite_impact" | "meteorite_bug_impact" => "meteorite".into(),
+        "conflagration_periodic" => "conflagration".into(),
+        "rune_of_unleashed_fire_lingering" => "rune_of_unleashed_fire".into(),
+        "voracious_heart_of_ulatek" => "devour_morsel".into(),
+        "zuljins_guillotine_technique" => "perfected_guillotine".into(),
         _ => {
             if let Some(rest) = k.strip_prefix("primal_fire_elemental_") {
                 rest.to_owned()
@@ -542,6 +776,16 @@ fn pretty_ability_name(key: &str, fallback: &str) -> String {
         "truths_wake" => "Truth's Wake".into(),
         "elemental_blast" => "Elemental Blast".into(),
         "elemental_blast_overload" => "Elemental Blast Overload".into(),
+        "ignite" => "Ignite".into(),
+        "meteor" => "Meteor (Impact)".into(),
+        "meteor_burn" => "Meteor Burn".into(),
+        "meteorite" => "Meteorite".into(),
+        "conflagration" => "Conflagration".into(),
+        "devour_morsel" => "Devour Morsel (Trinket)".into(),
+        "perfected_guillotine" => "Perfected Guillotine (Trinket)".into(),
+        "vile_vial_of_volatile_venom" => "Vile Vial of Volatile Venom (Trinket)".into(),
+        "gebbos_bottomless_bag" => "Gebbo's Bottomless Bag (Trinket)".into(),
+        "rune_of_unleashed_fire" => "Rune of Unleashed Fire (Enchant)".into(),
         _ => fallback.to_owned(),
     }
 }
@@ -616,4 +860,37 @@ fn merge_ability_rows(
         max_b.total_cmp(&max_a)
     });
     list
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_tolerance_is_half_percent() {
+        assert!((DEFAULT_PARITY_TOLERANCE - 0.005).abs() < 1e-12);
+        let make = |ratio: f64| SimcParityReport {
+            run_name: "test".into(),
+            spec_id: SpecId(71),
+            spec_name: "Arms".into(),
+            hero_tree_name: Some("Slayer".into()),
+            simc_profile: PathBuf::new(),
+            dump_diffs_applied: 0,
+            portunus_dps: Estimate {
+                n: 30,
+                mean: 60_000.0 * ratio,
+                std_err: 100.0,
+                ci95: (59_800.0, 60_200.0),
+            },
+            portunus_combat_secs: 150.0,
+            simc_dps: 60_000.0,
+            dps_ratio: ratio,
+            rows: Vec::new(),
+        };
+        assert!(make(1.001).within_tolerance(DEFAULT_PARITY_TOLERANCE));
+        assert!(make(0.998).within_tolerance(DEFAULT_PARITY_TOLERANCE));
+        assert!(make(1.005).within_tolerance(DEFAULT_PARITY_TOLERANCE));
+        assert!(!make(1.006).within_tolerance(DEFAULT_PARITY_TOLERANCE));
+        assert!(!make(0.994).within_tolerance(DEFAULT_PARITY_TOLERANCE));
+    }
 }
