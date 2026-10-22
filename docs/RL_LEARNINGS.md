@@ -183,13 +183,7 @@ scenarios (`crates/scenario`) learn when to hold 2-minute cooldowns (`Ascendance
 `Combustion`, `Avatar`, `Metamorphosis`) at the end of a dying pack for the next
 pull's engage.
 
-### Priority 4: Residual `StudentNet` (`2x32`) in `portunus-export`
-Upgrade `StudentNet` (`crates/export/src/lib.rs`) from a 1-layer `32`-unit MLP to
-a `2x32` residual MLP (`+1,024` floats / `+8 KB` in `PortunusRotation/model.lua`)
-so a single distilled addon preserves 98%+ agreement across 1-target, 5-target,
-and 10-target regimes simultaneously.
-
-### Priority 5: Closed-loop Policy $\leftrightarrow$ Stat Co-Optimization
+### Priority 4: Closed-loop Policy $\leftrightarrow$ Stat Co-Optimization
 Wire `portunus-run optimize` (`RacingOptimizer`) to accept a trained Burn RL
 checkpoint dir (`--policy target/rl_...`) so secondary-stat allocations (`Crit`,
 `Haste`, `Mastery`, `Versatility`) can be re-optimized for the RL-learned
@@ -260,18 +254,18 @@ To prevent RL policies from overfitting cooldown timings (`Goremaw's Bite` `45s`
 
 Evaluating all six 34-point Spec + 13-point Hero talent setups across the `40M–60M` HP boss distribution (`4x64` residual `PolicyValueNet`, 5 iterations $\times$ 32 episodes $\times$ 24 MCTS sims, `n=30` paired eval seeds `1000..1030`):
 
-| Rank | Talent Setup & Hero Tree | Run File | SimC Script DPS (`40M–60M`, `n=30`) | Burn RL DPS (`40M–60M`, `n=30`) | RL Gain ($\Delta$ DPS) | RL Gain (%) | Mean Kill Time (`Script` $\rightarrow$ `RL`) | Fixed `40M` RL DPS | Student Agreement |
-| :-: | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **1** | **Deathstalker — Danse / Clone / Finisher Amp (`Death Perception` 2/2 + `Danse Macabre` + `The Rotten` + `Replicating Shadows`, drops `The First Dance`)** | `subtlety_deathstalker_danse_boss.ron` | `340,235.9 ± 5,254.0` | **`378,628.0`** | **`+38,392.1`** | **`+11.28%`** | `160.02s` $\rightarrow$ **`144.86s`** | `390,100.4` | **`100.0%`** |
-| **2** | **Trickster — Dark Brew Finisher Burst (`Dark Brew` + `Finality` 2/2 + `Death Perception` 2/2 + `The Rotten`, drops `The First Dance`)** | `subtlety_trickster_burst_boss.ron` | `333,657.5 ± 7,485.7` | **`349,893.8`** | **`+16,236.3`** | **`+4.87%`** | `163.22s` $\rightarrow$ **`156.06s`** | `364,687.6` | **`99.9%`** |
-| **3** | **Deathstalker — Dark Brew Shadow/Plague Amp (`Dark Brew` + `Finality` 2/2 + `The Rotten` + `Veiltouched`, drops `The First Dance`)** | `subtlety_deathstalker_dark_brew_boss.ron` | `304,899.7 ± 3,666.1` | **`342,212.8`** | **`+37,313.1`** | **`+12.24%`** | `177.25s` $\rightarrow$ **`159.30s`** | `356,788.3` | **`100.0%`** |
-| **4** | **Trickster — Unseen / Shadow Clone (`Backstab` + `Weaponmaster` + `Replicating Shadows` + `Danse Macabre`)** | `subtlety_trickster_unseen_boss.ron` | `316,027.4 ± 5,373.8` | **`338,526.6`** | **`+22,499.2`** | **`+7.12%`** | `171.54s` $\rightarrow$ **`161.13s`** | `349,146.1` | `98.4%` |
-| **5** | **Deathstalker — Canonical SimC MID2 Build (`The First Dance` + `Finality` 1/2 + `Death Perception` 1/2)** | `subtlety_deathstalker_boss.ron` | `288,292.0 ± 3,901.2` | **`316,657.8`** | **`+28,365.8`** | **`+9.84%`** | `186.84s` $\rightarrow$ **`171.18s`** | `324,589.3` | **`100.0%`** |
-| **6** | **Trickster — Canonical SimC MID2 Build (`The First Dance` + `Finality` 1/2 + `Death Perception` 1/2)** | `subtlety_trickster_boss.ron` | `280,346.0 ± 5,551.9` | **`297,066.7`** | **`+16,720.7`** | **`+5.96%`** | `192.06s` $\rightarrow$ **`181.73s`** | `306,366.6` | `99.3%` |
+| Rank | Talent Setup & Hero Tree | Run File | SimC Script DPS (`40M–60M`, `n=30`) | Burn RL DPS (`40M–60M`, `n=30`) | RL Gain ($\Delta$ DPS) | RL Gain (%) | Mean Kill Time (`Script` $\rightarrow$ `RL`) | Fixed `40M` RL DPS |
+| :-: | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **1** | **Deathstalker — Danse / Clone / Finisher Amp (`Death Perception` 2/2 + `Danse Macabre` + `The Rotten` + `Replicating Shadows`, drops `The First Dance`)** | `subtlety_deathstalker_danse_boss.ron` | `340,235.9 ± 5,254.0` | **`378,628.0`** | **`+38,392.1`** | **`+11.28%`** | `160.02s` $\rightarrow$ **`144.86s`** | `390,100.4` |
+| **2** | **Trickster — Dark Brew Finisher Burst (`Dark Brew` + `Finality` 2/2 + `Death Perception` 2/2 + `The Rotten`, drops `The First Dance`)** | `subtlety_trickster_burst_boss.ron` | `333,657.5 ± 7,485.7` | **`349,893.8`** | **`+16,236.3`** | **`+4.87%`** | `163.22s` $\rightarrow$ **`156.06s`** | `364,687.6` |
+| **3** | **Deathstalker — Dark Brew Shadow/Plague Amp (`Dark Brew` + `Finality` 2/2 + `The Rotten` + `Veiltouched`, drops `The First Dance`)** | `subtlety_deathstalker_dark_brew_boss.ron` | `304,899.7 ± 3,666.1` | **`342,212.8`** | **`+37,313.1`** | **`+12.24%`** | `177.25s` $\rightarrow$ **`159.30s`** | `356,788.3` |
+| **4** | **Trickster — Unseen / Shadow Clone (`Backstab` + `Weaponmaster` + `Replicating Shadows` + `Danse Macabre`)** | `subtlety_trickster_unseen_boss.ron` | `316,027.4 ± 5,373.8` | **`338,526.6`** | **`+22,499.2`** | **`+7.12%`** | `171.54s` $\rightarrow$ **`161.13s`** | `349,146.1` |
+| **5** | **Deathstalker — Canonical SimC MID2 Build (`The First Dance` + `Finality` 1/2 + `Death Perception` 1/2)** | `subtlety_deathstalker_boss.ron` | `288,292.0 ± 3,901.2` | **`316,657.8`** | **`+28,365.8`** | **`+9.84%`** | `186.84s` $\rightarrow$ **`171.18s`** | `324,589.3` |
+| **6** | **Trickster — Canonical SimC MID2 Build (`The First Dance` + `Finality` 1/2 + `Death Perception` 1/2)** | `subtlety_trickster_boss.ron` | `280,346.0 ± 5,551.9` | **`297,066.7`** | **`+16,720.7`** | **`+5.96%`** | `192.06s` $\rightarrow$ **`181.73s`** | `306,366.6` |
 
 - **Why the `40M–60M` HP distribution + `target_abs_hp` (`feat[7]`) matters:**
   - Across `40M–60M` HP bosses (`135s–182s` mean fight length), SimC's script only casts `1.0` `Vanish` (`120s` CD) per fight because its `cp <= 2.0 && energy >= 50` gate misses or delays the second window, whereas the RL policy consistently lands **`1.8–2.0` `Vanish` casts**, **`3.6–4.4` `Goremaw's Bite` (`45s` CD) casts**, and **`2.0–2.5` `Shadow Blades` (`90s` CD) casts** depending on the sampled boss HP.
-  - Because `target_abs_hp` (`feat[7]`) breaks the collinearity between `combat_sec` (`feat[1]`) and `target_hp` (`feat[6]`), **distilled `StudentNet` agreement reaches `100.0%` on all 3 Deathstalker builds and `98.4%–99.9%` on all 3 Trickster builds**!
+  - Adding `target_abs_hp` (`feat[7]`) breaks the collinearity between `combat_sec` (`feat[1]`) and `target_hp` (`feat[6]`), giving both the policy and value heads direct visibility into remaining boss health from $t = 0\text{s}$ onward.
   - The **exact same build ranking (#1 through #6)** holds across both fixed `40M` HP and the `40M–60M` HP distribution.
 
 ### 5.3 Automated All-Spec Talent & Cast-Rate Verification (`audit_talents` + `cast_rate_divergences`)

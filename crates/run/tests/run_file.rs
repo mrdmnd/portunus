@@ -2301,7 +2301,7 @@ fn train_rl_improves_single_target_dps() {
     );
     let rendered = report::render_training(&rep);
     assert!(rendered.contains("burn rl training: elemental_dummy"));
-    assert!(rendered.contains("distilled student agreement:"));
+    assert!(rendered.contains("trained policy vs scripted baseline"));
 }
 
 #[test]

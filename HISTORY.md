@@ -74,11 +74,7 @@ The goal of framing this problem as a Markov Decision Problem is to allow us to 
 Several great tools have come about in the past several years to support World of Warcraft theorycrafters. Our goal is not necessarily to supplant these tools, but to build on their design success and incorporate their best parts. 
 
 ### Simulation Engine (SIMC)
-Obviously, Simulationcraft is the "big daddy" of WoW Simulation. There have been probably hundreds of thousands of engineer-hours put into it at this point, and it's the gold standard for a reason. I am releasing Portunus not because I don't believe in SIMC, but because I believe we can do better - we can leverage the tools from DeepRL to go beyond static SIMC APLs into a better, higher DPS new world. Portunus is validated with SIMC APLs as the "human equivalent" line -- however, because the policies found by Portunus won't be "human playable" on their own, we need another piece of the puzzle:
-
-### Gameplay Suggestion (HeroRotation)
-Portunus' action policies should be exportable in the form of a rotation helper addon, like HeroRotation or Hekili or Ovale.
-The idea here is to allow the addon to compute the "game state" by scraping information from the Wow LUA API, then use that state to run its control policy and suggest the next action to the player. We'll provide our own rotation helper that takes as input one of the trained control policies from a training run. 
+Obviously, Simulationcraft is the "big daddy" of WoW Simulation. There have been probably hundreds of thousands of engineer-hours put into it at this point, and it's the gold standard for a reason. I am releasing Portunus not because I don't believe in SIMC, but because I believe we can do better - we can leverage the tools from DeepRL to go beyond static SIMC APLs into a better, higher DPS new world. Portunus is validated with SIMC APLs as the "human equivalent" line.
 
 ### Web Frontend for Fine-tuning (Raidbots)
 Raidbots is a tool developed by Seriallos that provides an incredibly intuitive frontend to the SIMC core simulation tool. It allows users to select various "tasks" and then guides them through using a wizard to setup the appropriate SIMC input code. Portunus intends to provide a similar front end webserver + queueing service to enable users to fine tune the core, base alpha zero network models on their specific character. Want to play a weird talent setup? Want to use other trinkets? No problem, eventually you'll be able to fine tune for your own use case.

@@ -5103,18 +5103,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "portunus-export"
-version = "0.1.0"
-dependencies = [
- "burn",
- "portunus-core",
- "portunus-engine",
- "portunus-env",
- "portunus-policy",
- "serde",
-]
-
-[[package]]
 name = "portunus-gamedata"
 version = "0.1.0"
 dependencies = [
@@ -5211,7 +5199,6 @@ dependencies = [
  "portunus-engine",
  "portunus-env",
  "portunus-eval",
- "portunus-export",
  "portunus-gamedata",
  "portunus-ingest",
  "portunus-learn",

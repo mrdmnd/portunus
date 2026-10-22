@@ -17,7 +17,6 @@ portunus-mechanics = { workspace = true }
 portunus-env = { workspace = true }
 portunus-policy = { workspace = true }
 portunus-learn = { workspace = true }
-portunus-export = { workspace = true }
 portunus-eval = { workspace = true }
 portunus-optimize = { workspace = true }
 portunus-ingest = { workspace = true }

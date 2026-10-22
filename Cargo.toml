@@ -13,7 +13,6 @@ members = [
     "crates/learn",
     "crates/eval",
     "crates/optimize",
-    "crates/export",
     "crates/ingest",
     "crates/run",
 ]
@@ -37,7 +36,6 @@ portunus-policy = { path = "crates/policy" }
 portunus-learn = { path = "crates/learn" }
 portunus-eval = { path = "crates/eval" }
 portunus-optimize = { path = "crates/optimize" }
-portunus-export = { path = "crates/export" }
 portunus-ingest = { path = "crates/ingest" }
 portunus-run = { path = "crates/run" }
 burn = { version = "0.22", features = ["flex"] }

@@ -240,12 +240,6 @@ pub fn render_training(r: &TrainReport) -> String {
             it.total_time.mean,
         );
     }
-    let _ = writeln!(
-        out,
-        "\ndistilled student agreement: {:.1}% (addon files: {:?})",
-        100.0 * r.distilled_agreement,
-        r.addon_files
-    );
     let _ = writeln!(out, "\ntrained policy vs untrained (iter 0 -> final):");
     out += &render_breakdown_change(&r.initial_breakdown, &r.final_breakdown);
     let _ = writeln!(

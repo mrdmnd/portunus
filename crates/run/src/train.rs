@@ -7,11 +7,8 @@ use std::time::Instant;
 
 use burn::tensor::Device;
 use portunus_core::{Seat, Seed, SimDuration, SpecId};
-use portunus_env::{ActionSpace, Decision, DenseReward, Env, SpecActionSpace, Turn};
+use portunus_env::{ActionSpace, DenseReward, SpecActionSpace};
 use portunus_eval::{Estimate, Experiment, LocalRunner, Metric, Runner, SeedSet};
-use portunus_export::{
-    AddonEmitter, AddonTarget, BurnDistiller, Distiller, LuaAddonEmitter, StudentNetConfig,
-};
 use portunus_learn::{
     BurnTrainer, Collector, DirStore, MemoryStore, ModelStore, Sample, SelfPlayCollector, Trainer,
 };
@@ -102,8 +99,6 @@ pub struct TrainReport {
     pub initial_breakdown: Breakdown,
     pub final_breakdown: Breakdown,
     pub iterations: Vec<IterationSummary>,
-    pub distilled_agreement: f64,
-    pub addon_files: Vec<(String, usize)>,
     pub mcts_env_secs: f64,
     pub mcts_nn_secs: f64,
     pub train_backprop_secs: f64,
@@ -254,8 +249,7 @@ pub fn train_rl(
         per_second: 2.5,
         per_death: 100.0,
     });
-    let rl_env = bundle.env_with(crate::observe::ScriptObserver, Arc::clone(&reward), false);
-    let fast_rl_env = bundle.env_with(feat_concrete, reward, false);
+    let fast_rl_env = bundle.env_with(feat_concrete, Arc::clone(&reward), false);
     let mcts_cfg = MctsConfig {
         simulations: spec.simulations,
         c_puct: 1.25,
@@ -275,8 +269,9 @@ pub fn train_rl(
     let mut samples_total = 0usize;
     let mut iter0_stats = TrainStats::default();
     if spec.warm_start_episodes > 0 {
+        let rl_env = bundle.env_with(crate::observe::ScriptObserver, reward, false);
         let mut warm_collector = SelfPlayCollector::new(
-            rl_env.clone(),
+            rl_env,
             mcts_cfg,
             Arc::clone(&space),
             Arc::clone(&featurizer),
@@ -502,48 +497,6 @@ pub fn train_rl(
         });
     }
 
-    // 5. Distill best trained BurnModel into a compact BurnStudent and emit Lua addon.
-    let teacher = ModelPolicy {
-        space: Arc::clone(&space),
-        featurizer: Arc::clone(&featurizer),
-        model: Arc::clone(&best_model),
-        temperature: 0.0,
-    };
-    let mut decisions: Vec<Decision<SeatObs>> = Vec::new();
-    let mut dist_env = rl_env;
-    for s in 0..spec.eval_seeds.count.min(4) {
-        let seed = Seed(spec.eval_seeds.first + u64::from(s));
-        if let Ok(mut turn) = dist_env.reset(seed) {
-            while let Turn::Decide(d) = turn {
-                let choice = teacher.act(&d);
-                if d.seat == seat_id {
-                    decisions.push(d);
-                }
-                let Ok(tr) = dist_env.step(choice) else {
-                    break;
-                };
-                turn = tr.next;
-            }
-        }
-    }
-
-    let student_cfg = StudentNetConfig::new(feature_width, action_space_size).with_hidden_width(32);
-    let distiller = BurnDistiller::new(student_cfg, Arc::clone(&space), Arc::clone(&featurizer));
-    let student = distiller.distill(&teacher, &decisions);
-    let distilled_agreement = distiller.agreement(&student, &teacher, &decisions);
-    let addon = LuaAddonEmitter.emit(
-        &student,
-        &AddonTarget {
-            addon_name: "PortunusRotation".into(),
-            interface: 120100,
-        },
-    );
-    let addon_files = addon
-        .files
-        .into_iter()
-        .map(|(path, content)| (path, content.len()))
-        .collect();
-
     let (mcts_env_us, mcts_nn_us) = take_mcts_profile_micros();
     let mcts_env_secs = mcts_env_us as f64 / 1_000_000.0;
     let mcts_nn_secs = mcts_nn_us as f64 / 1_000_000.0;
@@ -569,8 +522,6 @@ pub fn train_rl(
         initial_breakdown,
         final_breakdown,
         iterations,
-        distilled_agreement,
-        addon_files,
         mcts_env_secs,
         mcts_nn_secs,
         train_backprop_secs,

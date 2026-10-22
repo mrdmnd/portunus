@@ -8,7 +8,7 @@
 //!
 //! `portunus-run train <run.ron> [--iterations N] [--episodes E] [--warm-start W]
 //! [--simulations S] [--horizon-ms MS] [--epochs K] [--seat K] [--seeds N] [--first-seed S] [--threads T]`
-//! runs a multi-iteration Burn self-play RL loop (`Mcts` + `BurnTrainer` + `BurnDistiller`)
+//! runs a multi-iteration Burn self-play RL loop (`Mcts` + `BurnTrainer`)
 //! and compares each checkpoint against the bundle's scripted baseline.
 //!
 //! `portunus-run optimize <run.ron> [--rounds R] [--step-rating S] [--seat K]

@@ -3,9 +3,8 @@
 //! Two kinds of controller, split by what they can touch:
 //!
 //! - [`Policy`]: sees only its observation. Deployable — hand-written
-//!   rules, the SimulationCraft-style baseline, a Burn neural network on its
-//!   own ([`BurnModel`] + [`ModelPolicy`]), or a distilled student can all
-//!   run in an addon.
+//!   rules, the SimulationCraft-style baseline, or a Burn neural network on its
+//!   own ([`BurnModel`] + [`ModelPolicy`]).
 //! - [`SearchPolicy`]: also gets the env, so it can fork and play ahead.
 //!   Used for training targets and as an upper bound; never deployable.
 //!

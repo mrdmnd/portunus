@@ -2,9 +2,8 @@
 //!
 //! Observers are the only code given privileged state on a policy's
 //! behalf. Under [`InfoSet::Realistic`] an observer must restrict itself to
-//! what a player could know in game (and what an addon can read from the
-//! game API): visible health, cast bars, and auras, plus the timeline
-//! priors — never sampled future timings or pending spawns. It must also
+//! what a player could know in game: visible health, cast bars, and auras,
+//! plus the timeline priors — never sampled future timings or pending spawns. It must also
 //! hide events the seat hasn't perceived yet (`StateView::unperceived`),
 //! and present the legality mask as it looked before them.
 
