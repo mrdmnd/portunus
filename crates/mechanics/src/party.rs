@@ -74,11 +74,11 @@ impl PartyMechanics {
     }
 
     fn spell(&self, id: SpellId) -> Option<&SpellDef> {
-        self.math().data().spells.get(&id)
+        self.math().fast_spell(id)
     }
 
     fn aura_def(&self, id: portunus_core::AuraId) -> Option<&AuraDef> {
-        self.math().data().auras.get(&id)
+        self.math().fast_aura(id).map(|f| &f.def)
     }
 
     /// Take a bank tick's share out of its value and return it. Spread

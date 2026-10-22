@@ -2,14 +2,16 @@
 
 use std::sync::Arc;
 
-use portunus_core::{ActorId, PetId, Seat, SpecId, SpellId};
+use portunus_core::{ActorId, AuraId, PetId, Seat, SpecId, SpellId};
 use portunus_engine::mechanics::HitKind;
 pub(crate) use portunus_engine::state::predicate;
 use portunus_engine::state::{ActorKind, AuraInstance};
 use portunus_engine::{AuraRef, RunSetup, StateView};
-use portunus_gamedata::effect::{Coefficient, ModKind, ModScope, Modifier};
+use portunus_gamedata::aura::AuraDef;
+use portunus_gamedata::effect::{Coefficient, ListenFor, ModKind, ModScope, Modifier};
 use portunus_gamedata::item::{WeaponDef, WeaponHand};
 use portunus_gamedata::pet::PetKind;
+use portunus_gamedata::spell::SpellDef;
 use portunus_gamedata::stats::{DerivedStats, RatedStat, SchoolMask, Stat, StatBlock};
 use portunus_gamedata::GameData;
 
@@ -88,11 +90,213 @@ enum Role {
     Pet { owner: ActorId, guardian: bool },
 }
 
+#[inline]
+pub(crate) const fn mod_kind_bit(kind: ModKind) -> u32 {
+    match kind {
+        ModKind::DamageDonePct => 0,
+        ModKind::PetDamagePct => 1,
+        ModKind::GuardianDamagePct => 2,
+        ModKind::DamageTakenPct => 3,
+        ModKind::CritChanceAdd => 4,
+        ModKind::CritDamagePct => 5,
+        ModKind::HastePct => 6,
+        ModKind::AttackSpeedPct => 7,
+        ModKind::PersistentPct => 8,
+        ModKind::CastTimePct => 9,
+        ModKind::GcdPct => 10,
+        ModKind::CooldownPct => 11,
+        ModKind::ChargesAdd => 12,
+        ModKind::CostPct => 13,
+        ModKind::ResourceMax(_) => 14,
+        ModKind::StatPct(_) => 15,
+        ModKind::StatFlat(_) => 16,
+        ModKind::AttackPowerPct => 17,
+        ModKind::RatedPct(_) => 18,
+        ModKind::CastWhileMoving => 19,
+        ModKind::MoveSpeedPct => 20,
+        ModKind::Immune => 21,
+        ModKind::CritChanceScalesDamage => 22,
+        ModKind::CritChanceAddsDamage => 23,
+        ModKind::StatShare(_) => 24,
+        ModKind::StatFromStat { .. } => 25,
+        ModKind::ArmorPenPct => 26,
+        ModKind::MasteryDamagePct => 27,
+        ModKind::SourceDamageTakenPct => 28,
+        ModKind::ChannelTicksAdd => 29,
+        ModKind::ChainTargetsAdd => 30,
+        ModKind::ChainSharePct | ModKind::CooldownRatePct | ModKind::TickPeriodPct => 31,
+    }
+}
+
+#[inline]
+pub(crate) const fn listen_for_bit(on: ListenFor) -> u32 {
+    match on {
+        ListenFor::CastComplete { .. } => 0,
+        ListenFor::DamageDealt { .. } => 1,
+        ListenFor::DamageTaken => 2,
+        ListenFor::Swing { .. } => 3,
+        ListenFor::WeaponHit { .. } => 4,
+        ListenFor::PeriodicTick(_) => 5,
+        ListenFor::ResourceSpent(_) => 6,
+        ListenFor::AuraApplied(_) => 7,
+        ListenFor::AuraExpired(_) => 8,
+        ListenFor::PetExpired(_) => 9,
+        ListenFor::Departed => 10,
+        ListenFor::EnemyDied { .. } => 11,
+        ListenFor::CastStart { .. } => 12,
+        ListenFor::ResourceGained(_) => 13,
+        ListenFor::Absorbed(_) => 14,
+        ListenFor::Interrupted => 15,
+        ListenFor::MoveStart => 16,
+        ListenFor::MoveEnd => 17,
+        ListenFor::HealthBelow { .. } => 18,
+        ListenFor::AuraStacksReached { .. } => 19,
+        ListenFor::AuraRemovedBy { .. } => 20,
+    }
+}
+
+const STAT_MOD_MASK: u32 = (1 << mod_kind_bit(ModKind::AttackPowerPct))
+    | (1 << mod_kind_bit(ModKind::StatFlat(Stat::Strength)))
+    | (1 << mod_kind_bit(ModKind::StatPct(Stat::Strength)))
+    | (1 << mod_kind_bit(ModKind::RatedPct(RatedStat::Crit)))
+    | (1 << mod_kind_bit(ModKind::StatShare(Stat::Strength)))
+    | (1 << mod_kind_bit(ModKind::StatFromStat {
+        from: Stat::CritRating,
+        to: Stat::MasteryRating,
+    }));
+
+const OUTGOING_MOD_MASK: u32 = (1 << mod_kind_bit(ModKind::DamageDonePct))
+    | (1 << mod_kind_bit(ModKind::CritChanceScalesDamage))
+    | (1 << mod_kind_bit(ModKind::CritChanceAddsDamage))
+    | (1 << mod_kind_bit(ModKind::MasteryDamagePct));
+
+const MITIGATE_MOD_MASK: u32 =
+    (1 << mod_kind_bit(ModKind::Immune)) | (1 << mod_kind_bit(ModKind::DamageTakenPct));
+
+const CHAIN_MOD_MASK: u32 =
+    (1 << mod_kind_bit(ModKind::ChainTargetsAdd)) | (1 << mod_kind_bit(ModKind::ChainSharePct));
+
+#[derive(Debug, Clone)]
+pub(crate) struct FastAura {
+    pub mod_mask: u32,
+    pub listen_mask: u32,
+    pub has_kernel_stat_mod: bool,
+    pub has_cond_kernel_stat_mod: bool,
+    pub def: AuraDef,
+}
+
+#[derive(Debug)]
+pub(crate) struct FastAuraTable {
+    slots: Vec<Option<(AuraId, FastAura)>>,
+    shift: u32,
+    mask: usize,
+}
+
+impl FastAuraTable {
+    fn from_data(data: &GameData) -> Self {
+        let cap = (data.auras.len() * 4).next_power_of_two().max(64);
+        let shift = usize::BITS - cap.trailing_zeros();
+        let mask = cap - 1;
+        let mut slots = vec![None; cap];
+        for (&id, def) in &data.auras {
+            let mut mod_mask = 0u32;
+            let mut has_kernel_stat_mod = false;
+            let mut has_cond_kernel_stat_mod = false;
+            for m in &def.modifiers {
+                mod_mask |= 1u32 << mod_kind_bit(m.kind);
+                let is_kernel_stat = matches!(
+                    m.kind,
+                    ModKind::HastePct
+                        | ModKind::AttackSpeedPct
+                        | ModKind::StatFlat(_)
+                        | ModKind::StatPct(_)
+                        | ModKind::StatShare(_)
+                        | ModKind::StatFromStat { .. }
+                        | ModKind::RatedPct(RatedStat::Haste)
+                );
+                if is_kernel_stat {
+                    has_kernel_stat_mod = true;
+                    if m.condition.is_some() {
+                        has_cond_kernel_stat_mod = true;
+                    }
+                }
+            }
+            let mut listen_mask = 0u32;
+            for l in &def.listeners {
+                listen_mask |= 1u32 << listen_for_bit(l.on);
+            }
+            let fast = FastAura {
+                mod_mask,
+                listen_mask,
+                has_kernel_stat_mod,
+                has_cond_kernel_stat_mod,
+                def: def.clone(),
+            };
+            let mut idx = ((id.0 as usize).wrapping_mul(0x9E37_79B9_7F4A_7C15)) >> shift;
+            while slots[idx].is_some() {
+                idx = (idx + 1) & mask;
+            }
+            slots[idx] = Some((id, fast));
+        }
+        Self { slots, shift, mask }
+    }
+
+    #[inline]
+    pub fn get(&self, id: AuraId) -> Option<&FastAura> {
+        let mut idx = ((id.0 as usize).wrapping_mul(0x9E37_79B9_7F4A_7C15)) >> self.shift;
+        loop {
+            match &self.slots[idx] {
+                Some((k, v)) if *k == id => return Some(v),
+                Some(_) => idx = (idx + 1) & self.mask,
+                None => return None,
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct FastSpellTable {
+    slots: Vec<Option<(SpellId, SpellDef)>>,
+    shift: u32,
+    mask: usize,
+}
+
+impl FastSpellTable {
+    fn from_data(data: &GameData) -> Self {
+        let cap = (data.spells.len() * 4).next_power_of_two().max(64);
+        let shift = usize::BITS - cap.trailing_zeros();
+        let mask = cap - 1;
+        let mut slots = vec![None; cap];
+        for (&id, def) in &data.spells {
+            let mut idx = ((id.0 as usize).wrapping_mul(0x9E37_79B9_7F4A_7C15)) >> shift;
+            while slots[idx].is_some() {
+                idx = (idx + 1) & mask;
+            }
+            slots[idx] = Some((id, def.clone()));
+        }
+        Self { slots, shift, mask }
+    }
+
+    #[inline]
+    pub fn get(&self, id: SpellId) -> Option<&SpellDef> {
+        let mut idx = ((id.0 as usize).wrapping_mul(0x9E37_79B9_7F4A_7C15)) >> self.shift;
+        loop {
+            match &self.slots[idx] {
+                Some((k, v)) if *k == id => return Some(v),
+                Some(_) => idx = (idx + 1) & self.mask,
+                None => return None,
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 struct Statics {
     data: Arc<GameData>,
     seats: Vec<SeatStats>,
     curves: [Option<portunus_gamedata::stats::RatingCurve>; STAT_COUNT],
+    auras: FastAuraTable,
+    spells: FastSpellTable,
 }
 
 /// The [`CombatMath`] implementation.
@@ -173,17 +377,31 @@ impl Formulas {
             };
             setup.data.curves.ratings.get(&stat).cloned()
         });
+        let auras = FastAuraTable::from_data(&setup.data);
+        let spells = FastSpellTable::from_data(&setup.data);
         Self {
             s: Arc::new(Statics {
                 data: Arc::clone(&setup.data),
                 seats,
                 curves,
+                auras,
+                spells,
             }),
         }
     }
 
     pub(crate) fn data(&self) -> &GameData {
         &self.s.data
+    }
+
+    #[inline]
+    pub(crate) fn fast_aura(&self, id: AuraId) -> Option<&FastAura> {
+        self.s.auras.get(id)
+    }
+
+    #[inline]
+    pub(crate) fn fast_spell(&self, id: SpellId) -> Option<&SpellDef> {
+        self.s.spells.get(id)
     }
 
     fn role(&self, view: &dyn StateView, actor: ActorId) -> Role {
@@ -232,7 +450,7 @@ impl Formulas {
                 let form = view
                     .auras(actor)
                     .iter()
-                    .find_map(|x| self.s.data.auras.get(&x.aura)?.form.as_ref()?.weapon);
+                    .find_map(|x| self.fast_aura(x.aura)?.def.form.as_ref()?.weapon);
                 match form {
                     Some(w) => (i == 0).then_some(w),
                     None => self.s.seats.get(usize::from(seat.0))?.weapons[i],
@@ -276,7 +494,7 @@ impl Formulas {
         }
         let hand = ctx
             .hand
-            .or_else(|| self.s.data.spells.get(&ctx.spell?)?.weapon)
+            .or_else(|| self.fast_spell(ctx.spell?)?.weapon)
             .unwrap_or(WeaponHand::MainHand);
         let weapon = self.weapon(view, ctx.caster, hand).map_or(0.0, |w| {
             let speed = f64::from(w.speed.millis()) / 1000.0;
@@ -301,7 +519,7 @@ impl Formulas {
     ) -> (usize, f64) {
         let q = self.spell_query(view, ctx, Some(school));
         let (mut n, mut share) = (0.0, 1.0);
-        self.each_mod(view, &q, |m, v| match m.kind {
+        self.each_mod_masked(view, &q, CHAIN_MOD_MASK, |m, v| match m.kind {
             ModKind::ChainTargetsAdd => n += v,
             ModKind::ChainSharePct => share *= v / 100.0,
             _ => {}
@@ -363,9 +581,10 @@ impl Formulas {
         let mut ap_mult = 1.0;
         let mut shares: Vec<(Stat, f64, ActorId)> = Vec::new();
         let mut conversions: Vec<(Stat, Stat, f64)> = Vec::new();
-        self.each_sourced_mod(
+        self.each_sourced_mod_masked(
             view,
             &Query::holder_targeted(view, actor),
+            STAT_MOD_MASK,
             |m, value, source| match m.kind {
                 ModKind::AttackPowerPct => ap_mult *= 1.0 + value / 100.0,
                 ModKind::StatFlat(stat) => stats[stat_idx(stat)] += value,
@@ -555,10 +774,9 @@ impl Formulas {
             auto: false,
         };
         let mut kept = 1.0;
-        self.each_mod(view, &q, |m, v| {
-            if m.kind == ModKind::ArmorPenPct {
-                kept *= (1.0 - v / 100.0).max(0.0);
-            }
+        let mask = 1u32 << mod_kind_bit(ModKind::ArmorPenPct);
+        self.each_mod_masked(view, &q, mask, |_, v| {
+            kept *= (1.0 - v / 100.0).max(0.0);
         });
         kept
     }
@@ -581,10 +799,9 @@ impl Formulas {
             ..Query::holder(target)
         };
         let mut total = 1.0;
-        self.each_sourced_mod(view, &q, |m, v, source| {
-            if m.kind == ModKind::SourceDamageTakenPct
-                && (source == attacker || owner == Some(source))
-            {
+        let mask = 1u32 << mod_kind_bit(ModKind::SourceDamageTakenPct);
+        self.each_sourced_mod_masked(view, &q, mask, |_, v, source| {
+            if source == attacker || owner == Some(source) {
                 total *= 1.0 + v / 100.0;
             }
         });
@@ -616,29 +833,40 @@ impl Formulas {
     }
 
     fn spell_school(&self, spell: Option<SpellId>) -> Option<SchoolMask> {
-        spell
-            .and_then(|s| self.s.data.spells.get(&s))
-            .map(|d| d.school)
+        spell.and_then(|s| self.fast_spell(s)).map(|d| d.school)
     }
 
-    /// Calls `f` with every applicable modifier and its value times stacks
-    /// (for `per_stack` modifiers).
-    fn each_mod(&self, view: &dyn StateView, q: &Query, mut f: impl FnMut(&Modifier, f64)) {
-        self.each_sourced_mod(view, q, |m, value, _| f(m, value));
-    }
-
-    /// [`Self::each_mod`], also passing who applied each modifier's aura.
-    fn each_sourced_mod(
+    /// Calls `f` with every applicable modifier matching `want_mask` and its
+    /// value times stacks (for `per_stack` modifiers).
+    fn each_mod_masked(
         &self,
         view: &dyn StateView,
         q: &Query,
+        want_mask: u32,
+        mut f: impl FnMut(&Modifier, f64),
+    ) {
+        self.each_sourced_mod_masked(view, q, want_mask, |m, value, _| f(m, value));
+    }
+
+    /// [`Self::each_mod_masked`], also passing who applied each modifier's aura.
+    fn each_sourced_mod_masked(
+        &self,
+        view: &dyn StateView,
+        q: &Query,
+        want_mask: u32,
         mut f: impl FnMut(&Modifier, f64, ActorId),
     ) {
         for inst in view.auras(q.holder) {
-            let Some(def) = self.s.data.auras.get(&inst.aura) else {
+            let Some(fast) = self.fast_aura(inst.aura) else {
                 continue;
             };
-            for m in &def.modifiers {
+            if fast.mod_mask & want_mask == 0 {
+                continue;
+            }
+            for m in &fast.def.modifiers {
+                if (1u32 << mod_kind_bit(m.kind)) & want_mask == 0 {
+                    continue;
+                }
                 if !self.applies(view, q, m) {
                     continue;
                 }
@@ -667,7 +895,8 @@ impl Formulas {
 
     fn mod_sum(&self, view: &dyn StateView, q: &Query, kind: ModKind) -> f64 {
         let mut total = 0.0;
-        self.each_mod(view, q, |m, v| {
+        let mask = 1u32 << mod_kind_bit(kind);
+        self.each_mod_masked(view, q, mask, |m, v| {
             if m.kind == kind {
                 total += v;
             }
@@ -678,7 +907,8 @@ impl Formulas {
     /// The product of `1 + value / 100` over matching modifiers.
     fn mod_product(&self, view: &dyn StateView, q: &Query, kind: ModKind) -> f64 {
         let mut total = 1.0;
-        self.each_mod(view, q, |m, v| {
+        let mask = 1u32 << mod_kind_bit(kind);
+        self.each_mod_masked(view, q, mask, |m, v| {
             if m.kind == kind {
                 total *= 1.0 + v / 100.0;
             }
@@ -793,7 +1023,7 @@ impl CombatMath for Formulas {
                 let mut crit_adds = false;
                 let mut by_mastery = 1.0;
                 let mut damage_done = 1.0;
-                self.each_mod(view, &q, |m, v| match m.kind {
+                self.each_mod_masked(view, &q, OUTGOING_MOD_MASK, |m, v| match m.kind {
                     ModKind::CritChanceScalesDamage => crit_scales = true,
                     ModKind::CritChanceAddsDamage => crit_adds = true,
                     ModKind::MasteryDamagePct => by_mastery *= 1.0 + v * mastery,
@@ -852,7 +1082,7 @@ impl CombatMath for Formulas {
         };
         let mut immune = false;
         let mut dmg_taken = 1.0;
-        self.each_mod(view, &q, |m, v| match m.kind {
+        self.each_mod_masked(view, &q, MITIGATE_MOD_MASK, |m, v| match m.kind {
             ModKind::Immune => immune = true,
             ModKind::DamageTakenPct => dmg_taken *= 1.0 + v / 100.0,
             _ => {}

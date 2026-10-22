@@ -70,20 +70,21 @@ impl World {
     }
 
     fn affects_cooldown_rate(&self, aura: AuraId) -> bool {
-        self.s.setup.data.auras.get(&aura).is_some_and(|d| {
-            d.modifiers
+        self.s.auras.get(aura).is_some_and(|f| {
+            f.def
+                .modifiers
                 .iter()
                 .any(|m| m.kind == ModKind::CooldownRatePct)
         })
     }
 
     fn affects_tick_period(&self, aura: AuraId) -> bool {
-        self.s
-            .setup
-            .data
-            .auras
-            .get(&aura)
-            .is_some_and(|d| d.modifiers.iter().any(|m| m.kind == ModKind::TickPeriodPct))
+        self.s.auras.get(aura).is_some_and(|f| {
+            f.def
+                .modifiers
+                .iter()
+                .any(|m| m.kind == ModKind::TickPeriodPct)
+        })
     }
 
     /// Rescale active periodic ticks on auras sourced by `source` after
@@ -728,10 +729,9 @@ impl World {
     fn deck_for(&self, holder: ActorId, aura: AuraId, index: u8) -> Option<DeckView> {
         let listener = self
             .s
-            .setup
-            .data
             .auras
-            .get(&aura)?
+            .get(aura)?
+            .def
             .listeners
             .get(usize::from(index))?;
         if listener.shared_with.is_some() {

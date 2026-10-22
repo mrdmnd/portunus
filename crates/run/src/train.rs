@@ -209,7 +209,8 @@ pub fn train_rl(
     let feat_concrete = SeatObsFeaturizer::for_spec(&bundle.data, spec_id).expect("featurizer");
     let feature_width = feat_concrete.width();
     let schema = feat_concrete.schema.clone();
-    let featurizer: Arc<dyn Featurizer<SeatObs>> = Arc::new(feat_concrete);
+    let featurizer: Arc<dyn Featurizer<SeatObs>> = Arc::new(feat_concrete.clone());
+    let fast_featurizer: Arc<dyn Featurizer<Vec<f32>>> = Arc::new(feat_concrete.clone());
 
     let _ = take_mcts_profile_micros();
     let mut train_backprop_secs = 0.0f64;
@@ -247,13 +248,14 @@ pub fn train_rl(
     );
 
     let reward_scale = (10_000.0 / scripted_dps.mean.max(1_000.0)).clamp(0.005, 2.0);
-    let reward = Arc::new(DenseReward {
+    let reward: Arc<dyn portunus_env::Reward + Send + Sync> = Arc::new(DenseReward {
         per_k_damage: reward_scale,
         per_pull_cleared: 50.0,
         per_second: 2.5,
         per_death: 100.0,
     });
-    let rl_env = bundle.env_with(crate::observe::ScriptObserver, reward, false);
+    let rl_env = bundle.env_with(crate::observe::ScriptObserver, Arc::clone(&reward), false);
+    let fast_rl_env = bundle.env_with(feat_concrete, reward, false);
     let mcts_cfg = MctsConfig {
         simulations: spec.simulations,
         c_puct: 1.25,
@@ -262,12 +264,8 @@ pub fn train_rl(
         temperature: 0.15,
         horizon: spec.horizon,
     };
-    let mut collector = SelfPlayCollector::new(
-        rl_env.clone(),
-        mcts_cfg,
-        Arc::clone(&space),
-        Arc::clone(&featurizer),
-    );
+    let mut collector =
+        SelfPlayCollector::new(fast_rl_env, mcts_cfg, Arc::clone(&space), fast_featurizer);
     collector.discount = 0.85;
     collector.max_steps = 96;
     collector.threads = runner.threads;
@@ -277,10 +275,19 @@ pub fn train_rl(
     let mut samples_total = 0usize;
     let mut iter0_stats = TrainStats::default();
     if spec.warm_start_episodes > 0 {
+        let mut warm_collector = SelfPlayCollector::new(
+            rl_env.clone(),
+            mcts_cfg,
+            Arc::clone(&space),
+            Arc::clone(&featurizer),
+        );
+        warm_collector.discount = 0.85;
+        warm_collector.max_steps = 96;
+        warm_collector.threads = runner.threads;
         let warm_seeds: Vec<Seed> = (0..spec.warm_start_episodes)
             .map(|k| Seed(50_000 + u64::from(k)))
             .collect();
-        let warm_trajs = collector.collect_with_policy(
+        let warm_trajs = warm_collector.collect_with_policy(
             &*scripted_policy,
             ModelVersion {
                 name: model_name.clone(),

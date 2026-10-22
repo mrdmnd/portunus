@@ -167,21 +167,50 @@ impl Interpreter {
         if ev.depth > 1 {
             return;
         }
-        let data = self.math.data();
-        let held: Vec<AuraRef> = io
-            .view()
-            .auras(holder)
-            .iter()
-            .map(|i| AuraRef {
+        let ev_bit = 1u32 << happening_bit(ev.what);
+        let mut stack_held = [AuraRef {
+            holder,
+            aura: AuraId(0),
+            source: holder,
+        }; 32];
+        let mut stack_len = 0usize;
+        let mut heap_held: Option<Vec<AuraRef>> = None;
+
+        for i in io.view().auras(holder) {
+            let Some(fast) = self.math.fast_aura(i.aura) else {
+                continue;
+            };
+            if fast.listen_mask & ev_bit == 0 {
+                continue;
+            }
+            let r = AuraRef {
                 holder,
                 aura: i.aura,
                 source: i.source,
-            })
-            .collect();
-        for r in held {
-            let Some(def) = data.auras.get(&r.aura) else {
+            };
+            if let Some(vec) = &mut heap_held {
+                vec.push(r);
+            } else if stack_len < stack_held.len() {
+                stack_held[stack_len] = r;
+                stack_len += 1;
+            } else {
+                let mut vec = Vec::with_capacity(64);
+                vec.extend_from_slice(&stack_held);
+                vec.push(r);
+                heap_held = Some(vec);
+            }
+        }
+
+        let held_slice: &[AuraRef] = match &heap_held {
+            Some(vec) => vec.as_slice(),
+            None => &stack_held[..stack_len],
+        };
+
+        for &r in held_slice {
+            let Some(fast) = self.math.fast_aura(r.aura) else {
                 continue;
             };
+            let def = &fast.def;
             for (index, l) in def.listeners.iter().enumerate() {
                 let extra_swing_loop = matches!(ev.what, Happening::Swing { .. })
                     && l.effects.contains(&Effect::ExtraSwing);
@@ -465,12 +494,7 @@ impl Interpreter {
         EffectCtx {
             caster: r.source,
             target: Some(r.holder),
-            spell: self
-                .math
-                .data()
-                .spells
-                .contains_key(&spell)
-                .then_some(spell),
+            spell: self.math.fast_spell(spell).map(|_| spell),
             aura: Some(r),
             event_amount: None,
             scale: 1.0,
@@ -488,10 +512,8 @@ impl Interpreter {
     pub(crate) fn value_limits(&self, view: &dyn StateView, r: AuraRef) -> ValueLimits {
         let Some(v) = self
             .math
-            .data()
-            .auras
-            .get(&r.aura)
-            .and_then(|d| d.value.as_ref())
+            .fast_aura(r.aura)
+            .and_then(|f| f.def.value.as_ref())
         else {
             return ValueLimits::default();
         };
@@ -688,29 +710,32 @@ impl Interpreter {
     /// Re-push kernel stats for `actor` (and any seat targeting `actor`)
     /// that holds an aura with a conditional stat or haste modifier.
     pub(crate) fn refresh_conditional_stats(&self, io: &mut dyn EngineIo, actor: ActorId) {
-        let data = self.math.data();
         let view = io.view();
-        let mut check: Vec<ActorId> = vec![actor];
+        let mut check_buf = [actor; 8];
+        let mut check_len = 1usize;
         for &seat in view.seats() {
-            if seat != actor && view.target(seat) == Some(actor) {
-                check.push(seat);
+            if seat != actor && view.target(seat) == Some(actor) && check_len < check_buf.len() {
+                check_buf[check_len] = seat;
+                check_len += 1;
             }
         }
-        let mut to_refresh: Vec<(ActorId, AuraId)> = Vec::new();
-        for holder in check {
+        let mut to_refresh_buf = [(actor, AuraId(0)); 16];
+        let mut to_refresh_len = 0usize;
+        for &holder in &check_buf[..check_len] {
             for inst in view.auras(holder) {
-                let conditional = data
-                    .auras
-                    .get(&inst.aura)
-                    .is_some_and(|d| d.modifiers.iter().any(|m| m.condition.is_some()));
-                if conditional {
-                    to_refresh.push((holder, inst.aura));
+                let conditional = self
+                    .math
+                    .fast_aura(inst.aura)
+                    .is_some_and(|f| f.has_cond_kernel_stat_mod);
+                if conditional && to_refresh_len < to_refresh_buf.len() {
+                    to_refresh_buf[to_refresh_len] = (holder, inst.aura);
+                    to_refresh_len += 1;
                 }
             }
         }
-        for (holder, aura) in to_refresh {
-            if let Some(def) = data.auras.get(&aura) {
-                self.refresh_stats(io, holder, def);
+        for &(holder, aura) in &to_refresh_buf[..to_refresh_len] {
+            if let Some(fast) = self.math.fast_aura(aura) {
+                self.refresh_stats(io, holder, &fast.def);
             }
         }
     }
@@ -725,31 +750,43 @@ impl Interpreter {
         holder: ActorId,
         def: &portunus_gamedata::aura::AuraDef,
     ) {
+        if self
+            .math
+            .fast_aura(def.id)
+            .is_some_and(|f| !f.has_kernel_stat_mod)
+        {
+            return;
+        }
         self.refresh_speed(io, holder, def);
         self.refresh_health(io, holder, def);
         self.refresh_run_speed(io, holder, def);
-        let data = self.math.data();
         let view = io.view();
-        let mut sharing: Vec<(ActorId, AuraId)> = Vec::new();
+        if view.seats().len() <= 1 {
+            return;
+        }
+        let mut sharing = [(holder, AuraId(0)); 8];
+        let mut sharing_len = 0usize;
         for &seat in view.seats().iter().filter(|&&s| s != holder) {
             for inst in view.auras(seat).iter().filter(|i| i.source == holder) {
-                let shares = data.auras.get(&inst.aura).is_some_and(|d| {
-                    d.modifiers
+                let shares = self.math.fast_aura(inst.aura).is_some_and(|f| {
+                    f.def
+                        .modifiers
                         .iter()
                         .any(|m| matches!(m.kind, portunus_gamedata::effect::ModKind::StatShare(_)))
                 });
-                if shares {
-                    sharing.push((seat, inst.aura));
+                if shares && sharing_len < sharing.len() {
+                    sharing[sharing_len] = (seat, inst.aura);
+                    sharing_len += 1;
                 }
             }
         }
-        for (seat, aura) in sharing {
-            let Some(share) = data.auras.get(&aura) else {
+        for &(seat, aura) in &sharing[..sharing_len] {
+            let Some(fast) = self.math.fast_aura(aura) else {
                 continue;
             };
-            self.refresh_speed(io, seat, share);
-            self.refresh_health(io, seat, share);
-            self.refresh_run_speed(io, seat, share);
+            self.refresh_speed(io, seat, &fast.def);
+            self.refresh_health(io, seat, &fast.def);
+            self.refresh_run_speed(io, seat, &fast.def);
         }
     }
 
@@ -761,7 +798,6 @@ impl Interpreter {
         stat: portunus_gamedata::stats::Stat,
     ) -> bool {
         use portunus_gamedata::effect::ModKind;
-        let data = self.math.data();
         let direct = |s: portunus_gamedata::stats::Stat, d: &portunus_gamedata::aura::AuraDef| {
             d.modifiers.iter().any(|m| match m.kind {
                 ModKind::StatFlat(x) | ModKind::StatPct(x) | ModKind::StatShare(x) => x == s,
@@ -769,15 +805,28 @@ impl Interpreter {
                 _ => false,
             })
         };
-        direct(stat, def)
-            || view
-                .auras(holder)
-                .iter()
-                .filter_map(|i| data.auras.get(&i.aura))
-                .flat_map(|d| &d.modifiers)
-                .any(|m| {
-                    matches!(m.kind, ModKind::StatFromStat { from, to } if to == stat && direct(from, def))
-                })
+        if direct(stat, def) {
+            return true;
+        }
+        let has_any_stat = def.modifiers.iter().any(|m| {
+            matches!(
+                m.kind,
+                ModKind::StatFlat(_)
+                    | ModKind::StatPct(_)
+                    | ModKind::StatShare(_)
+                    | ModKind::StatFromStat { .. }
+            )
+        });
+        if !has_any_stat {
+            return false;
+        }
+        view.auras(holder)
+            .iter()
+            .filter_map(|i| self.math.fast_aura(i.aura).map(|f| &f.def))
+            .flat_map(|d| &d.modifiers)
+            .any(|m| {
+                matches!(m.kind, ModKind::StatFromStat { from, to } if to == stat && direct(from, def))
+            })
     }
 
     fn refresh_run_speed(
@@ -1636,6 +1685,33 @@ fn own_or(ctx: &EffectCtx, r: AuraRef) -> AuraRef {
     match ctx.aura {
         Some(own) if own.aura == r.aura && own.holder == r.holder => own,
         _ => r,
+    }
+}
+
+#[inline]
+const fn happening_bit(what: Happening) -> u32 {
+    match what {
+        Happening::CastComplete { .. } => 0,
+        Happening::DamageDealt { .. } => 1,
+        Happening::DamageTaken => 2,
+        Happening::Swing { .. } => 3,
+        Happening::WeaponHit(_) => 4,
+        Happening::PeriodicTick(_) => 5,
+        Happening::ResourceSpent(_) => 6,
+        Happening::AuraApplied(_) => 7,
+        Happening::AuraExpired(_) => 8,
+        Happening::PetExpired(_) => 9,
+        Happening::Departed => 10,
+        Happening::EnemyDied { .. } => 11,
+        Happening::CastStart { .. } => 12,
+        Happening::ResourceGained(_) => 13,
+        Happening::Absorbed(_) => 14,
+        Happening::Interrupted => 15,
+        Happening::MoveStart => 16,
+        Happening::MoveEnd => 17,
+        Happening::HealthDropped { .. } => 18,
+        Happening::AuraStacks { .. } => 19,
+        Happening::AuraRemoved { .. } => 20,
     }
 }
 

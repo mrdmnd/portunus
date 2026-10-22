@@ -8,7 +8,7 @@ use portunus_core::rng::{self, Domain, Purpose};
 use portunus_core::{
     ActorId, AuraId, EnemyKey, Sample, Seat, SimDuration, SimTime, SpellId, StreamKey, Trigger,
 };
-use portunus_gamedata::aura::AuraValueKind;
+use portunus_gamedata::aura::{AuraDef, AuraValueKind};
 use portunus_gamedata::effect::{Effect, ModKind, ModScope, Predicate};
 use portunus_gamedata::enemy::{EnemyAction, PhaseName, RuleIndex};
 use portunus_gamedata::item::{WeaponDef, WeaponHand};
@@ -38,6 +38,186 @@ use crate::trace::{TraceEvent, TraceRecord};
 use super::queue::{Event, Queue, Wake};
 use super::resurrect::{ResOffer, ResPool};
 
+#[inline]
+pub(crate) const fn engine_mod_bit(kind: ModKind) -> u32 {
+    match kind {
+        ModKind::DamageDonePct => 0,
+        ModKind::PetDamagePct => 1,
+        ModKind::GuardianDamagePct => 2,
+        ModKind::DamageTakenPct => 3,
+        ModKind::CritChanceAdd => 4,
+        ModKind::CritDamagePct => 5,
+        ModKind::HastePct => 6,
+        ModKind::AttackSpeedPct => 7,
+        ModKind::PersistentPct => 8,
+        ModKind::CastTimePct => 9,
+        ModKind::GcdPct => 10,
+        ModKind::CooldownPct => 11,
+        ModKind::ChargesAdd => 12,
+        ModKind::CostPct => 13,
+        ModKind::ResourceMax(_) => 14,
+        ModKind::StatPct(_) => 15,
+        ModKind::StatFlat(_) => 16,
+        ModKind::AttackPowerPct => 17,
+        ModKind::RatedPct(_) => 18,
+        ModKind::CastWhileMoving => 19,
+        ModKind::MoveSpeedPct => 20,
+        ModKind::Immune => 21,
+        ModKind::CritChanceScalesDamage => 22,
+        ModKind::CritChanceAddsDamage => 23,
+        ModKind::StatShare(_) => 24,
+        ModKind::StatFromStat { .. } => 25,
+        ModKind::ArmorPenPct => 26,
+        ModKind::MasteryDamagePct => 27,
+        ModKind::SourceDamageTakenPct => 28,
+        ModKind::ChannelTicksAdd => 29,
+        ModKind::ChainTargetsAdd => 30,
+        ModKind::CooldownRatePct => 31,
+        ModKind::ChainSharePct | ModKind::TickPeriodPct => 31,
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct EngineFastAura {
+    pub mod_mask: u32,
+    pub has_overrides: bool,
+    pub def: AuraDef,
+}
+
+#[derive(Debug)]
+pub(crate) struct EngineAuraTable {
+    slots: Vec<Option<(AuraId, EngineFastAura)>>,
+    shift: u32,
+    mask: usize,
+}
+
+impl EngineAuraTable {
+    pub fn from_data(data: &portunus_gamedata::GameData) -> Self {
+        let cap = (data.auras.len() * 4).next_power_of_two().max(64);
+        let shift = usize::BITS - cap.trailing_zeros();
+        let mask = cap - 1;
+        let mut slots = vec![None; cap];
+        for (&id, def) in &data.auras {
+            let mut mod_mask = 0u32;
+            for m in &def.modifiers {
+                mod_mask |= 1u32 << engine_mod_bit(m.kind);
+            }
+            let fast = EngineFastAura {
+                mod_mask,
+                has_overrides: !def.overrides.is_empty(),
+                def: def.clone(),
+            };
+            let mut idx = ((id.0 as usize).wrapping_mul(0x9E37_79B9_7F4A_7C15)) >> shift;
+            while slots[idx].is_some() {
+                idx = (idx + 1) & mask;
+            }
+            slots[idx] = Some((id, fast));
+        }
+        Self { slots, shift, mask }
+    }
+
+    #[inline]
+    pub fn get(&self, id: AuraId) -> Option<&EngineFastAura> {
+        let mut idx = ((id.0 as usize).wrapping_mul(0x9E37_79B9_7F4A_7C15)) >> self.shift;
+        loop {
+            match &self.slots[idx] {
+                Some((k, v)) if *k == id => return Some(v),
+                Some(_) => idx = (idx + 1) & self.mask,
+                None => return None,
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct EngineSpellTable {
+    slots: Vec<Option<(SpellId, SpellDef)>>,
+    shift: u32,
+    mask: usize,
+}
+
+impl EngineSpellTable {
+    pub fn from_data(data: &portunus_gamedata::GameData) -> Self {
+        let cap = (data.spells.len() * 4).next_power_of_two().max(64);
+        let shift = usize::BITS - cap.trailing_zeros();
+        let mask = cap - 1;
+        let mut slots = vec![None; cap];
+        for (&id, def) in &data.spells {
+            let mut idx = ((id.0 as usize).wrapping_mul(0x9E37_79B9_7F4A_7C15)) >> shift;
+            while slots[idx].is_some() {
+                idx = (idx + 1) & mask;
+            }
+            slots[idx] = Some((id, def.clone()));
+        }
+        Self { slots, shift, mask }
+    }
+
+    #[inline]
+    pub fn get(&self, id: SpellId) -> Option<&SpellDef> {
+        let mut idx = ((id.0 as usize).wrapping_mul(0x9E37_79B9_7F4A_7C15)) >> self.shift;
+        loop {
+            match &self.slots[idx] {
+                Some((k, v)) if *k == id => return Some(v),
+                Some(_) => idx = (idx + 1) & self.mask,
+                None => return None,
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct FlatMap<K, V>(Vec<(K, V)>);
+
+impl<K: Ord, V> FlatMap<K, V> {
+    pub const fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    #[inline]
+    pub fn get(&self, key: &K) -> Option<&V> {
+        let idx = self.0.binary_search_by(|(k, _)| k.cmp(key)).ok()?;
+        Some(&self.0[idx].1)
+    }
+
+    #[inline]
+    pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
+        let idx = self.0.binary_search_by(|(k, _)| k.cmp(key)).ok()?;
+        Some(&mut self.0[idx].1)
+    }
+
+    #[inline]
+    pub fn contains_key(&self, key: &K) -> bool {
+        self.0.binary_search_by(|(k, _)| k.cmp(key)).is_ok()
+    }
+
+    #[inline]
+    pub fn insert(&mut self, key: K, val: V) {
+        match self.0.binary_search_by(|(k, _)| k.cmp(&key)) {
+            Ok(idx) => self.0[idx].1 = val,
+            Err(idx) => self.0.insert(idx, (key, val)),
+        }
+    }
+
+    #[inline]
+    pub fn get_or_insert_with(&mut self, key: K, f: impl FnOnce() -> V) -> &mut V {
+        match self.0.binary_search_by(|(k, _)| k.cmp(&key)) {
+            Ok(idx) => &mut self.0[idx].1,
+            Err(idx) => {
+                self.0.insert(idx, (key, f()));
+                &mut self.0[idx].1
+            }
+        }
+    }
+
+    pub fn keys(&self) -> impl Iterator<Item = &K> {
+        self.0.iter().map(|(k, _)| k)
+    }
+
+    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut V> {
+        self.0.iter_mut().map(|(_, v)| v)
+    }
+}
+
 /// What never changes during a rollout, shared by every fork.
 pub(crate) struct Statics {
     pub setup: RunSetup,
@@ -54,6 +234,8 @@ pub(crate) struct Statics {
     /// Per seat: the `Requirement::TargetHpAtMost` fractions among its
     /// abilities and what they can turn into, ascending.
     pub hp_thresholds: Vec<Vec<f64>>,
+    pub auras: EngineAuraTable,
+    pub spells: EngineSpellTable,
 }
 
 /// One enemy of a combat, by spawn index: the pull's own, then its adds
@@ -109,7 +291,7 @@ pub(crate) struct Actor {
     pub haste: f64,
     pub attack_speed: f64,
     pub resources: Vec<Resource>,
-    pub cooldowns: BTreeMap<CooldownKey, Cooldown>,
+    pub cooldowns: FlatMap<CooldownKey, Cooldown>,
     pub auras: Vec<AuraInstance>,
     /// `auras` as of its last death.
     pub died_with: Vec<AuraInstance>,
@@ -252,7 +434,7 @@ impl Actor {
             haste,
             attack_speed: 1.0,
             resources: Vec::new(),
-            cooldowns: BTreeMap::new(),
+            cooldowns: FlatMap::new(),
             auras: Vec::new(),
             died_with: Vec::new(),
             meta: Vec::new(),
@@ -658,7 +840,6 @@ pub(crate) struct Batch {
 pub(crate) struct Trace {
     pub hash: u64,
     pub records: Option<Vec<TraceRecord>>,
-    buf: Vec<u8>,
 }
 
 const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
@@ -669,19 +850,16 @@ impl Trace {
         Self {
             hash: FNV_OFFSET,
             records: record.then(Vec::new),
-            buf: Vec::new(),
         }
     }
 
     fn absorb(&mut self, rec: &TraceRecord) {
-        let mut buf = std::mem::take(&mut self.buf);
-        buf.clear();
-        if let Ok(bytes) = postcard::to_extend(rec, buf) {
-            for &b in &bytes {
+        let mut buf = [0u8; 128];
+        if let Ok(bytes) = postcard::to_slice(rec, &mut buf) {
+            for &b in &*bytes {
                 self.hash ^= u64::from(b);
                 self.hash = self.hash.wrapping_mul(FNV_PRIME);
             }
-            self.buf = bytes;
         }
     }
 }
@@ -713,10 +891,10 @@ pub struct World {
     pub(crate) timers: Vec<PendingTimer>,
     /// Parallel to `timers`.
     pub(crate) timer_ids: Vec<u32>,
-    pub(crate) streams: BTreeMap<(ActorId, StreamKey), (Domain, u64)>,
+    pub(crate) streams: FlatMap<(ActorId, StreamKey), (Domain, u64)>,
     /// Deck-of-cards draws by `(holder, aura, listener index)`, kept across
     /// reapplications.
-    pub(crate) decks: BTreeMap<(ActorId, AuraId, u8), DeckView>,
+    pub(crate) decks: FlatMap<(ActorId, AuraId, u8), DeckView>,
     pub(crate) queue: Queue,
     pub(crate) followups: VecDeque<Followup>,
     pub(crate) batch: Option<Batch>,
@@ -783,6 +961,9 @@ impl World {
     }
 
     pub(crate) fn record(&mut self, event: TraceEvent) {
+        if self.trace.records.is_none() {
+            return;
+        }
         let rec = TraceRecord {
             time: self.now,
             event,
@@ -977,7 +1158,7 @@ impl World {
             return 0.0;
         };
         let name = &a.name;
-        let entry = self.streams.entry((actor, stream)).or_insert_with(|| {
+        let entry = self.streams.get_or_insert_with((actor, stream), || {
             let key = stream.0.to_string();
             (rng::domain(Purpose::Mechanics, &[&**name, key.as_str()]), 0)
         });
@@ -988,16 +1169,23 @@ impl World {
 
     /// What pressing `ability` casts, after the seat's aura overrides.
     pub(crate) fn resolved(&self, seat: Seat, ability: SpellId) -> SpellId {
-        let data = &self.s.setup.data;
         let Some(a) = self.actor_ref(self.seat_actor(seat)) else {
             return ability;
         };
-        a.auras
-            .iter()
-            .filter_map(|inst| data.auras.get(&inst.aura))
-            .flat_map(|def| &def.overrides)
-            .find(|(from, _)| *from == ability)
-            .map_or(ability, |&(_, to)| to)
+        for inst in &a.auras {
+            let Some(fast) = self.s.auras.get(inst.aura) else {
+                continue;
+            };
+            if !fast.has_overrides {
+                continue;
+            }
+            for &(from, to) in &fast.def.overrides {
+                if from == ability {
+                    return to;
+                }
+            }
+        }
+        ability
     }
 
     pub(crate) fn predicate(
@@ -1056,16 +1244,19 @@ impl World {
         target: Option<ActorId>,
         mut f: impl FnMut(f64),
     ) {
-        let data = &self.s.setup.data;
         let Some(a) = self.actor_ref(caster) else {
             return;
         };
-        let sdef = data.spells.get(&spell);
+        let want_bit = 1u32 << engine_mod_bit(kind);
+        let sdef = self.s.spells.get(spell);
         for inst in &a.auras {
-            let Some(def) = data.auras.get(&inst.aura) else {
+            let Some(fast) = self.s.auras.get(inst.aura) else {
                 continue;
             };
-            for m in &def.modifiers {
+            if fast.mod_mask & want_bit == 0 {
+                continue;
+            }
+            for m in &fast.def.modifiers {
                 if m.kind != kind || !scope_matches(m.scope, spell, sdef) {
                     continue;
                 }
@@ -1090,7 +1281,7 @@ impl World {
         spell: SpellId,
         target: Option<ActorId>,
     ) -> SimDuration {
-        let Some(def) = self.s.setup.data.spells.get(&spell) else {
+        let Some(def) = self.s.spells.get(spell) else {
             return SimDuration::ZERO;
         };
         let (time, hasted) = match &def.cast {
@@ -1219,8 +1410,27 @@ impl World {
             cd.settle(now, old);
         }
         a.haste = mult.max(f64::MIN_POSITIVE);
-        let keys: Vec<CooldownKey> = a.cooldowns.keys().copied().collect();
-        for key in keys {
+        let mut keys_buf = [CooldownKey::Spell(SpellId(0)); 32];
+        let mut keys_len = 0usize;
+        let mut keys_vec: Option<Vec<CooldownKey>> = None;
+        for &k in a.cooldowns.keys() {
+            if let Some(v) = &mut keys_vec {
+                v.push(k);
+            } else if keys_len < keys_buf.len() {
+                keys_buf[keys_len] = k;
+                keys_len += 1;
+            } else {
+                let mut v = Vec::with_capacity(64);
+                v.extend_from_slice(&keys_buf);
+                v.push(k);
+                keys_vec = Some(v);
+            }
+        }
+        let keys_slice: &[CooldownKey] = match &keys_vec {
+            Some(v) => v.as_slice(),
+            None => &keys_buf[..keys_len],
+        };
+        for &key in keys_slice {
             self.schedule_cooldown(actor, key);
         }
         self.rescale_swings(actor, old_speed);

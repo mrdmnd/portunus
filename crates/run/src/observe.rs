@@ -377,11 +377,13 @@ fn absorb_pct(ctx: &ObsContext<'_>, actor: ActorId) -> f64 {
         .auras(actor)
         .iter()
         .filter(|i| {
-            ctx.data
-                .auras
-                .get(&i.aura)
-                .and_then(|d| d.value.as_ref())
-                .is_some_and(|v| matches!(v.kind, AuraValueKind::Absorb { .. }))
+            i.value > 0.0
+                && ctx
+                    .data
+                    .auras
+                    .get(&i.aura)
+                    .and_then(|d| d.value.as_ref())
+                    .is_some_and(|v| matches!(v.kind, AuraValueKind::Absorb { .. }))
         })
         .map(|i| i.value)
         .sum();
@@ -693,6 +695,10 @@ impl SeatObsFeaturizer {
             auras,
         })
     }
+
+    pub fn width(&self) -> usize {
+        8 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
+    }
 }
 
 impl Featurizer<SeatObs> for SeatObsFeaturizer {
@@ -769,6 +775,167 @@ impl Featurizer<SeatObs> for SeatObsFeaturizer {
         }
 
         debug_assert_eq!(out.len(), self.width());
+        out
+    }
+}
+
+impl Observer for SeatObsFeaturizer {
+    type Obs = Vec<f32>;
+
+    fn observe(&self, ctx: &ObsContext<'_>, seat: Seat) -> Vec<f32> {
+        let state = ctx.state;
+        let hide = hidden(ctx, seat);
+        let now = state.now();
+        let me = state.seats()[usize::from(seat.0)];
+        let template = ctx.party.get(usize::from(seat.0));
+        let actor = state.actor(me);
+
+        let mut out = Vec::with_capacity(self.width());
+        let (in_combat, combat_sec) = match state.segment() {
+            SegmentView::Combat(c) => (
+                1.0,
+                now.saturating_since(c.started).millis() as f32 / 1000.0,
+            ),
+            SegmentView::Travel { .. } | SegmentView::Finished => (0.0, 0.0),
+        };
+        let gcd_sec = state
+            .gcd_end(seat)
+            .map_or(0.0, |g| g.saturating_since(now).millis() as f32 / 1000.0);
+        let health_frac = actor.map_or(0.0, |a| a.health_frac().clamp(0.0, 1.0) as f32);
+        let moving = if state.movement(seat).is_some() {
+            1.0
+        } else {
+            0.0
+        };
+
+        let target_id = state.target(me).filter(|t| !hide.enemies.contains(t));
+        let (enemies, target_hp, target_dist) =
+            match target_id.and_then(|t| Some((t, state.actor(t)?))) {
+                Some((t, a)) => {
+                    let n_neighbours = if state.pack_position(t).is_some() {
+                        state
+                            .enemies()
+                            .iter()
+                            .copied()
+                            .filter(|&e| e != t && !hide.enemies.contains(&e))
+                            .filter(|&e| {
+                                state
+                                    .actor(e)
+                                    .is_some_and(|ea| ea.engaged && ea.alive && ea.targetable)
+                                    && state.pack_position(e).is_some()
+                            })
+                            .count()
+                    } else {
+                        0
+                    };
+                    (
+                        ((1 + n_neighbours) as f32 / 10.0).clamp(0.0, 2.0),
+                        a.health_frac().clamp(0.0, 1.0) as f32,
+                        (state.distance(seat, t).unwrap_or(0.0) as f32 / 40.0).clamp(0.0, 2.0),
+                    )
+                }
+                None => (0.0, 0.0, 0.0),
+            };
+
+        out.push(in_combat);
+        out.push((combat_sec / 300.0).clamp(0.0, 2.0));
+        out.push((gcd_sec / 1.5).clamp(0.0, 1.0));
+        out.push(health_frac);
+        out.push(moving);
+        out.push(enemies);
+        out.push(target_hp);
+        out.push(target_dist);
+
+        for &kind in &self.resources {
+            let has_res = template.is_some_and(|t| t.resources.iter().any(|r| r.kind == kind));
+            let (val, max) = if has_res {
+                state
+                    .resource(me, kind)
+                    .map_or((0.0, 100.0), |rv| (rv.value, rv.max.max(1.0)))
+            } else {
+                (0.0, 100.0)
+            };
+            let cur = (val / max).clamp(0.0, 1.0) as f32;
+            out.push(cur);
+            out.push(1.0 - cur);
+        }
+
+        let seat_abilities = state.abilities(seat);
+        for &spell in &self.spells {
+            let rem_ms = if !hide.cooldowns.contains(&spell) && seat_abilities.contains(&spell) {
+                state.cooldown(me, spell).map_or(0, |cd| {
+                    if cd.charges == 0 {
+                        cd.next_charge_at
+                            .map_or(0, |t| t.saturating_since(now).millis())
+                    } else {
+                        0
+                    }
+                })
+            } else {
+                0
+            };
+            out.push(0.0);
+            out.push((rem_ms as f32 / 60_000.0).clamp(0.0, 2.0));
+        }
+
+        let me_auras = state.auras(me);
+        let t_auras = target_id.map_or(&[][..], |t| state.auras(t));
+        for &aura in &self.auras {
+            let b_inst = if hide.auras.contains(&aura) {
+                None
+            } else {
+                me_auras.iter().rev().find(|i| i.aura == aura)
+            };
+            let b_stacks = b_inst.map_or(0.0, |i| f32::from(i.stacks) / 10.0);
+            let b_rem = b_inst.map_or(0.0, |i| {
+                i.expires.map_or(1.0, |e| {
+                    (e.saturating_since(now).millis() as f32 / 30_000.0).clamp(0.0, 2.0)
+                })
+            });
+            out.push(b_stacks);
+            out.push(b_rem);
+
+            let d_inst = t_auras
+                .iter()
+                .rev()
+                .find(|i| i.source == me && i.aura == aura);
+            let d_stacks = d_inst.map_or(0.0, |i| f32::from(i.stacks) / 10.0);
+            let d_rem = d_inst.map_or(0.0, |i| {
+                i.expires.map_or(1.0, |e| {
+                    (e.saturating_since(now).millis() as f32 / 30_000.0).clamp(0.0, 2.0)
+                })
+            });
+            out.push(d_stacks);
+            out.push(d_rem);
+        }
+
+        debug_assert_eq!(out.len(), self.width());
+        out
+    }
+
+    fn legal(&self, ctx: &ObsContext<'_>, seat: Seat, engine_mask: &ActionMask) -> ActionMask {
+        ScriptObserver.legal(ctx, seat, engine_mask)
+    }
+}
+
+impl Featurizer<Vec<f32>> for SeatObsFeaturizer {
+    fn schema(&self) -> &SchemaId {
+        &self.schema
+    }
+
+    fn width(&self) -> usize {
+        8 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
+    }
+
+    fn featurize(&self, obs: &Vec<f32>, mask: &ActionMask) -> Vec<f32> {
+        let mut out = obs.clone();
+        let base = 8 + 2 * self.resources.len();
+        for (i, &spell) in self.spells.iter().enumerate() {
+            let idx = base + 2 * i;
+            if idx < out.len() {
+                out[idx] = if mask.is_ready(spell) { 1.0 } else { 0.0 };
+            }
+        }
         out
     }
 }

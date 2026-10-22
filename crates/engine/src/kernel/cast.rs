@@ -198,7 +198,7 @@ impl World {
             return;
         };
         let haste = a.haste;
-        let cd = a.cooldowns.entry(key).or_insert(fresh);
+        let cd = a.cooldowns.get_or_insert_with(key, || fresh);
         cd.settle(now, haste);
         while cd.charges < cd.max && cd.base > 0.0 && cd.progress >= cd.base {
             cd.charges += 1;

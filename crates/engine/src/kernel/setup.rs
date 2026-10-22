@@ -319,6 +319,8 @@ pub(crate) fn build(setup: RunSetup) -> World {
         .collect();
     let group = group(&setup);
     let battle_res = ResPool::new(group.battle_res);
+    let auras = super::world::EngineAuraTable::from_data(&setup.data);
+    let spells = super::world::EngineSpellTable::from_data(&setup.data);
     World {
         s: Arc::new(Statics {
             setup,
@@ -328,6 +330,8 @@ pub(crate) fn build(setup: RunSetup) -> World {
             gcd,
             roles,
             hp_thresholds,
+            auras,
+            spells,
         }),
         now: SimTime::ZERO,
         seg: Seg::Finished,
@@ -343,8 +347,8 @@ pub(crate) fn build(setup: RunSetup) -> World {
         departing: Vec::new(),
         timers: Vec::new(),
         timer_ids: Vec::new(),
-        streams: BTreeMap::new(),
-        decks: BTreeMap::new(),
+        streams: super::world::FlatMap::new(),
+        decks: super::world::FlatMap::new(),
         queue: Queue::default(),
         followups: VecDeque::new(),
         batch: None,
