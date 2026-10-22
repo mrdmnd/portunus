@@ -53,6 +53,25 @@ impl SimcParityReport {
     pub fn within_tolerance(&self, tolerance: f64) -> bool {
         self.dps_ratio.is_finite() && (self.dps_ratio - 1.0).abs() <= tolerance
     }
+
+    /// Returns primary rotational ability rows (`portunus_casts >= 5.0`,
+    /// `simc_casts >= 5.0`, `simc_share >= 0.03`, excluding trinkets/enchants)
+    /// whose relative cast count differs from SimC by more than `max_rel_diff`
+    /// (e.g. `0.35` for `±35%`).
+    pub fn cast_rate_divergences(&self, max_rel_diff: f64) -> Vec<AbilityParityRow> {
+        self.rows
+            .iter()
+            .filter(|r| {
+                r.portunus_casts >= 5.0
+                    && r.simc_casts >= 5.0
+                    && r.simc_share >= 0.03
+                    && !r.name.contains("(Trinket)")
+                    && !r.name.contains("(Enchant)")
+                    && ((r.portunus_casts - r.simc_casts) / r.simc_casts).abs() > max_rel_diff
+            })
+            .cloned()
+            .collect()
+    }
 }
 
 impl Bundle {
@@ -359,12 +378,12 @@ fn dump_label_and_class_tree_tuning_pct(spec: SpecId, hero: Option<HeroTreeId>) 
         (255, Some(43)) => Some(2.88),
         (258, Some(19)) => Some(65.79),
         (258, Some(18)) => Some(80.45),
-        (259, Some(53)) => Some(14.47),
+        (259, Some(53)) => Some(8.74),
         (259, Some(52)) => Some(36.62),
-        (260, Some(51)) => Some(112.80),
+        (260, Some(51)) => Some(144.84),
         (260, Some(52)) => Some(117.73),
-        (261, Some(53)) => Some(176.84),
-        (261, Some(51)) => Some(125.99),
+        (261, Some(53)) => Some(101.63),
+        (261, Some(51)) => Some(150.37),
         (262, Some(54)) => Some(24.54),
         (262, Some(55)) => Some(93.19),
         (262, None) => Some(710.00),

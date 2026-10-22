@@ -61,6 +61,10 @@ impl CooldownObs {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TargetObs {
     pub actor: ActorId,
+    /// Remaining health points.
+    pub health: u64,
+    /// Maximum health points.
+    pub max_health: u64,
     /// Percent of max health, 0 to 100.
     pub health_pct: f64,
     /// Shields left, in percent of max health (as the health bar shows).
@@ -272,6 +276,11 @@ impl SeatObs {
     /// 0 to 100; `None` with no target.
     pub fn target_health_pct(&self) -> Option<f64> {
         self.target.as_ref().map(|t| t.health_pct)
+    }
+
+    /// Remaining health points of the current target; `None` with no target.
+    pub fn target_health(&self) -> Option<u64> {
+        self.target.as_ref().map(|t| t.health)
     }
 
     /// Until a charge is available; zero for abilities without a cooldown.
@@ -568,6 +577,8 @@ impl Observer for ScriptObserver {
                 neighbours.sort_by(f64::total_cmp);
                 Some(TargetObs {
                     actor: t,
+                    health: a.health,
+                    max_health: a.max_health,
                     health_pct: 100.0 * a.health_frac(),
                     absorb_pct: absorb_pct(ctx, t),
                     distance: state.distance(seat, t).unwrap_or(0.0),
@@ -689,7 +700,7 @@ impl SeatObsFeaturizer {
         let spells = spec_spells(data, spec)?;
         let auras = spec_auras(data, spec)?;
         Some(Self {
-            schema: SchemaId(format!("seat_obs:v1:spec_{}", spec.0)),
+            schema: SchemaId(format!("seat_obs:v2:spec_{}", spec.0)),
             resources,
             spells,
             auras,
@@ -697,7 +708,7 @@ impl SeatObsFeaturizer {
     }
 
     pub fn width(&self) -> usize {
-        8 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
+        9 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
     }
 }
 
@@ -707,7 +718,7 @@ impl Featurizer<SeatObs> for SeatObsFeaturizer {
     }
 
     fn width(&self) -> usize {
-        8 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
+        9 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
     }
 
     fn featurize(&self, obs: &SeatObs, mask: &ActionMask) -> Vec<f32> {
@@ -717,13 +728,14 @@ impl Featurizer<SeatObs> for SeatObsFeaturizer {
         let gcd_sec = obs.gcd_remaining.millis() as f32 / 1000.0;
         let health_frac = (obs.health_pct / 100.0).clamp(0.0, 1.0) as f32;
         let moving = if obs.movement.is_some() { 1.0 } else { 0.0 };
-        let (enemies, target_hp, target_dist) = match &obs.target {
+        let (enemies, target_hp, target_abs_hp, target_dist) = match &obs.target {
             Some(t) => (
                 ((1 + t.neighbours.len()) as f32 / 10.0).clamp(0.0, 2.0),
                 (t.health_pct / 100.0).clamp(0.0, 1.0) as f32,
+                (t.health as f64 / 50_000_000.0).clamp(0.0, 2.0) as f32,
                 (t.distance as f32 / 40.0).clamp(0.0, 2.0),
             ),
-            None => (0.0, 0.0, 0.0),
+            None => (0.0, 0.0, 0.0, 0.0),
         };
 
         out.push(in_combat);
@@ -733,6 +745,7 @@ impl Featurizer<SeatObs> for SeatObsFeaturizer {
         out.push(moving);
         out.push(enemies);
         out.push(target_hp);
+        out.push(target_abs_hp);
         out.push(target_dist);
 
         for &kind in &self.resources {
@@ -809,7 +822,7 @@ impl Observer for SeatObsFeaturizer {
         };
 
         let target_id = state.target(me).filter(|t| !hide.enemies.contains(t));
-        let (enemies, target_hp, target_dist) =
+        let (enemies, target_hp, target_abs_hp, target_dist) =
             match target_id.and_then(|t| Some((t, state.actor(t)?))) {
                 Some((t, a)) => {
                     let n_neighbours = if state.pack_position(t).is_some() {
@@ -831,10 +844,11 @@ impl Observer for SeatObsFeaturizer {
                     (
                         ((1 + n_neighbours) as f32 / 10.0).clamp(0.0, 2.0),
                         a.health_frac().clamp(0.0, 1.0) as f32,
+                        (a.health as f64 / 50_000_000.0).clamp(0.0, 2.0) as f32,
                         (state.distance(seat, t).unwrap_or(0.0) as f32 / 40.0).clamp(0.0, 2.0),
                     )
                 }
-                None => (0.0, 0.0, 0.0),
+                None => (0.0, 0.0, 0.0, 0.0),
             };
 
         out.push(in_combat);
@@ -844,6 +858,7 @@ impl Observer for SeatObsFeaturizer {
         out.push(moving);
         out.push(enemies);
         out.push(target_hp);
+        out.push(target_abs_hp);
         out.push(target_dist);
 
         for &kind in &self.resources {
@@ -924,12 +939,12 @@ impl Featurizer<Vec<f32>> for SeatObsFeaturizer {
     }
 
     fn width(&self) -> usize {
-        8 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
+        9 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
     }
 
     fn featurize(&self, obs: &Vec<f32>, mask: &ActionMask) -> Vec<f32> {
         let mut out = obs.clone();
-        let base = 8 + 2 * self.resources.len();
+        let base = 9 + 2 * self.resources.len();
         for (i, &spell) in self.spells.iter().enumerate() {
             let idx = base + 2 * i;
             if idx < out.len() {

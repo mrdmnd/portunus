@@ -354,6 +354,19 @@ pub fn render_parity(r: &SimcParityReport) -> String {
         100.0 * (r.dps_ratio - 1.0),
         gate_str
     );
+    let cast_divs = r.cast_rate_divergences(0.35);
+    if !cast_divs.is_empty() {
+        let names: Vec<String> = cast_divs
+            .iter()
+            .map(|d| {
+                format!(
+                    "{} ({:.1} vs {:.1})",
+                    d.name, d.portunus_casts, d.simc_casts
+                )
+            })
+            .collect();
+        let _ = writeln!(out, "  cast-rate divergences (>35%): {}", names.join(", "));
+    }
     let _ = writeln!(
         out,
         "\n  {:<28} {:>8} {:>8} {:>11} {:>11} {:>9} {:>8} {:>8}",

@@ -195,3 +195,96 @@ checkpoint dir (`--policy target/rl_...`) so secondary-stat allocations (`Crit`,
 `Haste`, `Mastery`, `Versatility`) can be re-optimized for the RL-learned
 rotation (e.g., shifting out of Crit on Farseer AoE once RL replaces 100%-crit
 `Lava Burst` with `Chain Lightning` + `Earthquake`).
+
+---
+
+## 5. Subtlety Rogue Single-Target Talent-Setup $\times$ RL Optimization Study & All-Spec Talent Verification (`40M` HP Boss)
+
+### 5.1 How RL + `SpellDataDump` Caught Four Subtlety Rogue Mechanics Bugs
+
+Running Burn RL (`Mcts` + `BurnTrainer`) across Subtlety Rogue talent builds and
+cross-checking `data/game.ron` against `target/simc/engine/class_modules/sc_rogue.cpp`
+and `target/simc/SpellDataDump/rogue.txt` uncovered **four classic game-data
+bugs** that aggregate total-DPS parity (`≤ 0.5%`) had masked:
+
+1. **`The First Dance` (`382505` / `470678`) — Permanent Passive Checked Instead of Consumable Ready Buff:**
+   - `Shadow Dance` (`185313`) previously checked `when: caster_has_aura(382505)`
+     (the permanent talent passive), extending **every** `Shadow Dance` in combat
+     by `+4s`. In `sc_rogue.cpp:7414-7443, 11770-11773` and
+     `SpellDataDump/rogue.txt:14600-14622`, `382505` grants the consumable ready
+     buff `470678` out of combat (on pull and on `Stealth` `1784`), which is
+     consumed (`remove_aura(aura: 470678, target: caster)`) on the **first**
+     `Shadow Dance` cast.
+2. **`Deepening Shadows` (`185314` / `1271702`) & `Improved Secret Technique` (`1279444`) — Deprecated Pre-12.1 Cooldown Reduction:**
+   - `data/game.ron` had both the 12.1 Midnight base cooldowns (`20s` `Shadow Dance`,
+     `25s` `Secret Technique`) **and** the legacy Dragonflight/TWW per-CP
+     cooldown-reduction listeners (`0.7s/CP` on `185314` and `1.0s/CP` on
+     `1279444`), causing `Shadow Dance` (`21` casts vs SimC's `8` casts) and
+     `Secret Technique` (`15+` casts vs SimC's `5` casts) to cycle $2.5\times$ too
+     fast. In 12.1 (`SpellDataDump/rogue.txt:2935, 17237, 17531`), `Deepening Shadows`
+     increases `Shadow Dance` duration by `150%` of Haste rating% (`+1.2s–1.5s`),
+     and `Improved Secret Technique` increases `Secret Technique` damage by `+15%`.
+3. **`Unseen Blade` (`441146` / `441144`) — Missing `20s` Cooldown Lockout (`459485`), `Thousand Cuts` (`441346`), and `Disorienting Strikes` (`441274`):**
+   - Previously, `Backstab`, `Gloomblade`, and `Shadowstrike` triggered
+     `Unseen Blade` (`441144`) on **100% of builder casts** (`69+` hits/fight),
+     which RL exploited by spamming builders into `Coup de Grace`. In
+     `sc_rogue.cpp:8766-8793, 11036-11051, 11473-11500` and
+     `SpellDataDump/rogue.txt:12206, 12335, 12400, 13951, 17382`, `Unseen Blade`
+     applies a `20s` lockout aura (`459485`, reduced to `15s` with `25%`
+     double-strike chance by `Flashing Steel` `1276630`), which is refreshed by
+     `Thousand Cuts` (`441346`, `4.5` hasted RPPM on auto-attacks) and bypassed
+     for 2 strikes after `Secret Technique` / `Killing Spree` by
+     `Disorienting Strikes` (`441274` / `441275`).
+4. **`Clear the Witnesses` (`1248793`) & `5+ CP` Finisher Gate on `Deathstalker's Mark` (`457052` / `457157`):**
+   - When RL trained on Deathstalker, it immediately discovered two specification
+     loopholes: (a) `Eviscerate` (`196819`) could be cast at `1 CP` to trigger
+     full `Deathstalker's Mark` (`457157`) + `Darkest Night` (`457280`, `+30`
+     Energy) + `Eviscerate (Shadow)` (`328082`), and (b) `Shuriken Storm`
+     (`197835`) had a stray `trigger_spell(spell: 457157)` on `1248793` (*Clear
+     the Witnesses*, which in `SpellDataDump/rogue.txt:15436` is simply `+60%`
+     `Shuriken Storm` / `Fan of Knives` damage). Fixing `1248793`, guarding
+     `Shadowstrike`'s mark application on `!target_has_aura(457129) && !caster_has_aura(457280)`,
+     requiring `5+` CP on finishers (`457052#2` and `457058`), and wiring 12.1
+     `Danse Macabre` (`382528` -> `1264397` *Lashe Macabre*), `Death Perception`
+     (`469642`), `The Rotten` (`382015`/`382016`), `Finality` (`382525`),
+     `Veiltouched` (`382017`), `Replicating Shadows` (`382506`), `Hunt Them Down`
+     (`457054`/`457193`), `Symbolic Victory` (`457062`/`457167`), and
+     `Unshakeable Drive` (`1248774`/`1248775`) aligned both total DPS (`100.0%–100.4%`)
+     and per-spell cast counts with `simc`.
+
+### 5.2 Subtlety Rogue Single-Target Talent-Setup $\times$ RL Matrix (`40M–60M` HP Uniform Distribution + `target_abs_hp` Feature)
+
+To prevent RL policies from overfitting cooldown timings (`Goremaw's Bite` `45s` CD, `Shadow Blades` `90s` CD, `Vanish` `120s` CD) to a single fixed fight duration, we:
+1. Updated `data/scenarios/single_target_boss.ron` to `health: uniform(lo: 40.0, hi: 60.0)` (`40M–60M` HP, mean `50M` HP, matching SimC's `vary_combat_length = 0.20`), and
+2. Added `TargetObs::health` / `max_health` (`SeatObs::target_health()`) and normalized remaining absolute health (`feat[7] = (health / 50_000_000.0).clamp(0.0, 2.0)`) to `SeatObsFeaturizer` (`crates/run/src/observe.rs`) and `FlatObserver` (`crates/env/src/observe.rs`), expanding Subtlety's feature vector from `154 -> 155` features.
+
+Evaluating all six 34-point Spec + 13-point Hero talent setups across the `40M–60M` HP boss distribution (`4x64` residual `PolicyValueNet`, 5 iterations $\times$ 32 episodes $\times$ 24 MCTS sims, `n=30` paired eval seeds `1000..1030`):
+
+| Rank | Talent Setup & Hero Tree | Run File | SimC Script DPS (`40M–60M`, `n=30`) | Burn RL DPS (`40M–60M`, `n=30`) | RL Gain ($\Delta$ DPS) | RL Gain (%) | Mean Kill Time (`Script` $\rightarrow$ `RL`) | Fixed `40M` RL DPS | Student Agreement |
+| :-: | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **1** | **Deathstalker — Danse / Clone / Finisher Amp (`Death Perception` 2/2 + `Danse Macabre` + `The Rotten` + `Replicating Shadows`, drops `The First Dance`)** | `subtlety_deathstalker_danse_boss.ron` | `340,235.9 ± 5,254.0` | **`378,628.0`** | **`+38,392.1`** | **`+11.28%`** | `160.02s` $\rightarrow$ **`144.86s`** | `390,100.4` | **`100.0%`** |
+| **2** | **Trickster — Dark Brew Finisher Burst (`Dark Brew` + `Finality` 2/2 + `Death Perception` 2/2 + `The Rotten`, drops `The First Dance`)** | `subtlety_trickster_burst_boss.ron` | `333,657.5 ± 7,485.7` | **`349,893.8`** | **`+16,236.3`** | **`+4.87%`** | `163.22s` $\rightarrow$ **`156.06s`** | `364,687.6` | **`99.9%`** |
+| **3** | **Deathstalker — Dark Brew Shadow/Plague Amp (`Dark Brew` + `Finality` 2/2 + `The Rotten` + `Veiltouched`, drops `The First Dance`)** | `subtlety_deathstalker_dark_brew_boss.ron` | `304,899.7 ± 3,666.1` | **`342,212.8`** | **`+37,313.1`** | **`+12.24%`** | `177.25s` $\rightarrow$ **`159.30s`** | `356,788.3` | **`100.0%`** |
+| **4** | **Trickster — Unseen / Shadow Clone (`Backstab` + `Weaponmaster` + `Replicating Shadows` + `Danse Macabre`)** | `subtlety_trickster_unseen_boss.ron` | `316,027.4 ± 5,373.8` | **`338,526.6`** | **`+22,499.2`** | **`+7.12%`** | `171.54s` $\rightarrow$ **`161.13s`** | `349,146.1` | `98.4%` |
+| **5** | **Deathstalker — Canonical SimC MID2 Build (`The First Dance` + `Finality` 1/2 + `Death Perception` 1/2)** | `subtlety_deathstalker_boss.ron` | `288,292.0 ± 3,901.2` | **`316,657.8`** | **`+28,365.8`** | **`+9.84%`** | `186.84s` $\rightarrow$ **`171.18s`** | `324,589.3` | **`100.0%`** |
+| **6** | **Trickster — Canonical SimC MID2 Build (`The First Dance` + `Finality` 1/2 + `Death Perception` 1/2)** | `subtlety_trickster_boss.ron` | `280,346.0 ± 5,551.9` | **`297,066.7`** | **`+16,720.7`** | **`+5.96%`** | `192.06s` $\rightarrow$ **`181.73s`** | `306,366.6` | `99.3%` |
+
+- **Why the `40M–60M` HP distribution + `target_abs_hp` (`feat[7]`) matters:**
+  - Across `40M–60M` HP bosses (`135s–182s` mean fight length), SimC's script only casts `1.0` `Vanish` (`120s` CD) per fight because its `cp <= 2.0 && energy >= 50` gate misses or delays the second window, whereas the RL policy consistently lands **`1.8–2.0` `Vanish` casts**, **`3.6–4.4` `Goremaw's Bite` (`45s` CD) casts**, and **`2.0–2.5` `Shadow Blades` (`90s` CD) casts** depending on the sampled boss HP.
+  - Because `target_abs_hp` (`feat[7]`) breaks the collinearity between `combat_sec` (`feat[1]`) and `target_hp` (`feat[6]`), **distilled `StudentNet` agreement reaches `100.0%` on all 3 Deathstalker builds and `98.4%–99.9%` on all 3 Trickster builds**!
+  - The **exact same build ranking (#1 through #6)** holds across both fixed `40M` HP and the `40M–60M` HP distribution.
+
+### 5.3 Automated All-Spec Talent & Cast-Rate Verification (`audit_talents` + `cast_rate_divergences`)
+
+To detect broken talents systematically across all 26 specs, we implemented two automated verifiers:
+1. **`portunus_ingest::audit_talents(&GameData, Option<&SpellDump>)` (`crates/ingest/src/dump.rs` & `crates/ingest/tests/data_files.rs`):**
+   - Scans every `TalentDef`, `AuraDef`, and `SpellDef` across all 26 specs and hero trees against `target/simc/SpellDataDump/*.txt` for four bug classes:
+     - `TalentFindingKind::UnconsumedPassiveOverride` (*The First Dance* pattern: checking a permanent passive `duration: None` to override buff duration when the dump specifies `"next "` or `"out of combat"`),
+     - `TalentFindingKind::DeprecatedCooldownReduction` (*Deepening Shadows / Improved Secret Technique* pattern: `AdjustCooldown` listener on a talent aura whose 12.1 dump entry has no cooldown reduction),
+     - `TalentFindingKind::MissingDumpCooldownOrRppm` (*Unseen Blade / Thousand Cuts* pattern: dump specifies `Real PPM` or `"may occur once every ..."` lockout missing in `game.ron`), and
+     - `TalentFindingKind::InertOffensiveTalent` (a talent grants a `PassiveAura` with no modifiers, listeners, periodic ticks, or predicate references, while its dump description is offensive).
+   - Subtlety Rogue (`Spec 261`, `Trickster 51`, `Deathstalker 53`), Elemental Shaman (`Spec 262`, `Stormbringer 54`, `Farseer 55`), Arms Warrior (`71`), Fury Warrior (`72`), and Retribution Paladin (`70`) have **0 findings** across all four categories.
+2. **`SimcParityReport::cast_rate_divergences` (`crates/run/src/parity.rs` & `crates/run/src/report.rs`):**
+   - Surfaces any core rotational ability (`portunus_casts >= 5`, `simc_casts >= 5`, `simc_share >= 3%`) whose cast count diverges from SimC by `> 35%`, preventing spec-wide DPS scalars from hiding cooldown or resource bugs.
+
+

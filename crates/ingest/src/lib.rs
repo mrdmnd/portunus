@@ -14,8 +14,9 @@ mod ron_file;
 
 pub use check::{check_enemy_data, check_game_data, DataIssue, Owner};
 pub use dump::{
-    audit_game_data, sync_game_data_with_dump, DumpDiff, DumpEffect, DumpSpell, DumpSyncedSource,
-    SimcEquippedSlot, SimcPopulatedLoadout, SimcProfile, SpellDump,
+    audit_game_data, audit_talents, sync_game_data_with_dump, DumpDiff, DumpEffect, DumpSpell,
+    DumpSyncedSource, SimcEquippedSlot, SimcPopulatedLoadout, SimcProfile, SpellDump,
+    TalentAuditFinding, TalentFindingKind,
 };
 pub use ron_file::{read_ron, RonFile};
 

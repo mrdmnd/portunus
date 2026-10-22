@@ -205,12 +205,12 @@ impl<E: Env> SelfPlayCollector<E> {
                     let legal_count = legal.iter().filter(|&&b| b).count();
                     // KataGo Playout Cap Oscillation: run full Gumbel MCTS on high-leverage
                     // steps and fast playout cap on low-branching or alternating filler steps.
-                    let is_full_search = if full_cfg.simulations < 16 {
+                    let is_full_search = if full_cfg.simulations < 16 || step_idx == 0 {
                         true
                     } else if legal_count <= 2 {
                         false
                     } else {
-                        (step_idx + seed.0 as usize).is_multiple_of(2)
+                        step_idx.is_multiple_of(2)
                     };
                     mcts.config = if is_full_search { full_cfg } else { fast_cfg };
                     let sr = mcts.search(&env, &d);

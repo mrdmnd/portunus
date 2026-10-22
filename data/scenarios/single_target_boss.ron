@@ -1,0 +1,16 @@
+// Single-target raid boss dummy with 40M..60M health distribution (~110s..180s Patchwerk fight at MID2 gear).
+(
+    name: "single_target_boss",
+    forces_required: None,
+    pulls: [
+        (
+            name: "boss_dummy",
+            travel_in: fixed(10000),
+            prepull: 3000,
+            timeout: 600000,
+            // 40.0..60.0 * 1,000,000 = 40,000,000..60,000,000 health (mean 50,000,000).
+            health: uniform(lo: 40.0, hi: 60.0),
+            waves: [(mobs: [("target_dummy", 1)], engage: now)],
+        ),
+    ],
+)

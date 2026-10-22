@@ -78,6 +78,7 @@ pub struct DumpSpell {
     pub triggered_by: Vec<SpellId>,
     pub description_refs: Vec<SpellId>,
     pub spelldesc_parent: Option<SpellId>,
+    pub description: String,
     pub effects: Vec<DumpEffect>,
 }
 
@@ -687,9 +688,12 @@ pub fn sync_game_data_with_dump(
         } else if spell_id == SpellId(434481) {
             // Bombardments proc rate per marked attack.
             0.28
+        } else if spell_id == SpellId(280720) {
+            // Secret Technique (Clone) 3-hit x 6-CP finisher share.
+            6.0
         } else if spell_id == SpellId(457157) {
             // Deathstalker's Mark per-stack trigger share.
-            0.30
+            1.0
         } else if spell_id == SpellId(1295924) {
             // Prismatic Bolt proc frequency normalization.
             0.30
@@ -903,6 +907,7 @@ fn parse_spell_block(lines: &[&str]) -> Option<DumpSpell> {
         triggered_by: Vec::new(),
         description_refs: Vec::new(),
         spelldesc_parent: None,
+        description: String::new(),
         effects: Vec::new(),
     };
 
@@ -957,6 +962,7 @@ fn parse_spell_block(lines: &[&str]) -> Option<DumpSpell> {
             }
         } else if let Some(val) = line.strip_prefix("Description      : ") {
             let trimmed = val.trim();
+            spell.description.push_str(trimmed);
             if let Some(after) = trimmed.strip_prefix("$@spelldesc") {
                 if let Ok(pid) = after.trim().parse::<u32>() {
                     spell.spelldesc_parent = Some(SpellId(pid));
@@ -970,6 +976,10 @@ fn parse_spell_block(lines: &[&str]) -> Option<DumpSpell> {
                 continue;
             }
         } else if line.contains('$') {
+            if !spell.description.is_empty() {
+                spell.description.push(' ');
+                spell.description.push_str(line.trim());
+            }
             extract_dollar_spell_refs(line, &mut spell.description_refs);
         }
         idx += 1;
@@ -2053,6 +2063,470 @@ fn simple_passive_aura(
         dispel: None,
         self_resurrect: None,
     }
+}
+
+/// Classification of a structural or `SpellDataDump` talent discrepancy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum TalentFindingKind {
+    /// A talent grants a `PassiveAura` with no modifiers, listeners, periodic,
+    /// overrides, or expire effects, and the aura ID is never referenced by any
+    /// `Predicate`, `Requirement`, or `ListenFor`, while `SpellDataDump` shows
+    /// an offensive effect.
+    InertOffensiveTalent,
+    /// An active spell checks `when: caster_has_aura(talent_passive_id)` where
+    /// `talent_passive_id` is a permanent passive (`duration: None`) and applies
+    /// a duration override without consuming a ready buff (`The First Dance` pattern).
+    UnconsumedPassiveOverride,
+    /// A passive talent aura has an `AdjustCooldown` listener in `GameData`,
+    /// whereas `SpellDataDump` shows the talent no longer reduces cooldowns in 12.1
+    /// (`Deepening Shadows` / `Improved Secret Technique` pattern).
+    DeprecatedCooldownReduction,
+    /// `SpellDataDump` defines an RPPM rate or lockout cooldown aura on a
+    /// proc talent, while `GameData` triggers it unconditionally on every cast
+    /// (`Unseen Blade` / `Thousand Cuts` pattern).
+    MissingDumpCooldownOrRppm,
+}
+
+/// One finding produced by [`audit_talents`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TalentAuditFinding {
+    pub spec_id: Option<SpecId>,
+    pub spec_name: String,
+    pub hero_tree_id: Option<portunus_core::HeroTreeId>,
+    pub talent_id: portunus_core::TalentId,
+    pub talent_name: String,
+    pub aura_or_spell_id: u32,
+    pub kind: TalentFindingKind,
+    pub detail: String,
+}
+
+/// Audits all talents across all specs and hero trees in `data` against
+/// structural invariants and (when provided) `SpellDataDump`.
+pub fn audit_talents(data: &GameData, dump: Option<&SpellDump>) -> Vec<TalentAuditFinding> {
+    use portunus_core::{HeroTreeId, TalentId};
+    use portunus_gamedata::effect::Predicate;
+    use portunus_gamedata::spell::Requirement;
+    use portunus_gamedata::talent::Grant;
+
+    // 1. Collect every AuraId referenced in any Predicate, Requirement, or ListenFor.
+    let mut referenced_auras: BTreeSet<AuraId> = BTreeSet::new();
+    fn collect_pred_auras(p: &Predicate, out: &mut BTreeSet<AuraId>) {
+        match *p {
+            Predicate::TargetHasAura { aura, .. }
+            | Predicate::CasterHasAura(aura)
+            | Predicate::CasterLacksAura(aura)
+            | Predicate::OwnerHasAura(aura)
+            | Predicate::TargetStacksAtLeast { aura, .. }
+            | Predicate::CasterStacksAtLeast { aura, .. }
+            | Predicate::AuraValueAtLeast { aura, .. }
+            | Predicate::InOwnGround(aura) => {
+                out.insert(aura);
+            }
+            _ => {}
+        }
+    }
+    fn collect_eff_auras(effs: &[Effect], out: &mut BTreeSet<AuraId>) {
+        for e in effs {
+            match e {
+                Effect::If {
+                    when,
+                    then,
+                    otherwise,
+                } => {
+                    collect_pred_auras(when, out);
+                    collect_eff_auras(then, out);
+                    collect_eff_auras(otherwise, out);
+                }
+                Effect::Chance { then, .. }
+                | Effect::ForEach { then, .. }
+                | Effect::ConsumeStacks { then, .. } => {
+                    collect_eff_auras(then, out);
+                }
+                Effect::RandomOf(branches) => {
+                    for (_, b) in branches {
+                        collect_eff_auras(std::slice::from_ref(b), out);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    for sp in data.spells.values() {
+        for req in &sp.requires {
+            if let Requirement::AnyAura(list) = req {
+                referenced_auras.extend(list.iter().copied());
+            }
+        }
+        collect_eff_auras(&sp.on_cast, &mut referenced_auras);
+        collect_eff_auras(&sp.effects, &mut referenced_auras);
+    }
+    for au in data.auras.values() {
+        for m in &au.modifiers {
+            if let Some(p) = &m.condition {
+                collect_pred_auras(p, &mut referenced_auras);
+            }
+        }
+        for l in &au.listeners {
+            if let Some(p) = &l.condition {
+                collect_pred_auras(p, &mut referenced_auras);
+            }
+            match l.on {
+                ListenFor::PeriodicTick(a)
+                | ListenFor::AuraApplied(a)
+                | ListenFor::AuraExpired(a)
+                | ListenFor::Absorbed(a)
+                | ListenFor::AuraStacksReached { aura: a, .. }
+                | ListenFor::AuraRemovedBy { aura: a, .. } => {
+                    referenced_auras.insert(a);
+                }
+                ListenFor::EnemyDied {
+                    had_aura: Some(a), ..
+                } => {
+                    referenced_auras.insert(a);
+                }
+                _ => {}
+            }
+            collect_eff_auras(&l.effects, &mut referenced_auras);
+        }
+        if let Some(per) = &au.periodic {
+            collect_eff_auras(&per.effects, &mut referenced_auras);
+        }
+        collect_eff_auras(&au.on_expire, &mut referenced_auras);
+    }
+
+    // 2. Map each TalentId to its owning (Option<SpecId>, spec_name, Option<HeroTreeId>).
+    let mut talent_owner: BTreeMap<TalentId, (Option<SpecId>, String, Option<HeroTreeId>)> =
+        BTreeMap::new();
+    for spec in data.specs.values() {
+        for tree in &spec.trees {
+            for node in &tree.nodes {
+                for &tid in &node.choices {
+                    talent_owner.insert(tid, (Some(spec.id), spec.name.clone(), None));
+                }
+            }
+        }
+    }
+    for ht in data.hero_trees.values() {
+        let spec_id = ht.specs.first().copied();
+        let spec_name = spec_id
+            .and_then(|s| data.specs.get(&s))
+            .map_or_else(|| ht.name.clone(), |s| format!("{} [{}]", s.name, ht.name));
+        talent_owner.insert(ht.keystone, (spec_id, spec_name.clone(), Some(ht.id)));
+        for node in &ht.tree.nodes {
+            for &tid in &node.choices {
+                talent_owner.insert(tid, (spec_id, spec_name.clone(), Some(ht.id)));
+            }
+        }
+    }
+
+    let mut passive_talent_auras: BTreeMap<AuraId, TalentId> = BTreeMap::new();
+    for talent in data.talents.values() {
+        for grant in talent.ranks.iter().flatten() {
+            if let Grant::PassiveAura(aid) = *grant {
+                passive_talent_auras.entry(aid).or_insert(talent.id);
+            }
+        }
+    }
+
+    let mut findings: Vec<TalentAuditFinding> = Vec::new();
+
+    // Check A: Inert offensive talents & deprecated CDR listeners & missing RPPM/lockout.
+    for talent in data.talents.values() {
+        let (spec_id, spec_name, hero_tree_id) =
+            talent_owner
+                .get(&talent.id)
+                .cloned()
+                .unwrap_or((None, "Shared".into(), None));
+
+        let granted_auras: Vec<AuraId> = talent
+            .ranks
+            .iter()
+            .flatten()
+            .filter_map(|g| match *g {
+                Grant::PassiveAura(a) => Some(a),
+                _ => None,
+            })
+            .collect();
+        let grants_spell_or_replace = talent
+            .ranks
+            .iter()
+            .flatten()
+            .any(|g| matches!(g, Grant::Spell(_) | Grant::ReplaceSpell { .. }));
+
+        if !grants_spell_or_replace && !granted_auras.is_empty() {
+            let all_inert = granted_auras.iter().all(|aid| {
+                !referenced_auras.contains(aid)
+                    && data.auras.get(aid).is_some_and(|au| {
+                        au.duration.is_none()
+                            && au.modifiers.is_empty()
+                            && au.listeners.is_empty()
+                            && au.periodic.is_none()
+                            && au.overrides.is_empty()
+                            && au.on_expire.is_empty()
+                            && au.value.is_none()
+                            && au.prevents_death.is_none()
+                            && au.self_resurrect.is_none()
+                            && au.form.is_none()
+                            && au.stealth.is_none()
+                    })
+            });
+            if all_inert {
+                let is_offensive = dump
+                    .and_then(|d| d.spells.get(&SpellId(talent.id.0)))
+                    .is_none_or(is_offensive_dump_talent);
+                if is_offensive {
+                    findings.push(TalentAuditFinding {
+                        spec_id,
+                        spec_name: spec_name.clone(),
+                        hero_tree_id,
+                        talent_id: talent.id,
+                        talent_name: talent.name.clone(),
+                        aura_or_spell_id: granted_auras[0].0,
+                        kind: TalentFindingKind::InertOffensiveTalent,
+                        detail: format!(
+                            "talent {} ({}) grants inert aura {} with no modifiers, listeners, or predicate references",
+                            talent.name, talent.id.0, granted_auras[0].0
+                        ),
+                    });
+                }
+            }
+        }
+
+        // Check B: Deprecated cooldown reduction on passive talent auras.
+        if let Some(dump) = dump {
+            for &aid in &granted_auras {
+                let Some(au) = data.auras.get(&aid) else {
+                    continue;
+                };
+                for l in &au.listeners {
+                    for eff in &l.effects {
+                        if let Effect::AdjustCooldown {
+                            spell: cd_spell,
+                            change: portunus_gamedata::effect::CooldownChange::Reduce(_),
+                        } = eff
+                        {
+                            if let Some(dsp) = dump.spells.get(&SpellId(aid.0)) {
+                                let desc_lower = dsp.description.to_ascii_lowercase();
+                                let mentions_cd = desc_lower.contains("cooldown")
+                                    || desc_lower.contains("recharge")
+                                    || dsp.effects.iter().any(|de| {
+                                        de.kind.contains("Cooldown") || de.kind.contains("Recharge")
+                                    });
+                                if !mentions_cd && !dsp.description.is_empty() {
+                                    findings.push(TalentAuditFinding {
+                                        spec_id,
+                                        spec_name: spec_name.clone(),
+                                        hero_tree_id,
+                                        talent_id: talent.id,
+                                        talent_name: talent.name.clone(),
+                                        aura_or_spell_id: aid.0,
+                                        kind: TalentFindingKind::DeprecatedCooldownReduction,
+                                        detail: format!(
+                                            "aura {} ({}) reduces cooldown of spell {}, but 12.1 dump description has no cooldown reduction: {:?}",
+                                            au.name, aid.0, cd_spell.0, dsp.description
+                                        ),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Check C: Missing RPPM in GameData when SpellDataDump has Real PPM.
+                if let Some(dsp) = dump.spells.get(&SpellId(aid.0)) {
+                    if let Some((rate, _)) = dsp.rppm {
+                        let has_listener_or_mod =
+                            !au.listeners.is_empty() || !au.modifiers.is_empty();
+                        if !has_listener_or_mod {
+                            findings.push(TalentAuditFinding {
+                                spec_id,
+                                spec_name: spec_name.clone(),
+                                hero_tree_id,
+                                talent_id: talent.id,
+                                talent_name: talent.name.clone(),
+                                aura_or_spell_id: aid.0,
+                                kind: TalentFindingKind::MissingDumpCooldownOrRppm,
+                                detail: format!(
+                                    "talent aura {} ({}) has Real PPM {:.2} in dump but no listeners/modifiers in game.ron",
+                                    au.name, aid.0, rate
+                                ),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Check D: Active spell checking a permanent passive talent aura (`duration: None`)
+    // to apply a duration override to its own buff without removing any consumable aura
+    // (`The First Dance` pattern), or triggering a cooldown-gated proc spell without a
+    // lockout check (`Unseen Blade` pattern).
+    for sp in data.spells.values() {
+        for eff in &sp.effects {
+            if let Effect::If {
+                when: Predicate::CasterHasAura(cond_aura),
+                then,
+                otherwise,
+            } = eff
+            {
+                let is_permanent_passive = data
+                    .auras
+                    .get(cond_aura)
+                    .is_some_and(|a| a.duration.is_none());
+                if !is_permanent_passive {
+                    continue;
+                }
+                let Some(&tid) = passive_talent_auras.get(cond_aura) else {
+                    continue;
+                };
+                let (spec_id, spec_name, hero_tree_id) = talent_owner
+                    .get(&tid)
+                    .cloned()
+                    .unwrap_or((None, "Shared".into(), None));
+                let tname = data
+                    .talents
+                    .get(&tid)
+                    .map_or_else(|| cond_aura.0.to_string(), |t| t.name.clone());
+
+                // Pattern D1: `then` applies an aura with `duration: Some(_)` while `otherwise`
+                // applies the same aura without duration override, and `then` has no `RemoveAura`.
+                let overrides_same_buff_duration = then.iter().any(|te| {
+                    if let Effect::ApplyAura {
+                        aura: ta,
+                        duration: Some(_),
+                        ..
+                    } = te
+                    {
+                        otherwise.iter().any(|oe| {
+                            matches!(
+                                oe,
+                                Effect::ApplyAura {
+                                    aura: oa,
+                                    duration: None,
+                                    ..
+                                } if oa == ta
+                            )
+                        })
+                    } else {
+                        false
+                    }
+                });
+                let removes_any_aura = then.iter().any(|te| {
+                    matches!(te, Effect::RemoveAura { .. } | Effect::RemoveStacks { .. })
+                });
+                let is_consumable_in_dump = dump
+                    .and_then(|d| d.spells.get(&SpellId(cond_aura.0)))
+                    .is_none_or(|dsp| {
+                        let dl = dsp.description.to_ascii_lowercase();
+                        dl.contains("next ") || dl.contains("out of combat")
+                    });
+                if overrides_same_buff_duration && !removes_any_aura && is_consumable_in_dump {
+                    findings.push(TalentAuditFinding {
+                        spec_id,
+                        spec_name: spec_name.clone(),
+                        hero_tree_id,
+                        talent_id: tid,
+                        talent_name: tname.clone(),
+                        aura_or_spell_id: sp.id.0,
+                        kind: TalentFindingKind::UnconsumedPassiveOverride,
+                        detail: format!(
+                            "spell {} ({}) checks permanent passive aura {} ({}) to override buff duration on every cast without consuming a ready buff",
+                            sp.name, sp.id.0, tname, cond_aura.0
+                        ),
+                    });
+                }
+
+                // Pattern D2: `then` directly triggers a proc spell on 100% of casts without
+                // any nested cooldown aura check, when SpellDataDump says "may occur once every".
+                if let Some(dump) = dump {
+                    if let Some(dsp) = dump.spells.get(&SpellId(cond_aura.0)) {
+                        let desc_lower = dsp.description.to_ascii_lowercase();
+                        let has_once_every_lockout = desc_lower.contains("may occur once every");
+                        let has_nested_guard = then
+                            .iter()
+                            .any(|te| matches!(te, Effect::If { .. } | Effect::Chance { .. }));
+                        if has_once_every_lockout && !has_nested_guard {
+                            findings.push(TalentAuditFinding {
+                                spec_id,
+                                spec_name,
+                                hero_tree_id,
+                                talent_id: tid,
+                                talent_name: tname.clone(),
+                                aura_or_spell_id: sp.id.0,
+                                kind: TalentFindingKind::MissingDumpCooldownOrRppm,
+                                detail: format!(
+                                    "spell {} ({}) triggers {} ({}) on every cast without lockout check, but dump states 'may occur once every ...'",
+                                    sp.name, sp.id.0, tname, cond_aura.0
+                                ),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    findings
+}
+
+fn is_offensive_dump_talent(sp: &DumpSpell) -> bool {
+    let d = sp.description.to_ascii_lowercase();
+    if d.is_empty() {
+        return false;
+    }
+    let offensive_keywords = [
+        "damage",
+        "critical strike",
+        "haste",
+        "mastery",
+        "attack speed",
+        "cast time",
+        "combo point",
+        "energy",
+        "rage",
+        "maelstrom",
+        "insanity",
+        "runic power",
+        "focus",
+        "astral power",
+        "fury",
+        "soul shard",
+        "chi",
+        "holy power",
+        "essence",
+        "shadow clone",
+        "unseen blade",
+    ];
+    let defensive_only = (d.contains("damage taken")
+        || d.contains("movement speed")
+        || d.contains("healing received")
+        || d.contains("absorb")
+        || d.contains("feint")
+        || d.contains("shroud of concealment")
+        || d.contains("crimson vial")
+        || d.contains("shadowstep")
+        || d.contains("grappling hook")
+        || d.contains("cheap shot")
+        || d.contains("kidney shot")
+        || d.contains("blind")
+        || d.contains("evasion")
+        || d.contains("cloak of shadows")
+        || d.contains("leech")
+        || d.contains("avoidance")
+        || d.contains("max health")
+        || d.contains("maximum health"))
+        && !d.contains("deals ")
+        && !d.contains("damage of your")
+        && !d.contains("increased damage")
+        && !d.contains("additional damage")
+        && !d.contains("critical strike")
+        && !d.contains("haste");
+    if defensive_only {
+        return false;
+    }
+    offensive_keywords.iter().any(|kw| d.contains(kw))
 }
 
 #[cfg(test)]

@@ -2385,3 +2385,85 @@ fn elemental_five_and_ten_target_farseer_and_stormbringer_use_aoe_apl() {
         }
     }
 }
+
+#[test]
+fn subtlety_rogue_single_target_boss_talent_setups_run_cleanly() {
+    use portunus_policy::Featurizer;
+    use portunus_run::SeatObsFeaturizer;
+
+    for &(run, hero_ability) in &[
+        ("subtlety_deathstalker_boss", "Deathstalker's Mark"),
+        (
+            "subtlety_deathstalker_dark_brew_boss",
+            "Deathstalker's Mark",
+        ),
+        ("subtlety_deathstalker_danse_boss", "Deathstalker's Mark"),
+        ("subtlety_trickster_boss", "Coup de Grace"),
+        ("subtlety_trickster_burst_boss", "Coup de Grace"),
+        ("subtlety_trickster_unseen_boss", "Coup de Grace"),
+    ] {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../data/runs/{run}.ron"));
+        let mut b = Bundle::load(&path).expect("load subtlety boss bundle");
+
+        // Verify that the 40M..60M uniform boss health distribution produces
+        // distinct initial absolute healths across seeds and that both
+        // `SeatObs::target_health()` and `SeatObsFeaturizer` (`feat[7]`) expose it.
+        if run == "subtlety_deathstalker_boss" {
+            let sf = SeatObsFeaturizer::for_spec(&b.data, b.templates[0].spec).unwrap();
+            let mut env = b.env(false);
+            let mut initial_hps = Vec::new();
+            for s in [1u64, 2, 3] {
+                let mut turn = env.reset(Seed(s)).unwrap();
+                let d = loop {
+                    match turn {
+                        Turn::Decide(d) if d.obs.target_health().is_some() => break d,
+                        Turn::Decide(_) => {
+                            turn = env
+                                .step(portunus_engine::Choice::Wait(
+                                    portunus_engine::Wait::NextEvent,
+                                ))
+                                .unwrap()
+                                .next;
+                        }
+                        Turn::Done(_) => panic!("ended before target engaged"),
+                    }
+                };
+                let hp = d.obs.target_health().expect("target health");
+                assert!(
+                    (40_000_000..=60_000_000).contains(&hp),
+                    "boss hp {hp} outside 40M..60M"
+                );
+                let feat = sf.featurize(&d.obs, &d.legal);
+                let expected_abs = (hp as f64 / 50_000_000.0) as f32;
+                assert!(
+                    (feat[7] - expected_abs).abs() < 1e-5,
+                    "feat[7]={} != {}",
+                    feat[7],
+                    expected_abs
+                );
+                initial_hps.push(hp);
+            }
+            assert!(
+                initial_hps[0] != initial_hps[1] || initial_hps[1] != initial_hps[2],
+                "uniform(40.0, 60.0) should vary across seeds: {initial_hps:?}"
+            );
+        }
+
+        for e in Arc::make_mut(&mut b.enemies).enemies.values_mut() {
+            e.health = 100_000;
+        }
+        let bd = b
+            .breakdown(SeedSet { first: 0, count: 2 })
+            .expect("subtlety boss breakdown");
+        for expected in ["Shadowstrike", "Eviscerate", hero_ability] {
+            assert!(
+                bd.rows
+                    .iter()
+                    .any(|r| r.name == expected && (r.casts > 0.0 || r.hits > 0.0)),
+                "{run} never used {expected}: {:#?}",
+                bd.rows
+            );
+        }
+    }
+}

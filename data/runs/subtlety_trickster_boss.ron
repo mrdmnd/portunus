@@ -1,0 +1,21 @@
+// Subtlety Rogue [Trickster — Standard SimC Build] on a 40M HP single-target boss.
+(
+    name: "subtlety_trickster_boss",
+    game: "../game.ron",
+    enemies: "../enemies.ron",
+    scenario: "../scenarios/single_target_boss.ron",
+    simc_profile: Some("../../target/simc/profiles/MID2/MID2_Rogue_Subtlety.simc"),
+    seats: [
+        (
+            loadout: "../loadouts/subtlety_trickster.ron",
+            policy: "subtlety",
+            latency: (
+                anticipated: fixed(0),
+                reaction: jitter(base: 250, jitter: 50),
+                cast_lag: jitter(base: 100, jitter: 10),
+            ),
+        ),
+    ],
+    info: realistic,
+    seeds: 30,
+)

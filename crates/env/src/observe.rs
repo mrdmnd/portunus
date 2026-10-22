@@ -216,7 +216,7 @@ impl FlatObserver {
 
     /// Fixed feature-vector length produced by [`Self::observe`].
     pub fn width(&self) -> usize {
-        8 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
+        9 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
     }
 }
 
@@ -267,15 +267,20 @@ impl Observer for FlatObserver {
             })
             .collect();
         let target = state.target(me).filter(|t| visible_enemies.contains(t));
-        let (target_hp, target_dist) = target
+        let (target_hp, target_abs_hp, target_dist) = target
             .and_then(|t| {
                 let a = state.actor(t)?;
                 let dist = state.distance(seat, t).unwrap_or(0.0) as f32;
-                Some((a.health_frac() as f32, (dist / 40.0).clamp(0.0, 2.0)))
+                let abs_hp = (a.health as f64 / 50_000_000.0).clamp(0.0, 2.0) as f32;
+                Some((
+                    a.health_frac() as f32,
+                    abs_hp,
+                    (dist / 40.0).clamp(0.0, 2.0),
+                ))
             })
-            .unwrap_or((0.0, 0.0));
+            .unwrap_or((0.0, 0.0, 0.0));
 
-        // 8 global & target scalars
+        // 9 global & target scalars
         out.push(if matches!(state.segment(), SegmentView::Combat(_)) {
             1.0
         } else {
@@ -287,6 +292,7 @@ impl Observer for FlatObserver {
         out.push(moving);
         out.push((visible_enemies.len() as f32 / 10.0).clamp(0.0, 2.0));
         out.push(target_hp);
+        out.push(target_abs_hp);
         out.push(target_dist);
 
         // 2 per resource: normalized current and deficit

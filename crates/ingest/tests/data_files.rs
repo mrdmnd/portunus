@@ -1781,3 +1781,136 @@ fn spell_dump_sync_validates_all_specs_and_loadouts() {
         let _ = Compiler.compile(&game, &loadout).expect("compile loadout");
     }
 }
+
+#[test]
+fn talent_auditor_flags_known_bug_patterns_and_subtlety_is_clean() {
+    use portunus_gamedata::effect::CooldownChange;
+    use portunus_ingest::{audit_talents, SpellDump, TalentFindingKind};
+    use std::collections::BTreeMap;
+
+    let dump_dir =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/simc/SpellDataDump");
+    let dump = dump_dir
+        .exists()
+        .then(|| SpellDump::from_dir(&dump_dir).expect("loads SpellDataDump"));
+
+    let game = game();
+    let findings = audit_talents(&game, dump.as_ref());
+
+    let mut by_kind: BTreeMap<TalentFindingKind, usize> = BTreeMap::new();
+    let mut by_spec: BTreeMap<String, usize> = BTreeMap::new();
+    for f in &findings {
+        *by_kind.entry(f.kind).or_default() += 1;
+        *by_spec.entry(f.spec_name.clone()).or_default() += 1;
+        if f.kind != TalentFindingKind::InertOffensiveTalent {
+            println!(
+                "  [{:?}] {} | {} ({}) -> {}",
+                f.kind, f.spec_name, f.talent_name, f.talent_id.0, f.detail
+            );
+        }
+    }
+    println!(
+        "[talent-audit] total findings across 26 specs: {} ({:?})",
+        findings.len(),
+        by_kind
+    );
+    println!("[talent-audit] findings by spec: {by_spec:?}");
+
+    // Subtlety Rogue (261) + Trickster (51) + Deathstalker (53) must have zero
+    // UnconsumedPassiveOverride, DeprecatedCooldownReduction, or MissingDumpCooldownOrRppm bugs.
+    let sub_bugs: Vec<_> = findings
+        .iter()
+        .filter(|f| {
+            (f.spec_id == Some(SpecId(261))
+                || f.hero_tree_id == Some(HeroTreeId(51))
+                || f.hero_tree_id == Some(HeroTreeId(53)))
+                && matches!(
+                    f.kind,
+                    TalentFindingKind::UnconsumedPassiveOverride
+                        | TalentFindingKind::DeprecatedCooldownReduction
+                        | TalentFindingKind::MissingDumpCooldownOrRppm
+                )
+        })
+        .collect();
+    assert!(
+        sub_bugs.is_empty(),
+        "Subtlety/Trickster/Deathstalker should have zero structural/dump cooldown/proc bugs: {sub_bugs:#?}"
+    );
+
+    // Inject the 3 exact historical Subtlety bugs into a mutated copy and verify
+    // `audit_talents` catches all 3:
+    // 1. `The First Dance` (382505) checked directly as a permanent passive on `Shadow Dance` (185313)
+    //    without removing a ready buff.
+    // 2. `Deepening Shadows` (185314) having a deprecated cooldown-reduction listener on `185313`.
+    // 3. `Backstab` (53) triggering `Unseen Blade` (441144) on every cast without checking `459485`.
+    let mut buggy = game.clone();
+    buggy.spells.get_mut(&SpellId(185313)).unwrap().effects[0] = Effect::If {
+        when: Predicate::CasterHasAura(AuraId(382505)),
+        then: vec![Effect::ApplyAura {
+            aura: AuraId(185422),
+            target: EffectTarget::Caster,
+            stacks: 1,
+            duration: Some(SimDuration(10000)),
+            per_unit_spent: None,
+        }],
+        otherwise: vec![Effect::ApplyAura {
+            aura: AuraId(185422),
+            target: EffectTarget::Caster,
+            stacks: 1,
+            duration: None,
+            per_unit_spent: None,
+        }],
+    };
+    buggy.auras.get_mut(&AuraId(185314)).unwrap().listeners = vec![Listener {
+        on: ListenFor::ResourceSpent(ResourceKind::ComboPoints),
+        per_unit: false,
+        condition: None,
+        chance: ProcChance::Always,
+        internal_cooldown: None,
+        shared_with: None,
+        chain: false,
+        effects: vec![Effect::AdjustCooldown {
+            spell: SpellId(185313),
+            change: CooldownChange::Reduce(SimDuration(700)),
+        }],
+    }];
+    buggy
+        .spells
+        .get_mut(&SpellId(53))
+        .unwrap()
+        .effects
+        .push(Effect::If {
+            when: Predicate::CasterHasAura(AuraId(441146)),
+            then: vec![Effect::TriggerSpell {
+                spell: SpellId(441144),
+                target: EffectTarget::Target,
+                delay: SimDuration::ZERO,
+            }],
+            otherwise: Vec::new(),
+        });
+
+    let buggy_findings = audit_talents(&buggy, dump.as_ref());
+    assert!(
+        buggy_findings.iter().any(|f| {
+            f.talent_id == TalentId(382505)
+                && f.kind == TalentFindingKind::UnconsumedPassiveOverride
+        }),
+        "must flag The First Dance permanent-passive override bug"
+    );
+    if dump.is_some() {
+        assert!(
+            buggy_findings.iter().any(|f| {
+                f.talent_id == TalentId(185314)
+                    && f.kind == TalentFindingKind::DeprecatedCooldownReduction
+            }),
+            "must flag Deepening Shadows deprecated CDR bug"
+        );
+        assert!(
+            buggy_findings.iter().any(|f| {
+                f.talent_id == TalentId(441146)
+                    && f.kind == TalentFindingKind::MissingDumpCooldownOrRppm
+            }),
+            "must flag Unseen Blade missing cooldown lockout bug"
+        );
+    }
+}
