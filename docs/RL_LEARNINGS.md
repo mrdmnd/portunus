@@ -281,4 +281,46 @@ To detect broken talents systematically across all 26 specs, we implemented two 
 2. **`SimcParityReport::cast_rate_divergences` (`crates/run/src/parity.rs` & `crates/run/src/report.rs`):**
    - Surfaces any core rotational ability (`portunus_casts >= 5`, `simc_casts >= 5`, `simc_share >= 3%`) whose cast count diverges from SimC by `> 35%`, preventing spec-wide DPS scalars from hiding cooldown or resource bugs.
 
+---
+
+## 6. Multi-Pull Mythic+ Dungeon Wing RL Study (`mythic_plus_wing.ron`)
+
+### 6.1 Scenario & Observation/Reward Architecture
+
+In a real Mythic+ dungeon key, pulls are **heterogeneous** (a `12M` HP `Dungeon Lieutenant` surrounded by four `4M` HP `Dungeon Trash` mobs, followed by another trash+lieutenant pack, followed by a `32M` HP `Dungeon Boss`), separated by `8s–12s` travel windows, and the objective is **minimizing total wing completion time** rather than maximizing raw pad AoE DPS.
+
+We added three Mythic+ archetypes to `data/enemies.ron` (`dungeon_lieutenant`: `12M` HP / `8` forces, `dungeon_trash`: `4M` HP / `2` forces, `dungeon_boss`: `32M` HP / `cc_immune`) and created `data/scenarios/mythic_plus_wing.ron`:
+- **Pull 1 (`courtyard_pack`):** `1x Dungeon Lieutenant` (`12M` HP) + `4x Dungeon Trash` (`4M` HP each = `28M` pack HP), `health: uniform(lo: 0.85, hi: 1.15)`, `8s` travel (`3s` prepull).
+- **Pull 2 (`hallway_pack`):** `1x Dungeon Lieutenant` (`12M` HP) + `4x Dungeon Trash` (`4M` HP each = `28M` pack HP), `health: uniform(lo: 0.85, hi: 1.15)`, `10s` travel (`3s` prepull).
+- **Pull 3 (`wing_boss`):** `1x Dungeon Boss` (`32M` HP), `health: uniform(lo: 0.85, hi: 1.15)`, `12s` travel (`3s` prepull), `forces_required: Some(32)`.
+
+To make learned policies multi-pull and priority-target aware, we added:
+1. **`SeatObs` & `SeatObsFeaturizer` / `FlatObserver` (`crates/run/src/observe.rs` & `crates/env/src/observe.rs`):**
+   - `pulls_remaining` (`feat[9] = (pulls_remaining / 5.0).clamp(0.0, 2.0)`): `2` on Pull 1, `1` on Pull 2, `0` on the Boss.
+   - `pack_health` (`feat[10] = (pack_health / 100_000_000.0).clamp(0.0, 4.0)`): total remaining HP across all engaged enemies in the current pull.
+   - `priority_health` (`feat[11] = (priority_health / 50_000_000.0).clamp(0.0, 2.0)`): highest remaining HP among engaged enemies in the current pull (the mob holding up pull completion).
+2. **`DenseReward::per_k_priority_damage` (`crates/env/src/reward.rs` & `crates/run/src/train.rs`):**
+   - Weighted `70%` total pack damage + `30%` priority-target (`priority_health`) damage + `+50.0` per pull cleared `- 2.5` per second elapsed, directly rewarding funneling single-target damage into the `12M` HP Lieutenant while cleaving the `4M` HP trash.
+3. **Travel-Invariant MCTS Lookahead (`crates/policy/src/lib.rs`):**
+   - Capped single-step elapsed time contribution toward `MctsConfig::horizon` at `2.5s` so an `8s–12s` inter-pull travel gap does not prematurely terminate an MCTS simulation before seeing the next pull's opening GCDs.
+
+### 6.2 3-Pull Mythic+ Wing Results (`4x64` Residual `PolicyValueNet`, `n=30` Paired Seeds)
+
+| Spec & Hero Tree | Run File | SimC Script DPS (`n=30`) | Burn RL DPS (`n=30`) | RL DPS Gain (%) | Total Wing Time (`Script` $\rightarrow$ `RL`) | Time Saved |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| **Subtlety Rogue [Deathstalker — Danse / Finisher Amp]** | `subtlety_deathstalker_danse_mplus.ron` | `446,865.7 ± 8,923.2` | **`525,712.7`** | **`+78,847.0` (`+17.64%`)** | `228.56s` $\rightarrow$ **`198.22s`** | **`-30.34s` (`-13.3%`)** |
+| **Subtlety Rogue [Trickster — Dark Brew Finisher Burst]** | `subtlety_trickster_burst_mplus.ron` | `568,311.2 ± 14,031.3` | **`611,241.6`** | **`+42,930.4` (`+7.55%`)** | `186.19s` $\rightarrow$ **`175.04s`** | **`-11.15s` (`-6.0%`)** |
+| **Elemental Shaman [Stormbringer]** | `elemental_stormbringer_mplus.ron` | `381,513.5 ± 5,202.6` | **`394,023.7`** | **`+12,510.2` (`+3.28%`)** | `261.82s` $\rightarrow$ **`254.63s`** | **`-7.19s` (`-2.7%`)** |
+| **Elemental Shaman [Farseer]** | `elemental_farseer_mplus.ron` | `405,739.6 ± 5,767.6` | **`406,572.4`** | **`+832.8` (`+0.21%`)** | `248.24s` $\rightarrow$ **`247.85s`** | **`-0.39s` (`-0.2%`)** |
+
+### 6.3 Why Subtlety Rogue Saves `30.3 Seconds` (`+17.64%` DPS) Across the 3-Pull Wing
+
+SimC's `subtlety` priority list uses a simple target-count rule (`if enemies > 1 { Shuriken Storm }`, `if enemies >= 2 { Black Powder }`). On a Mythic+ pack with `1x 12M HP Lieutenant + 4x 4M HP Trash`:
+- **What SimC's script does (`228.56s` total wing time):** Spams `Shuriken Storm` (`53.8` casts) and `Black Powder` (`28.8` casts) for as long as 2+ mobs are alive. The four `4M` HP trash mobs die halfway through the pull, leaving the `12M` HP Lieutenant alive at `~55%` HP with `Deathstalker's Mark` undetonated.
+- **What Burn RL learns (`198.22s` total wing time, `-30.34s`):**
+  1. **Priority-Target Funneling on Packs 1 & 2:** Cuts `Shuriken Storm` from `53.8 -> 21.6` casts (`-32.2` casts) and replaces it with **`Shadowstrike` (`17.9 -> 35.1` casts, `+23,759 DPS`)** and **`Eviscerate` (`38.2 -> 47.5` casts, `+27,114 DPS`)** directly into the `12M` HP `Dungeon Lieutenant`, while letting **`Secret Technique` (`+18,563 DPS`)**, **`Goremaw's Bite` (`+4,014 DPS`)**, and `24.0` **`Black Powder`** casts passively cleave the four `4M` HP trash mobs down at the exact same moment the Lieutenant dies!
+  2. **Detonating `+16.8` More `Deathstalker's Mark` Stacks (`35.6 -> 52.4` hits, `+21,870 DPS`):** By weaving `Shadowstrike` + `Eviscerate` onto the Lieutenant during trash pulls instead of spamming `Shuriken Storm` (which does not apply `Deathstalker's Mark`), RL triggers `+16.8` more `Deathstalker's Mark` explosions and `+52.5` more `Hunt Them Down` procs.
+  3. **Inter-Pull `Stealth` (`3.7–4.0` casts across 3 pulls) + `The First Dance` (`470678`) + `Vanish` (`1.0 -> 2.0` casts):** Enters every single pull in `Stealth` and uses `Vanish` twice across the wing (`Pull 1` and `Pull 3` Boss).
+
+
 

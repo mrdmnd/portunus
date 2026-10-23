@@ -16,6 +16,7 @@ use portunus_policy::{
     take_mcts_profile_micros, Featurizer, MctsConfig, Model, ModelPolicy, ModelVersion, Policy,
     PolicyValueNetConfig, UniformModel,
 };
+use portunus_scenario::ScenarioSampler;
 
 use crate::arm::{AbilityRow, Breakdown, SimArm};
 use crate::bundle::{Bundle, RunError};
@@ -244,11 +245,14 @@ pub fn train_rl(
 
     let reward_scale = (10_000.0 / scripted_dps.mean.max(1_000.0)).clamp(0.005, 2.0);
     let reward: Arc<dyn portunus_env::Reward + Send + Sync> = Arc::new(DenseReward {
-        per_k_damage: reward_scale,
+        per_k_damage: 0.70 * reward_scale,
+        per_k_priority_damage: 0.30 * reward_scale,
         per_pull_cleared: 50.0,
         per_second: 2.5,
         per_death: 100.0,
     });
+    let num_pulls = bundle.sampler.spec().pulls.len().max(1);
+    let max_mcts_steps = (96 * num_pulls).min(240);
     let fast_rl_env = bundle.env_with(feat_concrete, Arc::clone(&reward), false);
     let mcts_cfg = MctsConfig {
         simulations: spec.simulations,
@@ -261,7 +265,7 @@ pub fn train_rl(
     let mut collector =
         SelfPlayCollector::new(fast_rl_env, mcts_cfg, Arc::clone(&space), fast_featurizer);
     collector.discount = 0.85;
-    collector.max_steps = 96;
+    collector.max_steps = max_mcts_steps;
     collector.threads = runner.threads;
 
     let mut warm_buffer: Vec<Sample> = Vec::new();
@@ -277,7 +281,7 @@ pub fn train_rl(
             Arc::clone(&featurizer),
         );
         warm_collector.discount = 0.85;
-        warm_collector.max_steps = 96;
+        warm_collector.max_steps = max_mcts_steps;
         warm_collector.threads = runner.threads;
         let warm_seeds: Vec<Seed> = (0..spec.warm_start_episodes)
             .map(|k| Seed(50_000 + u64::from(k)))

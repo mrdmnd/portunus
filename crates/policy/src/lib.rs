@@ -673,7 +673,7 @@ impl<O> Mcts<O> {
                 break;
             };
             total_reward += tr.reward;
-            elapsed = elapsed + tr.elapsed;
+            elapsed = elapsed + tr.elapsed.min(SimDuration(2_500));
             match tr.next {
                 Turn::Done(_) => return (total_reward, elapsed, true, None),
                 Turn::Decide(next_dec) => dec = next_dec,
@@ -845,7 +845,7 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                     let Ok(tr) = sim.step(choice) else {
                         break SimStep::Done(0.0);
                     };
-                    elapsed_total = elapsed_total + tr.elapsed;
+                    elapsed_total = elapsed_total + tr.elapsed.min(SimDuration(2_500));
                     nodes[node_id].edges[edge_pos].visits += 1;
                     path.push((node_id, edge_pos, tr.reward));
 

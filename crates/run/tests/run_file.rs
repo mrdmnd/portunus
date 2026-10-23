@@ -2467,3 +2467,97 @@ fn subtlety_rogue_single_target_boss_talent_setups_run_cleanly() {
         }
     }
 }
+
+#[test]
+fn mythic_plus_three_pull_wing_tracks_pulls_remaining_and_clears_all_pulls() {
+    use portunus_policy::Featurizer;
+    use portunus_run::SeatObsFeaturizer;
+    use portunus_scenario::ScenarioSampler;
+
+    for &(run, aoe_spell, st_spell) in &[
+        (
+            "subtlety_deathstalker_danse_mplus",
+            "Black Powder",
+            "Eviscerate",
+        ),
+        (
+            "subtlety_trickster_burst_mplus",
+            "Black Powder",
+            "Coup de Grace",
+        ),
+        ("elemental_farseer_mplus", "Chain Lightning", "Lava Burst"),
+        ("elemental_stormbringer_mplus", "Chain Lightning", "Tempest"),
+    ] {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../data/runs/{run}.ron"));
+        let mut b = Bundle::load(&path).expect("load mythic_plus_wing bundle");
+
+        // Verify that on Pull 1 engage, `pulls_remaining == 2`, `pack_health > priority_health`,
+        // and `SeatObsFeaturizer` exposes `feat[9..12]`.
+        if run == "subtlety_deathstalker_danse_mplus" {
+            let sf = SeatObsFeaturizer::for_spec(&b.data, b.templates[0].spec).unwrap();
+            let mut env = b.env(false);
+            let mut turn = env.reset(Seed(1)).unwrap();
+            let d = loop {
+                match turn {
+                    Turn::Decide(d)
+                        if d.obs.combat_time.is_some()
+                            && d.obs
+                                .target
+                                .as_ref()
+                                .is_some_and(|t| !t.neighbours.is_empty()) =>
+                    {
+                        break d
+                    }
+                    Turn::Decide(_) => {
+                        turn = env
+                            .step(portunus_engine::Choice::Wait(
+                                portunus_engine::Wait::NextEvent,
+                            ))
+                            .unwrap()
+                            .next;
+                    }
+                    Turn::Done(_) => panic!("ended before Pull 1 engage"),
+                }
+            };
+            assert_eq!(d.obs.pulls_remaining, 2, "Pull 1 has 2 pulls after it");
+            assert!(
+                d.obs.pack_health > d.obs.priority_health && d.obs.priority_health > 0,
+                "pack_health={} vs priority_health={}",
+                d.obs.pack_health,
+                d.obs.priority_health
+            );
+            let feat = sf.featurize(&d.obs, &d.legal);
+            assert!((feat[9] - 0.4).abs() < 1e-5, "pulls_rem_norm={}", feat[9]);
+            assert!(
+                (feat[10] - (d.obs.pack_health as f64 / 100_000_000.0) as f32).abs() < 1e-5
+                    && (feat[11] - (d.obs.priority_health as f64 / 50_000_000.0) as f32).abs()
+                        < 1e-5
+                    && feat[11] > 0.0
+            );
+        }
+
+        // Scale down enemy health for fast unit-test rollout across all 3 pulls.
+        for e in Arc::make_mut(&mut b.enemies).enemies.values_mut() {
+            e.health /= 4;
+        }
+        let sampler = portunus_scenario::Sampler::new(
+            portunus_scenario::ScenarioSampler::spec(&*b.sampler).clone(),
+            Arc::clone(&b.enemies),
+        )
+        .unwrap();
+        b.sampler = Arc::new(sampler);
+        let bd = b
+            .breakdown(SeedSet { first: 0, count: 2 })
+            .expect("mythic_plus_wing breakdown");
+        for expected in [aoe_spell, st_spell] {
+            assert!(
+                bd.rows
+                    .iter()
+                    .any(|r| r.name == expected && (r.casts > 0.0 || r.hits > 0.0)),
+                "{run} never used {expected} across 3-pull dungeon wing: {:#?}",
+                bd.rows
+            );
+        }
+    }
+}

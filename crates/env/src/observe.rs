@@ -215,7 +215,7 @@ impl FlatObserver {
 
     /// Fixed feature-vector length produced by [`Self::observe`].
     pub fn width(&self) -> usize {
-        9 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
+        12 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
     }
 }
 
@@ -241,9 +241,21 @@ impl Observer for FlatObserver {
         }
 
         let mut out = Vec::with_capacity(self.width());
-        let combat_sec = match state.segment() {
-            SegmentView::Combat(c) => now.saturating_since(c.started).millis() as f32 / 1000.0,
-            _ => 0.0,
+        let total_combats = ctx
+            .run
+            .segments
+            .iter()
+            .filter(|s| matches!(s, portunus_scenario::resolved::Segment::Combat(_)))
+            .count();
+        let (combat_sec, pulls_rem) = match state.segment() {
+            SegmentView::Combat(c) => (
+                now.saturating_since(c.started).millis() as f32 / 1000.0,
+                total_combats.saturating_sub(usize::from(c.index) + 1),
+            ),
+            SegmentView::Travel { next_combat, .. } => {
+                (0.0, total_combats.saturating_sub(usize::from(next_combat)))
+            }
+            SegmentView::Finished => (0.0, 0),
         };
         let gcd_sec = state
             .gcd_end(seat)
@@ -254,17 +266,21 @@ impl Observer for FlatObserver {
         } else {
             0.0
         };
-        let visible_enemies: Vec<_> = state
-            .enemies()
-            .iter()
-            .copied()
-            .filter(|e| !hidden_enemies.contains(e))
-            .filter(|&e| {
-                state
-                    .actor(e)
-                    .is_some_and(|a| a.engaged && a.alive && a.targetable)
-            })
-            .collect();
+        let mut visible_enemies: Vec<_> = Vec::new();
+        let mut pack_hp_total: u64 = 0;
+        let mut prio_hp_max: u64 = 0;
+        for &e in state.enemies() {
+            if hidden_enemies.contains(&e) {
+                continue;
+            }
+            if let Some(a) = state.actor(e) {
+                if a.engaged && a.alive && a.targetable {
+                    visible_enemies.push(e);
+                    pack_hp_total = pack_hp_total.saturating_add(a.health);
+                    prio_hp_max = prio_hp_max.max(a.health);
+                }
+            }
+        }
         let target = state.target(me).filter(|t| visible_enemies.contains(t));
         let (target_hp, target_abs_hp, target_dist) = target
             .and_then(|t| {
@@ -278,8 +294,11 @@ impl Observer for FlatObserver {
                 ))
             })
             .unwrap_or((0.0, 0.0, 0.0));
+        let pulls_rem_norm = (pulls_rem as f32 / 5.0).clamp(0.0, 2.0);
+        let pack_abs_hp = (pack_hp_total as f64 / 100_000_000.0).clamp(0.0, 4.0) as f32;
+        let prio_abs_hp = (prio_hp_max as f64 / 50_000_000.0).clamp(0.0, 2.0) as f32;
 
-        // 9 global & target scalars
+        // 12 global, target, & multi-pull scalars
         out.push(if matches!(state.segment(), SegmentView::Combat(_)) {
             1.0
         } else {
@@ -293,6 +312,9 @@ impl Observer for FlatObserver {
         out.push(target_hp);
         out.push(target_abs_hp);
         out.push(target_dist);
+        out.push(pulls_rem_norm);
+        out.push(pack_abs_hp);
+        out.push(prio_abs_hp);
 
         // 2 per resource: normalized current and deficit
         for &kind in &self.resources {

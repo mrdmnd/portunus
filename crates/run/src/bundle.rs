@@ -104,7 +104,7 @@ pub struct Bundle {
     /// Index = seat.
     pub policies: Vec<Arc<dyn Policy<SeatObs>>>,
     pub plan: Arc<Plan>,
-    pub(crate) sampler: Arc<Sampler>,
+    pub sampler: Arc<Sampler>,
     priors: Arc<TimelinePriors>,
     kits: Arc<dyn SpecRegistry>,
 }

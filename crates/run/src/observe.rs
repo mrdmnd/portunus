@@ -192,6 +192,14 @@ pub struct SeatObs {
     /// The other seats, in seat order.
     pub allies: Vec<AllyObs>,
     pub battle_res: BattleResObs,
+    /// Number of combat pulls remaining after the current one (`0` on the final
+    /// pull of the scenario).
+    pub pulls_remaining: u16,
+    /// Sum of remaining health across all visible engaged enemies in the pack.
+    pub pack_health: u64,
+    /// Highest remaining health among all visible engaged enemies in the pack
+    /// (the priority target that determines when the pull ends).
+    pub priority_health: u64,
 }
 
 /// A controlled pet, as its owner sees it on the pet frame.
@@ -599,6 +607,28 @@ impl Observer for ScriptObserver {
                 })
             });
 
+        let total_combats = ctx
+            .run
+            .segments
+            .iter()
+            .filter(|s| matches!(s, portunus_scenario::resolved::Segment::Combat(_)))
+            .count();
+        let pulls_remaining = match state.segment() {
+            SegmentView::Combat(c) => total_combats.saturating_sub(usize::from(c.index) + 1) as u16,
+            SegmentView::Travel { next_combat, .. } => {
+                total_combats.saturating_sub(usize::from(next_combat)) as u16
+            }
+            SegmentView::Finished => 0,
+        };
+        let mut pack_health: u64 = 0;
+        let mut priority_health: u64 = 0;
+        for e in visible_enemies() {
+            if let Some(a) = state.actor(e) {
+                pack_health = pack_health.saturating_add(a.health);
+                priority_health = priority_health.max(a.health);
+            }
+        }
+
         SeatObs {
             now,
             hero_tree: template.and_then(|t| t.hero_tree),
@@ -668,6 +698,9 @@ impl Observer for ScriptObserver {
                     next_in: b.next_at.map(|t| t.saturating_since(now)),
                 }
             },
+            pulls_remaining,
+            pack_health,
+            priority_health,
         }
     }
 
@@ -700,7 +733,7 @@ impl SeatObsFeaturizer {
         let spells = spec_spells(data, spec)?;
         let auras = spec_auras(data, spec)?;
         Some(Self {
-            schema: SchemaId(format!("seat_obs:v2:spec_{}", spec.0)),
+            schema: SchemaId(format!("seat_obs:v3:spec_{}", spec.0)),
             resources,
             spells,
             auras,
@@ -708,7 +741,7 @@ impl SeatObsFeaturizer {
     }
 
     pub fn width(&self) -> usize {
-        9 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
+        12 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
     }
 }
 
@@ -718,7 +751,7 @@ impl Featurizer<SeatObs> for SeatObsFeaturizer {
     }
 
     fn width(&self) -> usize {
-        9 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
+        12 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
     }
 
     fn featurize(&self, obs: &SeatObs, mask: &ActionMask) -> Vec<f32> {
@@ -737,6 +770,9 @@ impl Featurizer<SeatObs> for SeatObsFeaturizer {
             ),
             None => (0.0, 0.0, 0.0, 0.0),
         };
+        let pulls_rem_norm = (f32::from(obs.pulls_remaining) / 5.0).clamp(0.0, 2.0);
+        let pack_abs_hp = (obs.pack_health as f64 / 100_000_000.0).clamp(0.0, 4.0) as f32;
+        let prio_abs_hp = (obs.priority_health as f64 / 50_000_000.0).clamp(0.0, 2.0) as f32;
 
         out.push(in_combat);
         out.push((combat_sec / 300.0).clamp(0.0, 2.0));
@@ -747,6 +783,9 @@ impl Featurizer<SeatObs> for SeatObsFeaturizer {
         out.push(target_hp);
         out.push(target_abs_hp);
         out.push(target_dist);
+        out.push(pulls_rem_norm);
+        out.push(pack_abs_hp);
+        out.push(prio_abs_hp);
 
         for &kind in &self.resources {
             let max = obs
@@ -804,12 +843,24 @@ impl Observer for SeatObsFeaturizer {
         let actor = state.actor(me);
 
         let mut out = Vec::with_capacity(self.width());
-        let (in_combat, combat_sec) = match state.segment() {
+        let total_combats = ctx
+            .run
+            .segments
+            .iter()
+            .filter(|s| matches!(s, portunus_scenario::resolved::Segment::Combat(_)))
+            .count();
+        let (in_combat, combat_sec, pulls_rem) = match state.segment() {
             SegmentView::Combat(c) => (
                 1.0,
                 now.saturating_since(c.started).millis() as f32 / 1000.0,
+                total_combats.saturating_sub(usize::from(c.index) + 1),
             ),
-            SegmentView::Travel { .. } | SegmentView::Finished => (0.0, 0.0),
+            SegmentView::Travel { next_combat, .. } => (
+                0.0,
+                0.0,
+                total_combats.saturating_sub(usize::from(next_combat)),
+            ),
+            SegmentView::Finished => (0.0, 0.0, 0),
         };
         let gcd_sec = state
             .gcd_end(seat)
@@ -820,6 +871,20 @@ impl Observer for SeatObsFeaturizer {
         } else {
             0.0
         };
+
+        let mut pack_hp_total: u64 = 0;
+        let mut prio_hp_max: u64 = 0;
+        for &e in state.enemies() {
+            if hide.enemies.contains(&e) {
+                continue;
+            }
+            if let Some(ea) = state.actor(e) {
+                if ea.engaged && ea.alive && ea.targetable {
+                    pack_hp_total = pack_hp_total.saturating_add(ea.health);
+                    prio_hp_max = prio_hp_max.max(ea.health);
+                }
+            }
+        }
 
         let target_id = state.target(me).filter(|t| !hide.enemies.contains(t));
         let (enemies, target_hp, target_abs_hp, target_dist) =
@@ -850,6 +915,9 @@ impl Observer for SeatObsFeaturizer {
                 }
                 None => (0.0, 0.0, 0.0, 0.0),
             };
+        let pulls_rem_norm = (pulls_rem as f32 / 5.0).clamp(0.0, 2.0);
+        let pack_abs_hp = (pack_hp_total as f64 / 100_000_000.0).clamp(0.0, 4.0) as f32;
+        let prio_abs_hp = (prio_hp_max as f64 / 50_000_000.0).clamp(0.0, 2.0) as f32;
 
         out.push(in_combat);
         out.push((combat_sec / 300.0).clamp(0.0, 2.0));
@@ -860,6 +928,9 @@ impl Observer for SeatObsFeaturizer {
         out.push(target_hp);
         out.push(target_abs_hp);
         out.push(target_dist);
+        out.push(pulls_rem_norm);
+        out.push(pack_abs_hp);
+        out.push(prio_abs_hp);
 
         for &kind in &self.resources {
             let has_res = template.is_some_and(|t| t.resources.iter().any(|r| r.kind == kind));
@@ -939,12 +1010,12 @@ impl Featurizer<Vec<f32>> for SeatObsFeaturizer {
     }
 
     fn width(&self) -> usize {
-        9 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
+        12 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
     }
 
     fn featurize(&self, obs: &Vec<f32>, mask: &ActionMask) -> Vec<f32> {
         let mut out = obs.clone();
-        let base = 9 + 2 * self.resources.len();
+        let base = 12 + 2 * self.resources.len();
         for (i, &spell) in self.spells.iter().enumerate() {
             let idx = base + 2 * i;
             if idx < out.len() {

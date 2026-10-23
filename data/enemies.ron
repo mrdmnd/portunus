@@ -121,5 +121,32 @@
                 ),
             ],
         ),
+        // Mythic+ dungeon archetypes: priority lieutenant, standard trash, and
+        // wing boss.
+        "dungeon_lieutenant": (
+            key: "dungeon_lieutenant",
+            name: "Dungeon Lieutenant",
+            kind: trash,
+            health: 12000000,
+            forces: 8,
+            defense: (level_offset: 2, armor: 0.0),
+        ),
+        "dungeon_trash": (
+            key: "dungeon_trash",
+            name: "Dungeon Trash",
+            kind: trash,
+            health: 4000000,
+            forces: 2,
+            defense: (level_offset: 1, armor: 0.0),
+        ),
+        "dungeon_boss": (
+            key: "dungeon_boss",
+            name: "Dungeon Boss",
+            kind: boss,
+            health: 32000000,
+            forces: 0,
+            defense: (level_offset: 3, armor: 0.0),
+            cc_immune: true,
+        ),
     },
 )
