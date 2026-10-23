@@ -647,7 +647,9 @@ impl Checker<'_> {
                     .is_none_or(|a| a.ground.is_some());
                 self.valid_predicate(owner, ground);
             }
-            Predicate::EnemiesAtLeast(n) => self.valid_predicate(owner, n > 0),
+            Predicate::EnemiesAtLeast(n) | Predicate::SpentAtLeast(n) => {
+                self.valid_predicate(owner, n > 0);
+            }
             Predicate::Stationary { for_at_least } => {
                 self.valid_predicate(owner, for_at_least > SimDuration::ZERO);
             }

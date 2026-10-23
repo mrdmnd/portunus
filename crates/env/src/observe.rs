@@ -21,7 +21,7 @@ use portunus_plan::PullPlan;
 use portunus_scenario::{ResolvedRun, TimelinePriors};
 use serde::{Deserialize, Serialize};
 
-use crate::action_space::spec_spells;
+use crate::action_space::{spec_spells, DEFAULT_TARGET_SLOTS};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -215,7 +215,10 @@ impl FlatObserver {
 
     /// Fixed feature-vector length produced by [`Self::observe`].
     pub fn width(&self) -> usize {
-        12 + 2 * self.resources.len() + 2 * self.spells.len() + 4 * self.auras.len()
+        10 + DEFAULT_TARGET_SLOTS
+            + 2 * self.resources.len()
+            + 2 * self.spells.len()
+            + 4 * self.auras.len()
     }
 }
 
@@ -267,8 +270,6 @@ impl Observer for FlatObserver {
             0.0
         };
         let mut visible_enemies: Vec<_> = Vec::new();
-        let mut pack_hp_total: u64 = 0;
-        let mut prio_hp_max: u64 = 0;
         for &e in state.enemies() {
             if hidden_enemies.contains(&e) {
                 continue;
@@ -276,8 +277,6 @@ impl Observer for FlatObserver {
             if let Some(a) = state.actor(e) {
                 if a.engaged && a.alive && a.targetable {
                     visible_enemies.push(e);
-                    pack_hp_total = pack_hp_total.saturating_add(a.health);
-                    prio_hp_max = prio_hp_max.max(a.health);
                 }
             }
         }
@@ -295,10 +294,8 @@ impl Observer for FlatObserver {
             })
             .unwrap_or((0.0, 0.0, 0.0));
         let pulls_rem_norm = (pulls_rem as f32 / 5.0).clamp(0.0, 2.0);
-        let pack_abs_hp = (pack_hp_total as f64 / 100_000_000.0).clamp(0.0, 4.0) as f32;
-        let prio_abs_hp = (prio_hp_max as f64 / 50_000_000.0).clamp(0.0, 2.0) as f32;
 
-        // 12 global, target, & multi-pull scalars
+        // 10 global & current-target scalars + 8 retarget-slot nameplate healths
         out.push(if matches!(state.segment(), SegmentView::Combat(_)) {
             1.0
         } else {
@@ -313,8 +310,20 @@ impl Observer for FlatObserver {
         out.push(target_abs_hp);
         out.push(target_dist);
         out.push(pulls_rem_norm);
-        out.push(pack_abs_hp);
-        out.push(prio_abs_hp);
+
+        let mut other_iter = visible_enemies
+            .iter()
+            .copied()
+            .filter(|&e| Some(e) != target);
+        for _ in 0..DEFAULT_TARGET_SLOTS {
+            let hp = other_iter
+                .next()
+                .and_then(|e| state.actor(e))
+                .map_or(0.0, |a| {
+                    (a.health as f64 / 50_000_000.0).clamp(0.0, 2.0) as f32
+                });
+            out.push(hp);
+        }
 
         // 2 per resource: normalized current and deficit
         for &kind in &self.resources {
@@ -387,10 +396,13 @@ impl Observer for FlatObserver {
     }
 
     fn legal(&self, ctx: &ObsContext<'_>, seat: Seat, engine_mask: &ActionMask) -> ActionMask {
-        if ctx.info == InfoSet::Privileged {
-            return engine_mask.clone();
-        }
+        let me = ctx.state.seats()[usize::from(seat.0)];
+        let cur_target = ctx.state.target(me);
         let mut mask = engine_mask.clone();
+        mask.targets.retain(|&t| Some(t) != cur_target);
+        if ctx.info == InfoSet::Privileged {
+            return mask;
+        }
         for p in ctx.state.unperceived(seat) {
             match p.reason {
                 WakeReason::CooldownReady(s) => {

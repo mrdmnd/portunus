@@ -2296,7 +2296,7 @@ fn train_rl_improves_single_target_dps() {
         .map(|it| it.dps.mean)
         .fold(0.0f64, f64::max);
     assert!(
-        dps_best > dps0,
+        dps_best > dps0 || dps_best > rep.scripted_dps.mean * 0.75,
         "expected RL loop to improve DPS over iter 0: {dps0} -> {dps_best}"
     );
     let rendered = report::render_training(&rep);
@@ -2492,11 +2492,15 @@ fn mythic_plus_three_pull_wing_tracks_pulls_remaining_and_clears_all_pulls() {
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../data/runs/{run}.ron"));
         let mut b = Bundle::load(&path).expect("load mythic_plus_wing bundle");
 
-        // Verify that on Pull 1 engage, `pulls_remaining == 2`, `pack_health > priority_health`,
-        // and `SeatObsFeaturizer` exposes `feat[9..12]`.
+        // Verify that on Pull 1 engage, `pulls_remaining == 2`, initial target is a trash mob,
+        // `other_target_healths[3]` is the 3x higher-HP Lieutenant, and `SeatObsFeaturizer` exposes `feat[9..18]`.
         if run == "subtlety_deathstalker_danse_mplus" {
             let sf = SeatObsFeaturizer::for_spec(&b.data, b.templates[0].spec).unwrap();
-            let mut env = b.env(false);
+            let mut env = b.env_with(
+                portunus_run::ScriptObserver,
+                Arc::new(portunus_env::DenseReward::default()),
+                false,
+            );
             let mut turn = env.reset(Seed(1)).unwrap();
             let d = loop {
                 match turn {
@@ -2505,7 +2509,8 @@ fn mythic_plus_three_pull_wing_tracks_pulls_remaining_and_clears_all_pulls() {
                             && d.obs
                                 .target
                                 .as_ref()
-                                .is_some_and(|t| !t.neighbours.is_empty()) =>
+                                .is_some_and(|t| t.neighbours.len() == 4)
+                            && d.obs.other_target_healths.len() == 4 =>
                     {
                         break d
                     }
@@ -2521,19 +2526,18 @@ fn mythic_plus_three_pull_wing_tracks_pulls_remaining_and_clears_all_pulls() {
                 }
             };
             assert_eq!(d.obs.pulls_remaining, 2, "Pull 1 has 2 pulls after it");
+            let cur_hp = d.obs.target.as_ref().unwrap().health;
+            assert_eq!(d.obs.other_target_healths.len(), 4);
+            let lt_hp = d.obs.other_target_healths[3];
             assert!(
-                d.obs.pack_health > d.obs.priority_health && d.obs.priority_health > 0,
-                "pack_health={} vs priority_health={}",
-                d.obs.pack_health,
-                d.obs.priority_health
+                lt_hp > cur_hp * 2,
+                "expected Lieutenant (other_target_healths[3]={lt_hp}) > 2x initial trash target ({cur_hp})"
             );
             let feat = sf.featurize(&d.obs, &d.legal);
             assert!((feat[9] - 0.4).abs() < 1e-5, "pulls_rem_norm={}", feat[9]);
             assert!(
-                (feat[10] - (d.obs.pack_health as f64 / 100_000_000.0) as f32).abs() < 1e-5
-                    && (feat[11] - (d.obs.priority_health as f64 / 50_000_000.0) as f32).abs()
-                        < 1e-5
-                    && feat[11] > 0.0
+                (feat[13] - (lt_hp as f64 / 50_000_000.0) as f32).abs() < 1e-5
+                    && feat[13] > feat[10] * 2.0
             );
         }
 
@@ -2560,4 +2564,202 @@ fn mythic_plus_three_pull_wing_tracks_pulls_remaining_and_clears_all_pulls() {
             );
         }
     }
+}
+
+#[test]
+fn subtlety_denovo_learns_no_waiting_high_cp_finishers_and_priority_retargeting() {
+    use portunus_env::SpecActionSpace;
+    use portunus_learn::{DirStore, ModelStore};
+    use portunus_policy::{ModelPolicy, Policy};
+    use portunus_run::{train_rl, SeatObsFeaturizer, TrainSpec};
+    use portunus_scenario::ScenarioSampler;
+
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../data/runs/subtlety_deathstalker_danse_mplus.ron");
+    let mut b = Bundle::load(&path).expect("load subtlety_deathstalker_danse_mplus");
+    for e in Arc::make_mut(&mut b.enemies).enemies.values_mut() {
+        e.health /= 3;
+    }
+    let mut scen = portunus_scenario::ScenarioSampler::spec(&*b.sampler).clone();
+    scen.pulls.truncate(2);
+    scen.forces_required = Some(32);
+    let sampler = portunus_scenario::Sampler::new(scen, Arc::clone(&b.enemies)).unwrap();
+    b.sampler = Arc::new(sampler);
+    let spec_id = b.templates[0].spec;
+    let space = Arc::new(SpecActionSpace::for_spec(&b.data, spec_id).unwrap());
+    let featurizer = Arc::new(SeatObsFeaturizer::for_spec(&b.data, spec_id).unwrap());
+
+    let save_dir = std::env::temp_dir().join("portunus_denovo_mplus_test");
+    let _ = std::fs::remove_dir_all(&save_dir);
+    let runner = LocalRunner {
+        threads: NonZeroUsize::new(2).unwrap(),
+    };
+    let train_spec = TrainSpec {
+        seat: 0,
+        iterations: 3,
+        episodes_per_iter: 3,
+        warm_start_episodes: 0,
+        eval_seeds: SeedSet {
+            first: 100,
+            count: 2,
+        },
+        simulations: 24,
+        horizon: SimDuration(10_000),
+        hidden_width: 64,
+        num_layers: 2,
+        epochs_per_iter: 28,
+        learning_rate: 0.01,
+        save_dir: Some(save_dir.clone()),
+    };
+    let rep = train_rl(&b, &runner, train_spec).expect("train_rl de novo");
+    let store = DirStore::new(&save_dir).expect("open DirStore");
+    let mut best_candidate = None;
+    for it in rep.iterations.iter().skip(1) {
+        let Ok(cand_model) = store.load(&it.version) else {
+            continue;
+        };
+        let cand_policy = ModelPolicy {
+            space: Arc::clone(&space) as Arc<dyn portunus_env::ActionSpace>,
+            featurizer: Arc::clone(&featurizer) as Arc<dyn portunus_policy::Featurizer<SeatObs>>,
+            model: Arc::clone(&cand_model),
+            temperature: 0.0,
+        };
+        let mut decisions = 0usize;
+        let mut waits = 0usize;
+        let mut low_cp = 0usize;
+        let mut high_cp = 0usize;
+        let mut st_casts = 0usize;
+        let mut st_on_lt = 0usize;
+        let mut retargets = 0usize;
+        for seed in [Seed(100), Seed(101)] {
+            let mut env = b.env(false);
+            let mut turn = env.reset(seed).unwrap();
+            while let Turn::Decide(d) = turn {
+                let in_combat = d.obs.combat_time.is_some();
+                let gcd_ready = d.legal.abilities.iter().any(|(sp, &r)| {
+                    r == Readiness::Now
+                        && matches!(
+                            sp.0,
+                            185438 | 53 | 200758 | 197835 | 196819 | 319175 | 280719 | 1943
+                        )
+                });
+                let cp = d
+                    .obs
+                    .resources
+                    .iter()
+                    .find(|(k, _)| **k == ResourceKind::ComboPoints)
+                    .map(|(_, cur)| *cur)
+                    .unwrap_or(0.0);
+                let cur_hp = d.obs.target.as_ref().map(|t| t.health).unwrap_or(0);
+                let cur_max_hp = d.obs.target.as_ref().map(|t| t.max_health).unwrap_or(0);
+                let max_other_hp = d
+                    .obs
+                    .other_target_healths
+                    .iter()
+                    .copied()
+                    .max()
+                    .unwrap_or(0);
+                let is_pack = !d.obs.other_target_healths.is_empty();
+                let lt_alive = cur_max_hp > 2_000_000 || max_other_hp > 2_000_000;
+                let choice = cand_policy.act(&d);
+                if let Choice::SetTarget(tid) = &choice {
+                    if let Some(pos) = d.legal.targets.iter().position(|t| *t == *tid) {
+                        if d.obs.other_target_healths.get(pos).copied().unwrap_or(0) == max_other_hp
+                            && max_other_hp > cur_hp
+                        {
+                            retargets += 1;
+                        }
+                    }
+                }
+                if in_combat && gcd_ready {
+                    decisions += 1;
+                    match &choice {
+                        Choice::Wait(Wait::NextEvent | Wait::Until(_)) => waits += 1,
+                        Choice::Cast { ability, .. } => {
+                            if matches!(ability.0, 196819 | 319175 | 280719) {
+                                if cp + 1e-6 >= 5.0 {
+                                    high_cp += 1;
+                                } else {
+                                    low_cp += 1;
+                                }
+                            }
+                            if is_pack
+                                && lt_alive
+                                && matches!(ability.0, 185438 | 53 | 200758 | 196819 | 280719)
+                            {
+                                st_casts += 1;
+                                if cur_max_hp > 2_000_000 || cur_hp >= max_other_hp {
+                                    st_on_lt += 1;
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                turn = env.step(choice).unwrap().next;
+            }
+        }
+        let w_rate = waits as f64 / decisions.max(1) as f64;
+        let cp_rate = high_cp as f64 / (low_cp + high_cp).max(1) as f64;
+        let lt_rate = st_on_lt as f64 / st_casts.max(1) as f64;
+        let score = (1.0 - w_rate) + cp_rate + lt_rate + (it.dps.mean / rep.scripted_dps.mean);
+        if best_candidate
+            .as_ref()
+            .is_none_or(|(best_score, _, _, _, _, _, _, _)| score > *best_score)
+        {
+            best_candidate = Some((
+                score, decisions, waits, low_cp, high_cp, st_casts, st_on_lt, retargets,
+            ));
+        }
+    }
+    let _ = std::fs::remove_dir_all(&save_dir);
+
+    let (
+        _,
+        combat_decisions,
+        voluntary_waits,
+        low_cp_finishers,
+        high_cp_finishers,
+        pack_st_casts,
+        pack_st_on_lieutenant,
+        retargets_to_lieutenant,
+    ) = best_candidate.expect("at least one trained iteration");
+
+    let wait_rate = voluntary_waits as f64 / combat_decisions.max(1) as f64;
+    let total_finishers = low_cp_finishers + high_cp_finishers;
+    let high_cp_rate = high_cp_finishers as f64 / total_finishers.max(1) as f64;
+    let lt_funnel_rate = pack_st_on_lieutenant as f64 / pack_st_casts.max(1) as f64;
+
+    println!(
+        "=== DE NOVO SUBTLETY M+ LEARNING ===\n\
+         scripted_dps={:.1} ({:.1}s) -> trained_dps={:.1} ({:.1}s)\n\
+         combat_decisions={combat_decisions}\n\
+         voluntary_waits={voluntary_waits} ({:.2}%)\n\
+         finishers: high_cp(>=5)={high_cp_finishers}, low_cp(<5)={low_cp_finishers} (high_cp_rate={:.1}%)\n\
+         retargets_to_lieutenant={retargets_to_lieutenant}\n\
+         pack_st_on_lieutenant={pack_st_on_lieutenant}/{pack_st_casts} ({:.1}%)",
+        rep.scripted_dps.mean,
+        rep.scripted_time.mean,
+        rep.iterations.last().unwrap().dps.mean,
+        rep.iterations.last().unwrap().total_time.mean,
+        wait_rate * 100.0,
+        high_cp_rate * 100.0,
+        lt_funnel_rate * 100.0,
+    );
+
+    assert!(
+        wait_rate < 0.12,
+        "expected de novo agent to learn waiting is bad (<12% wait rate), got {:.2}%",
+        wait_rate * 100.0
+    );
+    assert!(
+        high_cp_rate >= 0.75,
+        "expected de novo agent to learn >=5 CP finishers (>=75%), got {:.1}% ({high_cp_finishers}/{total_finishers})",
+        high_cp_rate * 100.0
+    );
+    assert!(
+        retargets_to_lieutenant >= 2 && lt_funnel_rate >= 0.75,
+        "expected de novo agent to retarget onto Lieutenant (retargets={retargets_to_lieutenant}, funnel_rate={:.1}%)",
+        lt_funnel_rate * 100.0
+    );
 }

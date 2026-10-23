@@ -1,10 +1,10 @@
 // Multi-pull Mythic+ dungeon wing:
-//   Pull 1 ("courtyard_pack"): 1 Dungeon Lieutenant (12M base HP, 8 forces) + 4 Dungeon Trash (4M base HP each, 2 forces each)
-//   Pull 2 ("hallway_pack"):   1 Dungeon Lieutenant (12M base HP, 8 forces) + 4 Dungeon Trash (4M base HP each, 2 forces each)
+//   Pull 1 ("courtyard_pack"): 4 Dungeon Trash (4M base HP each, 2 forces each) + 1 Dungeon Lieutenant (12M base HP, 8 forces)
+//   Pull 2 ("hallway_pack"):   4 Dungeon Trash (4M base HP each, 2 forces each) + 1 Dungeon Lieutenant (12M base HP, 8 forces)
 //   Pull 3 ("wing_boss"):      1 Dungeon Boss (32M base HP)
-// Each pull scales health uniformly in [0.85, 1.15] so policies cannot overfit to a fixed pull duration,
-// and the Lieutenant is listed first so default targeting funnels single-target damage into the priority mob
-// while cleave/AoE sweeps down the 4 surrounding trash mobs.
+// Each pull scales health uniformly in [0.85, 1.15] so policies cannot overfit to a fixed pull duration.
+// Trash mobs are spawned before the Lieutenant so default auto-targeting starts on a low-HP trash mob
+// and the policy must learn de novo to retarget onto higher-health targets.
 (
     name: "mythic_plus_wing",
     forces_required: Some(32),
@@ -18,8 +18,8 @@
             waves: [
                 (
                     mobs: [
-                        ("dungeon_lieutenant", 1),
                         ("dungeon_trash", 4),
+                        ("dungeon_lieutenant", 1),
                     ],
                     engage: now,
                 ),
@@ -34,8 +34,8 @@
             waves: [
                 (
                     mobs: [
-                        ("dungeon_lieutenant", 1),
                         ("dungeon_trash", 4),
+                        ("dungeon_lieutenant", 1),
                     ],
                     engage: now,
                 ),

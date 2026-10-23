@@ -537,6 +537,7 @@ pub fn predicate(
         Predicate::Stationary { for_at_least } => {
             seat().is_some_and(|s| view.stationary_for(s) >= for_at_least)
         }
+        Predicate::SpentAtLeast(_) => false,
     }
 }
 

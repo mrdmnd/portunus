@@ -1096,7 +1096,12 @@ impl Interpreter {
                     then,
                     otherwise,
                 } => {
-                    let holds = predicate(io.view(), *when, ctx.caster, ctx.target, ctx.spell);
+                    let holds = match *when {
+                        portunus_gamedata::effect::Predicate::SpentAtLeast(n) => {
+                            ctx.spent.is_some_and(|s| s + 1e-6 >= f64::from(n))
+                        }
+                        other => predicate(io.view(), other, ctx.caster, ctx.target, ctx.spell),
+                    };
                     hits.extend(self.roll_direct(io, ctx, if holds { then } else { otherwise }));
                 }
                 Effect::HighestSecondary { .. } => {
@@ -1164,7 +1169,12 @@ impl Interpreter {
                     then,
                     otherwise,
                 } => {
-                    let holds = predicate(io.view(), *when, ctx.caster, ctx.target, ctx.spell);
+                    let holds = match *when {
+                        portunus_gamedata::effect::Predicate::SpentAtLeast(n) => {
+                            ctx.spent.is_some_and(|s| s + 1e-6 >= f64::from(n))
+                        }
+                        other => predicate(io.view(), other, ctx.caster, ctx.target, ctx.spell),
+                    };
                     self.run_besides_damage(io, ctx, if holds { then } else { otherwise });
                 }
                 Effect::HighestSecondary { .. } => {
@@ -1543,7 +1553,12 @@ impl Interpreter {
                 then,
                 otherwise,
             } => {
-                let holds = predicate(io.view(), *when, caster, ctx.target, ctx.spell);
+                let holds = match *when {
+                    portunus_gamedata::effect::Predicate::SpentAtLeast(n) => {
+                        ctx.spent.is_some_and(|s| s + 1e-6 >= f64::from(n))
+                    }
+                    other => predicate(io.view(), other, caster, ctx.target, ctx.spell),
+                };
                 self.run(io, ctx, if holds { then } else { otherwise });
             }
             Effect::HighestSecondary { .. } => {

@@ -30,18 +30,12 @@ pub trait Reward {
     fn reward(&self, before: &Progress, after: &Progress) -> f64;
 }
 
-/// Dense shaped [`Reward`] combining enemy health removed, priority-target
-/// health removed, pull completions, elapsed time cost, and death penalties
-/// for finite-horizon search and RL.
+/// Dense shaped [`Reward`] combining enemy health removed, pull completions,
+/// elapsed time cost, and death penalties for finite-horizon search and RL.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct DenseReward {
-    /// Reward per 1,000 total enemy health removed.
+    /// Reward per 1,000 enemy health removed.
     pub per_k_damage: f64,
-    /// Additional reward per 1,000 priority-target (highest-HP enemy) health
-    /// removed: incentivizes funneling single-target damage into the mob that
-    /// holds up pull completion.
-    #[serde(default)]
-    pub per_k_priority_damage: f64,
     /// Bonus per pull cleared.
     pub per_pull_cleared: f64,
     /// Penalty per second elapsed.
@@ -54,7 +48,6 @@ impl Default for DenseReward {
     fn default() -> Self {
         Self {
             per_k_damage: 1.0,
-            per_k_priority_damage: 0.0,
             per_pull_cleared: 50.0,
             per_second: 1.0,
             per_death: 100.0,
@@ -65,22 +58,14 @@ impl Default for DenseReward {
 impl Reward for DenseReward {
     fn reward(&self, before: &Progress, after: &Progress) -> f64 {
         let dt = f64::from(after.now.saturating_since(before.now).millis()) / 1000.0;
-        let (dmg, prio_dmg) = if after.pulls_cleared == before.pulls_cleared {
-            (
-                (before.enemy_health - after.enemy_health).max(0.0) / 1000.0,
-                (before.priority_health - after.priority_health).max(0.0) / 1000.0,
-            )
+        let dmg = if after.pulls_cleared == before.pulls_cleared {
+            (before.enemy_health - after.enemy_health).max(0.0) / 1000.0
         } else {
-            (
-                before.enemy_health.max(0.0) / 1000.0,
-                before.priority_health.max(0.0) / 1000.0,
-            )
+            before.enemy_health.max(0.0) / 1000.0
         };
         let pulls = f64::from(after.pulls_cleared.saturating_sub(before.pulls_cleared));
         let deaths = f64::from(after.deaths.saturating_sub(before.deaths));
-        self.per_k_damage * dmg
-            + self.per_k_priority_damage * prio_dmg
-            + self.per_pull_cleared * pulls
+        self.per_k_damage * dmg + self.per_pull_cleared * pulls
             - self.per_second * dt
             - self.per_death * deaths
     }

@@ -219,11 +219,18 @@ impl<O: Observer> SimEnv<O> {
                     info: self.info,
                 };
                 let engine_mask = live.kernel.legal(req.seat);
+                let mut legal = self.observer.legal(&ctx, req.seat, &engine_mask);
+                if req.reason == portunus_engine::WakeReason::FreeAction {
+                    legal.targets.clear();
+                    legal.cancel.clear();
+                    legal.can_stop = false;
+                    legal.can_stop_move = false;
+                }
                 Ok(Turn::Decide(Decision {
                     seat: req.seat,
                     reason: req.reason,
                     obs: self.observer.observe(&ctx, req.seat),
-                    legal: self.observer.legal(&ctx, req.seat, &engine_mask),
+                    legal,
                     key: DecisionKey {
                         seed: live.seed,
                         seat: req.seat,
@@ -278,6 +285,29 @@ impl<O: Observer> Env for SimEnv<O> {
             return Err(EnvError::Finished);
         }
         let req = live.pending.ok_or(EnvError::NotStarted)?;
+        let choice = if matches!(
+            choice,
+            portunus_engine::Choice::Wait(portunus_engine::Wait::NextEvent)
+        ) {
+            let state = live.kernel.state();
+            let me = state.seats()[usize::from(req.seat.0)];
+            let casting = state.actor(me).is_some_and(|a| a.casting.is_some());
+            let mask = live.kernel.legal(req.seat);
+            let any_ready = mask
+                .abilities
+                .values()
+                .any(|&r| r == portunus_engine::Readiness::Now);
+            let has_demand = !state.demands(req.seat).is_empty();
+            if !casting && any_ready && !has_demand {
+                portunus_engine::Choice::Wait(portunus_engine::Wait::Until(
+                    state.now() + portunus_core::SimDuration(600),
+                ))
+            } else {
+                choice
+            }
+        } else {
+            choice
+        };
         live.kernel.submit(req.seat, choice)?;
         let before = live.progress;
         let next = self.advance()?;

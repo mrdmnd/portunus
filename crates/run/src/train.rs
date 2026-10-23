@@ -245,8 +245,7 @@ pub fn train_rl(
 
     let reward_scale = (10_000.0 / scripted_dps.mean.max(1_000.0)).clamp(0.005, 2.0);
     let reward: Arc<dyn portunus_env::Reward + Send + Sync> = Arc::new(DenseReward {
-        per_k_damage: 0.70 * reward_scale,
-        per_k_priority_damage: 0.30 * reward_scale,
+        per_k_damage: reward_scale,
         per_pull_cleared: 50.0,
         per_second: 2.5,
         per_death: 100.0,
@@ -264,7 +263,7 @@ pub fn train_rl(
     };
     let mut collector =
         SelfPlayCollector::new(fast_rl_env, mcts_cfg, Arc::clone(&space), fast_featurizer);
-    collector.discount = 0.85;
+    collector.discount = 0.95;
     collector.max_steps = max_mcts_steps;
     collector.threads = runner.threads;
 
@@ -280,7 +279,7 @@ pub fn train_rl(
             Arc::clone(&space),
             Arc::clone(&featurizer),
         );
-        warm_collector.discount = 0.85;
+        warm_collector.discount = 0.95;
         warm_collector.max_steps = max_mcts_steps;
         warm_collector.threads = runner.threads;
         let warm_seeds: Vec<Seed> = (0..spec.warm_start_episodes)
@@ -475,14 +474,14 @@ pub fn train_rl(
             time.mean,
             samples_total
         );
+        if let Some(ds) = &mut dir_store {
+            let _ = ds.save(&ckpt);
+        }
         if dps.mean >= best_dps {
             best_dps = dps.mean;
             best_net = cand_net;
             best_model = Arc::clone(&latest_model);
             final_breakdown = bd.clone();
-            if let Some(ds) = &mut dir_store {
-                let _ = ds.save(&ckpt);
-            }
         } else {
             trainer.net = best_net.clone();
             trainer.learning_rate = (trainer.learning_rate * 0.85).max(0.0015);

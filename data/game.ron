@@ -9773,7 +9773,7 @@
             gcd: Some((base: 1000, hasted: false, floor: 800)),
             costs: [
                 (kind: energy, amount: 35.0, extra: 0.0, scaling: none),
-                (kind: combo_points, amount: 5.0, extra: 2.0, scaling: per_unit),
+                (kind: combo_points, amount: 1.0, extra: 6.0, scaling: per_unit),
             ],
             weapon: Some(main_hand),
             targeting: enemy,
@@ -9782,29 +9782,31 @@
             castable_while_moving: true,
             effects: [
                 damage(amount: attack_power(0.37325), school: 1, target: target, hand: Some(main_hand)),
-                if(when: caster_has_aura(382511), then: [
-                    if(when: target_has_aura(aura: 316220, from_self: true), then: [
-                        trigger_spell(spell: 328082, target: target),
+                if(when: spent_at_least(5), then: [
+                    if(when: caster_has_aura(382511), then: [
+                        if(when: target_has_aura(aura: 316220, from_self: true), then: [
+                            trigger_spell(spell: 328082, target: target),
+                        ]),
                     ]),
-                ]),
-                apply_aura(aura: 315496, target: caster, stacks: 1, duration: Some(36000)),
-                if(when: caster_has_aura(382517), then: [
-                    apply_aura(aura: 382516, target: caster, stacks: 1),
+                    apply_aura(aura: 315496, target: caster, stacks: 1, duration: Some(36000)),
+                    if(when: caster_has_aura(382517), then: [
+                        apply_aura(aura: 382516, target: caster, stacks: 1),
+                    ]),
+                    if(when: caster_has_aura(457280), then: [
+                        apply_aura(aura: 457129, target: target, stacks: 3),
+                        remove_aura(aura: 457280, target: caster),
+                    ], otherwise: [
+                        if(when: target_has_aura(aura: 457129, from_self: true), then: [
+                            remove_stacks(aura: 457129, target: target, stacks: 1),
+                            trigger_spell(spell: 457157, target: target),
+                        ]),
+                    ]),
                 ]),
                 if(when: caster_has_aura(1264398), then: [
                     remove_stacks(aura: 1264398, target: caster, stacks: 1),
                     trigger_spell(spell: 1264397, target: target),
                 ]),
                 remove_aura(aura: 457167, target: caster),
-                if(when: caster_has_aura(457280), then: [
-                    apply_aura(aura: 457129, target: target, stacks: 3),
-                    remove_aura(aura: 457280, target: caster),
-                ], otherwise: [
-                    if(when: target_has_aura(aura: 457129, from_self: true), then: [
-                        remove_stacks(aura: 457129, target: target, stacks: 1),
-                        trigger_spell(spell: 457157, target: target),
-                    ]),
-                ]),
             ],
         ),
         328082: (
@@ -9828,7 +9830,7 @@
             gcd: Some((base: 1000, hasted: false, floor: 800)),
             costs: [
                 (kind: energy, amount: 35.0, extra: 0.0, scaling: none),
-                (kind: combo_points, amount: 5.0, extra: 2.0, scaling: per_unit),
+                (kind: combo_points, amount: 1.0, extra: 6.0, scaling: per_unit),
             ],
             weapon: Some(main_hand),
             targeting: enemy,
@@ -9837,22 +9839,24 @@
             castable_while_moving: true,
             effects: [
                 damage(amount: attack_power(0.185), school: 1, target: all_enemies, aoe: Some((max_targets: None, sqrt_cap: Some(8), secondary: 1.0))),
-                if(when: caster_has_aura(382511), then: [
-                    trigger_spell(spell: 319190, target: target),
-                ]),
-                apply_aura(aura: 315496, target: caster, stacks: 1, duration: Some(36000)),
-                if(when: caster_has_aura(382517), then: [
-                    apply_aura(aura: 382516, target: caster, stacks: 1),
+                if(when: spent_at_least(5), then: [
+                    if(when: caster_has_aura(382511), then: [
+                        trigger_spell(spell: 319190, target: target),
+                    ]),
+                    apply_aura(aura: 315496, target: caster, stacks: 1, duration: Some(36000)),
+                    if(when: caster_has_aura(382517), then: [
+                        apply_aura(aura: 382516, target: caster, stacks: 1),
+                    ]),
+                    if(when: target_has_aura(aura: 457129, from_self: true), then: [
+                        remove_stacks(aura: 457129, target: target, stacks: 1),
+                        trigger_spell(spell: 457157, target: target),
+                    ]),
                 ]),
                 if(when: caster_has_aura(1264398), then: [
                     remove_stacks(aura: 1264398, target: caster, stacks: 1),
                     trigger_spell(spell: 1264397, target: target),
                 ]),
                 remove_aura(aura: 457167, target: caster),
-                if(when: target_has_aura(aura: 457129, from_self: true), then: [
-                    remove_stacks(aura: 457129, target: target, stacks: 1),
-                    trigger_spell(spell: 457157, target: target),
-                ]),
             ],
         ),
         319190: (
@@ -9877,7 +9881,7 @@
             cooldown: Some((duration: 25000, charges: 1, hasted: false, category: None)),
             costs: [
                 (kind: energy, amount: 30.0, extra: 0.0, scaling: none),
-                (kind: combo_points, amount: 5.0, extra: 2.0, scaling: per_unit),
+                (kind: combo_points, amount: 1.0, extra: 6.0, scaling: per_unit),
             ],
             weapon: Some(main_hand),
             targeting: enemy,
@@ -9886,30 +9890,32 @@
             castable_while_moving: true,
             effects: [
                 trigger_spell(spell: 280720, target: target),
-                trigger_spell(spell: 280720, target: target),
-                trigger_spell(spell: 280720, target: target),
-                apply_aura(aura: 315496, target: caster, stacks: 1, duration: Some(36000)),
-                if(when: caster_has_aura(382517), then: [
-                    apply_aura(aura: 382516, target: caster, stacks: 1),
-                ]),
-                if(when: caster_has_aura(441274), then: [
-                    apply_aura(aura: 441275, target: caster, stacks: 2),
-                ]),
-                if(when: caster_has_aura(441321), then: [
-                    apply_aura(aura: 441326, target: caster, stacks: 1),
-                ]),
-                if(when: caster_has_aura(441263), then: [
-                    apply_aura(aura: 441224, target: target, stacks: 1),
+                if(when: spent_at_least(5), then: [
+                    trigger_spell(spell: 280720, target: target),
+                    trigger_spell(spell: 280720, target: target),
+                    apply_aura(aura: 315496, target: caster, stacks: 1, duration: Some(36000)),
+                    if(when: caster_has_aura(382517), then: [
+                        apply_aura(aura: 382516, target: caster, stacks: 1),
+                    ]),
+                    if(when: caster_has_aura(441274), then: [
+                        apply_aura(aura: 441275, target: caster, stacks: 2),
+                    ]),
+                    if(when: caster_has_aura(441321), then: [
+                        apply_aura(aura: 441326, target: caster, stacks: 1),
+                    ]),
+                    if(when: caster_has_aura(441263), then: [
+                        apply_aura(aura: 441224, target: target, stacks: 1),
+                    ]),
+                    if(when: caster_has_aura(457280), then: [], otherwise: [
+                        if(when: target_has_aura(aura: 457129, from_self: true), then: [
+                            remove_stacks(aura: 457129, target: target, stacks: 1),
+                            trigger_spell(spell: 457157, target: target),
+                        ]),
+                    ]),
                 ]),
                 if(when: caster_has_aura(1264398), then: [
                     remove_stacks(aura: 1264398, target: caster, stacks: 1),
                     trigger_spell(spell: 1264397, target: target),
-                ]),
-                if(when: caster_has_aura(457280), then: [], otherwise: [
-                    if(when: target_has_aura(aura: 457129, from_self: true), then: [
-                        remove_stacks(aura: 457129, target: target, stacks: 1),
-                        trigger_spell(spell: 457157, target: target),
-                    ]),
                 ]),
             ],
         ),

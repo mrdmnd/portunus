@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use portunus_core::{SpecId, SpellId};
-use portunus_engine::{ActionMask, CastOpts, Choice, MoveGoal, Readiness, TargetSel, Wait};
+use portunus_engine::{ActionMask, CastOpts, Choice, MoveGoal, TargetSel, Wait};
 use portunus_gamedata::spell::CastKind;
 use portunus_gamedata::talent::Grant;
 use portunus_gamedata::GameData;
@@ -147,17 +147,15 @@ impl SpecActionSpace {
     }
 
     fn slot_is_legal(slot: &ActionSlot, mask: &ActionMask) -> bool {
-        let any_cast_ready = mask.abilities.values().any(|&r| r == Readiness::Now);
         match slot {
             ActionSlot::Cast { ability, .. } => mask.is_ready(*ability),
-            ActionSlot::WaitNextEvent => !any_cast_ready || mask.can_wait_tick,
+            ActionSlot::WaitNextEvent => true,
             ActionSlot::WaitChannelTick => mask.can_wait_tick,
-            ActionSlot::StopCast
-            | ActionSlot::StopMove
-            | ActionSlot::WaitGcdEnd
-            | ActionSlot::ClearDemands
-            | ActionSlot::Retarget(_)
-            | ActionSlot::CancelAura(_) => false,
+            ActionSlot::StopCast => mask.can_stop,
+            ActionSlot::StopMove => mask.can_stop_move,
+            ActionSlot::Retarget(i) => *i < mask.targets.len(),
+            ActionSlot::CancelAura(i) => *i < mask.cancel.len(),
+            ActionSlot::WaitGcdEnd | ActionSlot::ClearDemands => false,
         }
     }
 }
@@ -295,6 +293,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use portunus_core::{ActorId, AuraId, SimDuration};
+    use portunus_engine::Readiness;
 
     use super::*;
 

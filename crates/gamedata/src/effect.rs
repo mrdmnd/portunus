@@ -535,6 +535,9 @@ pub enum Predicate {
     Stationary {
         for_at_least: SimDuration,
     },
+    /// The cast spent at least this many units of its variable/scaling
+    /// resource (e.g. 5 or more combo points for Deathstalker's Mark).
+    SpentAtLeast(u8),
 }
 
 /// How many of a seat's casts the engine remembers for
