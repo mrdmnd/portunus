@@ -230,23 +230,101 @@ pub struct PolicyValueNet {
 }
 
 impl PolicyValueNetConfig {
-    /// Initializes a [`PolicyValueNet`] on `device`.
+    /// Initializes a [`PolicyValueNet`] on `device` with deterministic
+    /// Kaiming-uniform weights keyed by [`portunus_core::rng`].
     pub fn init(&self, device: &Device) -> PolicyValueNet {
         let extra = self.num_layers.max(1).saturating_sub(1);
         PolicyValueNet {
-            policy_hidden: LinearConfig::new(self.input_width, self.hidden_width).init(device),
+            policy_hidden: det_linear(
+                "policy_hidden",
+                self.input_width,
+                self.hidden_width,
+                1.0,
+                device,
+            ),
             policy_blocks: (0..extra)
-                .map(|_| LinearConfig::new(self.hidden_width, self.hidden_width).init(device))
+                .map(|i| {
+                    det_linear(
+                        &format!("policy_block_{i}"),
+                        self.hidden_width,
+                        self.hidden_width,
+                        0.5,
+                        device,
+                    )
+                })
                 .collect(),
-            policy_head: LinearConfig::new(self.hidden_width, self.output_width).init(device),
-            value_hidden: LinearConfig::new(self.input_width, self.hidden_width).init(device),
+            policy_head: det_linear(
+                "policy_head",
+                self.hidden_width,
+                self.output_width,
+                0.01,
+                device,
+            ),
+            value_hidden: det_linear(
+                "value_hidden",
+                self.input_width,
+                self.hidden_width,
+                1.0,
+                device,
+            ),
             value_blocks: (0..extra)
-                .map(|_| LinearConfig::new(self.hidden_width, self.hidden_width).init(device))
+                .map(|i| {
+                    det_linear(
+                        &format!("value_block_{i}"),
+                        self.hidden_width,
+                        self.hidden_width,
+                        0.5,
+                        device,
+                    )
+                })
                 .collect(),
-            value_head: LinearConfig::new(self.hidden_width, 1).init(device),
+            value_head: det_linear("value_head", self.hidden_width, 1, 0.01, device),
             activation: Relu::new(),
         }
     }
+}
+
+fn det_linear(name: &str, d_in: usize, d_out: usize, scale: f64, device: &Device) -> Linear {
+    use burn::module::Param;
+    use portunus_core::Seed;
+
+    let mut layer = LinearConfig::new(d_in, d_out).init(device);
+    let dom_w = domain(Purpose::Policy, &["net_init_w", name]);
+    let dom_b = domain(Purpose::Policy, &["net_init_b", name]);
+    let bound = (3.0 / (d_in.max(1) as f64)).sqrt() * scale;
+    let w_data: Vec<f32> = (0..(d_in * d_out))
+        .map(|i| ((2.0 * unit(Seed(42), dom_w, i as u64) - 1.0) * bound) as f32)
+        .collect();
+    let b_bound = if scale < 0.1 {
+        0.0
+    } else {
+        (1.0 / (d_in.max(1) as f64)).sqrt() * scale
+    };
+    let b_data: Vec<f32> = (0..d_out)
+        .map(|i| ((2.0 * unit(Seed(42), dom_b, i as u64) - 1.0) * b_bound) as f32)
+        .collect();
+    let req_grad = layer.weight.is_require_grad();
+    let w_tensor = Tensor::<2>::from_data(TensorData::new(w_data, [d_in, d_out]), device);
+    layer.weight = Param::initialized(
+        layer.weight.id,
+        if req_grad {
+            w_tensor.require_grad()
+        } else {
+            w_tensor
+        },
+    );
+    if let Some(prev_b) = &layer.bias {
+        let b_tensor = Tensor::<1>::from_data(TensorData::new(b_data, [d_out]), device);
+        layer.bias = Some(Param::initialized(
+            prev_b.id,
+            if req_grad {
+                b_tensor.require_grad()
+            } else {
+                b_tensor
+            },
+        ));
+    }
+    layer
 }
 
 impl PolicyValueNet {
@@ -711,10 +789,11 @@ impl<O> Mcts<O> {
             } else {
                 sub_step += 1;
             }
+            let step_discount = (-0.04 * (f64::from(elapsed.millis()) / 1000.0)).exp();
             if elapsed + dt > rollout_cap && dt > SimDuration::ZERO {
                 let rem = f64::from(rollout_cap.0.saturating_sub(elapsed.0));
                 let full = f64::from(dt.millis()).max(1.0);
-                total_reward += tr.reward * (rem / full).clamp(0.0, 1.0);
+                total_reward += step_discount * tr.reward * (rem / full).clamp(0.0, 1.0);
                 elapsed = rollout_cap;
                 return (
                     total_reward,
@@ -723,7 +802,7 @@ impl<O> Mcts<O> {
                     last_val,
                 );
             }
-            total_reward += tr.reward;
+            total_reward += step_discount * tr.reward;
             elapsed = elapsed + dt;
             match tr.next {
                 Turn::Done(_) => return (total_reward, elapsed, true, None),

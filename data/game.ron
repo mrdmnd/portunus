@@ -8026,11 +8026,6 @@
                         adjust_cooldown(spell: 1261193, change: reduce(4000)),
                     ]),
                 ]),
-                if(when: caster_has_aura(1252943), then: [
-                    chance(chance: 0.35, then: [
-                        apply_aura(aura: 1252947, target: caster, stacks: 1),
-                    ]),
-                ]),
                 if(when: caster_has_aura(472550), then: [
                     extend_aura(aura: 471881, target: caster, by: 5000),
                 ]),
@@ -24897,7 +24892,20 @@
                 (scope: spell(259495), kind: cooldown_rate_pct, value: 60.0),
             ],
         ),
-        1252943: (id: 1252943, name: "Wildfire Imbuement", duration: None),
+        1252943: (
+            id: 1252943,
+            name: "Wildfire Imbuement",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: None, school: None),
+                    chance: rppm(rate: 2.0, hasted: false),
+                    effects: [
+                        apply_aura(aura: 1252947, target: caster, stacks: 1),
+                    ],
+                ),
+            ],
+        ),
         1252947: (
             id: 1252947,
             name: "Wildfire Imbuement",
@@ -25232,13 +25240,6 @@
                 partial_final_tick: false,
                 effects: [
                     damage(amount: attack_power(0.5), school: 32, target: target),
-                    if(when: caster_has_aura(1264289), then: [
-                        if(when: caster_has_aura(137016), then: [
-                            chance(chance: 0.08, then: [
-                                summon(pet: 255153, count: 1, duration: Some(20000)),
-                            ]),
-                        ]),
-                    ]),
                 ],
             )),
         ),
@@ -25284,7 +25285,22 @@
             ],
         ),
         467911: (id: 467911, name: "Bleak Powder", duration: None),
-        1264289: (id: 1264289, name: "Corpsecaller", duration: None),
+        1264289: (
+            id: 1264289,
+            name: "Corpsecaller",
+            duration: None,
+            listeners: [
+                (
+                    on: periodic_tick(468572),
+                    chance: rppm(rate: 0.5, hasted: true),
+                    effects: [
+                        if(when: caster_has_aura(137016), then: [
+                            summon(pet: 255153, count: 1, duration: Some(20000)),
+                        ]),
+                    ],
+                ),
+            ],
+        ),
         467897: (id: 467897, name: "Ebon Bowstring", duration: None),
         1277565: (
             id: 1277565,
@@ -27434,7 +27450,22 @@
             ],
         ),
         1254857: (id: 1254857, name: "Deep Impact", duration: None),
-        457735: (id: 457735, name: "Heat Shimmer", duration: None),
+        457735: (
+            id: 457735,
+            name: "Heat Shimmer",
+            duration: None,
+            listeners: [
+                (
+                    on: periodic_tick(12654),
+                    chance: rppm(rate: 3.0, hasted: false),
+                    effects: [
+                        if(when: caster_has_aura(190319), then: [], otherwise: [
+                            apply_aura(aura: 457736, target: caster, stacks: 1),
+                        ]),
+                    ],
+                ),
+            ],
+        ),
         457736: (
             id: 457736,
             name: "Heat Shimmer",
@@ -29127,7 +29158,20 @@
         440051: (id: 440051, name: "Bleakheart Tactics", duration: None),
         440065: (id: 440065, name: "Zevrim's Resilience", duration: None),
         440070: (id: 440070, name: "Illhoof's Design", duration: None),
-        1266805: (id: 1266805, name: "Devil Fruit", duration: None),
+        1266805: (
+            id: 1266805,
+            name: "Devil Fruit",
+            duration: None,
+            listeners: [
+                (
+                    on: periodic_tick(445474),
+                    chance: rppm(rate: 1.0, hasted: true),
+                    effects: [
+                        apply_aura(aura: 442726, target: caster, stacks: 1, duration: Some(8000)),
+                    ],
+                ),
+            ],
+        ),
         440046: (
             id: 440046,
             name: "Mark of Xavius",
@@ -29491,7 +29535,23 @@
         409044: (id: 409044, name: "Distorted Reality", duration: None),
         407469: (id: 407469, name: "Spectral Horrors", duration: None),
         1242862: (id: 1242862, name: "Instilled Doubt", duration: None),
-        392507: (id: 392507, name: "Deathspeaker", duration: None),
+        392507: (
+            id: 392507,
+            name: "Deathspeaker",
+            duration: None,
+            modifiers: [
+                (scope: spell(32379), kind: damage_done_pct, value: 25.0),
+            ],
+            listeners: [
+                (
+                    on: periodic_tick(589),
+                    chance: rppm(rate: 2.25, hasted: true),
+                    effects: [
+                        adjust_cooldown(spell: 32379, change: reset),
+                    ],
+                ),
+            ],
+        ),
         321291: (id: 321291, name: "Death and Madness", duration: None),
         373202: (id: 373202, name: "Mind Devourer", duration: None),
         373204: (
@@ -29546,10 +29606,39 @@
                 (scope: spell(1242173), kind: damage_done_pct, value: 15.0, per_stack: true),
             ],
         ),
-        373310: (id: 373310, name: "Idol of Y'Shaarj", duration: None),
+        373310: (
+            id: 373310,
+            name: "Idol of Y'Shaarj",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: haste_pct, value: 2.0),
+            ],
+            listeners: [
+                (
+                    on: damage_dealt(spell: None, school: Some(32), crit_only: false, direct: Some(true)),
+                    chance: rppm(rate: 2.0, hasted: false),
+                    effects: [
+                        resource((kind: insanity, amount: 5.0)),
+                    ],
+                ),
+            ],
+        ),
         373280: (id: 373280, name: "Idol of N'Zoth", duration: None),
         373273: (id: 373273, name: "Idol of Yogg-Saron", duration: None),
-        377349: (id: 377349, name: "Idol of C'Thun", duration: None),
+        377349: (
+            id: 377349,
+            name: "Idol of C'Thun",
+            duration: None,
+            listeners: [
+                (
+                    on: damage_dealt(spell: None, school: Some(32), crit_only: false, direct: Some(false)),
+                    chance: rppm(rate: 2.0, hasted: true),
+                    effects: [
+                        resource((kind: insanity, amount: 15.0)),
+                    ],
+                ),
+            ],
+        ),
         1264096: (id: 1264096, name: "Void Apparitions (Rank 1)", duration: None),
         1264104: (
             id: 1264104,
@@ -29830,7 +29919,20 @@
         280197: (id: 280197, name: "Spiritual Focus", duration: None),
         1249832: (id: 1249832, name: "Obsidian Spiral", duration: None),
         137384: (id: 137384, name: "Combo Breaker", duration: None),
-        325201: (id: 325201, name: "Dance of Chi-Ji", duration: None),
+        325201: (
+            id: 325201,
+            name: "Dance of Chi-Ji",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: None, school: None),
+                    chance: rppm(rate: 1.0, hasted: true),
+                    effects: [
+                        apply_aura(aura: 325202, target: caster, stacks: 1),
+                    ],
+                ),
+            ],
+        ),
         392982: (
             id: 392982,
             name: "Shadowboxing Treads",
@@ -29865,7 +29967,20 @@
         457974: (id: 457974, name: "Jadefire Stomp", duration: None),
         1248704: (id: 1248704, name: "Skyfire Heel", duration: None),
         1250041: (id: 1250041, name: "Harmonic Combo", duration: None),
-        452137: (id: 452137, name: "Flurry of Xuen", duration: None),
+        452137: (
+            id: 452137,
+            name: "Flurry of Xuen",
+            duration: None,
+            listeners: [
+                (
+                    on: damage_dealt(spell: None, school: None, crit_only: false, direct: Some(true)),
+                    chance: rppm(rate: 2.0, hasted: true),
+                    effects: [
+                        trigger_spell(spell: 1261706, target: target),
+                    ],
+                ),
+            ],
+        ),
         1272685: (id: 1272685, name: "Martial Agility", duration: None),
         1248833: (id: 1248833, name: "Airborne Rhythm", duration: None),
         1248837: (id: 1248837, name: "Hurricane's Vault", duration: None),
@@ -29900,7 +30015,21 @@
         ),
         442743: (id: 442743, name: "Temple Training", duration: None),
         442687: (id: 442687, name: "Xuen's Guidance", duration: None),
-        443087: (id: 443087, name: "Courage of the White Tiger", duration: None),
+        443087: (
+            id: 443087,
+            name: "Courage of the White Tiger",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(100780), school: None),
+                    chance: rppm(rate: 4.0, hasted: true),
+                    effects: [
+                        trigger_spell(spell: 443088, target: target),
+                        apply_aura(aura: 443111, target: caster, stacks: 1),
+                    ],
+                ),
+            ],
+        ),
         443111: (id: 443111, name: "Strength of the Black Ox (Ready)", duration: Some(20000)),
         442719: (id: 442719, name: "Restore Balance", duration: None),
         392986: (id: 392986, name: "Xuen's Bond", duration: None),
@@ -29920,7 +30049,20 @@
         443566: (id: 443566, name: "Chi-Ji's Swiftness", duration: None),
         443110: (id: 443110, name: "Strength of the Black Ox", duration: None),
         1273154: (id: 1273154, name: "Path of the Falling Star", duration: None),
-        1262667: (id: 1262667, name: "Yu'lon's Avatar", duration: None),
+        1262667: (
+            id: 1262667,
+            name: "Yu'lon's Avatar",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(1249625), school: None),
+                    chance: rppm(rate: 1.5, hasted: true),
+                    effects: [
+                        apply_aura(aura: 443421, target: caster, stacks: 1, duration: Some(4000)),
+                    ],
+                ),
+            ],
+        ),
         442747: (id: 442747, name: "Niuzao's Protection", duration: None),
         443059: (id: 443059, name: "Jade Sanctuary", duration: None),
         1248989: (id: 1248989, name: "Celestial Conduit", duration: None),
@@ -30220,7 +30362,20 @@
                 (scope: spell(194153), kind: damage_done_pct, value: 15.0),
             ],
         ),
-        468936: (id: 468936, name: "Sunseeker Mushroom", duration: None),
+        468936: (
+            id: 468936,
+            name: "Sunseeker Mushroom",
+            duration: None,
+            listeners: [
+                (
+                    on: periodic_tick(164815),
+                    chance: rppm(rate: 1.66, hasted: false),
+                    effects: [
+                        resource((kind: astral_power, amount: 8.0)),
+                    ],
+                ),
+            ],
+        ),
         450347: (id: 450347, name: "Nature's Grace", duration: None),
         1240283: (id: 1240283, name: "Elune's Challenge", duration: None),
         450212: (id: 450212, name: "Stellar Amplification", duration: None),
@@ -30268,7 +30423,20 @@
         393760: (id: 393760, name: "Umbral Embrace", duration: None),
         450558: (id: 450558, name: "Harmony of the Heavens", duration: None),
         393991: (id: 393991, name: "Elune's Guidance", duration: None),
-        394065: (id: 394065, name: "Denizen of the Dream", duration: None),
+        394065: (
+            id: 394065,
+            name: "Denizen of the Dream",
+            duration: None,
+            listeners: [
+                (
+                    on: periodic_tick(164812),
+                    chance: rppm(rate: 1.0, hasted: true),
+                    effects: [
+                        resource((kind: astral_power, amount: 10.0)),
+                    ],
+                ),
+            ],
+        ),
         394121: (id: 394121, name: "Radiant Moonlight", duration: None),
         1261564: (id: 1261564, name: "Ascendant Eclipses (Rank 1)", duration: None),
         1261565: (
@@ -30306,7 +30474,20 @@
             ],
         ),
         433748: (id: 433748, name: "Protective Growth", duration: None),
-        1264614: (id: 1264614, name: "Sylvan Beckoning", duration: None),
+        1264614: (
+            id: 1264614,
+            name: "Sylvan Beckoning",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(78674), school: None),
+                    chance: rppm(rate: 1.0, hasted: false),
+                    effects: [
+                        resource((kind: astral_power, amount: 8.0)),
+                    ],
+                ),
+            ],
+        ),
         428859: (
             id: 428859,
             name: "Power of Nature",
@@ -30378,7 +30559,20 @@
                 (scope: spell(194153), kind: damage_done_pct, value: 35.0),
             ],
         ),
-        428655: (id: 428655, name: "The Light of Elune", duration: None),
+        428655: (
+            id: 428655,
+            name: "The Light of Elune",
+            duration: None,
+            listeners: [
+                (
+                    on: periodic_tick(164812),
+                    chance: rppm(rate: 1.0, hasted: true),
+                    effects: [
+                        apply_aura(aura: 202770, target: caster, stacks: 1, duration: Some(3000)),
+                    ],
+                ),
+            ],
+        ),
         429536: (id: 429536, name: "Astral Insight", duration: None),
         429540: (id: 429540, name: "Arcane Affinity", duration: None),
         429539: (id: 429539, name: "Lunation", duration: None),

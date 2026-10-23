@@ -1816,25 +1816,22 @@ fn talent_auditor_flags_known_bug_patterns_and_subtlety_is_clean() {
     );
     println!("[talent-audit] findings by spec: {by_spec:?}");
 
-    // Subtlety Rogue (261) + Trickster (51) + Deathstalker (53) must have zero
+    // Every spec and hero tree across all 26 specs must have zero
     // UnconsumedPassiveOverride, DeprecatedCooldownReduction, or MissingDumpCooldownOrRppm bugs.
-    let sub_bugs: Vec<_> = findings
+    let structural_bugs: Vec<_> = findings
         .iter()
         .filter(|f| {
-            (f.spec_id == Some(SpecId(261))
-                || f.hero_tree_id == Some(HeroTreeId(51))
-                || f.hero_tree_id == Some(HeroTreeId(53)))
-                && matches!(
-                    f.kind,
-                    TalentFindingKind::UnconsumedPassiveOverride
-                        | TalentFindingKind::DeprecatedCooldownReduction
-                        | TalentFindingKind::MissingDumpCooldownOrRppm
-                )
+            matches!(
+                f.kind,
+                TalentFindingKind::UnconsumedPassiveOverride
+                    | TalentFindingKind::DeprecatedCooldownReduction
+                    | TalentFindingKind::MissingDumpCooldownOrRppm
+            )
         })
         .collect();
     assert!(
-        sub_bugs.is_empty(),
-        "Subtlety/Trickster/Deathstalker should have zero structural/dump cooldown/proc bugs: {sub_bugs:#?}"
+        structural_bugs.is_empty(),
+        "All 26 specs should have zero structural/dump cooldown/RPPM bugs: {structural_bugs:#?}"
     );
 
     // Inject the 3 exact historical Subtlety bugs into a mutated copy and verify

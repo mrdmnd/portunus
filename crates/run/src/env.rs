@@ -293,12 +293,18 @@ impl<O: Observer> Env for SimEnv<O> {
             let me = state.seats()[usize::from(req.seat.0)];
             let casting = state.actor(me).is_some_and(|a| a.casting.is_some());
             let mask = live.kernel.legal(req.seat);
-            let any_ready = mask
-                .abilities
-                .values()
-                .any(|&r| r == portunus_engine::Readiness::Now);
+            let spells = &live.episode.setup.data.spells;
+            let offensive_ready = mask.abilities.iter().any(|(sp, &r)| {
+                r == portunus_engine::Readiness::Now
+                    && spells.get(sp).is_some_and(|def| {
+                        def.hostile
+                            && def.effects.iter().any(|e| {
+                                !matches!(e, portunus_gamedata::effect::Effect::Interrupt { .. })
+                            })
+                    })
+            });
             let has_demand = !state.demands(req.seat).is_empty();
-            if !casting && any_ready && !has_demand {
+            if !casting && offensive_ready && !has_demand {
                 portunus_engine::Choice::Wait(portunus_engine::Wait::Until(
                     state.now() + portunus_core::SimDuration(600),
                 ))

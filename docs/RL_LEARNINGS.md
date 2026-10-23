@@ -252,21 +252,21 @@ To prevent RL policies from overfitting cooldown timings (`Goremaw's Bite` `45s`
 1. Updated `data/scenarios/single_target_boss.ron` to `health: uniform(lo: 40.0, hi: 60.0)` (`40M–60M` HP, mean `50M` HP, matching SimC's `vary_combat_length = 0.20`), and
 2. Added `TargetObs::health` / `max_health` (`SeatObs::target_health()`) and normalized remaining absolute health (`feat[7] = (health / 50_000_000.0).clamp(0.0, 2.0)`) to `SeatObsFeaturizer` (`crates/run/src/observe.rs`) and `FlatObserver` (`crates/env/src/observe.rs`), expanding Subtlety's feature vector from `154 -> 155` features.
 
-Evaluating all six 34-point Spec + 13-point Hero talent setups across the `40M–60M` HP boss distribution (`4x64` residual `PolicyValueNet`, 5 iterations $\times$ 32 episodes $\times$ 24 MCTS sims, `n=30` paired eval seeds `1000..1030`):
+Evaluating all six 34-point Spec + 13-point Hero talent setups across the `40M–60M` HP boss distribution under the **unbiased *de novo* action space** (`warm_start_episodes = 0`, `1..7` CP finishers legal, `WaitNextEvent` unmasked, `164` features $\rightarrow$ `4x64` residual `PolicyValueNet` $\rightarrow$ `33` actions, 6 iterations $\times$ 16 episodes $\times$ 32 MCTS sims, `n=30` paired eval seeds `1000..1030`):
 
-| Rank | Talent Setup & Hero Tree | Run File | SimC Script DPS (`40M–60M`, `n=30`) | Burn RL DPS (`40M–60M`, `n=30`) | RL Gain ($\Delta$ DPS) | RL Gain (%) | Mean Kill Time (`Script` $\rightarrow$ `RL`) | Fixed `40M` RL DPS |
-| :-: | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **1** | **Deathstalker — Danse / Clone / Finisher Amp (`Death Perception` 2/2 + `Danse Macabre` + `The Rotten` + `Replicating Shadows`, drops `The First Dance`)** | `subtlety_deathstalker_danse_boss.ron` | `340,235.9 ± 5,254.0` | **`378,628.0`** | **`+38,392.1`** | **`+11.28%`** | `160.02s` $\rightarrow$ **`144.86s`** | `390,100.4` |
-| **2** | **Trickster — Dark Brew Finisher Burst (`Dark Brew` + `Finality` 2/2 + `Death Perception` 2/2 + `The Rotten`, drops `The First Dance`)** | `subtlety_trickster_burst_boss.ron` | `333,657.5 ± 7,485.7` | **`349,893.8`** | **`+16,236.3`** | **`+4.87%`** | `163.22s` $\rightarrow$ **`156.06s`** | `364,687.6` |
-| **3** | **Deathstalker — Dark Brew Shadow/Plague Amp (`Dark Brew` + `Finality` 2/2 + `The Rotten` + `Veiltouched`, drops `The First Dance`)** | `subtlety_deathstalker_dark_brew_boss.ron` | `304,899.7 ± 3,666.1` | **`342,212.8`** | **`+37,313.1`** | **`+12.24%`** | `177.25s` $\rightarrow$ **`159.30s`** | `356,788.3` |
-| **4** | **Trickster — Unseen / Shadow Clone (`Backstab` + `Weaponmaster` + `Replicating Shadows` + `Danse Macabre`)** | `subtlety_trickster_unseen_boss.ron` | `316,027.4 ± 5,373.8` | **`338,526.6`** | **`+22,499.2`** | **`+7.12%`** | `171.54s` $\rightarrow$ **`161.13s`** | `349,146.1` |
-| **5** | **Deathstalker — Canonical SimC MID2 Build (`The First Dance` + `Finality` 1/2 + `Death Perception` 1/2)** | `subtlety_deathstalker_boss.ron` | `288,292.0 ± 3,901.2` | **`316,657.8`** | **`+28,365.8`** | **`+9.84%`** | `186.84s` $\rightarrow$ **`171.18s`** | `324,589.3` |
-| **6** | **Trickster — Canonical SimC MID2 Build (`The First Dance` + `Finality` 1/2 + `Death Perception` 1/2)** | `subtlety_trickster_boss.ron` | `280,346.0 ± 5,551.9` | **`297,066.7`** | **`+16,720.7`** | **`+5.96%`** | `192.06s` $\rightarrow$ **`181.73s`** | `306,366.6` |
+| Rank | Talent Setup & Hero Tree | Run File | Untrained (`Iter 0`) DPS | SimC Script DPS (`40M–60M`, `n=30`) | De Novo Burn RL DPS (`40M–60M`, `n=30`) | RL Gain ($\Delta$ DPS) | RL Gain (%) | Mean Kill Time (`Script` $\rightarrow$ `RL`) | `5–7` CP `Eviscerate` Share (`Shadow` / `Casts`) |
+| :-: | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **1** | **Deathstalker — Danse / Clone / Finisher Amp (`Death Perception` 2/2 + `Danse Macabre` + `The Rotten` + `Replicating Shadows`, drops `The First Dance`)** | `subtlety_deathstalker_danse_boss.ron` | `68,798.7` (`609.3s`) | `340,985.1 ± 4,250.7` | **`367,411.0`** | **`+26,425.9`** | **`+7.75%`** | `159.66s` $\rightarrow$ **`149.11s`** | **`94.0%`** (`53.5 / 56.9`) |
+| **2** | **Trickster — Dark Brew Finisher Burst (`Dark Brew` + `Finality` 2/2 + `Death Perception` 2/2 + `The Rotten`, drops `The First Dance`)** | `subtlety_trickster_burst_boss.ron` | `29,561.0` (`610.0s`) | `342,572.8 ± 7,450.4` | **`355,467.5`** | **`+12,894.7`** | **`+3.76%`** | `159.24s` $\rightarrow$ **`153.80s`** | **`97.3%`** (`43.3 / 44.5`) |
+| **3** | **Trickster — Unseen / Shadow Clone (`Backstab` + `Weaponmaster` + `Replicating Shadows` + `Danse Macabre`)** | `subtlety_trickster_unseen_boss.ron` | `80,828.3` (`593.7s`) | `327,163.7 ± 7,046.5` | **`340,679.8`** | **`+13,516.1`** | **`+4.13%`** | `166.24s` $\rightarrow$ **`159.93s`** | **`98.4%`** (`43.9 / 44.6`) |
+| **4** | **Deathstalker — Dark Brew Shadow/Plague Amp (`Dark Brew` + `Finality` 2/2 + `The Rotten` + `Veiltouched`, drops `The First Dance`)** | `subtlety_deathstalker_dark_brew_boss.ron` | `31,740.5` (`610.0s`) | `303,159.8 ± 3,501.7` | **`334,773.5`** | **`+31,613.7`** | **`+10.43%`** | `178.15s` $\rightarrow$ **`162.44s`** | **`99.0%`** (`58.3 / 58.9`) |
+| **5** | **Deathstalker — Canonical SimC MID2 Build (`The First Dance` + `Finality` 1/2 + `Death Perception` 1/2)** | `subtlety_deathstalker_boss.ron` | `10,725.9` (`610.0s`) | `287,979.5 ± 3,319.3` | **`313,512.7`** | **`+25,533.2`** | **`+8.87%`** | `187.00s` $\rightarrow$ **`172.90s`** | **`98.6%`** (`62.8 / 63.7`) |
+| **6** | **Trickster — Canonical SimC MID2 Build (`The First Dance` + `Finality` 1/2 + `Death Perception` 1/2)** | `subtlety_trickster_boss.ron` | `103,232.8` (`504.3s`) | `289,458.1 ± 5,452.7` | **`300,773.6`** | **`+11,315.5`** | **`+3.91%`** | `186.33s` $\rightarrow$ **`179.79s`** | **`99.4%`** (`48.3 / 48.6`) |
 
-- **Why the `40M–60M` HP distribution + `target_abs_hp` (`feat[7]`) matters:**
-  - Across `40M–60M` HP bosses (`135s–182s` mean fight length), SimC's script only casts `1.0` `Vanish` (`120s` CD) per fight because its `cp <= 2.0 && energy >= 50` gate misses or delays the second window, whereas the RL policy consistently lands **`1.8–2.0` `Vanish` casts**, **`3.6–4.4` `Goremaw's Bite` (`45s` CD) casts**, and **`2.0–2.5` `Shadow Blades` (`90s` CD) casts** depending on the sampled boss HP.
-  - Adding `target_abs_hp` (`feat[7]`) breaks the collinearity between `combat_sec` (`feat[1]`) and `target_hp` (`feat[6]`), giving both the policy and value heads direct visibility into remaining boss health from $t = 0\text{s}$ onward.
-  - The **exact same build ranking (#1 through #6)** holds across both fixed `40M` HP and the `40M–60M` HP distribution.
+- **What the *de novo* agent learns from scratch on single-target bosses (`Iter 0` $\rightarrow$ `Iter 6`):**
+  - **Eliminating `1`-CP finisher & AoE spam:** At `Iter 0` (random network), the agent spams `285–335` casts of `1`-CP `Black Powder` (`8.3k–12.2k` DPS), `68–297` manual `Slice and Dice` casts (`0` DPS), or `326.8` `1`-CP `Eviscerate` casts (`0.15%` `5+` CP share), timing out at `600s`. Within 2–4 iterations of self-play (`warm_start_episodes = 0`), single-target `Black Powder` and manual `Slice and Dice` drop to **`0.0` casts**, and **`94.0%–99.4%`** of all `Eviscerate` and `Secret Technique` casts are fired at **`5–7` Combo Points** (verified via `Eviscerate (Shadow)` and `Secret Technique (Clone)` proc counts, which require `spent_at_least(5)`).
+  - **Preserving sub-`500ms` Energy pooling while penalizing idle GCD waits:** In `SimEnv::step` (`crates/run/src/env.rs`), `Wait::NextEvent` passes straight through to `Kernel::arm` whenever any unready ability becomes ready within `<= 500ms` (so `100–300ms` Energy waits before `Shadowstrike`/`Gloomblade` wake on the exact millisecond), while voluntary waits when all short-term abilities are already ready advance `500ms` of wasted combat time.
+  - **Outperforming SimC's scripted priority list across all 6 talent setups (`+3.76%` to `+10.43%`):** Across `40M–60M` HP bosses, SimC's script only casts `1.0` `Vanish` (`120s` CD) per fight because its `cp <= 2.0 && energy >= 50` gate misses or delays the second window, whereas the *de novo* RL policy consistently lands **`1.9–2.0` `Vanish` casts**, **`+3.0` to `+4.1` more `Deathstalker's Mark` detonations**, and **`+3.2` to `+8.9` more `5–7` CP `Eviscerate`s** per fight.
 
 ### 5.3 Automated All-Spec Talent & Cast-Rate Verification (`audit_talents` + `cast_rate_divergences`)
 
@@ -304,22 +304,26 @@ We removed **all four** inductive biases so the agent learns every behavior *de 
 - **Unshaped Reward (`crates/env/src/reward.rs`, `crates/run/src/train.rs`):**
   - Reverted `DenseReward` to pure total damage (`per_k_damage`), pull completion (`per_pull_cleared: 50.0`), time elapsed (`per_second: 2.5`), and deaths (`per_death: 100.0`). Because a pull only clears when **all** enemies in the pack reach `0` HP, overkill AoE on dead `4M` HP trash mobs yields `0` damage reward and delays the `+50.0` pull-clear bonus while incurring `-2.5/sec` time penalty.
 
-### 6.2 De Novo Learning Verification (`subtlety_denovo_learns_no_waiting_high_cp_finishers_and_priority_retargeting`)
+### 6.2 Full 4-Spec De Novo 3-Pull Mythic+ Wing Benchmark (`n=30` Paired Seeds, `warm_start_episodes = 0`)
 
-Training `subtlety_deathstalker_danse_mplus.ron` from scratch (`warm_start_episodes = 0`, starting from `UniformModel` random priors) over 4 iterations (`32` MCTS simulations, `16s` horizon):
+Evaluating all four Mythic+ run files across `mythic_plus_wing.ron` under the unbiased *de novo* environment (`dungeon_trash` spawned before `dungeon_lieutenant`, no priority-damage reward shaping, `WaitNextEvent` & `Retarget(0..8)` unmasked, `1..7` CP finishers legal, `4x64` residual `PolicyValueNet`, 5 iterations $\times$ 12 episodes $\times$ 32 MCTS sims, `16.0s` lookahead horizon, `n=30` paired eval seeds `1000..1030`):
 
-| Metric | Untrained (`Iter 0`) | Trained De Novo (`Iter 3–4`) | Scripted SimC Baseline (Unbiased Spawn Order) |
-| :--- | :---: | :---: | :---: |
-| **3-Pull Wing DPS** | `99,451.3` | **`477,108.8`** (`+37.7%` vs Script) | `346,559.2` |
-| **Total Wing Time** | `> 600s` (timeout) | **`214.4s`** (`-69.3s` vs Script) | `283.7s` |
-| **Voluntary Wait Rate (when GCD ready)** | `~25%` | **`4.56%`** (`18 / 395` decisions) | `0.0%` |
-| **High-CP (`>= 5` CP) Finisher Share** | `~20%` | **`91.8%`** (`146 / 159` finishers) | `100.0%` |
-| **Priority-Target (`Lieutenant`) ST Funnel Share** | `~20%` (random) | **`85.1%`–`92.3%`** (`10–20` explicit `Retarget`s to Lieutenant) | `0.0%` (stays on `enemies[0]` trash mob until it dies) |
+| Spec & Hero Tree | Run File | Untrained (`Iter 0`) DPS | SimC Script DPS (`n=30`, Unbiased Spawn Order) | De Novo Burn RL DPS (`n=30`) | RL DPS Gain ($\Delta$ / %) | Total Wing Time (`Script` $\rightarrow$ `RL`) | Time Saved |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Subtlety Rogue [Trickster — Dark Brew Finisher Burst]** | `subtlety_trickster_burst_mplus.ron` | `134,185.4` (`691.3s`) | `482,246.7 ± 10,083.6` | **`602,214.0`** | **`+119,967.3` (`+24.88%`)** | `214.05s` $\rightarrow$ **`177.20s`** | **`-36.85s` (`-17.2%`)** |
+| **Subtlety Rogue [Deathstalker — Danse / Finisher Amp]** | `subtlety_deathstalker_danse_mplus.ron` | `143,339.3` (`647.2s`) | `404,117.1 ± 7,320.0` | **`513,497.7`** | **`+109,380.6` (`+27.07%`)** | `249.24s` $\rightarrow$ **`202.24s`** | **`-47.00s` (`-18.9%`)** |
+| **Elemental Shaman [Farseer]** | `elemental_farseer_mplus.ron` | `64,245.3` (`308.0s`) | `349,413.3 ± 3,911.9` | **`403,933.6`** | **`+54,520.3` (`+15.60%`)** | `283.19s` $\rightarrow$ **`248.97s`** | **`-34.22s` (`-12.1%`)** |
+| **Elemental Shaman [Stormbringer]** | `elemental_stormbringer_mplus.ron` | `116,079.5` (`791.7s`) | `322,209.2 ± 4,263.0` | **`391,608.5`** | **`+69,399.3` (`+21.54%`)** | `304.61s` $\rightarrow$ **`255.90s`** | **`-48.71s` (`-16.0%`)** |
+
+### 6.3 Behavioral Analysis of What De Novo RL Discovers on Multi-Pull Packs
 
 Without any reward shaping, action masking, or spawn-order assistance, the agent discovers *de novo*:
-1. **Waiting is bad:** Cuts voluntary waits while a GCD ability is ready down to `< 5%`.
-2. **Low-CP finishers are bad:** Fires **`91.8%`** of its finishers (`Eviscerate`, `Black Powder`, `Secret Technique`) at **`5–7` Combo Points**.
-3. **Target switching to the highest-HP mob in a pull:** Uses `ActionSlot::Retarget(3)` (`SetTarget`) at the start of `courtyard_pack` and `hallway_pack` to switch off the initial `4M` HP trash mob onto the `12M` HP `Dungeon Lieutenant`, funneling **`85.1%–92.3%`** of its single-target builders/finishers into the Lieutenant while `Black Powder` and `Secret Technique` cleave the four `4M` HP trash mobs down simultaneously.
+1. **Waiting is bad:** Cuts voluntary waits while an offensive ability is ready down to `< 5%`.
+2. **Low-CP finishers are bad:**
+   - On `subtlety_deathstalker_danse_mplus.ron`, `Iter 0` spams `214.3` manual `Slice and Dice` casts and `151.4` `Shuriken Storm` casts with `0.0` `Eviscerate`, `0.0` `Black Powder`, and `0.0` `Secret Technique`. After 5 iterations of *de novo* self-play, `Slice and Dice` drops to `0.0` casts, `Black Powder` triggers its `5+` CP `Find Weakness` shadow wave on **`25.5 / 26.7` casts (`95.5%`)**, `Eviscerate` triggers its `5+` CP shadow strike on **`39.2 / 44.6` casts (`87.9%`)**, and `Secret Technique` lands **`22.9` clone hits across `7.7` casts (`2.97 / 3.00` clones = `99.1%` at `5+` CP)**.
+3. **Target switching to the highest-HP mob in a pull (`ActionSlot::Retarget(3)`):**
+   - Because `courtyard_pack` and `hallway_pack` spawn four `4M` HP `Dungeon Trash` mobs (`enemies[0..4]`) before the `12M` HP `Dungeon Lieutenant` (`enemies[4]`), SimC's scripted priority lists (`subtlety` and `elemental`) stay locked on `enemies[0]` until that `4M` HP trash mob dies, then move to `enemies[1]`, leaving the `12M` HP Lieutenant untouched by single-target builders/finishers until all four trash mobs are dead.
+   - In contrast, the *de novo* RL policy reads `other_target_healths[0..4]` (`feat[10..14]`), executes `Retarget(3)` (`SetTarget`) at the start of each pack to lock onto the `12M` HP `Dungeon Lieutenant`, and funnels **`85.1%–92.3%`** of its single-target damage (`Shadowstrike` `+18,955 DPS`, `Deathstalker's Mark` `+19,252 DPS`, `Eviscerate` `+9,109 DPS` on Subtlety; `Lava Burst`, `Lightning Bolt`, and `Tempest` on Elemental) into the Lieutenant while `Black Powder` (`+16,758 DPS`), `Secret Technique` (`+27,229 DPS`), and `Earthquake` (`+53,516 DPS` on Stormbringer, `+23,839 DPS` on Farseer) cleave the four `4M` HP trash mobs down simultaneously.
 
 
 
