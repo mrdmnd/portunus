@@ -80,4 +80,8 @@ pub trait Env: Clone {
     type Obs: Clone;
     fn reset(&mut self, seed: Seed) -> Result<Turn<Self::Obs>, EnvError>;
     fn step(&mut self, choice: Choice) -> Result<Transition<Self::Obs>, EnvError>;
+    /// Reseed future random draws on a forked environment for open-loop
+    /// search, so lookahead rollouts sample independent stochastic futures
+    /// instead of peeking at the ground-truth episode seed.
+    fn reseed(&mut self, _seed: Seed) {}
 }

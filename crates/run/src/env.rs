@@ -328,4 +328,11 @@ impl<O: Observer> Env for SimEnv<O> {
             next,
         })
     }
+
+    fn reseed(&mut self, seed: Seed) {
+        if let Some(live) = &mut self.live {
+            live.seed = seed;
+            live.kernel.reseed(seed);
+        }
+    }
 }

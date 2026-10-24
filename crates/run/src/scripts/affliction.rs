@@ -83,7 +83,7 @@ impl<'a> Aff<'a> {
             self.pick(WITHER, corr_refresh),
             self.pick(CORRUPTION, corr_refresh),
             self.pick(DARK_HARVEST, true),
-            self.pick(MALEVOLENCE, true),
+            self.pick(MALEVOLENCE, self.obs.target_aura(WITHER_DOT).is_some()),
             self.pick(SUMMON_DARKGLARE, true),
             self.filler(self.nightfall >= 2),
             self.pick(

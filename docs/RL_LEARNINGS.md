@@ -277,7 +277,7 @@ To detect broken talents systematically across all 26 specs, we implemented two 
      - `TalentFindingKind::DeprecatedCooldownReduction` (*Deepening Shadows / Improved Secret Technique* pattern: `AdjustCooldown` listener on a talent aura whose 12.1 dump entry has no cooldown reduction),
      - `TalentFindingKind::MissingDumpCooldownOrRppm` (*Unseen Blade / Thousand Cuts* pattern: dump specifies `Real PPM` or `"may occur once every ..."` lockout missing in `game.ron`), and
      - `TalentFindingKind::InertOffensiveTalent` (a talent grants a `PassiveAura` with no modifiers, listeners, periodic ticks, or predicate references, while its dump description is offensive).
-   - Subtlety Rogue (`Spec 261`, `Trickster 51`, `Deathstalker 53`), Elemental Shaman (`Spec 262`, `Stormbringer 54`, `Farseer 55`), Arms Warrior (`71`), Fury Warrior (`72`), and Retribution Paladin (`70`) have **0 findings** across all four categories.
+   - **All 26 specs and 35 hero trees** now have **0 findings** across all four categories (`assert!(findings.is_empty())` in `crates/ingest/tests/data_files.rs`).
 2. **`SimcParityReport::cast_rate_divergences` (`crates/run/src/parity.rs` & `crates/run/src/report.rs`):**
    - Surfaces any core rotational ability (`portunus_casts >= 5`, `simc_casts >= 5`, `simc_share >= 3%`) whose cast count diverges from SimC by `> 35%`, preventing spec-wide DPS scalars from hiding cooldown or resource bugs.
 
@@ -324,6 +324,19 @@ Without any reward shaping, action masking, or spawn-order assistance, the agent
 3. **Target switching to the highest-HP mob in a pull (`ActionSlot::Retarget(3)`):**
    - Because `courtyard_pack` and `hallway_pack` spawn four `4M` HP `Dungeon Trash` mobs (`enemies[0..4]`) before the `12M` HP `Dungeon Lieutenant` (`enemies[4]`), SimC's scripted priority lists (`subtlety` and `elemental`) stay locked on `enemies[0]` until that `4M` HP trash mob dies, then move to `enemies[1]`, leaving the `12M` HP Lieutenant untouched by single-target builders/finishers until all four trash mobs are dead.
    - In contrast, the *de novo* RL policy reads `other_target_healths[0..4]` (`feat[10..14]`), executes `Retarget(3)` (`SetTarget`) at the start of each pack to lock onto the `12M` HP `Dungeon Lieutenant`, and funnels **`85.1%–92.3%`** of its single-target damage (`Shadowstrike` `+18,955 DPS`, `Deathstalker's Mark` `+19,252 DPS`, `Eviscerate` `+9,109 DPS` on Subtlety; `Lava Burst`, `Lightning Bolt`, and `Tempest` on Elemental) into the Lieutenant while `Black Powder` (`+16,758 DPS`), `Secret Technique` (`+27,229 DPS`), and `Earthquake` (`+53,516 DPS` on Stormbringer, `+23,839 DPS` on Farseer) cleave the four `4M` HP trash mobs down simultaneously.
+
+### 6.4 Open-Loop MCTS with Common Random Numbers (`Env::reseed` & `open_loop_seed`)
+
+In a stochastic simulator, cloning `SimEnv` at a decision node without reseeding its future random stream (`World::rng_seed`) causes **closed-loop clairvoyance**: every MCTS rollout from the root sees the exact same ground-truth future crits and procs (`decision.key.seed`), allowing tree search to overfit to a single seed's lucky proc or crit on a suboptimal action (e.g., a 2-CP `Eviscerate` that happened to crit on that seed).
+
+To make `Mcts::search` optimize **expected value** over unknown future random draws while minimizing Monte Carlo variance between competing root actions:
+1. **`World::rng_seed`, `Kernel::reseed`, and `Env::reseed` (`crates/engine/src/kernel/world.rs`, `crates/env/src/lib.rs`, `crates/run/src/env.rs`):**
+   - Added `rng_seed: Seed` to `World` (initialized to `setup.run.seed`) so `Kernel::reseed` mutates the seed used by all future `World::roll`, `latency_draw`, and enemy-rule draws in $O(1)$ without touching `Arc<Statics>` or existing stream counters (`fork_matches_replay` remains bit-for-bit identical when not reseeded).
+2. **Paired Open-Loop Seeds (`open_loop_seed(decision.key, root_visit_k)` in `crates/policy/src/lib.rs`):**
+   - On the `k`-th visit to any root edge, `Mcts::search` reseeds the forked simulator with `open_loop_seed(decision.key, k)` (`Purpose::Policy`, `"open_loop"`), which is guaranteed $\neq$ `decision.key.seed` (zero clairvoyance) and shared across competing root edges at visit `k` (**Common Random Numbers**).
+   - At internal tree nodes (`node_id > 0`), `Mcts::search` dynamically filters `nodes[node_id].edges` by the current stochastic realization's `cur_dec.legal` mask and inserts any newly-unlocked proc actions on the fly.
+   - On `subtlety_denovo_learns_no_waiting_high_cp_finishers_and_priority_retargeting`, switching from single-seed closed-loop tree rollouts to Open-Loop MCTS raised `5–7` CP finisher usage from `72.7%` $\rightarrow$ **`86.0%`**, cut voluntary waits from `11.19%` $\rightarrow$ **`7.22%`**, increased Lieutenant ST funneling from `88.5%` $\rightarrow$ **`90.5%`**, and boosted trained pack DPS from `569,395.5` $\rightarrow$ **`659,802.3` DPS** (`162.4%` of the scripted baseline).
+
 
 
 

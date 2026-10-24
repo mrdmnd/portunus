@@ -20542,7 +20542,15 @@
                 (scope: school(8), kind: crit_damage_pct, value: 10.0),
             ],
         ),
-        384149: (id: 384149, name: "Raging Maelstrom", duration: None),
+        384149: (
+            id: 384149,
+            name: "Raging Maelstrom",
+            duration: None,
+            modifiers: [
+                (scope: spell(188196), kind: damage_done_pct, value: 10.0),
+                (scope: spell(188443), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         382888: (
             id: 382888,
             name: "Flurry",
@@ -20595,7 +20603,15 @@
                 (scope: spell(60103), kind: cooldown_rate_pct, value: 100.0),
             ],
         ),
-        392352: (id: 392352, name: "Storm's Wrath", duration: None),
+        392352: (
+            id: 392352,
+            name: "Storm's Wrath",
+            duration: None,
+            modifiers: [
+                (scope: spell(187874), kind: damage_done_pct, value: 5.0),
+                (scope: spell(17364), kind: damage_done_pct, value: 5.0),
+            ],
+        ),
         1250364: (
             id: 1250364,
             name: "Elemental Tempo",
@@ -23178,7 +23194,14 @@
             ],
         ),
         443532: (id: 443532, name: "Bind in Darkness", duration: None),
-        1265859: (id: 1265859, name: "Frigid Resolve", duration: None),
+        1265859: (
+            id: 1265859,
+            name: "Frigid Resolve",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_taken_pct, value: -3.0),
+            ],
+        ),
         437161: (id: 437161, name: "Soul Rupture", duration: None),
         434905: (
             id: 434905,
@@ -23241,7 +23264,14 @@
                 (scope: spell(46585), kind: cooldown_pct, value: -25.0),
             ],
         ),
-        439948: (id: 439948, name: "Expelling Shield", duration: None),
+        439948: (
+            id: 439948,
+            name: "Expelling Shield",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_taken_pct, value: -3.0),
+            ],
+        ),
         1265855: (
             id: 1265855,
             name: "Echoing Fury",
@@ -23478,7 +23508,14 @@
                 (scope: all, kind: damage_taken_pct, value: -8.0, condition: Some(in_own_ground(188290))),
             ],
         ),
-        1234559: (id: 1234559, name: "Desecrate", duration: None),
+        1234559: (
+            id: 1234559,
+            name: "Desecrate",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 2.0, condition: Some(in_own_ground(188290))),
+            ],
+        ),
         434100: (id: 434100, name: "Vampiric Aura", duration: None),
         434136: (id: 434136, name: "Bloody Fortitude", duration: None),
         1265547: (id: 1265547, name: "Thrill of Blood", duration: None),
@@ -24047,7 +24084,15 @@
                 (scope: spell(1232922), kind: guardian_damage_pct, value: 10.0, per_stack: true),
             ],
         ),
-        386870: (id: 386870, name: "Brutal Companion", duration: None),
+        386870: (
+            id: 386870,
+            name: "Brutal Companion",
+            duration: None,
+            modifiers: [
+                (scope: spell(217200), kind: damage_done_pct, value: 10.0),
+                (scope: all, kind: pet_damage_pct, value: 3.0),
+            ],
+        ),
         459730: (id: 459730, name: "Huntmaster's Call", duration: None),
         459731: (
             id: 459731,
@@ -24238,7 +24283,14 @@
                 (scope: spell(257044), kind: channel_ticks_add, value: 3.0),
             ],
         ),
-        466867: (id: 466867, name: "Avian Specialization", duration: None),
+        466867: (
+            id: 466867,
+            name: "Avian Specialization",
+            duration: None,
+            modifiers: [
+                (scope: spell(19434), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 466872, from_self: true))),
+            ],
+        ),
         466872: (
             id: 466872,
             name: "Spotter's Mark",
@@ -25046,7 +25098,14 @@
         ),
         1264904: (id: 1264904, name: "Twilight Requiem", duration: None),
         1266069: (id: 1266069, name: "Stalk and Strike", duration: None),
-        1253846: (id: 1253846, name: "Arcane Talons", duration: None),
+        1253846: (
+            id: 1253846,
+            name: "Arcane Talons",
+            duration: None,
+            modifiers: [
+                (scope: spell(19434), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         1253852: (id: 1253852, name: "Lunar Calling", duration: None),
         1253887: (
             id: 1253887,
@@ -25549,8 +25608,22 @@
                 (scope: spell(113780), kind: damage_done_pct, value: 20.0),
             ],
         ),
-        423054: (id: 423054, name: "Path of Blood", duration: None),
-        1250359: (id: 1250359, name: "Canny Strikes", duration: None),
+        423054: (
+            id: 423054,
+            name: "Path of Blood",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: resource_max(energy), value: 50.0),
+            ],
+        ),
+        1250359: (
+            id: 1250359,
+            name: "Canny Strikes",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: crit_chance_add, value: 3.0),
+            ],
+        ),
         381627: (id: 381627, name: "Internal Bleeding", duration: None),
         381628: (
             id: 381628,
@@ -25703,7 +25776,16 @@
             ],
         ),
         421976: (id: 421976, name: "Caustic Spatter", duration: Some(10000)),
-        457512: (id: 457512, name: "Sanguine Stratagem", duration: None),
+        457512: (
+            id: 457512,
+            name: "Sanguine Stratagem",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: resource_max(combo_points), value: 1.0),
+                (scope: spell(32645), kind: damage_done_pct, value: 5.0),
+                (scope: spell(1943), kind: damage_done_pct, value: 5.0),
+            ],
+        ),
         381630: (id: 381630, name: "Intent to Kill", duration: None),
         196861: (id: 196861, name: "Iron Wire", duration: None),
         392384: (
@@ -25746,7 +25828,15 @@
                 (scope: spell(51723), kind: damage_done_pct, value: 15.0, condition: Some(enemies_at_least(5))),
             ],
         ),
-        1250141: (id: 1250141, name: "Secondary Poisoning", duration: None),
+        1250141: (
+            id: 1250141,
+            name: "Secondary Poisoning",
+            duration: None,
+            modifiers: [
+                (scope: spell(2818), kind: damage_done_pct, value: 10.0),
+                (scope: spell(113780), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         255544: (id: 255544, name: "Poison Bomb", duration: None),
         381664: (
             id: 381664,
@@ -25773,7 +25863,15 @@
             ],
         ),
         79134: (id: 79134, name: "Venomous Wounds", duration: None),
-        381652: (id: 381652, name: "Systemic Failure", duration: None),
+        381652: (
+            id: 381652,
+            name: "Systemic Failure",
+            duration: None,
+            modifiers: [
+                (scope: spell(1329), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 703, from_self: true))),
+                (scope: spell(8676), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 703, from_self: true))),
+            ],
+        ),
         381797: (
             id: 381797,
             name: "Dashing Scoundrel",
@@ -25847,8 +25945,29 @@
                 (scope: spell(8676), kind: damage_done_pct, value: 15.0),
             ],
         ),
-        1250318: (id: 1250318, name: "Poisoner's Drive", duration: None),
-        1250358: (id: 1250358, name: "Avulsion", duration: None),
+        1250318: (
+            id: 1250318,
+            name: "Poisoner's Drive",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(32645), school: None),
+                    chance: always,
+                    condition: Some(caster_has_aura(32645)),
+                    effects: [
+                        resource((kind: combo_points, amount: 1.0)),
+                    ],
+                ),
+            ],
+        ),
+        1250358: (
+            id: 1250358,
+            name: "Avulsion",
+            duration: None,
+            modifiers: [
+                (scope: spell(1943), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         381799: (id: 381799, name: "Scent of Blood", duration: None, max_stacks: 2),
         381800: (
             id: 381800,
@@ -25859,7 +25978,14 @@
                 (scope: all, kind: stat_pct(agility), value: 1.0, per_stack: true),
             ],
         ),
-        1298812: (id: 1298812, name: "Unstable Toxin", duration: None),
+        1298812: (
+            id: 1298812,
+            name: "Unstable Toxin",
+            duration: None,
+            modifiers: [
+                (scope: spell(32645), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         381801: (
             id: 381801,
             name: "Dragon-Tempered Blades",
@@ -25965,7 +26091,14 @@
         ),
         256188: (id: 256188, name: "Retractable Hook", duration: None),
         256165: (id: 256165, name: "Blinding Powder", duration: None),
-        1259498: (id: 1259498, name: "Expert Duelist", duration: None),
+        1259498: (
+            id: 1259498,
+            name: "Expert Duelist",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 5.0, condition: Some(caster_has_aura(315341))),
+            ],
+        ),
         61329: (
             id: 61329,
             name: "Combat Potency",
@@ -25983,8 +26116,23 @@
                 ),
             ],
         ),
-        1259612: (id: 1259612, name: "Deadly Pursuit", duration: None),
-        428377: (id: 428377, name: "Precision Shot", duration: None),
+        1259612: (
+            id: 1259612,
+            name: "Deadly Pursuit",
+            duration: None,
+            modifiers: [
+                (scope: spell(315341), kind: cooldown_rate_pct, value: 15.0),
+            ],
+        ),
+        428377: (
+            id: 428377,
+            name: "Precision Shot",
+            duration: None,
+            modifiers: [
+                (scope: spell(315341), kind: damage_done_pct, value: 10.0),
+                (scope: spell(185763), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         1259499: (
             id: 1259499,
             name: "Crescendo of Violence",
@@ -25995,7 +26143,16 @@
             ],
         ),
         381878: (id: 381878, name: "Deft Maneuvers", duration: None),
-        394321: (id: 394321, name: "Devious Stratagem", duration: None),
+        394321: (
+            id: 394321,
+            name: "Devious Stratagem",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: resource_max(combo_points), value: 1.0),
+                (scope: spell(2098), kind: damage_done_pct, value: 5.0),
+                (scope: spell(315341), kind: damage_done_pct, value: 5.0),
+            ],
+        ),
         35551: (id: 35551, name: "Fatal Flourish", duration: None),
         196938: (id: 196938, name: "Quick Draw", duration: None),
         14161: (
@@ -26093,7 +26250,15 @@
                 (scope: all, kind: rated_pct(versatility), value: 4.0),
             ],
         ),
-        1259492: (id: 1259492, name: "Flickering Steel", duration: None),
+        1259492: (
+            id: 1259492,
+            name: "Flickering Steel",
+            duration: None,
+            modifiers: [
+                (scope: spell(193315), kind: damage_done_pct, value: 10.0),
+                (scope: spell(8676), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         381845: (id: 381845, name: "Audacity", duration: None),
         386270: (id: 386270, name: "Audacity (Ready)", duration: Some(12000)),
         381885: (
@@ -26146,10 +26311,25 @@
                 (scope: spell(2098), kind: damage_done_pct, value: 6.0, per_stack: true),
             ],
         ),
-        1259481: (id: 1259481, name: "Dragon-Bone Dice", duration: None),
+        1259481: (
+            id: 1259481,
+            name: "Dragon-Bone Dice",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: crit_chance_add, value: 3.0, condition: Some(caster_has_aura(1214934))),
+            ],
+        ),
         381846: (id: 381846, name: "Fan the Hammer", duration: None, max_stacks: 2),
         383281: (id: 383281, name: "Hidden Opportunity", duration: None),
-        1259480: (id: 1259480, name: "Fast Action", duration: None),
+        1259480: (
+            id: 1259480,
+            name: "Fast Action",
+            duration: None,
+            modifiers: [
+                (scope: spell(315341), kind: cooldown_pct, value: -10.0),
+                (scope: all, kind: damage_done_pct, value: 3.0, condition: Some(caster_has_aura(315341))),
+            ],
+        ),
         1265861: (id: 1265861, name: "Gravedigger (Rank 1)", duration: None),
         1265862: (
             id: 1265862,
@@ -26793,7 +26973,20 @@
                 (scope: spell(452538), kind: damage_done_pct, value: 25.0),
             ],
         ),
-        454419: (id: 454419, name: "Deal Fate", duration: None),
+        454419: (
+            id: 454419,
+            name: "Deal Fate",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(193315), school: None),
+                    chance: flat(0.3),
+                    effects: [
+                        resource((kind: combo_points, amount: 1.0)),
+                    ],
+                ),
+            ],
+        ),
         1249215: (
             id: 1249215,
             name: "Fate Intertwined",
@@ -26812,7 +27005,16 @@
                 (scope: all, kind: crit_chance_add, value: 4.0),
             ],
         ),
-        1249194: (id: 1249194, name: "Delivered Doom", duration: None),
+        1249194: (
+            id: 1249194,
+            name: "Delivered Doom",
+            duration: None,
+            modifiers: [
+                (scope: spell(32645), kind: damage_done_pct, value: 8.0),
+                (scope: spell(2098), kind: damage_done_pct, value: 8.0),
+                (scope: spell(315341), kind: damage_done_pct, value: 8.0),
+            ],
+        ),
         1249190: (id: 1249190, name: "Overflowing Purse", duration: None),
         454435: (id: 454435, name: "Destiny Defined", duration: None),
         1249204: (
@@ -26974,7 +27176,14 @@
         ),
         457057: (id: 457057, name: "Shadewalker", duration: None),
         457063: (id: 457063, name: "Shroud of Night", duration: None),
-        1273035: (id: 1273035, name: "Mass Casualty", duration: None),
+        1273035: (
+            id: 1273035,
+            name: "Mass Casualty",
+            duration: None,
+            modifiers: [
+                (scope: spell(457157), kind: damage_done_pct, value: 15.0, condition: Some(enemies_at_least(2))),
+            ],
+        ),
         457058: (
             id: 457058,
             name: "Darkest Night",
@@ -27231,7 +27440,14 @@
                 ],
             )),
         ),
-        452997: (id: 452997, name: "Energized Familiar", duration: None),
+        452997: (
+            id: 452997,
+            name: "Energized Familiar",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 4.0, condition: Some(caster_has_aura(365362))),
+            ],
+        ),
         1243557: (id: 1243557, name: "Expanded Mind", duration: None),
         461260: (
             id: 461260,
@@ -27299,10 +27515,34 @@
                 (scope: spell(7268), kind: damage_done_pct, value: 25.0),
             ],
         ),
-        1244001: (id: 1244001, name: "Arcane Singularity", duration: None, max_stacks: 2),
+        1244001: (
+            id: 1244001,
+            name: "Arcane Singularity",
+            duration: None,
+            max_stacks: 2,
+            modifiers: [
+                (scope: spell(44425), kind: damage_done_pct, value: 10.0, per_stack: true),
+            ],
+        ),
         461248: (id: 461248, name: "High Voltage", duration: None),
-        461251: (id: 461251, name: "Charged Missiles", duration: None),
-        1243542: (id: 1243542, name: "Overflowing Insight", duration: None),
+        461251: (
+            id: 461251,
+            name: "Charged Missiles",
+            duration: None,
+            modifiers: [
+                (scope: spell(7268), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        1243542: (
+            id: 1243542,
+            name: "Overflowing Insight",
+            duration: None,
+            modifiers: [
+                (scope: spell(30451), kind: damage_done_pct, value: 15.0),
+                (scope: spell(1241462), kind: damage_done_pct, value: 15.0),
+                (scope: spell(30451), kind: cost_pct, value: 10.0),
+            ],
+        ),
         1244329: (
             id: 1244329,
             name: "Overpowered Missiles",
@@ -27412,8 +27652,23 @@
                 (scope: spell(108853), kind: cooldown_rate_pct, value: 100.0, condition: Some(caster_has_aura(383634))),
             ],
         ),
-        416094: (id: 416094, name: "Fuel the Fire", duration: None),
-        387044: (id: 387044, name: "Fervent Flickering", duration: None),
+        416094: (
+            id: 416094,
+            name: "Fuel the Fire",
+            duration: None,
+            modifiers: [
+                (scope: spell(2120), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        387044: (
+            id: 387044,
+            name: "Fervent Flickering",
+            duration: None,
+            modifiers: [
+                (scope: spell(108853), kind: charges_add, value: 1.0),
+                (scope: spell(108853), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         86949: (id: 86949, name: "Cauterize", duration: None),
         155158: (
             id: 155158,
@@ -27493,7 +27748,14 @@
                 (scope: spell(12654), kind: damage_done_pct, value: 10.0),
             ],
         ),
-        343230: (id: 343230, name: "Mote of Flame", duration: None),
+        343230: (
+            id: 343230,
+            name: "Mote of Flame",
+            duration: None,
+            modifiers: [
+                (scope: school(4), kind: damage_done_pct, value: 4.0),
+            ],
+        ),
         416719: (id: 416719, name: "Blast Zone", duration: None),
         1271171: (id: 1271171, name: "Conflagration", duration: None),
         1271172: (
@@ -27511,7 +27773,14 @@
                 ],
             )),
         ),
-        416714: (id: 416714, name: "Intensifying Flame", duration: None),
+        416714: (
+            id: 416714,
+            name: "Intensifying Flame",
+            duration: None,
+            modifiers: [
+                (scope: spell(12654), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         451875: (id: 451875, name: "Spontaneous Combustion", duration: None, max_stacks: 2),
         457803: (
             id: 457803,
@@ -27521,7 +27790,14 @@
                 (scope: all, kind: damage_done_pct, value: 7.0, condition: Some(target_hp_below(0.35))),
             ],
         ),
-        417467: (id: 417467, name: "Inflame", duration: None),
+        417467: (
+            id: 417467,
+            name: "Inflame",
+            duration: None,
+            modifiers: [
+                (scope: spell(12654), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         1254828: (
             id: 1254828,
             name: "Wildfire",
@@ -27550,12 +27826,42 @@
                 (scope: all, kind: crit_damage_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(190319))),
             ],
         ),
-        384174: (id: 384174, name: "Master of Flame", duration: None),
-        342344: (id: 342344, name: "From the Ashes", duration: None),
+        384174: (
+            id: 384174,
+            name: "Master of Flame",
+            duration: None,
+            modifiers: [
+                (scope: spell(12654), kind: damage_done_pct, value: 15.0, condition: Some(caster_lacks_aura(190319))),
+            ],
+        ),
+        342344: (
+            id: 342344,
+            name: "From the Ashes",
+            duration: None,
+            modifiers: [
+                (scope: spell(108853), kind: damage_done_pct, value: 15.0),
+                (scope: spell(108853), kind: cooldown_rate_pct, value: 15.0),
+            ],
+        ),
         383634: (id: 383634, name: "Fiery Rush", duration: None),
-        453282: (id: 453282, name: "Flame Accelerant", duration: None),
+        453282: (
+            id: 453282,
+            name: "Flame Accelerant",
+            duration: None,
+            modifiers: [
+                (scope: spell(11366), kind: cast_time_pct, value: -15.0),
+                (scope: spell(2120), kind: cast_time_pct, value: -15.0),
+            ],
+        ),
         451466: (id: 451466, name: "Pyromaniac", duration: None),
-        1271177: (id: 1271177, name: "Burnout", duration: None),
+        1271177: (
+            id: 1271177,
+            name: "Burnout",
+            duration: None,
+            modifiers: [
+                (scope: spell(12654), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         383391: (id: 383391, name: "Feel the Burn", duration: None),
         383395: (
             id: 383395,
@@ -27566,7 +27872,15 @@
                 (scope: all, kind: rated_pct(mastery), value: 2.0, per_stack: true),
             ],
         ),
-        383967: (id: 383967, name: "Slow Burn", duration: None),
+        383967: (
+            id: 383967,
+            name: "Slow Burn",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: rated_pct(mastery), value: 10.0, condition: Some(caster_has_aura(190319))),
+                (scope: spell(12654), kind: damage_done_pct, value: 10.0, condition: Some(caster_has_aura(190319))),
+            ],
+        ),
         1254512: (id: 1254512, name: "Burn It All", duration: None),
         269650: (id: 269650, name: "Pyroclasm", duration: None),
         269651: (
@@ -27579,7 +27893,15 @@
                 (scope: spell(2120), kind: damage_done_pct, value: 230.0, condition: Some(caster_lacks_aura(48108))),
             ],
         ),
-        1254865: (id: 1254865, name: "Cinderstorm", duration: None),
+        1254865: (
+            id: 1254865,
+            name: "Cinderstorm",
+            duration: None,
+            modifiers: [
+                (scope: spell(11366), kind: damage_done_pct, value: 8.0),
+                (scope: spell(2120), kind: damage_done_pct, value: 8.0),
+            ],
+        ),
         1257343: (id: 1257343, name: "Fired Up (Rank 1)", duration: None),
         1257349: (
             id: 1257349,
@@ -27629,7 +27951,14 @@
             ],
         ),
         1248829: (id: 1248829, name: "Blizzard (Targeted)", duration: None),
-        1248825: (id: 1248825, name: "Frostbite", duration: None),
+        1248825: (
+            id: 1248825,
+            name: "Frostbite",
+            duration: None,
+            modifiers: [
+                (scope: spell(1246949), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         1246832: (id: 1246832, name: "Icicles", duration: None),
         205473: (
             id: 205473,
@@ -27676,7 +28005,14 @@
             ],
         ),
         385167: (id: 385167, name: "Everlasting Frost", duration: None),
-        460590: (id: 460590, name: "Permafrost Lances", duration: None),
+        460590: (
+            id: 460590,
+            name: "Permafrost Lances",
+            duration: None,
+            modifiers: [
+                (scope: spell(1246949), kind: damage_done_pct, value: 15.0, condition: Some(caster_has_aura(84714))),
+            ],
+        ),
         205030: (id: 205030, name: "Frozen Touch", duration: None),
         56377: (
             id: 56377,
@@ -27693,8 +28029,23 @@
             ],
         ),
         379993: (id: 379993, name: "Flash Freeze", duration: None),
-        418733: (id: 418733, name: "Splintering Ray", duration: None),
-        1247055: (id: 1247055, name: "Frigid Focus", duration: None),
+        418733: (
+            id: 418733,
+            name: "Splintering Ray",
+            duration: None,
+            modifiers: [
+                (scope: spell(205021), kind: chain_targets_add, value: 2.0),
+                (scope: spell(205021), kind: chain_share_pct, value: 40.0),
+            ],
+        ),
+        1247055: (
+            id: 1247055,
+            name: "Frigid Focus",
+            duration: None,
+            modifiers: [
+                (scope: spell(205021), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         417489: (
             id: 417489,
             name: "Winter's Blessing",
@@ -27786,7 +28137,14 @@
         ),
         1216953: (id: 1216953, name: "Freezing Winds", duration: None),
         1247769: (id: 1247769, name: "Improved Flurry", duration: None),
-        378947: (id: 378947, name: "Glacial Assault", duration: None),
+        378947: (
+            id: 378947,
+            name: "Glacial Assault",
+            duration: None,
+            modifiers: [
+                (scope: spell(228354), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         1247544: (id: 1247544, name: "Crystalline Refraction", duration: None),
         31687: (
             id: 31687,
@@ -27813,7 +28171,14 @@
                 (scope: spell(228354), kind: damage_done_pct, value: 15.0),
             ],
         ),
-        1280779: (id: 1280779, name: "Glacial Chill", duration: None),
+        1280779: (
+            id: 1280779,
+            name: "Glacial Chill",
+            duration: None,
+            modifiers: [
+                (scope: spell(199786), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         1280780: (id: 1280780, name: "Glacial Shatter", duration: None),
         1247742: (id: 1247742, name: "Hailstones", duration: None),
         1247729: (id: 1247729, name: "Thermal Void", duration: None),
@@ -27904,7 +28269,15 @@
             ],
         ),
         449627: (id: 449627, name: "Lessons in Debilitation", duration: None),
-        1246030: (id: 1246030, name: "Explosive Potential", duration: None),
+        1246030: (
+            id: 1246030,
+            name: "Explosive Potential",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 3.0, condition: Some(caster_has_aura(365362))),
+                (scope: all, kind: damage_done_pct, value: 3.0, condition: Some(caster_has_aura(190319))),
+            ],
+        ),
         1260673: (
             id: 1260673,
             name: "Pyrocosm",
@@ -27915,10 +28288,33 @@
             ],
         ),
         449412: (id: 449412, name: "Savor the Moment", duration: None),
-        449349: (id: 449349, name: "Sunfury Execution", duration: None),
+        449349: (
+            id: 449349,
+            name: "Sunfury Execution",
+            duration: None,
+            modifiers: [
+                (scope: spell(44425), kind: damage_done_pct, value: 25.0, condition: Some(target_has_aura(aura: 210824, from_self: true))),
+                (scope: spell(11366), kind: damage_done_pct, value: 25.0, condition: Some(caster_has_aura(269651))),
+            ],
+        ),
         1260272: (id: 1260272, name: "Ashes of Inspiration", duration: None),
-        449596: (id: 449596, name: "Rondurmancy", duration: None),
-        1260616: (id: 1260616, name: "Spellfire Salvo", duration: None),
+        449596: (
+            id: 449596,
+            name: "Rondurmancy",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 3.0, condition: Some(caster_has_aura(448604))),
+            ],
+        ),
+        1260616: (
+            id: 1260616,
+            name: "Spellfire Salvo",
+            duration: None,
+            modifiers: [
+                (scope: spell(108853), kind: cooldown_pct, value: -10.0),
+                (scope: spell(44425), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         449619: (
             id: 449619,
             name: "Memory of Al'ar",
@@ -27988,7 +28384,17 @@
         444675: (id: 444675, name: "Shifting Shards", duration: None),
         444752: (id: 444752, name: "Slippery Slinging", duration: None),
         444756: (id: 444756, name: "Look Again", duration: None),
-        444483: (id: 444483, name: "Controlled Instincts", duration: None),
+        444483: (
+            id: 444483,
+            name: "Controlled Instincts",
+            duration: None,
+            modifiers: [
+                (scope: spell(443763), kind: chain_targets_add, value: 4.0),
+                (scope: spell(443763), kind: chain_share_pct, value: 40.0),
+                (scope: spell(443722), kind: chain_targets_add, value: 4.0),
+                (scope: spell(443722), kind: chain_share_pct, value: 40.0),
+            ],
+        ),
         444827: (id: 444827, name: "Reactive Barrier", duration: None),
         444784: (id: 444784, name: "Phantasmal Image", duration: None),
         1261080: (
@@ -28001,10 +28407,44 @@
                 (scope: spell(443785), kind: damage_done_pct, value: 20.0),
             ],
         ),
-        444968: (id: 444968, name: "Archmage's Wrath", duration: None),
-        470021: (id: 470021, name: "Signature Spell", duration: None),
-        444986: (id: 444986, name: "Spellfrost Teachings", duration: None),
-        1261082: (id: 1261082, name: "Polished Focus", duration: None),
+        444968: (
+            id: 444968,
+            name: "Archmage's Wrath",
+            duration: None,
+            modifiers: [
+                (scope: spell(365350), kind: damage_done_pct, value: 30.0),
+                (scope: spell(205021), kind: damage_done_pct, value: 25.0),
+            ],
+        ),
+        470021: (
+            id: 470021,
+            name: "Signature Spell",
+            duration: None,
+            modifiers: [
+                (scope: spell(30451), kind: damage_done_pct, value: 12.0),
+                (scope: spell(1241462), kind: damage_done_pct, value: 12.0),
+                (scope: spell(116), kind: damage_done_pct, value: 12.0),
+                (scope: spell(190357), kind: damage_done_pct, value: 12.0),
+            ],
+        ),
+        444986: (
+            id: 444986,
+            name: "Spellfrost Teachings",
+            duration: None,
+            modifiers: [
+                (scope: spell(153626), kind: cooldown_rate_pct, value: 15.0),
+                (scope: spell(84714), kind: cooldown_rate_pct, value: 15.0),
+            ],
+        ),
+        1261082: (
+            id: 1261082,
+            name: "Polished Focus",
+            duration: None,
+            modifiers: [
+                (scope: spell(44425), kind: damage_done_pct, value: 15.0),
+                (scope: spell(1246949), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         443783: (id: 443783, name: "Splinterstorm", duration: None),
         // Frostfire (41) hero tree auras.
         468655: (
@@ -28066,11 +28506,51 @@
                 (scope: school(16), kind: damage_done_pct, value: 5.0),
             ],
         ),
-        1248002: (id: 1248002, name: "Heat Sink", duration: None),
-        431117: (id: 431117, name: "Thermal Conditioning", duration: None),
-        431189: (id: 431189, name: "Severe Temperatures", duration: None),
-        1248014: (id: 1248014, name: "Dualcasting Adept", duration: None),
-        1262844: (id: 1262844, name: "Molten Chill", duration: None),
+        1248002: (
+            id: 1248002,
+            name: "Heat Sink",
+            duration: None,
+            modifiers: [
+                (scope: spell(228354), kind: damage_done_pct, value: 20.0),
+                (scope: spell(108853), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
+        431117: (
+            id: 431117,
+            name: "Thermal Conditioning",
+            duration: None,
+            modifiers: [
+                (scope: spell(431044), kind: cast_time_pct, value: -10.0),
+            ],
+        ),
+        431189: (
+            id: 431189,
+            name: "Severe Temperatures",
+            duration: None,
+            modifiers: [
+                (scope: spell(431044), kind: damage_done_pct, value: 15.0, condition: Some(caster_has_aura(431177))),
+            ],
+        ),
+        1248014: (
+            id: 1248014,
+            name: "Dualcasting Adept",
+            duration: None,
+            modifiers: [
+                (scope: school(4), kind: crit_damage_pct, value: 10.0),
+                (scope: school(16), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(11366), kind: damage_done_pct, value: 10.0),
+                (scope: spell(30455), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
+        1262844: (
+            id: 1262844,
+            name: "Molten Chill",
+            duration: None,
+            modifiers: [
+                (scope: spell(12654), kind: damage_done_pct, value: 10.0),
+                (scope: spell(468655), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         431166: (
             id: 431166,
             name: "Frostfire Infusion",
@@ -28104,8 +28584,23 @@
                 (scope: spell(1247777), kind: cooldown_rate_pct, value: 25.0),
             ],
         ),
-        1248016: (id: 1248016, name: "Blast Radius", duration: None),
-        1262845: (id: 1262845, name: "Elemental Conduit", duration: None),
+        1248016: (
+            id: 1248016,
+            name: "Blast Radius",
+            duration: None,
+            modifiers: [
+                (scope: spell(153561), kind: damage_done_pct, value: 15.0),
+                (scope: spell(153596), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        1262845: (
+            id: 1262845,
+            name: "Elemental Conduit",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: haste_pct, value: 4.0),
+            ],
+        ),
         431095: (id: 431095, name: "Isothermic Core", duration: None),
         // =====================================================================
         // Warlock: Affliction (265), Demonology (266), Destruction (267)
@@ -28416,9 +28911,23 @@
                 (scope: spell(1259790), kind: crit_chance_add, value: 10.0),
             ],
         ),
-        1260209: (id: 1260209, name: "Sudden Onset", duration: None),
+        1260209: (
+            id: 1260209,
+            name: "Sudden Onset",
+            duration: None,
+            modifiers: [
+                (scope: spell(980), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         1279521: (id: 1279521, name: "Eye Contract", duration: None),
-        1280733: (id: 1280733, name: "Nether Plating", duration: None),
+        1280733: (
+            id: 1280733,
+            name: "Nether Plating",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: guardian_damage_pct, value: 10.0),
+            ],
+        ),
         386986: (
             id: 386986,
             name: "Sacrolash's Dark Strike",
@@ -28442,7 +28951,16 @@
                 (scope: spell(27243), kind: cost_pct, value: -100.0),
             ],
         ),
-        1279510: (id: 1279510, name: "Niskaran Methods", duration: None),
+        1279510: (
+            id: 1279510,
+            name: "Niskaran Methods",
+            duration: None,
+            modifiers: [
+                (scope: spell(980), kind: damage_done_pct, value: 8.0),
+                (scope: spell(146739), kind: damage_done_pct, value: 8.0),
+                (scope: spell(445474), kind: damage_done_pct, value: 8.0),
+            ],
+        ),
         1259815: (
             id: 1259815,
             name: "Potent Soul Shards",
@@ -28502,7 +29020,14 @@
                 (scope: all, kind: damage_done_pct, value: 10.0, condition: Some(target_hp_below(0.35))),
             ],
         ),
-        1311969: (id: 1311969, name: "Hedonic Gorging", duration: None),
+        1311969: (
+            id: 1311969,
+            name: "Hedonic Gorging",
+            duration: None,
+            modifiers: [
+                (scope: spell(146739), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         196226: (id: 196226, name: "Sow the Seeds", duration: None),
         1261984: (id: 1261984, name: "Shadow of Nathreza (Rank 1)", duration: None),
         1261990: (
@@ -28654,7 +29179,14 @@
                 (scope: all, kind: damage_done_pct, value: 15.0),
             ],
         ),
-        1276956: (id: 1276956, name: "Blighted Maw", duration: None),
+        1276956: (
+            id: 1276956,
+            name: "Blighted Maw",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: guardian_damage_pct, value: 10.0),
+            ],
+        ),
         453800: (
             id: 453800,
             name: "Improved Demonic Tactics",
@@ -28696,7 +29228,15 @@
                 (scope: all, kind: guardian_damage_pct, value: 10.0),
             ],
         ),
-        453699: (id: 453699, name: "Flametouched", duration: None),
+        453699: (
+            id: 453699,
+            name: "Flametouched",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: pet_damage_pct, value: 10.0),
+                (scope: all, kind: guardian_damage_pct, value: 10.0),
+            ],
+        ),
         386185: (
             id: 386185,
             name: "Demonic Knowledge",
@@ -28715,8 +29255,24 @@
             ],
         ),
         1276748: (id: 1276748, name: "Reign of Tyranny", duration: None),
-        1240189: (id: 1240189, name: "Master Summoner", duration: None),
-        1276947: (id: 1276947, name: "Demonic Calling", duration: None),
+        1240189: (
+            id: 1240189,
+            name: "Master Summoner",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: rated_pct(mastery), value: 4.0),
+                (scope: spell(265187), kind: cast_time_pct, value: -25.0),
+            ],
+        ),
+        1276947: (
+            id: 1276947,
+            name: "Demonic Calling",
+            duration: None,
+            modifiers: [
+                (scope: spell(104316), kind: cast_time_pct, value: -50.0),
+                (scope: spell(104316), kind: cost_pct, value: -50.0),
+            ],
+        ),
         460551: (id: 460551, name: "Doom", duration: None),
         460553: (
             id: 460553,
@@ -28822,7 +29378,14 @@
                 (scope: spell(17962), kind: cooldown_rate_pct, value: 15.0),
             ],
         ),
-        387506: (id: 387506, name: "Mayhem", duration: None),
+        387506: (
+            id: 387506,
+            name: "Mayhem",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 5.0, condition: Some(enemies_at_least(2))),
+            ],
+        ),
         80240: (
             id: 80240,
             name: "Havoc",
@@ -28848,7 +29411,14 @@
                 (scope: spell(29722), kind: damage_done_pct, value: 8.0),
             ],
         ),
-        1244460: (id: 1244460, name: "Improved Havoc", duration: None),
+        1244460: (
+            id: 1244460,
+            name: "Improved Havoc",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 5.0, condition: Some(enemies_at_least(2))),
+            ],
+        ),
         387252: (
             id: 387252,
             name: "Ashen Remains",
@@ -28869,7 +29439,14 @@
                 (scope: spell(17877), kind: damage_done_pct, value: 50.0),
             ],
         ),
-        1244788: (id: 1244788, name: "Chaotic Inferno", duration: None),
+        1244788: (
+            id: 1244788,
+            name: "Chaotic Inferno",
+            duration: None,
+            modifiers: [
+                (scope: spell(116858), kind: damage_done_pct, value: 5.0),
+            ],
+        ),
         387259: (
             id: 387259,
             name: "Flashpoint",
@@ -28954,7 +29531,14 @@
                 (scope: spell(42223), kind: damage_done_pct, value: 25.0),
             ],
         ),
-        266086: (id: 266086, name: "Rain of Chaos", duration: None),
+        266086: (
+            id: 266086,
+            name: "Rain of Chaos",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: guardian_damage_pct, value: 15.0, condition: Some(caster_has_aura(1122))),
+            ],
+        ),
         387103: (
             id: 387103,
             name: "Ruin",
@@ -28972,7 +29556,15 @@
                 (scope: spell(116858), kind: damage_done_pct, value: 10.0),
             ],
         ),
-        1244928: (id: 1244928, name: "Destructive Rapidity", duration: None),
+        1244928: (
+            id: 1244928,
+            name: "Destructive Rapidity",
+            duration: None,
+            modifiers: [
+                (scope: spell(5740), kind: tick_period_pct, value: -20.0),
+                (scope: spell(42223), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         454735: (
             id: 454735,
             name: "Devastation",
@@ -28991,7 +29583,15 @@
                 (scope: spell(17877), kind: damage_done_pct, value: 15.0),
             ],
         ),
-        387108: (id: 387108, name: "Conflagration of Chaos", duration: None),
+        387108: (
+            id: 387108,
+            name: "Conflagration of Chaos",
+            duration: None,
+            modifiers: [
+                (scope: spell(17962), kind: crit_chance_add, value: 25.0),
+                (scope: spell(17877), kind: crit_chance_add, value: 25.0),
+            ],
+        ),
         387173: (
             id: 387173,
             name: "Diabolic Embers",
@@ -29000,9 +29600,24 @@
                 (scope: spell(29722), kind: damage_done_pct, value: 20.0),
             ],
         ),
-        1214442: (id: 1214442, name: "Demonfire Infusion", duration: None),
+        1214442: (
+            id: 1214442,
+            name: "Demonfire Infusion",
+            duration: None,
+            modifiers: [
+                (scope: spell(29722), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         1245089: (id: 1245089, name: "Avatar of Destruction", duration: None),
-        1280483: (id: 1280483, name: "Inferno", duration: None),
+        1280483: (
+            id: 1280483,
+            name: "Inferno",
+            duration: None,
+            modifiers: [
+                (scope: spell(1122), kind: cooldown_pct, value: -20.0),
+                (scope: all, kind: rated_pct(mastery), value: 4.0),
+            ],
+        ),
         1244941: (id: 1244941, name: "Alythess's Ire", duration: None),
         387166: (id: 387166, name: "Raging Demonfire", duration: None),
         1265770: (id: 1265770, name: "Embers of Nihilam (Rank 1)", duration: None),
@@ -29073,11 +29688,39 @@
         1268884: (id: 1268884, name: "Manifested Avarice", duration: None),
         449701: (id: 449701, name: "Gorebound Fortitude", duration: None),
         449703: (id: 449703, name: "Friends In Dark Places", duration: None),
-        449704: (id: 449704, name: "Shared Fate", duration: None),
-        449706: (id: 449706, name: "Feast of Souls", duration: None),
+        449704: (
+            id: 449704,
+            name: "Shared Fate",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 5.0, condition: Some(enemies_at_least(2))),
+            ],
+        ),
+        449706: (
+            id: 449706,
+            name: "Feast of Souls",
+            duration: None,
+            listeners: [
+                (
+                    on: enemy_died(had_aura: None, from_self: false),
+                    chance: flat(0.25),
+                    effects: [
+                        resource((kind: soul_shards, amount: 1.0)),
+                        apply_aura(aura: 449793, target: caster, stacks: 1),
+                    ],
+                ),
+            ],
+        ),
         449707: (id: 449707, name: "Eternal Servitude", duration: None),
         389623: (id: 389623, name: "Gorefiend's Resolve", duration: None),
-        1268889: (id: 1268889, name: "Shared Vessel", duration: None),
+        1268889: (
+            id: 1268889,
+            name: "Shared Vessel",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: rated_pct(mastery), value: 5.0),
+            ],
+        ),
         449631: (
             id: 449631,
             name: "Wicked Reaping",
@@ -29104,7 +29747,14 @@
                 (scope: all, kind: guardian_damage_pct, value: 8.0),
             ],
         ),
-        1268903: (id: 1268903, name: "Eternal Hunger", duration: None),
+        1268903: (
+            id: 1268903,
+            name: "Eternal Hunger",
+            duration: None,
+            modifiers: [
+                (scope: spell(449632), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         449638: (
             id: 449638,
             name: "Shadow of Death",
@@ -29151,11 +29801,34 @@
                 (scope: school(32), kind: crit_damage_pct, value: 10.0),
             ],
         ),
-        1266799: (id: 1266799, name: "Through the Felvine", duration: None),
+        1266799: (
+            id: 1266799,
+            name: "Through the Felvine",
+            duration: None,
+            modifiers: [
+                (scope: spell(1259790), kind: damage_done_pct, value: 8.0),
+                (scope: spell(116858), kind: damage_done_pct, value: 8.0),
+                (scope: spell(42223), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         440057: (id: 440057, name: "Curse of the Satyr", duration: None),
         440059: (id: 440059, name: "Aura of Enfeeblement", duration: None),
-        440048: (id: 440048, name: "Hatefury Rituals", duration: None),
-        440051: (id: 440051, name: "Bleakheart Tactics", duration: None),
+        440048: (
+            id: 440048,
+            name: "Hatefury Rituals",
+            duration: None,
+            modifiers: [
+                (scope: spell(445474), kind: damage_done_pct, value: 25.0),
+            ],
+        ),
+        440051: (
+            id: 440051,
+            name: "Bleakheart Tactics",
+            duration: None,
+            modifiers: [
+                (scope: spell(445474), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         440065: (id: 440065, name: "Zevrim's Resilience", duration: None),
         440070: (id: 440070, name: "Illhoof's Design", duration: None),
         1266805: (
@@ -29196,7 +29869,14 @@
                 (scope: spell(445474), kind: tick_period_pct, value: -15.0),
             ],
         ),
-        1266803: (id: 1266803, name: "Alzzin's Iniquity", duration: None),
+        1266803: (
+            id: 1266803,
+            name: "Alzzin's Iniquity",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: haste_pct, value: 4.0, condition: Some(caster_has_aura(442726))),
+            ],
+        ),
         430014: (id: 430014, name: "Malevolence", duration: None),
         442726: (
             id: 442726,
@@ -29262,7 +29942,15 @@
                 (scope: spell(432795), kind: damage_done_pct, value: 20.0),
             ],
         ),
-        1268709: (id: 1268709, name: "Diabolic Oculi", duration: None),
+        1268709: (
+            id: 1268709,
+            name: "Diabolic Oculi",
+            duration: None,
+            modifiers: [
+                (scope: spell(434635), kind: damage_done_pct, value: 15.0),
+                (scope: spell(434506), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         428911: (id: 428911, name: "Soul-Etched Circles", duration: None),
         429072: (id: 429072, name: "Annihilan's Bellow", duration: None),
         429902: (
@@ -29273,7 +29961,15 @@
                 (scope: all, kind: haste_pct, value: 5.0),
             ],
         ),
-        429917: (id: 429917, name: "Infernal Machine", duration: None),
+        429917: (
+            id: 429917,
+            name: "Infernal Machine",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: pet_damage_pct, value: 10.0),
+                (scope: all, kind: guardian_damage_pct, value: 10.0),
+            ],
+        ),
         429115: (id: 429115, name: "Infernal Vitality", duration: None),
         429130: (id: 429130, name: "Infernal Bulwark", duration: None),
         1268713: (id: 1268713, name: "Looks That Kill", duration: None),
@@ -29420,7 +30116,14 @@
             ],
         ),
         238558: (id: 238558, name: "Misery", duration: None),
-        1279350: (id: 1279350, name: "Invoked Nightmare", duration: None),
+        1279350: (
+            id: 1279350,
+            name: "Invoked Nightmare",
+            duration: None,
+            modifiers: [
+                (scope: spell(589), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         288733: (id: 288733, name: "Intangibility", duration: None),
         377065: (id: 377065, name: "Mental Fortitude", duration: None),
         406788: (
@@ -29432,8 +30135,22 @@
             ],
         ),
         341491: (id: 341491, name: "Shadowy Apparitions", duration: None),
-        1250492: (id: 1250492, name: "Tormenting Whispers", duration: None),
-        1242666: (id: 1242666, name: "Descending Darkness", duration: None),
+        1250492: (
+            id: 1250492,
+            name: "Tormenting Whispers",
+            duration: None,
+            modifiers: [
+                (scope: spell(335467), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
+        1242666: (
+            id: 1242666,
+            name: "Descending Darkness",
+            duration: None,
+            modifiers: [
+                (scope: spell(1242173), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         391399: (id: 391399, name: "Surge of Insanity", duration: None),
         391403: (
             id: 391403,
@@ -29494,9 +30211,23 @@
                 (scope: spell(391403), kind: damage_done_pct, value: 15.0),
             ],
         ),
-        1240388: (id: 1240388, name: "Dark Thoughts", duration: None),
+        1240388: (
+            id: 1240388,
+            name: "Dark Thoughts",
+            duration: None,
+            modifiers: [
+                (scope: spell(8092), kind: damage_done_pct, value: 10.0, condition: Some(caster_has_aura(375889))),
+            ],
+        ),
         391228: (id: 391228, name: "Maddening Touch", duration: None),
-        341240: (id: 341240, name: "Improved Voidform", duration: None),
+        341240: (
+            id: 341240,
+            name: "Improved Voidform",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 5.0, condition: Some(caster_has_aura(194249))),
+            ],
+        ),
         1231346: (id: 1231346, name: "Ancient Madness", duration: None),
         1231347: (
             id: 1231347,
@@ -29507,7 +30238,14 @@
                 (scope: all, kind: crit_chance_add, value: 2.0, per_stack: true),
             ],
         ),
-        73510: (id: 73510, name: "Shadeburst", duration: None),
+        73510: (
+            id: 73510,
+            name: "Shadeburst",
+            duration: None,
+            modifiers: [
+                (scope: spell(148859), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
         391099: (
             id: 391099,
             name: "Dark Evangelism",
@@ -29518,8 +30256,24 @@
                 (scope: spell(335467), kind: damage_done_pct, value: 12.0),
             ],
         ),
-        391090: (id: 391090, name: "Shattered Psyche", duration: None),
-        1228516: (id: 1228516, name: "Subservient Shadows", duration: None),
+        391090: (
+            id: 391090,
+            name: "Shattered Psyche",
+            duration: None,
+            modifiers: [
+                (scope: spell(8092), kind: crit_chance_add, value: 8.0),
+                (scope: spell(450405), kind: crit_chance_add, value: 8.0),
+            ],
+        ),
+        1228516: (
+            id: 1228516,
+            name: "Subservient Shadows",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: pet_damage_pct, value: 20.0),
+                (scope: all, kind: guardian_damage_pct, value: 20.0),
+            ],
+        ),
         391151: (
             id: 391151,
             name: "Mastermind",
@@ -29531,10 +30285,41 @@
                 (scope: spell(450405), kind: crit_damage_pct, value: 15.0),
             ],
         ),
-        407470: (id: 407470, name: "Mind's Eye", duration: None),
-        409044: (id: 409044, name: "Distorted Reality", duration: None),
-        407469: (id: 407469, name: "Spectral Horrors", duration: None),
-        1242862: (id: 1242862, name: "Instilled Doubt", duration: None),
+        407470: (
+            id: 407470,
+            name: "Mind's Eye",
+            duration: None,
+            modifiers: [
+                (scope: spell(335467), kind: cost_pct, value: -10.0),
+            ],
+        ),
+        409044: (
+            id: 409044,
+            name: "Distorted Reality",
+            duration: None,
+            modifiers: [
+                (scope: spell(335467), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
+        407469: (
+            id: 407469,
+            name: "Spectral Horrors",
+            duration: None,
+            modifiers: [
+                (scope: spell(148859), kind: damage_done_pct, value: 20.0, condition: Some(target_has_aura(aura: 335467, from_self: true))),
+            ],
+        ),
+        1242862: (
+            id: 1242862,
+            name: "Instilled Doubt",
+            duration: None,
+            modifiers: [
+                (scope: spell(589), kind: crit_chance_add, value: 8.0),
+                (scope: spell(34914), kind: crit_chance_add, value: 8.0),
+                (scope: spell(589), kind: crit_damage_pct, value: 15.0),
+                (scope: spell(34914), kind: crit_damage_pct, value: 15.0),
+            ],
+        ),
         392507: (
             id: 392507,
             name: "Deathspeaker",
@@ -29552,7 +30337,14 @@
                 ),
             ],
         ),
-        321291: (id: 321291, name: "Death and Madness", duration: None),
+        321291: (
+            id: 321291,
+            name: "Death and Madness",
+            duration: None,
+            modifiers: [
+                (scope: spell(32379), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         373202: (id: 373202, name: "Mind Devourer", duration: None),
         373204: (
             id: 373204,
@@ -29573,8 +30365,22 @@
         ),
         1279353: (id: 1279353, name: "Maddening Tentacles", duration: None),
         373427: (id: 373427, name: "Inescapable Torment", duration: None),
-        1240394: (id: 1240394, name: "Madness Weaving", duration: None),
-        1240364: (id: 1240364, name: "Death's Torment", duration: None),
+        1240394: (
+            id: 1240394,
+            name: "Madness Weaving",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: mastery_damage_pct, value: 0.25, condition: Some(target_has_aura(aura: 335467, from_self: true))),
+            ],
+        ),
+        1240364: (
+            id: 1240364,
+            name: "Death's Torment",
+            duration: None,
+            modifiers: [
+                (scope: spell(32379), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
         375767: (
             id: 375767,
             name: "Screams of the Void",
@@ -29585,7 +30391,14 @@
                 (scope: spell(335467), kind: tick_period_pct, value: -10.0),
             ],
         ),
-        391284: (id: 391284, name: "Tormented Spirits", duration: None),
+        391284: (
+            id: 391284,
+            name: "Tormented Spirits",
+            duration: None,
+            modifiers: [
+                (scope: spell(148859), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         373212: (
             id: 373212,
             name: "Insidious Ire",
@@ -29623,7 +30436,14 @@
                 ),
             ],
         ),
-        373280: (id: 373280, name: "Idol of N'Zoth", duration: None),
+        373280: (
+            id: 373280,
+            name: "Idol of N'Zoth",
+            duration: None,
+            modifiers: [
+                (scope: school(32), kind: damage_done_pct, value: 4.0),
+            ],
+        ),
         373273: (id: 373273, name: "Idol of Yogg-Saron", duration: None),
         377349: (
             id: 377349,
@@ -29690,7 +30510,14 @@
         450138: (id: 450138, name: "Void Empowerment", duration: None),
         449912: (id: 449912, name: "Darkening Horizon", duration: None),
         1266856: (id: 1266856, name: "Touch of the Void", duration: None),
-        1266845: (id: 1266845, name: "Quickened Pulse", duration: None),
+        1266845: (
+            id: 1266845,
+            name: "Quickened Pulse",
+            duration: None,
+            modifiers: [
+                (scope: spell(589), kind: tick_period_pct, value: -15.0),
+            ],
+        ),
         450612: (
             id: 450612,
             name: "Void Infusion",
@@ -29701,7 +30528,16 @@
         ),
         451311: (id: 451311, name: "Void Leech", duration: None),
         451569: (id: 451569, name: "Embrace the Shadow", duration: None),
-        1266883: (id: 1266883, name: "Overwhelming Shadows", duration: None),
+        1266883: (
+            id: 1266883,
+            name: "Overwhelming Shadows",
+            duration: None,
+            modifiers: [
+                (scope: spell(263165), kind: damage_done_pct, value: 20.0),
+                (scope: spell(8092), kind: damage_done_pct, value: 15.0),
+                (scope: spell(450405), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         448403: (
             id: 448403,
             name: "Collapsing Void",
@@ -29741,7 +30577,15 @@
             )),
         ),
         453783: (id: 453783, name: "Manifested Power", duration: None),
-        1272320: (id: 1272320, name: "Focused Outburst", duration: None),
+        1272320: (
+            id: 1272320,
+            name: "Focused Outburst",
+            duration: None,
+            modifiers: [
+                (scope: spell(1242173), kind: damage_done_pct, value: 20.0),
+                (scope: spell(335467), kind: damage_done_pct, value: 10.0, condition: Some(caster_has_aura(194249))),
+            ],
+        ),
         453852: (id: 453852, name: "Shock Pulse", duration: None),
         453918: (id: 453918, name: "Incessant Screams", duration: None),
         1272308: (id: 1272308, name: "Energy Conservation", duration: None),
@@ -29755,7 +30599,15 @@
         ),
         453726: (id: 453726, name: "Word of Supremacy", duration: None),
         453729: (id: 453729, name: "Heightened Alteration", duration: None),
-        449874: (id: 449874, name: "Energy Compression", duration: None),
+        449874: (
+            id: 449874,
+            name: "Energy Compression",
+            duration: None,
+            modifiers: [
+                (scope: spell(120644), kind: damage_done_pct, value: 25.0),
+                (scope: spell(120696), kind: damage_done_pct, value: 25.0),
+            ],
+        ),
         454001: (id: 454001, name: "Sustained Potency", duration: None),
         453845: (id: 453845, name: "Resonant Energy", duration: None),
         453846: (
@@ -29767,9 +30619,31 @@
                 (scope: all, kind: source_damage_taken_pct, value: 2.0, per_stack: true),
             ],
         ),
-        453828: (id: 453828, name: "Energy Cycle", duration: None),
-        1272326: (id: 1272326, name: "Realized Potential", duration: None),
-        1247178: (id: 1247178, name: "Spiritwell", duration: None),
+        453828: (
+            id: 453828,
+            name: "Energy Cycle",
+            duration: None,
+            modifiers: [
+                (scope: spell(391403), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        1272326: (
+            id: 1272326,
+            name: "Realized Potential",
+            duration: None,
+            modifiers: [
+                (scope: spell(32379), kind: damage_done_pct, value: 20.0),
+                (scope: spell(32379), kind: cooldown_pct, value: -15.0),
+            ],
+        ),
+        1247178: (
+            id: 1247178,
+            name: "Spiritwell",
+            duration: None,
+            modifiers: [
+                (scope: spell(148859), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
         449806: (id: 449806, name: "Divine Halo", duration: None),
         // =====================================================================
         // Monk: Windwalker (269) + Conduit of the Celestials (64), Shado-Pan (65)
@@ -29844,9 +30718,38 @@
                 (scope: spell(101546), kind: damage_done_pct, value: 35.0),
             ],
         ),
-        451294: (id: 451294, name: "Momentum Boost", duration: None),
-        121817: (id: 121817, name: "Combat Wisdom", duration: None),
-        261917: (id: 261917, name: "Sharp Reflexes", duration: None),
+        451294: (
+            id: 451294,
+            name: "Momentum Boost",
+            duration: None,
+            modifiers: [
+                (scope: spell(113656), kind: damage_done_pct, value: 15.0),
+                (scope: spell(117418), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        121817: (
+            id: 121817,
+            name: "Combat Wisdom",
+            duration: None,
+            modifiers: [
+                (scope: spell(100780), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
+        261917: (
+            id: 261917,
+            name: "Sharp Reflexes",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(100784), school: None),
+                    chance: always,
+                    effects: [
+                        adjust_cooldown(spell: 107428, change: reduce(1000)),
+                        adjust_cooldown(spell: 113656, change: reduce(1000)),
+                    ],
+                ),
+            ],
+        ),
         388856: (
             id: 388856,
             name: "Touch of the Tiger",
@@ -29881,7 +30784,14 @@
                 (scope: all, kind: resource_max(energy), value: 20.0),
             ],
         ),
-        451823: (id: 451823, name: "Dual Threat", duration: None),
+        451823: (
+            id: 451823,
+            name: "Dual Threat",
+            duration: None,
+            modifiers: [
+                (scope: auto_attack, kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         116645: (id: 116645, name: "Teachings of the Monastery", duration: None),
         392958: (id: 392958, name: "Glory of the Dawn", duration: None),
         388848: (
@@ -29892,7 +30802,15 @@
                 (scope: spell(101546), kind: damage_done_pct, value: 20.0),
             ],
         ),
-        391330: (id: 391330, name: "Meridian Strikes", duration: None),
+        391330: (
+            id: 391330,
+            name: "Meridian Strikes",
+            duration: None,
+            modifiers: [
+                (scope: spell(322109), kind: cooldown_pct, value: -20.0),
+                (scope: spell(322109), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         388849: (
             id: 388849,
             name: "Rising Star",
@@ -29904,9 +30822,31 @@
             ],
         ),
         196740: (id: 196740, name: "Hit Combo", duration: None),
-        451485: (id: 451485, name: "Brawler's Intensity", duration: None),
-        392979: (id: 392979, name: "Jade Ignition", duration: None),
-        1248749: (id: 1248749, name: "Cyclone's Drift", duration: None),
+        451485: (
+            id: 451485,
+            name: "Brawler's Intensity",
+            duration: None,
+            modifiers: [
+                (scope: spell(107428), kind: cooldown_pct, value: -10.0),
+                (scope: spell(100784), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        392979: (
+            id: 392979,
+            name: "Jade Ignition",
+            duration: None,
+            modifiers: [
+                (scope: spell(101546), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        1248749: (
+            id: 1248749,
+            name: "Cyclone's Drift",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: haste_pct, value: 4.0),
+            ],
+        ),
         1248747: (
             id: 1248747,
             name: "Crashing Fists",
@@ -29917,7 +30857,21 @@
         ),
         391370: (id: 391370, name: "Drinking Horn Cover", duration: None),
         280197: (id: 280197, name: "Spiritual Focus", duration: None),
-        1249832: (id: 1249832, name: "Obsidian Spiral", duration: None),
+        1249832: (
+            id: 1249832,
+            name: "Obsidian Spiral",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(100784), school: None),
+                    chance: always,
+                    condition: Some(caster_has_aura(1249625)),
+                    effects: [
+                        resource((kind: chi, amount: 1.0)),
+                    ],
+                ),
+            ],
+        ),
         137384: (id: 137384, name: "Combo Breaker", duration: None),
         325201: (
             id: 325201,
@@ -29943,15 +30897,81 @@
                 (scope: spell(100784), kind: chain_share_pct, value: 80.0),
             ],
         ),
-        451498: (id: 451498, name: "Energy Burst", duration: None),
-        397768: (id: 397768, name: "Inner Peace", duration: None),
-        451515: (id: 451515, name: "Sequenced Strikes", duration: None),
-        1272415: (id: 1272415, name: "Sunfire Spiral", duration: None),
-        451576: (id: 451576, name: "Communion With Wind", duration: None),
+        451498: (
+            id: 451498,
+            name: "Energy Burst",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(100784), school: None),
+                    chance: flat(0.25),
+                    effects: [
+                        resource((kind: chi, amount: 1.0)),
+                    ],
+                ),
+            ],
+        ),
+        397768: (
+            id: 397768,
+            name: "Inner Peace",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: resource_max(energy), value: 30.0),
+                (scope: spell(100780), kind: cost_pct, value: -10.0),
+            ],
+        ),
+        451515: (
+            id: 451515,
+            name: "Sequenced Strikes",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(101546), school: None),
+                    chance: flat(0.5),
+                    effects: [
+                        apply_aura(aura: 116768, target: caster, stacks: 1),
+                    ],
+                ),
+            ],
+        ),
+        1272415: (
+            id: 1272415,
+            name: "Sunfire Spiral",
+            duration: None,
+            modifiers: [
+                (scope: spell(107428), kind: damage_done_pct, value: 15.0),
+                (scope: spell(1250566), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        451576: (
+            id: 451576,
+            name: "Communion With Wind",
+            duration: None,
+            modifiers: [
+                (scope: spell(392983), kind: cooldown_pct, value: -10.0),
+                (scope: spell(392983), kind: damage_done_pct, value: 20.0),
+                (scope: spell(152175), kind: cooldown_pct, value: -10.0),
+                (scope: spell(152175), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
         451524: (id: 451524, name: "Revolving Whirl", duration: None),
         1250042: (id: 1250042, name: "Echo Technique", duration: None),
-        1272175: (id: 1272175, name: "Universal Energy", duration: None),
-        454969: (id: 454969, name: "Memory of the Monastery", duration: None),
+        1272175: (
+            id: 1272175,
+            name: "Universal Energy",
+            duration: None,
+            modifiers: [
+                (scope: school(8), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
+        454969: (
+            id: 454969,
+            name: "Memory of the Monastery",
+            duration: None,
+            modifiers: [
+                (scope: spell(100780), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
         392993: (
             id: 392993,
             name: "Xuen's Battlegear",
@@ -29962,11 +30982,43 @@
             ],
         ),
         392985: (id: 392985, name: "Thunderfist", duration: None),
-        1272678: (id: 1272678, name: "Weapon of Wind", duration: None),
-        451529: (id: 451529, name: "Knowledge of the Broken Temple", duration: None),
+        1272678: (
+            id: 1272678,
+            name: "Weapon of Wind",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 10.0, condition: Some(caster_has_aura(1249625))),
+            ],
+        ),
+        451529: (
+            id: 451529,
+            name: "Knowledge of the Broken Temple",
+            duration: None,
+            modifiers: [
+                (scope: spell(100784), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         457974: (id: 457974, name: "Jadefire Stomp", duration: None),
-        1248704: (id: 1248704, name: "Skyfire Heel", duration: None),
-        1250041: (id: 1250041, name: "Harmonic Combo", duration: None),
+        1248704: (
+            id: 1248704,
+            name: "Skyfire Heel",
+            duration: None,
+            modifiers: [
+                (scope: spell(107428), kind: crit_chance_add, value: 10.0),
+                (scope: spell(1250566), kind: crit_chance_add, value: 10.0),
+                (scope: spell(107428), kind: chain_targets_add, value: 4.0),
+                (scope: spell(107428), kind: chain_share_pct, value: 40.0),
+            ],
+        ),
+        1250041: (
+            id: 1250041,
+            name: "Harmonic Combo",
+            duration: None,
+            modifiers: [
+                (scope: spell(113656), kind: cost_pct, value: -33.0),
+                (scope: spell(117418), kind: damage_done_pct, value: -10.0),
+            ],
+        ),
         452137: (
             id: 452137,
             name: "Flurry of Xuen",
@@ -29981,11 +31033,53 @@
                 ),
             ],
         ),
-        1272685: (id: 1272685, name: "Martial Agility", duration: None),
-        1248833: (id: 1248833, name: "Airborne Rhythm", duration: None),
-        1248837: (id: 1248837, name: "Hurricane's Vault", duration: None),
-        392994: (id: 392994, name: "Path of Jade", duration: None),
-        451573: (id: 451573, name: "Singularly Focused Jade", duration: None),
+        1272685: (
+            id: 1272685,
+            name: "Martial Agility",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: attack_speed_pct, value: 10.0),
+                (scope: all, kind: attack_speed_pct, value: 10.0, condition: Some(caster_has_aura(1249625))),
+            ],
+        ),
+        1248833: (
+            id: 1248833,
+            name: "Airborne Rhythm",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(1217413), school: None),
+                    chance: always,
+                    effects: [
+                        resource((kind: chi, amount: 2.0)),
+                    ],
+                ),
+            ],
+        ),
+        1248837: (
+            id: 1248837,
+            name: "Hurricane's Vault",
+            duration: None,
+            modifiers: [
+                (scope: spell(1217413), kind: damage_done_pct, value: 30.0),
+            ],
+        ),
+        392994: (
+            id: 392994,
+            name: "Path of Jade",
+            duration: None,
+            modifiers: [
+                (scope: spell(101546), kind: damage_done_pct, value: 25.0),
+            ],
+        ),
+        451573: (
+            id: 451573,
+            name: "Singularly Focused Jade",
+            duration: None,
+            modifiers: [
+                (scope: spell(101546), kind: damage_done_pct, value: 40.0),
+            ],
+        ),
         1261703: (id: 1261703, name: "Tigereye Brew (Rank 1)", duration: None),
         1261844: (
             id: 1261844,
@@ -30013,8 +31107,24 @@
                 (scope: all, kind: haste_pct, value: 15.0),
             ],
         ),
-        442743: (id: 442743, name: "Temple Training", duration: None),
-        442687: (id: 442687, name: "Xuen's Guidance", duration: None),
+        442743: (
+            id: 442743,
+            name: "Temple Training",
+            duration: None,
+            modifiers: [
+                (scope: spell(113656), kind: damage_done_pct, value: 15.0),
+                (scope: spell(117418), kind: damage_done_pct, value: 15.0),
+                (scope: spell(101546), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        442687: (
+            id: 442687,
+            name: "Xuen's Guidance",
+            duration: None,
+            modifiers: [
+                (scope: spell(100780), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         443087: (
             id: 443087,
             name: "Courage of the White Tiger",
@@ -30031,8 +31141,23 @@
             ],
         ),
         443111: (id: 443111, name: "Strength of the Black Ox (Ready)", duration: Some(20000)),
-        442719: (id: 442719, name: "Restore Balance", duration: None),
-        392986: (id: 392986, name: "Xuen's Bond", duration: None),
+        442719: (
+            id: 442719,
+            name: "Restore Balance",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 6.0, condition: Some(caster_has_aura(123904))),
+            ],
+        ),
+        392986: (
+            id: 392986,
+            name: "Xuen's Bond",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: pet_damage_pct, value: 15.0),
+                (scope: spell(123904), kind: cooldown_pct, value: -15.0),
+            ],
+        ),
         443294: (id: 443294, name: "Heart of the Jade Serpent", duration: None),
         443421: (
             id: 443421,
@@ -30048,7 +31173,14 @@
         ),
         443566: (id: 443566, name: "Chi-Ji's Swiftness", duration: None),
         443110: (id: 443110, name: "Strength of the Black Ox", duration: None),
-        1273154: (id: 1273154, name: "Path of the Falling Star", duration: None),
+        1273154: (
+            id: 1273154,
+            name: "Path of the Falling Star",
+            duration: None,
+            modifiers: [
+                (scope: spell(443028), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
         1262667: (
             id: 1262667,
             name: "Yu'lon's Avatar",
@@ -30067,7 +31199,14 @@
         443059: (id: 443059, name: "Jade Sanctuary", duration: None),
         1248989: (id: 1248989, name: "Celestial Conduit", duration: None),
         443571: (id: 443571, name: "Inner Compass", duration: None),
-        1262672: (id: 1262672, name: "Flowing Wisdom", duration: None),
+        1262672: (
+            id: 1262672,
+            name: "Flowing Wisdom",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: haste_pct, value: 8.0, condition: Some(caster_has_aura(443421))),
+            ],
+        ),
         443589: (id: 443589, name: "Unity Within", duration: None),
         // Shado-Pan (65) hero tree auras.
         450615: (
@@ -30086,7 +31225,14 @@
             )),
         ),
         450979: (id: 450979, name: "Pride of Pandaria", duration: None),
-        450982: (id: 450982, name: "High Impact", duration: None),
+        450982: (
+            id: 450982,
+            name: "High Impact",
+            duration: None,
+            modifiers: [
+                (scope: spell(451021), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         450987: (
             id: 450987,
             name: "Veteran's Eye",
@@ -30103,7 +31249,14 @@
                 (scope: all, kind: damage_done_pct, value: 5.0),
             ],
         ),
-        1262612: (id: 1262612, name: "Shado Over the Battlefield", duration: None),
+        1262612: (
+            id: 1262612,
+            name: "Shado Over the Battlefield",
+            duration: None,
+            modifiers: [
+                (scope: spell(451021), kind: damage_done_pct, value: 15.0, condition: Some(enemies_at_least(2))),
+            ],
+        ),
         1272844: (id: 1272844, name: "Combat Stance", duration: None),
         1272849: (id: 1272849, name: "Initiator's Edge", duration: None),
         450988: (
@@ -30125,9 +31278,31 @@
         450992: (id: 450992, name: "Predictive Training", duration: None),
         1262603: (id: 1262603, name: "Stand Ready", duration: None),
         450986: (id: 450986, name: "Against All Odds", duration: None),
-        450989: (id: 450989, name: "Efficient Training", duration: None),
-        450993: (id: 450993, name: "Vigilant Watch", duration: None),
-        1262610: (id: 1262610, name: "Weapons of the Wall", duration: None),
+        450989: (
+            id: 450989,
+            name: "Efficient Training",
+            duration: None,
+            modifiers: [
+                (scope: spell(100780), kind: damage_done_pct, value: 15.0),
+                (scope: spell(1249625), kind: cooldown_pct, value: -10.0),
+            ],
+        ),
+        450993: (
+            id: 450993,
+            name: "Vigilant Watch",
+            duration: None,
+            modifiers: [
+                (scope: spell(100784), kind: crit_damage_pct, value: 15.0),
+            ],
+        ),
+        1262610: (
+            id: 1262610,
+            name: "Weapons of the Wall",
+            duration: None,
+            modifiers: [
+                (scope: spell(1249626), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
         1272821: (id: 1272821, name: "Wisdom of the Wall", duration: None),
         1272822: (
             id: 1272822,
@@ -30343,7 +31518,14 @@
             ],
         ),
         327541: (id: 327541, name: "Aetherial Kindling", duration: None),
-        1240262: (id: 1240262, name: "Meteor Storm", duration: None),
+        1240262: (
+            id: 1240262,
+            name: "Meteor Storm",
+            duration: None,
+            modifiers: [
+                (scope: spell(191034), kind: tick_period_pct, value: -20.0),
+            ],
+        ),
         406890: (
             id: 406890,
             name: "Wild Surges",
@@ -30376,13 +31558,36 @@
                 ),
             ],
         ),
-        450347: (id: 450347, name: "Nature's Grace", duration: None),
-        1240283: (id: 1240283, name: "Elune's Challenge", duration: None),
+        450347: (
+            id: 450347,
+            name: "Nature's Grace",
+            duration: None,
+            modifiers: [
+                (scope: spell(190984), kind: cast_time_pct, value: -10.0),
+                (scope: spell(194153), kind: cast_time_pct, value: -10.0),
+            ],
+        ),
+        1240283: (
+            id: 1240283,
+            name: "Elune's Challenge",
+            duration: None,
+            modifiers: [
+                (scope: spell(190984), kind: cast_time_pct, value: -10.0, condition: Some(caster_lacks_aura(48517))),
+                (scope: spell(194153), kind: cast_time_pct, value: -10.0, condition: Some(caster_lacks_aura(48518))),
+            ],
+        ),
         450212: (id: 450212, name: "Stellar Amplification", duration: None),
         468743: (id: 468743, name: "Whirling Stars", duration: None),
         390378: (id: 390378, name: "Orbital Strike", duration: None),
         450356: (id: 450356, name: "Touch the Cosmos", duration: None),
-        1240907: (id: 1240907, name: "Meteorites", duration: None),
+        1240907: (
+            id: 1240907,
+            name: "Meteorites",
+            duration: None,
+            modifiers: [
+                (scope: spell(191037), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         400059: (
             id: 400059,
             name: "Cosmic Rapidity",
@@ -30392,7 +31597,18 @@
                 (scope: spell(164815), kind: tick_period_pct, value: -10.0),
             ],
         ),
-        1240185: (id: 1240185, name: "Celestial Fire", duration: None),
+        1240185: (
+            id: 1240185,
+            name: "Celestial Fire",
+            duration: None,
+            modifiers: [
+                (scope: spell(8921), kind: damage_done_pct, value: 10.0),
+                (scope: spell(164812), kind: damage_done_pct, value: 10.0),
+                (scope: spell(93402), kind: damage_done_pct, value: 10.0),
+                (scope: spell(164815), kind: damage_done_pct, value: 10.0),
+                (scope: spell(202425), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         1240188: (id: 1240188, name: "Sculpt the Stars", duration: None),
         469004: (id: 469004, name: "Hail of Stars", duration: None),
         202345: (id: 202345, name: "Starlord", duration: None),
@@ -30417,12 +31633,43 @@
             ],
         ),
         394046: (id: 394046, name: "Power of Goldrinn", duration: None),
-        394094: (id: 394094, name: "Sundered Firmament", duration: None),
+        394094: (
+            id: 394094,
+            name: "Sundered Firmament",
+            duration: None,
+            modifiers: [
+                (scope: spell(202771), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         383197: (id: 383197, name: "Orbit Breaker", duration: None),
         394013: (id: 394013, name: "Incarnation: Chosen of Elune", duration: None),
-        393760: (id: 393760, name: "Umbral Embrace", duration: None),
-        450558: (id: 450558, name: "Harmony of the Heavens", duration: None),
-        393991: (id: 393991, name: "Elune's Guidance", duration: None),
+        393760: (
+            id: 393760,
+            name: "Umbral Embrace",
+            duration: None,
+            modifiers: [
+                (scope: spell(190984), kind: damage_done_pct, value: 10.0),
+                (scope: spell(194153), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
+        450558: (
+            id: 450558,
+            name: "Harmony of the Heavens",
+            duration: None,
+            modifiers: [
+                (scope: school(8), kind: damage_done_pct, value: 6.0, condition: Some(caster_has_aura(48517))),
+                (scope: school(64), kind: damage_done_pct, value: 6.0, condition: Some(caster_has_aura(48518))),
+            ],
+        ),
+        393991: (
+            id: 393991,
+            name: "Elune's Guidance",
+            duration: None,
+            modifiers: [
+                (scope: spell(78674), kind: cost_pct, value: -15.0, condition: Some(caster_has_aura(194223))),
+                (scope: spell(191034), kind: cost_pct, value: -15.0, condition: Some(caster_has_aura(194223))),
+            ],
+        ),
         394065: (
             id: 394065,
             name: "Denizen of the Dream",
@@ -30437,7 +31684,15 @@
                 ),
             ],
         ),
-        394121: (id: 394121, name: "Radiant Moonlight", duration: None),
+        394121: (
+            id: 394121,
+            name: "Radiant Moonlight",
+            duration: None,
+            modifiers: [
+                (scope: spell(202770), kind: cooldown_pct, value: -15.0),
+                (scope: spell(202771), kind: damage_done_pct, value: 25.0),
+            ],
+        ),
         1261564: (id: 1261564, name: "Ascendant Eclipses (Rank 1)", duration: None),
         1261565: (
             id: 1261565,
@@ -30497,16 +31752,63 @@
             ],
         ),
         429227: (id: 429227, name: "Durability of Nature", duration: None),
-        455797: (id: 455797, name: "Cenarius' Might", duration: None),
-        429402: (id: 429402, name: "Grove's Inspiration", duration: None),
-        429420: (id: 429420, name: "Potent Enchantments", duration: None),
-        1264776: (id: 1264776, name: "Dryad's Dance", duration: None),
+        455797: (
+            id: 455797,
+            name: "Cenarius' Might",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: haste_pct, value: 8.0, condition: Some(caster_has_aura(48517))),
+                (scope: all, kind: haste_pct, value: 8.0, condition: Some(caster_has_aura(48518))),
+            ],
+        ),
+        429402: (
+            id: 429402,
+            name: "Grove's Inspiration",
+            duration: None,
+            modifiers: [
+                (scope: spell(190984), kind: damage_done_pct, value: 12.0),
+                (scope: spell(194153), kind: damage_done_pct, value: 12.0),
+            ],
+        ),
+        429420: (
+            id: 429420,
+            name: "Potent Enchantments",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: haste_pct, value: 5.0, condition: Some(caster_has_aura(194223))),
+            ],
+        ),
+        1264776: (
+            id: 1264776,
+            name: "Dryad's Dance",
+            duration: None,
+            modifiers: [
+                (scope: spell(190984), kind: damage_done_pct, value: 8.0),
+                (scope: spell(194153), kind: damage_done_pct, value: 8.0),
+            ],
+        ),
         429215: (id: 429215, name: "Bounteous Bloom", duration: None),
         428937: (id: 428937, name: "Early Spring", duration: None),
         434220: (id: 434220, name: "Power of the Dream", duration: None),
         434249: (id: 434249, name: "Control of the Dream", duration: None),
-        429433: (id: 429433, name: "Blooming Infusion", duration: None),
-        1264899: (id: 1264899, name: "Spirit of the Thicket", duration: None),
+        429433: (
+            id: 429433,
+            name: "Blooming Infusion",
+            duration: None,
+            modifiers: [
+                (scope: spell(190984), kind: damage_done_pct, value: 8.0),
+                (scope: spell(194153), kind: damage_done_pct, value: 8.0),
+            ],
+        ),
+        1264899: (
+            id: 1264899,
+            name: "Spirit of the Thicket",
+            duration: None,
+            modifiers: [
+                (scope: spell(191037), kind: damage_done_pct, value: 10.0),
+                (scope: spell(78674), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         428731: (id: 428731, name: "Harmony of the Grove", duration: None),
         428735: (
             id: 428735,
@@ -30518,7 +31820,20 @@
         ),
         // Elune's Chosen (24) hero tree auras.
         424058: (id: 424058, name: "Boundless Moonlight", duration: None),
-        429520: (id: 429520, name: "Moon Guardian", duration: None),
+        429520: (
+            id: 429520,
+            name: "Moon Guardian",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(194153), school: None),
+                    chance: always,
+                    effects: [
+                        resource((kind: astral_power, amount: 2.0)),
+                    ],
+                ),
+            ],
+        ),
         429530: (
             id: 429530,
             name: "Lunar Insight",
@@ -30529,7 +31844,14 @@
             ],
         ),
         429533: (id: 429533, name: "Glistening Fur", duration: None),
-        1271206: (id: 1271206, name: "Star Cascade", duration: None),
+        1271206: (
+            id: 1271206,
+            name: "Star Cascade",
+            duration: None,
+            modifiers: [
+                (scope: spell(194153), kind: damage_done_pct, value: 12.0),
+            ],
+        ),
         429668: (
             id: 429668,
             name: "Stellar Command",
@@ -30550,7 +31872,14 @@
         ),
         429538: (id: 429538, name: "Moondust", duration: None),
         443046: (id: 443046, name: "Elune's Grace", duration: None),
-        1271261: (id: 1271261, name: "Penumbral Swell", duration: None),
+        1271261: (
+            id: 1271261,
+            name: "Penumbral Swell",
+            duration: None,
+            modifiers: [
+                (scope: school(64), kind: damage_done_pct, value: 5.0, condition: Some(caster_has_aura(48518))),
+            ],
+        ),
         429523: (
             id: 429523,
             name: "Lunar Calling",
@@ -30573,10 +31902,39 @@
                 ),
             ],
         ),
-        429536: (id: 429536, name: "Astral Insight", duration: None),
-        429540: (id: 429540, name: "Arcane Affinity", duration: None),
-        429539: (id: 429539, name: "Lunation", duration: None),
-        1271305: (id: 1271305, name: "Bask in Moonlight", duration: None),
+        429536: (
+            id: 429536,
+            name: "Astral Insight",
+            duration: None,
+            modifiers: [
+                (scope: school(64), kind: damage_done_pct, value: 10.0, condition: Some(caster_has_aura(194223))),
+            ],
+        ),
+        429540: (
+            id: 429540,
+            name: "Arcane Affinity",
+            duration: None,
+            modifiers: [
+                (scope: school(64), kind: damage_done_pct, value: 6.0),
+            ],
+        ),
+        429539: (
+            id: 429539,
+            name: "Lunation",
+            duration: None,
+            modifiers: [
+                (scope: spell(202770), kind: cooldown_rate_pct, value: 20.0),
+            ],
+        ),
+        1271305: (
+            id: 1271305,
+            name: "Bask in Moonlight",
+            duration: None,
+            modifiers: [
+                (scope: spell(78674), kind: damage_done_pct, value: 8.0),
+                (scope: spell(191037), kind: damage_done_pct, value: 8.0),
+            ],
+        ),
         424113: (
             id: 424113,
             name: "The Eternal Moon",
@@ -30775,9 +32133,27 @@
         1244258: (id: 1244258, name: "Chomp", duration: None),
         1244259: (id: 1244259, name: "Chomp (Ready)", duration: Some(10000)),
         16864: (id: 16864, name: "Omen of Clarity", duration: None),
-        449537: (id: 449537, name: "Coiled to Spring", duration: None),
+        449537: (
+            id: 449537,
+            name: "Coiled to Spring",
+            duration: None,
+            modifiers: [
+                (scope: spell(22568), kind: damage_done_pct, value: 8.0),
+                (scope: spell(441591), kind: damage_done_pct, value: 8.0),
+                (scope: spell(285381), kind: damage_done_pct, value: 8.0),
+            ],
+        ),
         391709: (id: 391709, name: "Rampant Ferocity", duration: None),
-        202021: (id: 202021, name: "Predator", duration: None),
+        202021: (
+            id: 202021,
+            name: "Predator",
+            duration: None,
+            modifiers: [
+                (scope: spell(5221), kind: damage_done_pct, value: 8.0),
+                (scope: spell(1822), kind: damage_done_pct, value: 8.0),
+                (scope: spell(106785), kind: damage_done_pct, value: 8.0),
+            ],
+        ),
         391700: (id: 391700, name: "Double-Clawed Rake", duration: None),
         202031: (
             id: 202031,
@@ -30796,7 +32172,15 @@
                 (scope: all, kind: resource_max(energy), value: 15.0),
             ],
         ),
-        390772: (id: 390772, name: "Pouncing Strikes", duration: None),
+        390772: (
+            id: 390772,
+            name: "Pouncing Strikes",
+            duration: None,
+            modifiers: [
+                (scope: spell(1822), kind: damage_done_pct, value: 15.0, condition: Some(caster_has_aura(5215))),
+                (scope: spell(5221), kind: damage_done_pct, value: 15.0, condition: Some(caster_has_aura(5215))),
+            ],
+        ),
         384665: (
             id: 384665,
             name: "Taste for Blood",
@@ -30814,18 +32198,94 @@
                 (scope: spell(1079), kind: damage_done_pct, value: 18.0),
             ],
         ),
-        236068: (id: 236068, name: "Moment of Clarity", duration: None),
-        449645: (id: 449645, name: "Savage Fury", duration: None),
+        236068: (
+            id: 236068,
+            name: "Moment of Clarity",
+            duration: None,
+            modifiers: [
+                (scope: spell(5221), kind: damage_done_pct, value: 15.0, condition: Some(caster_has_aura(135700))),
+                (scope: spell(106785), kind: damage_done_pct, value: 15.0, condition: Some(caster_has_aura(135700))),
+            ],
+        ),
+        449645: (
+            id: 449645,
+            name: "Savage Fury",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: haste_pct, value: 10.0, condition: Some(caster_has_aura(5217))),
+            ],
+        ),
         343223: (id: 343223, name: "Berserk", duration: None),
-        231063: (id: 231063, name: "Merciless Claws", duration: None),
-        1280316: (id: 1280316, name: "Panther's Guile", duration: None),
+        231063: (
+            id: 231063,
+            name: "Merciless Claws",
+            duration: None,
+            modifiers: [
+                (scope: spell(5221), kind: damage_done_pct, value: 15.0),
+                (scope: spell(106785), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        1280316: (
+            id: 1280316,
+            name: "Panther's Guile",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(5221), school: None),
+                    chance: flat(0.1),
+                    effects: [
+                        resource((kind: combo_points, amount: 3.0)),
+                    ],
+                ),
+            ],
+        ),
         48484: (id: 48484, name: "Infected Wounds", duration: None),
-        391078: (id: 391078, name: "Raging Fury", duration: None),
-        391872: (id: 391872, name: "Tiger's Tenacity", duration: None),
-        390864: (id: 390864, name: "Wild Slashes", duration: None),
+        391078: (
+            id: 391078,
+            name: "Raging Fury",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 4.0, condition: Some(caster_has_aura(5217))),
+            ],
+        ),
+        391872: (
+            id: 391872,
+            name: "Tiger's Tenacity",
+            duration: None,
+            modifiers: [
+                (scope: spell(155722), kind: damage_done_pct, value: 10.0, condition: Some(caster_has_aura(5217))),
+                (scope: spell(1079), kind: damage_done_pct, value: 10.0, condition: Some(caster_has_aura(5217))),
+            ],
+        ),
+        390864: (
+            id: 390864,
+            name: "Wild Slashes",
+            duration: None,
+            modifiers: [
+                (scope: spell(106785), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
         391174: (id: 391174, name: "Berserk: Heart of the Lion", duration: None),
-        1244532: (id: 1244532, name: "Blood Spattered", duration: None),
-        158476: (id: 158476, name: "Soul of the Forest (Feral)", duration: None),
+        1244532: (
+            id: 1244532,
+            name: "Blood Spattered",
+            duration: None,
+            modifiers: [
+                (scope: spell(22568), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 1079, from_self: true))),
+                (scope: spell(441591), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 1079, from_self: true))),
+            ],
+        ),
+        158476: (
+            id: 158476,
+            name: "Soul of the Forest (Feral)",
+            duration: None,
+            modifiers: [
+                (scope: spell(22568), kind: damage_done_pct, value: 5.0),
+                (scope: spell(441591), kind: damage_done_pct, value: 5.0),
+                (scope: spell(1079), kind: damage_done_pct, value: 5.0),
+                (scope: spell(285381), kind: damage_done_pct, value: 5.0),
+            ],
+        ),
         390902: (
             id: 390902,
             name: "Carnivorous Instinct",
@@ -30834,17 +32294,77 @@
                 (scope: all, kind: damage_done_pct, value: 3.0),
             ],
         ),
-        391875: (id: 391875, name: "Frantic Momentum", duration: None),
-        421432: (id: 421432, name: "Saber Jaws", duration: None),
+        391875: (
+            id: 391875,
+            name: "Frantic Momentum",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: haste_pct, value: 5.0),
+            ],
+        ),
+        421432: (
+            id: 421432,
+            name: "Saber Jaws",
+            duration: None,
+            modifiers: [
+                (scope: spell(22568), kind: damage_done_pct, value: 20.0),
+                (scope: spell(441591), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
         391881: (id: 391881, name: "Apex Predator's Craving", duration: None),
-        102543: (id: 102543, name: "Incarnation: Avatar of Ashamane", duration: None),
-        1244632: (id: 1244632, name: "Lacerating Claws", duration: None),
+        102543: (
+            id: 102543,
+            name: "Incarnation: Avatar of Ashamane",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 10.0, condition: Some(caster_has_aura(106951))),
+            ],
+        ),
+        1244632: (
+            id: 1244632,
+            name: "Lacerating Claws",
+            duration: None,
+            modifiers: [
+                (scope: spell(155722), kind: damage_done_pct, value: 10.0),
+                (scope: spell(1079), kind: damage_done_pct, value: 10.0),
+                (scope: spell(405233), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         391978: (id: 391978, name: "Veinripper", duration: None),
-        391347: (id: 391347, name: "Rip and Tear", duration: None),
+        391347: (
+            id: 391347,
+            name: "Rip and Tear",
+            duration: None,
+            modifiers: [
+                (scope: spell(1079), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         155580: (id: 155580, name: "Lunar Inspiration", duration: None),
-        1244544: (id: 1244544, name: "Focused Frenzy", duration: None),
+        1244544: (
+            id: 1244544,
+            name: "Focused Frenzy",
+            duration: None,
+            modifiers: [
+                (scope: spell(274837), kind: cooldown_pct, value: -15.0),
+                (scope: spell(274837), kind: damage_done_pct, value: 20.0),
+                (scope: spell(274838), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
         391548: (id: 391548, name: "Ashamane's Guidance", duration: None),
-        1244547: (id: 1244547, name: "Hunger for Battle", duration: None),
+        1244547: (
+            id: 1244547,
+            name: "Hunger for Battle",
+            duration: None,
+            listeners: [
+                (
+                    on: enemy_died(had_aura: Some(1079), from_self: true),
+                    chance: always,
+                    effects: [
+                        resource((kind: energy, amount: 10.0)),
+                    ],
+                ),
+            ],
+        ),
         400320: (
             id: 400320,
             name: "Circle of Life and Death",
@@ -30897,7 +32417,14 @@
             )),
         ),
         441675: (id: 441675, name: "Fount of Strength", duration: None),
-        441809: (id: 441809, name: "Dreadful Wound", duration: None),
+        441809: (
+            id: 441809,
+            name: "Dreadful Wound",
+            duration: None,
+            modifiers: [
+                (scope: spell(441810), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         441841: (
             id: 441841,
             name: "Bestial Strength",
@@ -30909,13 +32436,58 @@
         ),
         1271540: (id: 1271540, name: "Limb from Limb", duration: None),
         441678: (id: 441678, name: "Wildshape Mastery", duration: None),
-        1271839: (id: 1271839, name: "Exacerbating Wounds", duration: None),
+        1271839: (
+            id: 1271839,
+            name: "Exacerbating Wounds",
+            duration: None,
+            modifiers: [
+                (scope: spell(155722), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 441810, from_self: true))),
+                (scope: spell(1079), kind: damage_done_pct, value: 10.0, condition: Some(target_has_aura(aura: 441810, from_self: true))),
+            ],
+        ),
         441844: (id: 441844, name: "Pack's Endurance", duration: None),
-        441814: (id: 441814, name: "Ruthless Aggression", duration: None),
-        441824: (id: 441824, name: "Killing Strikes", duration: None),
-        441689: (id: 441689, name: "Empowered Shapeshifting", duration: None),
-        441691: (id: 441691, name: "Wildpower Surge", duration: None),
-        441829: (id: 441829, name: "Aggravate Wounds", duration: None),
+        441814: (
+            id: 441814,
+            name: "Ruthless Aggression",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: attack_speed_pct, value: 20.0),
+            ],
+        ),
+        441824: (
+            id: 441824,
+            name: "Killing Strikes",
+            duration: None,
+            modifiers: [
+                (scope: spell(441591), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        441689: (
+            id: 441689,
+            name: "Empowered Shapeshifting",
+            duration: None,
+            modifiers: [
+                (scope: spell(5221), kind: damage_done_pct, value: 6.0),
+                (scope: spell(106785), kind: damage_done_pct, value: 6.0),
+            ],
+        ),
+        441691: (
+            id: 441691,
+            name: "Wildpower Surge",
+            duration: None,
+            modifiers: [
+                (scope: spell(22568), kind: damage_done_pct, value: 8.0),
+                (scope: spell(1079), kind: damage_done_pct, value: 8.0),
+            ],
+        ),
+        441829: (
+            id: 441829,
+            name: "Aggravate Wounds",
+            duration: None,
+            modifiers: [
+                (scope: spell(441810), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         441845: (
             id: 441845,
             name: "Strike for the Heart",
@@ -30925,8 +32497,29 @@
                 (scope: spell(106785), kind: crit_chance_add, value: 10.0),
             ],
         ),
-        441846: (id: 441846, name: "Tear Down the Mighty", duration: None),
-        1271635: (id: 1271635, name: "Twin Claw", duration: None),
+        441846: (
+            id: 441846,
+            name: "Tear Down the Mighty",
+            duration: None,
+            modifiers: [
+                (scope: spell(274837), kind: damage_done_pct, value: 20.0),
+                (scope: spell(274838), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
+        1271635: (
+            id: 1271635,
+            name: "Twin Claw",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(5221), school: None),
+                    chance: flat(0.15),
+                    effects: [
+                        resource((kind: energy, amount: 5.0)),
+                    ],
+                ),
+            ],
+        ),
         441835: (id: 441835, name: "Claw Rampage", duration: None),
         // Wildstalker (22) hero tree auras.
         439528: (id: 439528, name: "Thriving Growth", duration: None),
@@ -30945,8 +32538,25 @@
                 ],
             )),
         ),
-        439868: (id: 439868, name: "Hunt Beneath the Open Skies", duration: None),
-        439890: (id: 439890, name: "Strategic Infusion", duration: None),
+        439868: (
+            id: 439868,
+            name: "Hunt Beneath the Open Skies",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 5.0),
+                (scope: spell(155625), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        439890: (
+            id: 439890,
+            name: "Strategic Infusion",
+            duration: None,
+            modifiers: [
+                (scope: spell(5221), kind: crit_chance_add, value: 10.0, condition: Some(caster_has_aura(5217))),
+                (scope: spell(1822), kind: crit_chance_add, value: 10.0, condition: Some(caster_has_aura(5217))),
+                (scope: spell(106785), kind: crit_chance_add, value: 10.0, condition: Some(caster_has_aura(5217))),
+            ],
+        ),
         439926: (
             id: 439926,
             name: "Wildstalker's Power",
@@ -30962,12 +32572,42 @@
         439901: (id: 439901, name: "Flower Walk", duration: None),
         439929: (id: 439929, name: "Bond with Nature", duration: None),
         440116: (id: 440116, name: "Harmonious Constitution", duration: None),
-        440120: (id: 440120, name: "Bursting Growth", duration: None),
+        440120: (
+            id: 440120,
+            name: "Bursting Growth",
+            duration: None,
+            modifiers: [
+                (scope: spell(440121), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         439880: (id: 439880, name: "Resilient Flourishing", duration: None),
-        439882: (id: 439882, name: "Root Network", duration: None),
-        1270592: (id: 1270592, name: "Patient Custodian", duration: None),
+        439882: (
+            id: 439882,
+            name: "Root Network",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 4.0, condition: Some(target_has_aura(aura: 439530, from_self: true))),
+            ],
+        ),
+        1270592: (
+            id: 1270592,
+            name: "Patient Custodian",
+            duration: None,
+            modifiers: [
+                (scope: spell(155722), kind: damage_done_pct, value: 6.0),
+                (scope: spell(1079), kind: damage_done_pct, value: 6.0),
+                (scope: spell(439530), kind: damage_done_pct, value: 6.0),
+            ],
+        ),
         440117: (id: 440117, name: "Twin Sprouts", duration: None),
-        440118: (id: 440118, name: "Implant", duration: None),
+        440118: (
+            id: 440118,
+            name: "Implant",
+            duration: None,
+            modifiers: [
+                (scope: spell(439530), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         1270586: (id: 1270586, name: "Rampancy", duration: None),
         440119: (
             id: 440119,
@@ -31127,7 +32767,20 @@
                 (scope: spell(201427), kind: crit_chance_add, value: 10.0),
             ],
         ),
-        320374: (id: 320374, name: "Burning Hatred", duration: None),
+        320374: (
+            id: 320374,
+            name: "Burning Hatred",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(258920), school: None),
+                    chance: always,
+                    effects: [
+                        resource((kind: fury, amount: 30.0)),
+                    ],
+                ),
+            ],
+        ),
         427794: (id: 427794, name: "Never Say Die", duration: None),
         343206: (
             id: 343206,
@@ -31147,7 +32800,14 @@
                 (scope: spell(210152), kind: damage_done_pct, value: 25.0),
             ],
         ),
-        391275: (id: 391275, name: "Accelerated Blade", duration: None),
+        391275: (
+            id: 391275,
+            name: "Accelerated Blade",
+            duration: None,
+            modifiers: [
+                (scope: spell(185123), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
         428241: (id: 428241, name: "Demon Hide", duration: None),
         205411: (id: 205411, name: "Desperate Instincts", duration: None),
         427776: (id: 427776, name: "Deflecting Dance", duration: None),
@@ -31155,11 +32815,31 @@
         388108: (id: 388108, name: "Initiative", duration: None),
         428232: (id: 428232, name: "Scars of Suffering", duration: None),
         213410: (id: 213410, name: "Demonic", duration: None),
-        393029: (id: 393029, name: "Furious Throws", duration: None),
+        393029: (
+            id: 393029,
+            name: "Furious Throws",
+            duration: None,
+            modifiers: [
+                (scope: spell(185123), kind: damage_done_pct, value: 50.0),
+            ],
+        ),
         258881: (id: 258881, name: "Trail of Ruin", duration: None),
         389688: (id: 389688, name: "Tactical Retreat", duration: None),
         203550: (id: 203550, name: "Blind Fury", duration: None),
-        343311: (id: 343311, name: "Furious Gaze", duration: None),
+        343311: (
+            id: 343311,
+            name: "Furious Gaze",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(198013), school: None),
+                    chance: always,
+                    effects: [
+                        apply_aura(aura: 343312, target: caster, stacks: 1),
+                    ],
+                ),
+            ],
+        ),
         389978: (
             id: 389978,
             name: "Dancing with Fate",
@@ -31177,18 +32857,80 @@
                 (scope: spell(258922), kind: damage_done_pct, value: 25.0),
             ],
         ),
-        206476: (id: 206476, name: "Exergy", duration: None),
-        427640: (id: 427640, name: "Inertia", duration: None),
-        388113: (id: 388113, name: "Isolated Prey", duration: None),
+        206476: (
+            id: 206476,
+            name: "Exergy",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(370965), school: None),
+                    chance: always,
+                    effects: [
+                        apply_aura(aura: 427641, target: caster, stacks: 1),
+                    ],
+                ),
+            ],
+        ),
+        427640: (
+            id: 427640,
+            name: "Inertia",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(232893), school: None),
+                    chance: always,
+                    effects: [
+                        apply_aura(aura: 427641, target: caster, stacks: 1),
+                    ],
+                ),
+            ],
+        ),
+        388113: (
+            id: 388113,
+            name: "Isolated Prey",
+            duration: None,
+            modifiers: [
+                (scope: spell(198013), kind: damage_done_pct, value: 25.0),
+            ],
+        ),
         390154: (id: 390154, name: "Serrated Glaive", duration: None),
         391189: (id: 391189, name: "Burning Wound", duration: None),
         347461: (id: 347461, name: "Unbound Chaos", duration: None),
-        389687: (id: 389687, name: "Chaos Theory", duration: None),
-        389693: (id: 389693, name: "Inner Demon", duration: None),
+        389687: (
+            id: 389687,
+            name: "Chaos Theory",
+            duration: None,
+            modifiers: [
+                (scope: spell(162794), kind: crit_chance_add, value: 10.0),
+                (scope: spell(201427), kind: crit_chance_add, value: 10.0),
+            ],
+        ),
+        389693: (
+            id: 389693,
+            name: "Inner Demon",
+            duration: None,
+            modifiers: [
+                (scope: spell(201427), kind: damage_done_pct, value: 15.0, condition: Some(caster_has_aura(162264))),
+            ],
+        ),
         388112: (id: 388112, name: "Chaotic Transformation", duration: None),
         389977: (id: 389977, name: "Relentless Onslaught", duration: None),
-        388106: (id: 388106, name: "Soulscar", duration: None),
-        388107: (id: 388107, name: "Ragefire", duration: None),
+        388106: (
+            id: 388106,
+            name: "Soulscar",
+            duration: None,
+            modifiers: [
+                (scope: spell(185123), kind: damage_done_pct, value: 30.0),
+            ],
+        ),
+        388107: (
+            id: 388107,
+            name: "Ragefire",
+            duration: None,
+            modifiers: [
+                (scope: spell(258922), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
         388118: (
             id: 388118,
             name: "Know Your Enemy",
@@ -31206,10 +32948,40 @@
                 (scope: school(124), kind: damage_done_pct, value: 6.0),
             ],
         ),
-        388116: (id: 388116, name: "Shattered Destiny", duration: None),
-        390152: (id: 390152, name: "Collective Anguish", duration: None),
-        1220506: (id: 1220506, name: "Screaming Brutality", duration: None),
-        427775: (id: 427775, name: "A Fire Inside", duration: None),
+        388116: (
+            id: 388116,
+            name: "Shattered Destiny",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 5.0, condition: Some(caster_has_aura(162264))),
+            ],
+        ),
+        390152: (
+            id: 390152,
+            name: "Collective Anguish",
+            duration: None,
+            modifiers: [
+                (scope: spell(198013), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
+        1220506: (
+            id: 1220506,
+            name: "Screaming Brutality",
+            duration: None,
+            modifiers: [
+                (scope: spell(188499), kind: damage_done_pct, value: 15.0),
+                (scope: spell(210152), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        427775: (
+            id: 427775,
+            name: "A Fire Inside",
+            duration: None,
+            modifiers: [
+                (scope: spell(258920), kind: charges_add, value: 1.0),
+                (scope: spell(258920), kind: cooldown_pct, value: -15.0),
+            ],
+        ),
         1270898: (id: 1270898, name: "Eternal Hunt (Rank 1)", duration: None),
         1270900: (
             id: 1270900,
@@ -31266,19 +33038,83 @@
                 ],
             )),
         ),
-        1215617: (id: 1215617, name: "Predator's Thirst", duration: None),
+        1215617: (
+            id: 1215617,
+            name: "Predator's Thirst",
+            duration: None,
+            modifiers: [
+                (scope: spell(473662), kind: damage_done_pct, value: 15.0),
+                (scope: spell(1217605), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         1246555: (id: 1246555, name: "Tempered Soul", duration: None),
         1246556: (id: 1246556, name: "Spontaneous Immolation", duration: None),
         471306: (id: 471306, name: "Void Metamorphosis", duration: None),
-        1237270: (id: 1237270, name: "Feast of Souls", duration: None),
-        1246558: (id: 1246558, name: "Scythe's Embrace", duration: None),
-        1246562: (id: 1246562, name: "Duty Eternal", duration: None),
+        1237270: (
+            id: 1237270,
+            name: "Feast of Souls",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 4.0, condition: Some(caster_has_aura(1226020))),
+            ],
+        ),
+        1246558: (
+            id: 1246558,
+            name: "Scythe's Embrace",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(1226019), school: None),
+                    chance: always,
+                    effects: [
+                        resource((kind: fury, amount: 15.0)),
+                    ],
+                ),
+            ],
+        ),
+        1246562: (
+            id: 1246562,
+            name: "Duty Eternal",
+            duration: None,
+            modifiers: [
+                (scope: spell(1215602), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         1238488: (id: 1238488, name: "Moment of Craving", duration: None),
-        1272847: (id: 1272847, name: "Gift of the Void", duration: None),
+        1272847: (
+            id: 1272847,
+            name: "Gift of the Void",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: crit_chance_add, value: 3.0),
+            ],
+        ),
         1261684: (id: 1261684, name: "Entropy", duration: None),
-        1223918: (id: 1223918, name: "Waste Not", duration: None),
-        1238739: (id: 1238739, name: "Soulshaper", duration: None),
-        1272832: (id: 1272832, name: "Singed Spirit", duration: None),
+        1223918: (
+            id: 1223918,
+            name: "Waste Not",
+            duration: None,
+            modifiers: [
+                (scope: spell(473728), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
+        1238739: (
+            id: 1238739,
+            name: "Soulshaper",
+            duration: None,
+            modifiers: [
+                (scope: spell(1226019), kind: damage_done_pct, value: 15.0),
+                (scope: spell(1226025), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        1272832: (
+            id: 1272832,
+            name: "Singed Spirit",
+            duration: None,
+            modifiers: [
+                (scope: spell(1241937), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         1244295: (
             id: 1244295,
             name: "Sweet Suffering",
@@ -31288,7 +33124,15 @@
             ],
         ),
         1239537: (id: 1239537, name: "Second Helping", duration: None),
-        1272842: (id: 1272842, name: "Umbral Blade", duration: None),
+        1272842: (
+            id: 1272842,
+            name: "Umbral Blade",
+            duration: None,
+            modifiers: [
+                (scope: spell(1226019), kind: cooldown_rate_pct, value: 15.0),
+                (scope: spell(1226025), kind: cooldown_rate_pct, value: 15.0),
+            ],
+        ),
         1272817: (
             id: 1272817,
             name: "Improved Consume",
@@ -31325,9 +33169,33 @@
                 (scope: spell(473728), kind: damage_done_pct, value: 25.0),
             ],
         ),
-        1272432: (id: 1272432, name: "Soulforged Blades", duration: None),
-        1272770: (id: 1272770, name: "Singular Strikes", duration: None),
-        1247538: (id: 1247538, name: "Demonic Instinct", duration: None),
+        1272432: (
+            id: 1272432,
+            name: "Soulforged Blades",
+            duration: None,
+            modifiers: [
+                (scope: spell(1239519), kind: crit_chance_add, value: 10.0),
+                (scope: spell(1215602), kind: crit_chance_add, value: 10.0),
+            ],
+        ),
+        1272770: (
+            id: 1272770,
+            name: "Singular Strikes",
+            duration: None,
+            modifiers: [
+                (scope: spell(1215602), kind: damage_done_pct, value: 15.0),
+                (scope: spell(1239519), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        1247538: (
+            id: 1247538,
+            name: "Demonic Instinct",
+            duration: None,
+            modifiers: [
+                (scope: spell(473728), kind: damage_done_pct, value: 10.0),
+                (scope: spell(1239519), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         1244222: (
             id: 1244222,
             name: "Devourer's Edge",
@@ -31336,15 +33204,71 @@
                 (scope: all, kind: damage_done_pct, value: 4.0),
             ],
         ),
-        1240202: (id: 1240202, name: "Voidglare Boon", duration: None),
-        1244237: (id: 1244237, name: "Rolling Torment", duration: None),
+        1240202: (
+            id: 1240202,
+            name: "Voidglare Boon",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(473728), school: None),
+                    chance: always,
+                    effects: [
+                        resource((kind: fury, amount: 20.0)),
+                    ],
+                ),
+            ],
+        ),
+        1244237: (
+            id: 1244237,
+            name: "Rolling Torment",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 4.0),
+            ],
+        ),
         1272422: (id: 1272422, name: "Voidrush", duration: None),
-        1240201: (id: 1240201, name: "Devourer's Bite", duration: None),
-        1227707: (id: 1227707, name: "Impending Apocalypse", duration: None),
-        1242495: (id: 1242495, name: "Calamitous", duration: None),
+        1240201: (
+            id: 1240201,
+            name: "Devourer's Bite",
+            duration: None,
+            modifiers: [
+                (scope: spell(1215602), kind: damage_done_pct, value: 12.0),
+                (scope: spell(370965), kind: damage_done_pct, value: 12.0),
+            ],
+        ),
+        1227707: (
+            id: 1227707,
+            name: "Impending Apocalypse",
+            duration: None,
+            modifiers: [
+                (scope: spell(1221167), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        1242495: (
+            id: 1242495,
+            name: "Calamitous",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: crit_damage_pct, value: 10.0),
+            ],
+        ),
         1240204: (id: 1240204, name: "Star Fragments", duration: None),
-        1242492: (id: 1242492, name: "Emptiness", duration: None),
-        1247534: (id: 1247534, name: "Soul Glutton", duration: None),
+        1242492: (
+            id: 1242492,
+            name: "Emptiness",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: haste_pct, value: 6.0, condition: Some(caster_has_aura(162264))),
+            ],
+        ),
+        1247534: (
+            id: 1247534,
+            name: "Soul Glutton",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 4.0, condition: Some(caster_has_aura(162264))),
+            ],
+        ),
         1226033: (id: 1226033, name: "Eradicate", duration: None),
         1242486: (id: 1242486, name: "Midnight (Rank 1)", duration: None),
         1250088: (
@@ -31384,7 +33308,15 @@
         ),
         452406: (id: 452406, name: "Set Fire to the Pain", duration: None),
         452407: (id: 452407, name: "Improved Soul Rending", duration: None),
-        1272364: (id: 1272364, name: "Blind Focus", duration: None),
+        1272364: (
+            id: 1272364,
+            name: "Blind Focus",
+            duration: None,
+            modifiers: [
+                (scope: school(4), kind: damage_done_pct, value: 8.0),
+                (scope: school(36), kind: damage_done_pct, value: 8.0),
+            ],
+        ),
         452408: (
             id: 452408,
             name: "Burning Blades",
@@ -31393,8 +33325,23 @@
                 (scope: all, kind: damage_done_pct, value: 6.0),
             ],
         ),
-        452409: (id: 452409, name: "Violent Transformation", duration: None),
-        452410: (id: 452410, name: "Enduring Torment", duration: None),
+        452409: (
+            id: 452409,
+            name: "Violent Transformation",
+            duration: None,
+            modifiers: [
+                (scope: spell(370965), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
+        452410: (
+            id: 452410,
+            name: "Enduring Torment",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: haste_pct, value: 5.0),
+                (scope: all, kind: rated_pct(mastery), value: 5.0),
+            ],
+        ),
         1272405: (id: 1272405, name: "Undying Embers", duration: None),
         452411: (
             id: 452411,
@@ -31404,8 +33351,23 @@
                 (scope: all, kind: resource_max(fury), value: 30.0),
             ],
         ),
-        452412: (id: 452412, name: "Student of Suffering", duration: None),
-        452413: (id: 452413, name: "Flamebound", duration: None),
+        452412: (
+            id: 452412,
+            name: "Student of Suffering",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: rated_pct(mastery), value: 5.0),
+            ],
+        ),
+        452413: (
+            id: 452413,
+            name: "Flamebound",
+            duration: None,
+            modifiers: [
+                (scope: spell(258922), kind: crit_damage_pct, value: 15.0),
+                (scope: spell(1239519), kind: crit_damage_pct, value: 15.0),
+            ],
+        ),
         452414: (
             id: 452414,
             name: "Monster Rising",
@@ -31467,25 +33429,108 @@
                 (scope: all, kind: damage_done_pct, value: 15.0),
             ],
         ),
-        442718: (id: 442718, name: "Fury of the Aldrachi", duration: None),
+        442718: (
+            id: 442718,
+            name: "Fury of the Aldrachi",
+            duration: None,
+            modifiers: [
+                (scope: spell(188499), kind: damage_done_pct, value: 15.0, condition: Some(caster_has_aura(442625))),
+                (scope: spell(210152), kind: damage_done_pct, value: 15.0, condition: Some(caster_has_aura(442625))),
+            ],
+        ),
         444926: (id: 444926, name: "Evasive Action", duration: None),
         444931: (id: 444931, name: "Unhindered Assault", duration: None),
-        442679: (id: 442679, name: "Reaver's Mark", duration: None),
+        442679: (
+            id: 442679,
+            name: "Reaver's Mark",
+            duration: None,
+            modifiers: [
+                (scope: spell(162794), kind: damage_done_pct, value: 15.0, condition: Some(caster_has_aura(442624))),
+                (scope: spell(201427), kind: damage_done_pct, value: 15.0, condition: Some(caster_has_aura(442624))),
+            ],
+        ),
         1272143: (id: 1272143, name: "Broken Spirit", duration: None),
         442683: (id: 442683, name: "Aldrachi Tactics", duration: None),
         442714: (id: 442714, name: "Army Unto Oneself", duration: None),
         442736: (id: 442736, name: "Incorruptible Spirit", duration: None),
-        442806: (id: 442806, name: "Wounded Quarry", duration: None),
-        1272138: (id: 1272138, name: "Keen Edge", duration: None),
-        442492: (id: 442492, name: "Incisive Blade", duration: None),
-        442497: (id: 442497, name: "Keen Engagement", duration: None),
-        444997: (id: 444997, name: "Preemptive Strike", duration: None),
-        1272153: (id: 1272153, name: "Bladecraft", duration: None),
-        442502: (id: 442502, name: "Warblade's Hunger", duration: None),
+        442806: (
+            id: 442806,
+            name: "Wounded Quarry",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 5.0, condition: Some(target_has_aura(aura: 442807, from_self: true))),
+            ],
+        ),
+        1272138: (
+            id: 1272138,
+            name: "Keen Edge",
+            duration: None,
+            modifiers: [
+                (scope: spell(442294), kind: damage_done_pct, value: 20.0),
+                (scope: school(1), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
+        442492: (
+            id: 442492,
+            name: "Incisive Blade",
+            duration: None,
+            modifiers: [
+                (scope: spell(162794), kind: damage_done_pct, value: 12.0),
+                (scope: spell(201427), kind: damage_done_pct, value: 12.0),
+            ],
+        ),
+        442497: (
+            id: 442497,
+            name: "Keen Engagement",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(442294), school: None),
+                    chance: always,
+                    effects: [
+                        resource((kind: fury, amount: 20.0)),
+                    ],
+                ),
+            ],
+        ),
+        444997: (
+            id: 444997,
+            name: "Preemptive Strike",
+            duration: None,
+            modifiers: [
+                (scope: spell(185123), kind: damage_done_pct, value: 15.0),
+                (scope: spell(442294), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        1272153: (
+            id: 1272153,
+            name: "Bladecraft",
+            duration: None,
+            modifiers: [
+                (scope: spell(188499), kind: damage_done_pct, value: 10.0),
+                (scope: spell(210152), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
+        442502: (
+            id: 442502,
+            name: "Warblade's Hunger",
+            duration: None,
+            modifiers: [
+                (scope: spell(162794), kind: damage_done_pct, value: 10.0),
+                (scope: spell(201427), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         442686: (id: 442686, name: "Thrill of the Fight", duration: None),
         // Annihilator (124) hero tree auras.
         1253304: (id: 1253304, name: "Voidfall", duration: None),
-        1253668: (id: 1253668, name: "Swift Erasure", duration: None),
+        1253668: (
+            id: 1253668,
+            name: "Swift Erasure",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: haste_pct, value: 5.0),
+            ],
+        ),
         1253377: (
             id: 1253377,
             name: "Meteoric Rise",
@@ -31494,18 +33539,55 @@
                 (scope: spell(1253306), kind: damage_done_pct, value: 25.0),
             ],
         ),
-        1253769: (id: 1253769, name: "Catastrophe", duration: None),
+        1253769: (
+            id: 1253769,
+            name: "Catastrophe",
+            duration: None,
+            modifiers: [
+                (scope: spell(1253306), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         1256245: (id: 1256245, name: "Phase Shift", duration: None),
         1253399: (id: 1253399, name: "Path to Oblivion", duration: None),
         1253402: (id: 1253402, name: "State of Matter", duration: None),
         1256295: (id: 1256295, name: "Mass Acceleration", duration: None),
         1253676: (id: 1253676, name: "Doomsayer", duration: None),
-        1279247: (id: 1279247, name: "Harness the Cosmos", duration: None),
-        1253415: (id: 1253415, name: "Celestial Echoes", duration: None),
+        1279247: (
+            id: 1279247,
+            name: "Harness the Cosmos",
+            duration: None,
+            modifiers: [
+                (scope: spell(1253306), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
+        1253415: (
+            id: 1253415,
+            name: "Celestial Echoes",
+            duration: None,
+            modifiers: [
+                (scope: spell(473662), kind: damage_done_pct, value: 15.0),
+                (scope: spell(1217605), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         1253805: (id: 1253805, name: "Final Hour", duration: None),
         1253391: (id: 1253391, name: "Meteoric Fall", duration: None),
-        1256307: (id: 1256307, name: "Dark Matter", duration: None),
-        1253817: (id: 1253817, name: "Otherworldly Focus", duration: None),
+        1256307: (
+            id: 1256307,
+            name: "Dark Matter",
+            duration: None,
+            modifiers: [
+                (scope: spell(1221167), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        1253817: (
+            id: 1253817,
+            name: "Otherworldly Focus",
+            duration: None,
+            modifiers: [
+                (scope: spell(1221167), kind: damage_done_pct, value: 15.0),
+                (scope: spell(1253306), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         1256353: (id: 1256353, name: "World Killer", duration: None),
         // =====================================================================
         // Evoker: Devastation (1467), Augmentation (1473)
@@ -31633,7 +33715,15 @@
             ],
         ),
         375797: (id: 375797, name: "Animosity", duration: None),
-        375722: (id: 375722, name: "Essence Attunement", duration: None),
+        375722: (
+            id: 375722,
+            name: "Essence Attunement",
+            duration: None,
+            modifiers: [
+                (scope: spell(356995), kind: damage_done_pct, value: 5.0, condition: Some(caster_has_aura(359618))),
+                (scope: spell(395160), kind: damage_done_pct, value: 5.0, condition: Some(caster_has_aura(359618))),
+            ],
+        ),
         370837: (
             id: 370837,
             name: "Engulfing Blaze",
@@ -31662,7 +33752,14 @@
             ],
         ),
         375757: (id: 375757, name: "Eternity's Span", duration: None),
-        411165: (id: 411165, name: "Eye of Infinity", duration: None),
+        411165: (
+            id: 411165,
+            name: "Eye of Infinity",
+            duration: None,
+            modifiers: [
+                (scope: spell(359073), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         411164: (id: 411164, name: "Event Horizon", duration: None),
         386283: (
             id: 386283,
@@ -31672,9 +33769,30 @@
                 (scope: spell(357209), kind: tick_period_pct, value: -25.0),
             ],
         ),
-        376888: (id: 376888, name: "Tyranny", duration: None),
-        370455: (id: 370455, name: "Charged Blast", duration: None),
-        1265802: (id: 1265802, name: "Shattering Stars", duration: None),
+        376888: (
+            id: 376888,
+            name: "Tyranny",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 10.0, condition: Some(caster_has_aura(375087))),
+            ],
+        ),
+        370455: (
+            id: 370455,
+            name: "Charged Blast",
+            duration: None,
+            modifiers: [
+                (scope: spell(357211), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
+        1265802: (
+            id: 1265802,
+            name: "Shattering Stars",
+            duration: None,
+            modifiers: [
+                (scope: spell(359073), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         369846: (id: 369846, name: "Feed the Flames", duration: None),
         375801: (id: 375801, name: "Burnout", duration: None),
         386348: (id: 386348, name: "Onyx Legacy", duration: None),
@@ -31686,17 +33804,89 @@
                 (scope: all, kind: crit_damage_pct, value: 20.0),
             ],
         ),
-        1265826: (id: 1265826, name: "Star Salvo", duration: None),
-        370781: (id: 370781, name: "Imminent Destruction", duration: None),
+        1265826: (
+            id: 1265826,
+            name: "Star Salvo",
+            duration: None,
+            modifiers: [
+                (scope: spell(359073), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        370781: (
+            id: 370781,
+            name: "Imminent Destruction",
+            duration: None,
+            modifiers: [
+                (scope: spell(356995), kind: damage_done_pct, value: 10.0),
+                (scope: spell(357211), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         411212: (id: 411212, name: "Font of Magic", duration: None),
-        386272: (id: 386272, name: "Titanic Wrath", duration: None),
-        1219723: (id: 1219723, name: "Azure Celerity", duration: None),
-        370839: (id: 370839, name: "Power Swell", duration: None),
-        1266151: (id: 1266151, name: "Strafing Run", duration: None),
-        370819: (id: 370819, name: "Scorching Embers", duration: None),
+        386272: (
+            id: 386272,
+            name: "Titanic Wrath",
+            duration: None,
+            modifiers: [
+                (scope: spell(356995), kind: damage_done_pct, value: 15.0, condition: Some(caster_has_aura(359618))),
+                (scope: spell(357211), kind: damage_done_pct, value: 15.0, condition: Some(caster_has_aura(359618))),
+            ],
+        ),
+        1219723: (
+            id: 1219723,
+            name: "Azure Celerity",
+            duration: None,
+            modifiers: [
+                (scope: spell(356995), kind: channel_ticks_add, value: 1.0),
+            ],
+        ),
+        370839: (
+            id: 370839,
+            name: "Power Swell",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(357208), school: None),
+                    chance: always,
+                    effects: [
+                        resource((kind: essence, amount: 1.0)),
+                    ],
+                ),
+            ],
+        ),
+        1266151: (
+            id: 1266151,
+            name: "Strafing Run",
+            duration: None,
+            modifiers: [
+                (scope: spell(357210), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
+        370819: (
+            id: 370819,
+            name: "Scorching Embers",
+            duration: None,
+            modifiers: [
+                (scope: school(4), kind: damage_done_pct, value: 20.0, condition: Some(target_has_aura(aura: 357209, from_self: true))),
+            ],
+        ),
         375777: (id: 375777, name: "Causality", duration: None),
-        370821: (id: 370821, name: "Scintillation", duration: None),
-        370867: (id: 370867, name: "Iridescence", duration: None),
+        370821: (
+            id: 370821,
+            name: "Scintillation",
+            duration: None,
+            modifiers: [
+                (scope: spell(356995), kind: damage_done_pct, value: 12.0),
+            ],
+        ),
+        370867: (
+            id: 370867,
+            name: "Iridescence",
+            duration: None,
+            modifiers: [
+                (scope: school(4), kind: damage_done_pct, value: 10.0),
+                (scope: school(64), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         1271687: (id: 1271687, name: "Rising Fury (Rank 1)", duration: None),
         1271796: (
             id: 1271796,
@@ -31759,10 +33949,33 @@
                 (scope: spell(395160), kind: damage_done_pct, value: 20.0),
             ],
         ),
-        407814: (id: 407814, name: "Pupil of Alexstrasza", duration: None),
-        410784: (id: 410784, name: "Echoing Strike", duration: None),
+        407814: (
+            id: 407814,
+            name: "Pupil of Alexstrasza",
+            duration: None,
+            modifiers: [
+                (scope: spell(361469), kind: chain_targets_add, value: 1.0),
+                (scope: spell(361469), kind: chain_share_pct, value: 100.0),
+            ],
+        ),
+        410784: (
+            id: 410784,
+            name: "Echoing Strike",
+            duration: None,
+            modifiers: [
+                (scope: spell(362969), kind: damage_done_pct, value: 25.0),
+            ],
+        ),
         404195: (id: 404195, name: "Defy Fate", duration: None),
-        408775: (id: 408775, name: "Ignition Rush", duration: None),
+        408775: (
+            id: 408775,
+            name: "Ignition Rush",
+            duration: None,
+            modifiers: [
+                (scope: spell(395160), kind: cast_time_pct, value: -20.0, condition: Some(caster_has_aura(359618))),
+                (scope: spell(395160), kind: damage_done_pct, value: 20.0, condition: Some(caster_has_aura(359618))),
+            ],
+        ),
         406904: (
             id: 406904,
             name: "Volcanism",
@@ -31787,10 +34000,31 @@
             ],
         ),
         412733: (id: 412733, name: "Unyielding Domain", duration: None),
-        408002: (id: 408002, name: "Tectonic Locus", duration: None),
-        406907: (id: 406907, name: "Regenerative Chitin", duration: None),
+        408002: (
+            id: 408002,
+            name: "Tectonic Locus",
+            duration: None,
+            modifiers: [
+                (scope: spell(396286), kind: damage_done_pct, value: 25.0),
+            ],
+        ),
+        406907: (
+            id: 406907,
+            name: "Regenerative Chitin",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 2.0, condition: Some(caster_has_aura(360827))),
+            ],
+        ),
         410643: (id: 410643, name: "Molten Blood", duration: None),
-        408004: (id: 408004, name: "Momentum Shift", duration: None),
+        408004: (
+            id: 408004,
+            name: "Momentum Shift",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: stat_pct(intellect), value: 4.0),
+            ],
+        ),
         407243: (
             id: 407243,
             name: "Aspects' Favor",
@@ -31800,21 +34034,98 @@
             ],
         ),
         454983: (id: 454983, name: "Arcane Reach", duration: None),
-        412774: (id: 412774, name: "Fate Mirror", duration: None),
+        412774: (
+            id: 412774,
+            name: "Fate Mirror",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 5.0, condition: Some(caster_has_aura(410089))),
+            ],
+        ),
         410685: (id: 410685, name: "Symbiotic Bloom", duration: None),
-        409329: (id: 409329, name: "Reactive Hide", duration: None),
+        409329: (
+            id: 409329,
+            name: "Reactive Hide",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 2.0, condition: Some(caster_has_aura(360827))),
+            ],
+        ),
         408083: (id: 408083, name: "Font of Magic (Augmentation)", duration: None),
-        375796: (id: 375796, name: "Hoarded Power", duration: None),
-        409267: (id: 409267, name: "Motes of Possibility", duration: None),
-        407869: (id: 407869, name: "Anachronism", duration: None),
+        375796: (
+            id: 375796,
+            name: "Hoarded Power",
+            duration: None,
+            modifiers: [
+                (scope: spell(356995), kind: damage_done_pct, value: 8.0, condition: Some(caster_has_aura(359618))),
+                (scope: spell(395160), kind: damage_done_pct, value: 8.0, condition: Some(caster_has_aura(359618))),
+            ],
+        ),
+        409267: (
+            id: 409267,
+            name: "Motes of Possibility",
+            duration: None,
+            modifiers: [
+                (scope: spell(395160), kind: damage_done_pct, value: 8.0),
+            ],
+        ),
+        407869: (
+            id: 407869,
+            name: "Anachronism",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(409311), school: None),
+                    chance: flat(0.15),
+                    effects: [
+                        apply_aura(aura: 359618, target: caster, stacks: 1),
+                    ],
+                ),
+            ],
+        ),
         410687: (id: 410687, name: "Prolong Life", duration: None),
-        414969: (id: 414969, name: "Dream of Spring", duration: None),
+        414969: (
+            id: 414969,
+            name: "Dream of Spring",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 2.0, condition: Some(caster_has_aura(395152))),
+            ],
+        ),
         407876: (id: 407876, name: "Accretion", duration: None),
-        459537: (id: 459537, name: "Imminent Destruction (Augmentation)", duration: None),
+        459537: (
+            id: 459537,
+            name: "Imminent Destruction (Augmentation)",
+            duration: None,
+            modifiers: [
+                (scope: spell(395160), kind: damage_done_pct, value: 10.0),
+            ],
+        ),
         1250914: (id: 1250914, name: "Clairvoyant", duration: None),
-        410261: (id: 410261, name: "Inferno's Blessing", duration: None),
-        459120: (id: 459120, name: "Rumbling Earth", duration: None),
-        407866: (id: 407866, name: "Plot the Future", duration: None),
+        410261: (
+            id: 410261,
+            name: "Inferno's Blessing",
+            duration: None,
+            modifiers: [
+                (scope: school(4), kind: damage_done_pct, value: 6.0),
+            ],
+        ),
+        459120: (
+            id: 459120,
+            name: "Rumbling Earth",
+            duration: None,
+            modifiers: [
+                (scope: spell(396286), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
+        407866: (
+            id: 407866,
+            name: "Plot the Future",
+            duration: None,
+            modifiers: [
+                (scope: spell(403631), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         412723: (id: 412723, name: "Tomorrow, Today", duration: None),
         412713: (id: 412713, name: "Interwoven Threads", duration: None),
         410260: (
@@ -31825,7 +34136,14 @@
                 (scope: spell(396286), kind: damage_done_pct, value: 30.0),
             ],
         ),
-        1291457: (id: 1291457, name: "Mighty Inferno", duration: None),
+        1291457: (
+            id: 1291457,
+            name: "Mighty Inferno",
+            duration: None,
+            modifiers: [
+                (scope: school(4), kind: damage_done_pct, value: 8.0),
+            ],
+        ),
         1259173: (id: 1259173, name: "Duplicate (Rank 1)", duration: None),
         1259174: (
             id: 1259174,
@@ -31873,8 +34191,25 @@
         ),
         434300: (id: 434300, name: "Bombardments", duration: None),
         441245: (id: 441245, name: "Onslaught", duration: None),
-        1260745: (id: 1260745, name: "Command Squadron", duration: None),
-        441176: (id: 441176, name: "Melt Armor", duration: None),
+        1260745: (
+            id: 1260745,
+            name: "Command Squadron",
+            duration: None,
+            modifiers: [
+                (scope: spell(357210), kind: damage_done_pct, value: 20.0),
+                (scope: spell(403631), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
+        441176: (
+            id: 441176,
+            name: "Melt Armor",
+            duration: None,
+            modifiers: [
+                (scope: spell(356995), kind: damage_done_pct, value: 15.0),
+                (scope: spell(357211), kind: damage_done_pct, value: 15.0),
+                (scope: spell(395160), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         441206: (id: 441206, name: "Wingleader", duration: None),
         441246: (
             id: 441246,
@@ -31888,12 +34223,43 @@
         1261448: (id: 1261448, name: "Concentrated Power", duration: None),
         441180: (id: 441180, name: "Hardened Scales", duration: None),
         441181: (id: 441181, name: "Menacing Presence", duration: None),
-        441212: (id: 441212, name: "Extended Battle", duration: None),
-        441219: (id: 441219, name: "Diverted Power", duration: None),
+        441212: (
+            id: 441212,
+            name: "Extended Battle",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 5.0, condition: Some(caster_has_aura(434480))),
+            ],
+        ),
+        441219: (
+            id: 441219,
+            name: "Diverted Power",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: damage_done_pct, value: 4.0, condition: Some(caster_has_aura(434480))),
+            ],
+        ),
         441253: (id: 441253, name: "Nimble Flyer", duration: None),
         441257: (id: 441257, name: "Slipstream", duration: None),
-        1261452: (id: 1261452, name: "Refined Essence", duration: None),
-        433871: (id: 433871, name: "Maneuverability", duration: None),
+        1261452: (
+            id: 1261452,
+            name: "Refined Essence",
+            duration: None,
+            modifiers: [
+                (scope: spell(356995), kind: damage_done_pct, value: 15.0),
+                (scope: spell(357211), kind: damage_done_pct, value: 15.0),
+                (scope: spell(395160), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        433871: (
+            id: 433871,
+            name: "Maneuverability",
+            duration: None,
+            modifiers: [
+                (scope: spell(357210), kind: damage_done_pct, value: 15.0),
+                (scope: spell(403631), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         // Flameshaper (37) hero tree auras.
         1264269: (id: 1264269, name: "Legacy of the Lifebinder", duration: None),
         444849: (id: 444849, name: "Trailblazer", duration: None),
@@ -31907,8 +34273,28 @@
                 (scope: spell(357209), kind: damage_done_pct, value: 25.0),
             ],
         ),
-        444845: (id: 444845, name: "Expanded Lungs", duration: None),
-        1265993: (id: 1265993, name: "Essence Well", duration: None),
+        444845: (
+            id: 444845,
+            name: "Expanded Lungs",
+            duration: None,
+            modifiers: [
+                (scope: spell(357209), kind: damage_done_pct, value: 25.0),
+            ],
+        ),
+        1265993: (
+            id: 1265993,
+            name: "Essence Well",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(357208), school: None),
+                    chance: flat(0.5),
+                    effects: [
+                        apply_aura(aura: 359618, target: caster, stacks: 1),
+                    ],
+                ),
+            ],
+        ),
         444843: (
             id: 444843,
             name: "Conduit of Flame",
@@ -31918,10 +34304,40 @@
             ],
         ),
         444020: (id: 444020, name: "Burning Adrenaline", duration: None),
-        1218447: (id: 1218447, name: "Fulminous Roar", duration: None),
-        1265979: (id: 1265979, name: "Twin Flame", duration: None),
-        445625: (id: 445625, name: "Titanic Precision", duration: None),
-        1264321: (id: 1264321, name: "Deep Exhalation", duration: None),
+        1218447: (
+            id: 1218447,
+            name: "Fulminous Roar",
+            duration: None,
+            modifiers: [
+                (scope: spell(357209), kind: tick_period_pct, value: -20.0),
+            ],
+        ),
+        1265979: (
+            id: 1265979,
+            name: "Twin Flame",
+            duration: None,
+            modifiers: [
+                (scope: spell(356995), kind: damage_done_pct, value: 10.0, condition: Some(caster_has_aura(359618))),
+                (scope: spell(357211), kind: damage_done_pct, value: 10.0, condition: Some(caster_has_aura(359618))),
+            ],
+        ),
+        445625: (
+            id: 445625,
+            name: "Titanic Precision",
+            duration: None,
+            modifiers: [
+                (scope: spell(361469), kind: crit_chance_add, value: 10.0),
+                (scope: spell(362969), kind: crit_chance_add, value: 10.0),
+            ],
+        ),
+        1264321: (
+            id: 1264321,
+            name: "Deep Exhalation",
+            duration: None,
+            modifiers: [
+                (scope: spell(357209), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
         444322: (id: 444322, name: "Lifecinders", duration: None),
         445958: (id: 445958, name: "Draconic Instincts", duration: None),
         1265992: (id: 1265992, name: "Fire Torrent", duration: None),
@@ -31940,16 +34356,66 @@
             ],
         ),
         1260484: (id: 1260484, name: "Chronoboon", duration: None),
-        431615: (id: 431615, name: "Reverberations", duration: None),
+        431615: (
+            id: 431615,
+            name: "Reverberations",
+            duration: None,
+            modifiers: [
+                (scope: spell(396286), kind: damage_done_pct, value: 30.0),
+            ],
+        ),
         431873: (id: 431873, name: "Temporality", duration: None),
         432008: (id: 432008, name: "Motes of Acceleration", duration: None),
-        431715: (id: 431715, name: "Nozdormu Adept", duration: None),
-        1291522: (id: 1291522, name: "Chronal Dynamo", duration: None),
-        431657: (id: 431657, name: "Primacy", duration: None),
-        431874: (id: 431874, name: "Double-time", duration: None),
-        431984: (id: 431984, name: "Time Convergence", duration: None),
+        431715: (
+            id: 431715,
+            name: "Nozdormu Adept",
+            duration: None,
+            modifiers: [
+                (scope: spell(409311), kind: cooldown_pct, value: -15.0),
+            ],
+        ),
+        1291522: (
+            id: 1291522,
+            name: "Chronal Dynamo",
+            duration: None,
+            modifiers: [
+                (scope: spell(361469), kind: cast_time_pct, value: -15.0),
+                (scope: spell(361469), kind: damage_done_pct, value: 15.0),
+            ],
+        ),
+        431657: (
+            id: 431657,
+            name: "Primacy",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: haste_pct, value: 6.0),
+            ],
+        ),
+        431874: (
+            id: 431874,
+            name: "Double-time",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: crit_chance_add, value: 4.0, condition: Some(caster_has_aura(395152))),
+            ],
+        ),
+        431984: (
+            id: 431984,
+            name: "Time Convergence",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: stat_pct(intellect), value: 5.0),
+            ],
+        ),
         431484: (id: 431484, name: "Instability Matrix", duration: None),
-        1260647: (id: 1260647, name: "Overclock", duration: None),
+        1260647: (
+            id: 1260647,
+            name: "Overclock",
+            duration: None,
+            modifiers: [
+                (scope: spell(431443), kind: damage_done_pct, value: 20.0),
+            ],
+        ),
         432004: (id: 432004, name: "Golden Opportunity", duration: None),
         431875: (id: 431875, name: "Afterimage", duration: None),
     },

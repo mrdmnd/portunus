@@ -6,7 +6,8 @@ use std::sync::Arc;
 
 use portunus_core::rng::{self, Domain, Purpose};
 use portunus_core::{
-    ActorId, AuraId, EnemyKey, Sample, Seat, SimDuration, SimTime, SpellId, StreamKey, Trigger,
+    ActorId, AuraId, EnemyKey, Sample, Seat, Seed, SimDuration, SimTime, SpellId, StreamKey,
+    Trigger,
 };
 use portunus_gamedata::aura::{AuraDef, AuraValueKind};
 use portunus_gamedata::effect::{Effect, ModKind, ModScope, Predicate};
@@ -868,6 +869,7 @@ impl Trace {
 #[derive(Clone)]
 pub struct World {
     pub(crate) s: Arc<Statics>,
+    pub(crate) rng_seed: Seed,
     pub(crate) now: SimTime,
     pub(crate) seg: Seg,
     pub(crate) actors: Vec<Actor>,
@@ -1081,7 +1083,7 @@ impl World {
         };
         let index = self.seats[i].draws[kind];
         self.seats[i].draws[kind] += 1;
-        dist.sample(self.s.setup.run.seed, self.s.latency[i][kind], index)
+        dist.sample(self.rng_seed, self.s.latency[i][kind], index)
     }
 
     /// Schedule a wake after the seat's latency draw. Idle and dead seats
@@ -1162,7 +1164,7 @@ impl World {
             let key = stream.0.to_string();
             (rng::domain(Purpose::Mechanics, &[&**name, key.as_str()]), 0)
         });
-        let u = rng::unit(self.s.setup.run.seed, entry.0, entry.1);
+        let u = rng::unit(self.rng_seed, entry.0, entry.1);
         entry.1 += 1;
         u
     }

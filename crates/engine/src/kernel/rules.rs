@@ -270,12 +270,12 @@ impl World {
         d: &Dist<SimDuration>,
     ) -> SimDuration {
         let (domain, index) = self.rule_draw(enemy, rule, TIMING, Purpose::EnemyRuleTiming);
-        d.sample(self.s.setup.run.seed, domain, index)
+        d.sample(self.rng_seed, domain, index)
     }
 
     fn rule_amount(&mut self, enemy: ActorId, rule: RuleIndex, d: &Dist<f64>) -> f64 {
         let (domain, index) = self.rule_draw(enemy, rule, AMOUNTS, Purpose::EnemyDamage);
-        d.sample(self.s.setup.run.seed, domain, index)
+        d.sample(self.rng_seed, domain, index)
     }
 
     /// Living seats a rule's action lands on. `Tank` is the party's first
@@ -320,7 +320,7 @@ impl World {
         let n = n.min(pool.len());
         for i in 0..n {
             let (domain, index) = self.rule_draw(enemy, rule, TARGETS, Purpose::EnemyTarget);
-            let u = rng::unit(self.s.setup.run.seed, domain, index);
+            let u = rng::unit(self.rng_seed, domain, index);
             let span = pool.len() - i;
             let j = i + ((u * span as f64) as usize).min(span - 1);
             pool.swap(i, j);

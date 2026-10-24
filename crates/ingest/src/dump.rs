@@ -2147,6 +2147,16 @@ pub fn audit_talents(data: &GameData, dump: Option<&SpellDump>) -> Vec<TalentAud
                         collect_eff_auras(std::slice::from_ref(b), out);
                     }
                 }
+                Effect::HighestSecondary {
+                    crit,
+                    haste,
+                    mastery,
+                    versatility,
+                } => {
+                    for b in [crit, haste, mastery, versatility] {
+                        collect_eff_auras(b, out);
+                    }
+                }
                 _ => {}
             }
         }
@@ -2157,6 +2167,9 @@ pub fn audit_talents(data: &GameData, dump: Option<&SpellDump>) -> Vec<TalentAud
             if let Requirement::AnyAura(list) = req {
                 referenced_auras.extend(list.iter().copied());
             }
+        }
+        if let portunus_gamedata::spell::CastKind::Channel { on_end, .. } = &sp.cast {
+            collect_eff_auras(on_end, &mut referenced_auras);
         }
         collect_eff_auras(&sp.on_cast, &mut referenced_auras);
         collect_eff_auras(&sp.effects, &mut referenced_auras);
@@ -2500,8 +2513,18 @@ fn is_offensive_dump_talent(sp: &DumpSpell) -> bool {
         "unseen blade",
     ];
     let defensive_only = (d.contains("damage taken")
+        || d.contains("damage you take")
+        || d.contains("damage done to you")
+        || d.contains("damage you would take")
+        || d.contains("reduced damage")
+        || d.contains("damage reduction")
+        || d.contains("preventing the damage")
+        || d.contains("damage may cancel")
+        || d.contains("anti-magic shell")
+        || d.contains("psychic scream")
         || d.contains("movement speed")
         || d.contains("healing received")
+        || d.contains("healing surge or chain heal")
         || d.contains("absorb")
         || d.contains("feint")
         || d.contains("shroud of concealment")

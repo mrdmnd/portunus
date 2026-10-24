@@ -321,6 +321,7 @@ pub(crate) fn build(setup: RunSetup) -> World {
     let battle_res = ResPool::new(group.battle_res);
     let auras = super::world::EngineAuraTable::from_data(&setup.data);
     let spells = super::world::EngineSpellTable::from_data(&setup.data);
+    let rng_seed = setup.run.seed;
     World {
         s: Arc::new(Statics {
             setup,
@@ -333,6 +334,7 @@ pub(crate) fn build(setup: RunSetup) -> World {
             auras,
             spells,
         }),
+        rng_seed,
         now: SimTime::ZERO,
         seg: Seg::Finished,
         actors,

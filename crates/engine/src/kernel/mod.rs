@@ -1668,6 +1668,13 @@ impl<M: Mechanics> Kernel<M> {
             }
         }
     }
+
+    /// Replace the seed used for all subsequent random draws on this world
+    /// (e.g. for Open-Loop MCTS lookahead rollouts) without altering existing
+    /// world state or stream counters.
+    pub fn reseed(&mut self, seed: portunus_core::Seed) {
+        self.world.rng_seed = seed;
+    }
 }
 
 impl<M: Mechanics> Engine for Kernel<M> {

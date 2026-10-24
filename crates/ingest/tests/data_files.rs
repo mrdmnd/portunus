@@ -1802,12 +1802,15 @@ fn talent_auditor_flags_known_bug_patterns_and_subtlety_is_clean() {
     for f in &findings {
         *by_kind.entry(f.kind).or_default() += 1;
         *by_spec.entry(f.spec_name.clone()).or_default() += 1;
-        if f.kind != TalentFindingKind::InertOffensiveTalent {
-            println!(
-                "  [{:?}] {} | {} ({}) -> {}",
-                f.kind, f.spec_name, f.talent_name, f.talent_id.0, f.detail
-            );
-        }
+        let desc = dump
+            .as_ref()
+            .and_then(|d| d.spells.get(&SpellId(f.talent_id.0)))
+            .map(|s| s.description.replace('\n', " ").replace('\r', ""))
+            .unwrap_or_else(|| "<no dump entry>".into());
+        println!(
+            "  [{:?}] {} | {} ({}) -> aura {} | desc: {}",
+            f.kind, f.spec_name, f.talent_name, f.talent_id.0, f.aura_or_spell_id, desc
+        );
     }
     println!(
         "[talent-audit] total findings across 26 specs: {} ({:?})",
@@ -1817,21 +1820,11 @@ fn talent_auditor_flags_known_bug_patterns_and_subtlety_is_clean() {
     println!("[talent-audit] findings by spec: {by_spec:?}");
 
     // Every spec and hero tree across all 26 specs must have zero
-    // UnconsumedPassiveOverride, DeprecatedCooldownReduction, or MissingDumpCooldownOrRppm bugs.
-    let structural_bugs: Vec<_> = findings
-        .iter()
-        .filter(|f| {
-            matches!(
-                f.kind,
-                TalentFindingKind::UnconsumedPassiveOverride
-                    | TalentFindingKind::DeprecatedCooldownReduction
-                    | TalentFindingKind::MissingDumpCooldownOrRppm
-            )
-        })
-        .collect();
+    // UnconsumedPassiveOverride, DeprecatedCooldownReduction, MissingDumpCooldownOrRppm,
+    // or InertOffensiveTalent findings.
     assert!(
-        structural_bugs.is_empty(),
-        "All 26 specs should have zero structural/dump cooldown/RPPM bugs: {structural_bugs:#?}"
+        findings.is_empty(),
+        "All 26 specs should have zero talent audit findings across all 4 categories: {findings:#?}"
     );
 
     // Inject the 3 exact historical Subtlety bugs into a mutated copy and verify
@@ -1885,8 +1878,20 @@ fn talent_auditor_flags_known_bug_patterns_and_subtlety_is_clean() {
             }],
             otherwise: Vec::new(),
         });
+    buggy
+        .auras
+        .get_mut(&AuraId(1250359))
+        .unwrap()
+        .modifiers
+        .clear();
 
     let buggy_findings = audit_talents(&buggy, dump.as_ref());
+    assert!(
+        buggy_findings.iter().any(|f| {
+            f.talent_id == TalentId(1250359) && f.kind == TalentFindingKind::InertOffensiveTalent
+        }),
+        "must flag Canny Strikes when its modifiers are stripped"
+    );
     assert!(
         buggy_findings.iter().any(|f| {
             f.talent_id == TalentId(382505)

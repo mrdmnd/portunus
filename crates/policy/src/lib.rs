@@ -853,6 +853,7 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
             {
                 let mut sim = env.clone();
                 let mut node_id = 0usize;
+                let mut cur_dec: Option<Decision<E::Obs>> = None;
                 let mut elapsed_total = SimDuration::ZERO;
                 let mut gcd_steps = 0u64;
                 let mut path: Vec<(usize, usize, f64)> = Vec::new();
@@ -872,6 +873,30 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                 }
 
                 let step_outcome = loop {
+                    let cur_legal_mask = if let Some(ref d_now) = cur_dec {
+                        let mask = self.space.legal(&d_now.legal);
+                        let node_mut = &mut nodes[node_id];
+                        for (idx, &ok) in mask.iter().enumerate() {
+                            if ok && !node_mut.edges.iter().any(|e| e.action_idx == idx) {
+                                if let Some(choice) = self.space.decode(idx, &d_now.legal) {
+                                    let prior =
+                                        node_mut.priors.get(idx).copied().unwrap_or(0.01).max(1e-4);
+                                    node_mut.edges.push(Edge {
+                                        action_idx: idx,
+                                        choice,
+                                        prior,
+                                        visits: 0,
+                                        value_sum: 0.0,
+                                        child: None,
+                                    });
+                                }
+                            }
+                        }
+                        Some(mask)
+                    } else {
+                        None
+                    };
+
                     let node = &nodes[node_id];
                     let total_visits: u32 = node.edges.iter().map(|e| e.visits).sum();
                     let sqrt_total = f64::from(total_visits.max(1)).sqrt();
@@ -949,6 +974,11 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                             node.edges
                                 .iter()
                                 .enumerate()
+                                .filter(|(_, e)| {
+                                    cur_legal_mask.as_ref().is_none_or(|m| {
+                                        m.get(e.action_idx).copied().unwrap_or(false)
+                                    })
+                                })
                                 .max_by(|(_, a), (_, b)| {
                                     let qa = norm_q(a);
                                     let qb = norm_q(b);
@@ -961,7 +991,7 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                                     ua.total_cmp(&ub)
                                 })
                                 .map(|(idx, _)| idx)
-                                .expect("expanded node has at least one edge")
+                                .unwrap_or(0)
                         };
 
                     if nodes[node_id].edges[edge_pos].child.is_none()
@@ -973,7 +1003,19 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                         break SimStep::Done(0.0);
                     }
 
-                    let choice = nodes[node_id].edges[edge_pos].choice.clone();
+                    if node_id == 0 {
+                        let root_visit_k = nodes[0].edges[edge_pos].visits;
+                        sim.reseed(open_loop_seed(decision.key, root_visit_k));
+                    }
+
+                    let action_idx = nodes[node_id].edges[edge_pos].action_idx;
+                    let choice = if let Some(ref d_now) = cur_dec {
+                        self.space
+                            .decode(action_idx, &d_now.legal)
+                            .unwrap_or_else(|| nodes[node_id].edges[edge_pos].choice.clone())
+                    } else {
+                        nodes[node_id].edges[edge_pos].choice.clone()
+                    };
                     let Ok(tr) = sim.step(choice) else {
                         break SimStep::Done(0.0);
                     };
@@ -997,6 +1039,7 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                                     break SimStep::Done(tree_r * (h_ms / e_ms) - tree_r);
                                 }
                                 node_id = child_id;
+                                cur_dec = Some(next_dec);
                             } else {
                                 break SimStep::Expand {
                                     parent_node: node_id,
@@ -1243,6 +1286,24 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
             value,
         }
     }
+}
+
+/// Deterministic open-loop future seed for the `visit_k`-th rollout of a
+/// root action at `key`.
+///
+/// Distinct from `key.seed` so search cannot peek at the ground-truth
+/// episode's future random draws (non-clairvoyance), while shared across root
+/// actions at the same `visit_k` (Common Random Numbers variance reduction).
+pub fn open_loop_seed(key: DecisionKey, visit_k: u32) -> portunus_core::Seed {
+    let seat_name = format!("seat{}", key.seat.0);
+    let dom = domain(Purpose::Policy, &[&seat_name, "open_loop"]);
+    let draw_idx = key
+        .index
+        .wrapping_mul(65_536)
+        .wrapping_add(u64::from(visit_k));
+    let u = unit(key.seed, dom, draw_idx);
+    let raw = (u * (u64::MAX as f64)) as u64 ^ 0x9E37_79B9_7F4A_7C15u64.wrapping_mul(draw_idx + 1);
+    portunus_core::Seed(if raw == key.seed.0 { raw ^ 1 } else { raw })
 }
 
 fn select_by_temperature(
@@ -1532,5 +1593,187 @@ mod tests {
         assert_eq!(decoded.schema(), m.schema());
         let eval_after = decoded.evaluate(&[&sample_in]);
         assert_eq!(eval_before, eval_after);
+    }
+
+    #[test]
+    fn open_loop_mcts_optimizes_expected_value_without_clairvoyance_on_lucky_seed() {
+        const LUCKY_GAMBLE: SpellId = SpellId(10);
+        const RELIABLE_STRIKE: SpellId = SpellId(20);
+        const PROC_FINISHER: SpellId = SpellId(30);
+
+        #[derive(Clone)]
+        struct StochasticEnv {
+            seed: Seed,
+            step: u64,
+            proc_active: bool,
+        }
+
+        impl StochasticEnv {
+            fn roll(&self, sub: u64) -> f64 {
+                let dom = domain(Purpose::Mechanics, &["stoch_env"]);
+                unit(self.seed, dom, self.step * 16 + sub)
+            }
+
+            fn decision(&self) -> Decision<Vec<f32>> {
+                let abilities = if self.step == 0 {
+                    BTreeMap::from([
+                        (LUCKY_GAMBLE, Readiness::Now),
+                        (RELIABLE_STRIKE, Readiness::Now),
+                        (PROC_FINISHER, Readiness::Blocked),
+                    ])
+                } else {
+                    BTreeMap::from([
+                        (LUCKY_GAMBLE, Readiness::Blocked),
+                        (RELIABLE_STRIKE, Readiness::Now),
+                        (
+                            PROC_FINISHER,
+                            if self.proc_active {
+                                Readiness::Now
+                            } else {
+                                Readiness::Blocked
+                            },
+                        ),
+                    ])
+                };
+                Decision {
+                    seat: Seat(0),
+                    reason: WakeReason::CombatStart,
+                    obs: vec![self.step as f32, if self.proc_active { 1.0 } else { 0.0 }],
+                    legal: ActionMask {
+                        abilities,
+                        can_stop: false,
+                        can_wait_tick: false,
+                        targets: Vec::new(),
+                        cancel: Vec::new(),
+                        can_move: false,
+                        can_stop_move: false,
+                    },
+                    key: DecisionKey {
+                        seed: self.seed,
+                        seat: Seat(0),
+                        index: self.step,
+                    },
+                }
+            }
+        }
+
+        impl Env for StochasticEnv {
+            type Obs = Vec<f32>;
+
+            fn reset(&mut self, seed: Seed) -> Result<Turn<Self::Obs>, EnvError> {
+                self.seed = seed;
+                self.step = 0;
+                self.proc_active = false;
+                Ok(Turn::Decide(self.decision()))
+            }
+
+            fn step(&mut self, choice: Choice) -> Result<Transition<Self::Obs>, EnvError> {
+                let reward = match (self.step, &choice) {
+                    (0, Choice::Cast { ability, .. }) if *ability == LUCKY_GAMBLE => {
+                        // 10% chance of +100 (EV = 10), 90% chance of 0.
+                        if self.roll(0) < 0.10 {
+                            100.0
+                        } else {
+                            0.0
+                        }
+                    }
+                    (0, Choice::Cast { ability, .. }) if *ability == RELIABLE_STRIKE => {
+                        // Guaranteed +40 at step 0, plus 50% chance to proc PROC_FINISHER (+30) at step 1.
+                        self.proc_active = self.roll(1) < 0.50;
+                        40.0
+                    }
+                    (1, Choice::Cast { ability, .. }) if *ability == PROC_FINISHER => {
+                        if !self.proc_active {
+                            return Err(EnvError::Finished);
+                        }
+                        30.0
+                    }
+                    (1, Choice::Cast { ability, .. }) if *ability == RELIABLE_STRIKE => 15.0,
+                    _ => 0.0,
+                };
+                self.step += 1;
+                let next = if self.step >= 2 {
+                    Turn::Done(Outcome {
+                        end_time: SimTime(2000),
+                        completed: true,
+                        pulls: Vec::new(),
+                        seats: Vec::new(),
+                    })
+                } else {
+                    Turn::Decide(self.decision())
+                };
+                Ok(Transition {
+                    reward,
+                    elapsed: SimDuration(1000),
+                    next,
+                })
+            }
+
+            fn reseed(&mut self, seed: Seed) {
+                self.seed = seed;
+            }
+        }
+
+        // Find a ground-truth seed where `LUCKY_GAMBLE` happens to hit its 10% jackpot on step 0.
+        let lucky_seed = (1..1000u64)
+            .map(Seed)
+            .find(|&s| {
+                let env = StochasticEnv {
+                    seed: s,
+                    step: 0,
+                    proc_active: false,
+                };
+                env.roll(0) < 0.10
+            })
+            .expect("find lucky seed");
+
+        let space: Arc<dyn ActionSpace> = Arc::new(SpecActionSpace::from_spells(
+            [LUCKY_GAMBLE, RELIABLE_STRIKE, PROC_FINISHER],
+            0,
+            0,
+        ));
+        let schema = SchemaId("stoch:v1".into());
+        let featurizer = Arc::new(IdentityFeaturizer {
+            schema: schema.clone(),
+            width: 2,
+        });
+        let model = Arc::new(UniformModel {
+            version: ModelVersion {
+                name: "uniform".into(),
+                step: 0,
+            },
+            schema,
+            input_width: 2,
+            output_width: space.size(),
+        });
+        let mut mcts = Mcts::new(
+            MctsConfig {
+                simulations: 64,
+                c_puct: 1.25,
+                dirichlet_alpha: 0.3,
+                dirichlet_frac: 0.0,
+                temperature: 0.0,
+                horizon: SimDuration(10_000),
+            },
+            Arc::clone(&space),
+            featurizer,
+            model,
+        );
+
+        let mut env = StochasticEnv {
+            seed: lucky_seed,
+            step: 0,
+            proc_active: false,
+        };
+        let Turn::Decide(d0) = env.reset(lucky_seed).unwrap() else {
+            panic!("expected decision");
+        };
+
+        // Even though `lucky_seed` would roll < 0.10 (+100) on `LUCKY_GAMBLE`, Open-Loop MCTS
+        // reseeds each rollout and discovers `RELIABLE_STRIKE` (EV = 40 + 0.5*30 + 0.5*15 = 62.5)
+        // beats `LUCKY_GAMBLE` (EV = 10 + 15 = 25.0), while handling stochastic `PROC_FINISHER`
+        // legality at depth 1 across proc and non-proc worlds.
+        let res = mcts.search(&env, &d0);
+        assert_eq!(res.choice, Choice::cast(RELIABLE_STRIKE));
     }
 }

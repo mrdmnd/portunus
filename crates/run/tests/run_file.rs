@@ -2249,12 +2249,47 @@ fn mcts_self_play_and_burn_trainer_run_end_to_end_on_combat_bundle() {
 
     let mut rollout_env = env;
     let mut turn = rollout_env.reset(Seed(2)).unwrap();
+    let mut verified_open_loop_fork = false;
     let outcome = loop {
         match turn {
             Turn::Done(o) => break o,
-            Turn::Decide(d) => turn = rollout_env.step(model_policy.act(&d)).unwrap().next,
+            Turn::Decide(d) => {
+                if !verified_open_loop_fork && d.legal.is_ready(LIGHTNING_BOLT) {
+                    let mut rewards_by_seed = Vec::new();
+                    for visit_k in 0..8 {
+                        let mut fork = rollout_env.clone();
+                        fork.reseed(portunus_policy::open_loop_seed(d.key, visit_k));
+                        let mut total_r = 0.0;
+                        let mut cur_legal = d.legal.clone();
+                        for _ in 0..16 {
+                            let c = if cur_legal.is_ready(LIGHTNING_BOLT) {
+                                Choice::cast(LIGHTNING_BOLT)
+                            } else {
+                                Choice::Wait(Wait::NextEvent)
+                            };
+                            let Ok(tr) = fork.step(c) else {
+                                break;
+                            };
+                            total_r += tr.reward;
+                            match tr.next {
+                                Turn::Decide(nd) => cur_legal = nd.legal,
+                                Turn::Done(_) => break,
+                            }
+                        }
+                        rewards_by_seed.push(total_r);
+                    }
+                    let first_r = rewards_by_seed[0];
+                    assert!(
+                        rewards_by_seed.iter().any(|&r| (r - first_r).abs() > 1e-6),
+                        "expected open-loop reseeded forks to sample distinct future crit/overload trajectories: {rewards_by_seed:?}"
+                    );
+                    verified_open_loop_fork = true;
+                }
+                turn = rollout_env.step(model_policy.act(&d)).unwrap().next;
+            }
         }
     };
+    assert!(verified_open_loop_fork);
     assert!(outcome.completed);
 }
 
