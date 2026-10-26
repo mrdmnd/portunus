@@ -1072,6 +1072,7 @@ fn channeler(swings: bool, tick: Vec<Effect>) -> Fixture {
         hasted: true,
         swings,
         tick_zero: false,
+        cost_per_tick: Vec::new(),
         on_end: Vec::new(),
     };
     let s = spell(CHANNEL, cast, true, tick);
@@ -2236,4 +2237,168 @@ fn reset_swing_restarts_the_swing_timer_and_form_gcd_overrides_spell_gcd() {
     // Swung at 10 s, reset at 11 s -> second swing pushed back by 1000 ms!
     let step = mh[2] - mh[1];
     assert_eq!(mh[1] - mh[0], step + SimDuration(1000));
+}
+
+#[test]
+fn bank_ticks_never_crit_and_unmodified_bank_skips_source_taken_double_dip() {
+    let mut b = bank(BankDraw::SpreadOverRemaining, 4000, false);
+    if let Some(p) = b.periodic.as_mut() {
+        p.effects = vec![Effect::Damage {
+            amount: Coefficient::EventAmount(1.0),
+            school: SchoolMask::SHADOW,
+            target: EffectTarget::Target,
+            aoe: None,
+            ignores_armor: true,
+            hand: None,
+            per_count: None,
+            unmodified: true,
+        }];
+    }
+    let mut f = banker(b, 4000.0);
+    // Give the caster 100% crit chance and +100% SourceDamageTakenPct on target:
+    // the bank payout must neither crit nor double-dip SourceDamageTakenPct!
+    let buff = AuraId(900_990);
+    f.data.auras.insert(
+        buff,
+        aura(
+            buff,
+            vec![
+                modifier(ModKind::CritChanceAdd, 100.0),
+                modifier(ModKind::DamageDonePct, 100.0),
+                modifier(ModKind::SourceDamageTakenPct, 100.0),
+            ],
+        ),
+    );
+    f.template.passive_auras.push(buff);
+    let debuff = AuraId(900_991);
+    f.data.auras.insert(
+        debuff,
+        aura(
+            debuff,
+            vec![
+                modifier(ModKind::DamageTakenPct, 100.0),
+                modifier(ModKind::SourceDamageTakenPct, 100.0),
+            ],
+        ),
+    );
+    f.data
+        .spells
+        .get_mut(&KINDLE)
+        .unwrap()
+        .effects
+        .insert(0, apply_to_target(debuff));
+
+    let paid = payouts(&f, &[0]);
+    assert_eq!(
+        paid,
+        [(1000, 1000), (2000, 1000), (3000, 1000), (4000, 1000)],
+        "unmodified bank ticks must pay exact 1000/tick without critting or double-dipping: {paid:?}"
+    );
+}
+
+#[test]
+fn conditional_haste_flips_mid_walk_when_leaving_own_ground() {
+    use portunus_engine::choice::MoveGoal;
+    use portunus_gamedata::aura::GroundDef;
+
+    let ground_aura = AuraId(900_992);
+    let place_ground = SpellId(900_993);
+    let cond_haste = AuraId(900_994);
+    let probe_cd = SpellId(900_995);
+
+    let mut f = caster(Vec::new());
+    let mut gdef = aura(ground_aura, Vec::new());
+    gdef.duration = Some(SimDuration(20_000));
+    gdef.ground = Some(GroundDef { radius: 7.0 });
+    f.data.auras.insert(ground_aura, gdef);
+
+    let mut hdef = aura(
+        cond_haste,
+        vec![Modifier {
+            scope: ModScope::All,
+            kind: ModKind::HastePct,
+            value: 100.0,
+            per_stack: false,
+            condition: Some(Predicate::InOwnGround(ground_aura)),
+        }],
+    );
+    hdef.duration = None;
+    f.data.auras.insert(cond_haste, hdef);
+    f.template.passive_auras.push(cond_haste);
+    learn(
+        &mut f,
+        spell(
+            place_ground,
+            CastKind::Instant,
+            false,
+            vec![apply_self(ground_aura)],
+        ),
+    );
+    let mut cd_sp = spell(probe_cd, CastKind::Instant, false, Vec::new());
+    cd_sp.gcd = None;
+    cd_sp.castable_while_moving = true;
+    cd_sp.cooldown = Some(portunus_gamedata::spell::CooldownDef {
+        duration: SimDuration(10_000),
+        charges: 1,
+        hasted: true,
+        category: None,
+    });
+    learn(&mut f, cd_sp);
+
+    let mut k = f.kernel(1);
+    let me = ActorId(0);
+    let move_start = COMBAT_START + SimDuration(1000);
+    let probe_mid = COMBAT_START + SimDuration(2200);
+    let end = COMBAT_START + SimDuration(10_000);
+    let mut placed = false;
+    let mut cast_cd = false;
+    let mut moved = false;
+    let mut recharge_in_ground = None;
+    let mut recharge_mid_walk_outside = None;
+
+    script(&mut k, end, |now, k| {
+        if now < COMBAT_START {
+            return Choice::Wait(Wait::Until(COMBAT_START));
+        }
+        if !placed {
+            placed = true;
+            return cast(place_ground);
+        }
+        if !cast_cd {
+            cast_cd = true;
+            return cast(probe_cd);
+        }
+        if now < move_start {
+            recharge_in_ground = k.state().cooldown(me, probe_cd).map(|c| c.recharge);
+            return Choice::Wait(Wait::Until(move_start));
+        }
+        if !moved {
+            moved = true;
+            // Walk 21 yards (3.0 s at 7 yd/s); crosses the 7-yard ground edge at +1.0 s (t = 2000ms after COMBAT_START).
+            return Choice::Move(MoveGoal::Yards(21.0));
+        }
+        if now < probe_mid {
+            return Choice::Wait(Wait::Until(probe_mid));
+        }
+        if recharge_mid_walk_outside.is_none() {
+            // Still moving at +2.2s, but already past the 7-yard ground radius!
+            assert!(
+                k.state().movement(Seat(0)).is_some(),
+                "still walking at probe_mid"
+            );
+            recharge_mid_walk_outside = k.state().cooldown(me, probe_cd).map(|c| c.recharge);
+        }
+        Choice::Wait(Wait::Until(end))
+    });
+
+    assert_eq!(
+        recharge_in_ground,
+        Some(SimDuration(5000)),
+        "inside ground should have 2.0x haste (5000ms recharge on 10s hasted CD)"
+    );
+    assert_eq!(
+        recharge_mid_walk_outside,
+        Some(SimDuration(10_000)),
+        "mid-walk after crossing ground edge should immediately drop to 1.0x haste (10000ms recharge)"
+    );
 }

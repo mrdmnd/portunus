@@ -35,6 +35,8 @@ pub struct EnemyInfo<'a> {
     pub spawner: Option<ActorId>,
     /// It left with its spawner rather than dying.
     pub despawned: bool,
+    /// When this enemy engaged (`None` if not yet engaged).
+    pub engaged_at: Option<SimTime>,
 }
 
 pub trait StateView {

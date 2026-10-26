@@ -1090,7 +1090,12 @@ impl CombatMath for Formulas {
         if immune {
             return 0.0;
         }
-        let mut out = amount * dmg_taken * self.source_taken(view, target, &hit);
+        let mult = if hit.unmodified && hit.kind == HitKind::Periodic {
+            1.0
+        } else {
+            dmg_taken * self.source_taken(view, target, &hit)
+        };
+        let mut out = amount * mult;
         let armored = hit.kind == HitKind::Direct && !hit.ignores_armor;
         if hit.school == SchoolMask::PHYSICAL && armored {
             let armor = self.armor(view, target) * self.armor_kept(view, &hit);

@@ -76,6 +76,9 @@ pub trait Mechanics: Clone {
     fn aura_absorbed(&self, _io: &mut dyn EngineIo, _ev: &AbsorbEvent) {}
     /// A seat started moving from standing still, or stopped.
     fn movement_changed(&self, _io: &mut dyn EngineIo, _seat: Seat, _moving: bool) {}
+    /// An actor's target or ground-effect containment changed without an
+    /// aura or movement-start/end event.
+    fn state_changed(&self, _io: &mut dyn EngineIo, _actor: ActorId) {}
     /// The aura's `prevents_death` saved its holder from a lethal hit:
     /// health is already set and the lockout applied.
     fn death_prevented(&self, _io: &mut dyn EngineIo, _aura: AuraRef) {}
@@ -379,6 +382,10 @@ pub struct RolledHit {
     /// Area damage: an AoE rule or a target set that can reach more than
     /// one actor (see `EffectTarget::is_area`).
     pub area: bool,
+    /// `Effect::Damage::unmodified`: the feeding hit already took caster
+    /// and target damage multipliers.
+    #[serde(default)]
+    pub unmodified: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

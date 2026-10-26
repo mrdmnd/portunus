@@ -29,7 +29,10 @@ pub use action_space::{
     DEFAULT_TARGET_SLOTS,
 };
 pub use episode::{Episode, EpisodeSource};
-pub use observe::{spec_auras, FlatObserver, InfoSet, ObsContext, Observer};
+pub use observe::{
+    observe_priors_and_windows, spec_auras, FlatObserver, InfoSet, ObsContext, Observer,
+    PlannedWindowTiming, UpcomingEventPrior,
+};
 pub use reward::{DenseReward, Progress, ProgressMeter, Reward};
 
 #[derive(Debug, Clone)]

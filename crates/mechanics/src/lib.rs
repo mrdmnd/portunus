@@ -76,6 +76,10 @@ pub struct IncomingHit {
     pub spell: Option<SpellId>,
     /// Area damage, which Avoidance reduces.
     pub area: bool,
+    /// `Effect::Damage::unmodified`: skip target `DamageTakenPct` and
+    /// `SourceDamageTakenPct` on periodic residuals whose feeding hit
+    /// already took them.
+    pub unmodified: bool,
 }
 
 impl IncomingHit {
@@ -89,6 +93,7 @@ impl IncomingHit {
             attacker: None,
             spell: None,
             area: false,
+            unmodified: false,
         }
     }
 
@@ -100,6 +105,7 @@ impl IncomingHit {
             attacker: Some(hit.source),
             spell: hit.spell,
             area: hit.area,
+            unmodified: hit.unmodified,
         }
     }
 }

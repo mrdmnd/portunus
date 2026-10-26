@@ -962,8 +962,16 @@ impl Interpreter {
     /// Amount and crit against `c.target`, before its mitigation.
     fn roll_hit(&self, io: &mut dyn EngineIo, c: &EffectCtx, d: DamageSpec) -> RolledHit {
         let view = io.view();
+        let is_bank_draw =
+            c.hit == HitKind::Periodic && matches!(d.amount, Coefficient::EventAmount(_));
         let (raw, chance) = if d.unmodified {
             (self.math.base(view, c, d.amount), 0.0)
+        } else if is_bank_draw {
+            (
+                self.math
+                    .outgoing(view, c, d.amount, Outgoing::Damage(d.school)),
+                0.0,
+            )
         } else {
             (
                 self.math
@@ -991,6 +999,7 @@ impl Interpreter {
             ignores_armor: d.ignores_armor,
             weapon,
             area: d.aoe.is_some() || d.target.is_area(),
+            unmodified: d.unmodified,
         }
     }
 
@@ -1227,6 +1236,7 @@ impl Interpreter {
         if d.leech_pct <= 0.0 {
             return;
         }
+        let before = health_fraction(io.view(), source);
         let amount = dealt as f64 * d.leech_pct / 100.0 * (1.0 + d.versatility_pct / 100.0);
         io.apply_heal(HealEvent {
             source,
@@ -1234,6 +1244,9 @@ impl Interpreter {
             amount: whole_points(amount),
             spell: None,
         });
+        if health_fraction(io.view(), source) != before {
+            self.refresh_conditional_stats(io, source);
+        }
     }
 
     fn heal(
@@ -1249,6 +1262,7 @@ impl Interpreter {
                 ..*ctx
             };
             let view = io.view();
+            let before = health_fraction(view, t);
             let raw = self.math.outgoing(view, &c, amount, Outgoing::Heal);
             let chance = self.math.crit_chance(view, &c);
             let mult = self.math.crit_multiplier(view, &c);
@@ -1259,6 +1273,9 @@ impl Interpreter {
                 amount: whole_points(if crit { raw * mult } else { raw }),
                 spell: ctx.spell,
             });
+            if health_fraction(io.view(), t) != before {
+                self.refresh_conditional_stats(io, t);
+            }
         }
     }
 

@@ -1361,6 +1361,7 @@ fn commanded_pets_channel_all_ticks_and_benefit_from_owner_debuffs_and_mastery()
             hasted: false,
             swings: false,
             tick_zero: false,
+            cost_per_tick: Vec::new(),
             on_end: Vec::new(),
         },
         None,

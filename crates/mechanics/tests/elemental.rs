@@ -191,6 +191,7 @@ fn kits_cover_the_data() {
         hasted: false,
         swings: false,
         tick_zero: false,
+        cost_per_tick: Vec::new(),
         on_end: vec![Effect::Hook(HookKey("at_the_end".into()))],
     };
     bolt.on_cast = vec![Effect::ConsumeStacks {

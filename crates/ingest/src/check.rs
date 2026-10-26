@@ -155,6 +155,9 @@ pub enum DataIssue {
     /// A resurrection's health share outside `(0, 1]`, or an aura that
     /// resurrects its holder but doesn't persist through death.
     InvalidResurrect(Owner),
+    /// An `EnemyAction::Heal` with neither a positive flat amount nor a
+    /// percentage in `(0, 100]`.
+    InvalidEnemyHeal(Owner),
 }
 
 fn positive(x: f64) -> bool {
@@ -302,12 +305,16 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
         if let CastKind::Channel {
             duration,
             ticks,
+            ref cost_per_tick,
             ref on_end,
             ..
         } = spell.cast
         {
             c.effects(&owner, on_end);
-            if ticks == 0 || duration == SimDuration::ZERO {
+            let bad_cost = cost_per_tick
+                .iter()
+                .any(|cost| !positive(cost.amount) || cost.extra != 0.0);
+            if ticks == 0 || duration == SimDuration::ZERO || bad_cost {
                 c.issues.push(DataIssue::InvalidChannel(spell.id));
             }
         }
@@ -317,7 +324,7 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
                     auras.iter().for_each(|&a| c.aura(&owner, a));
                     true
                 }
-                Requirement::OutOfCombat => true,
+                Requirement::OutOfCombat | Requirement::TargetCastingInterruptible => true,
                 Requirement::TargetHpAtMost(f) | Requirement::TargetHpAtLeast(f) => {
                     (0.0..=1.0).contains(&f)
                 }
@@ -325,6 +332,7 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
                     c.aura(&owner, aura);
                     stacks > 0
                 }
+                Requirement::Dispellable { ref types, .. } => !types.is_empty(),
             };
             if !ok {
                 c.issues.push(DataIssue::InvalidRequirement(spell.id));
@@ -1010,6 +1018,20 @@ impl Checker<'_> {
                 }
             }
             EnemyAction::Effects { effects, .. } => self.effects(owner, effects),
+            EnemyAction::Heal {
+                amount,
+                pct_max_health,
+                ..
+            } => {
+                let amount_ok = amount.as_ref().is_none_or(|d| {
+                    let (lo, hi) = d.bounds();
+                    lo > 0.0 && lo <= hi && hi.is_finite()
+                });
+                let pct_ok = pct_max_health.is_none_or(|p| p > 0.0 && p <= 100.0 && p.is_finite());
+                if (amount.is_none() && pct_max_health.is_none()) || !amount_ok || !pct_ok {
+                    self.issues.push(DataIssue::InvalidEnemyHeal(owner.clone()));
+                }
+            }
             EnemyAction::Damage { .. }
             | EnemyAction::ForceMovement { .. }
             | EnemyAction::EnterPhase(_) => {}

@@ -26,7 +26,9 @@ use crate::step::WakeReason;
 use crate::trace::{CastEndReason, TraceEvent};
 
 use super::queue::Event;
-use super::world::{Actor, EnemyCast, EnemySpawn, RuleState, Statics, TriggerOwner, World};
+use super::world::{
+    Actor, EnemyCast, EnemySpawn, Followup, RuleState, Statics, TriggerOwner, World,
+};
 use super::Kernel;
 
 /// Random draws per rule, by what they decide.
@@ -735,6 +737,55 @@ impl<M: Mechanics> Kernel<M> {
                     let t = self.world.seat_actor(seat);
                     self.call(|m, io| m.enemy_effects(io, enemy, t, effects));
                 }
+            }
+            EnemyAction::Heal {
+                amount,
+                pct_max_health,
+                target,
+            } => {
+                let flat = amount
+                    .as_ref()
+                    .map_or(0.0, |d| self.world.rule_amount(enemy, rule, d));
+                let live_allies: Vec<ActorId> = self
+                    .world
+                    .enemies
+                    .iter()
+                    .copied()
+                    .filter(|&e| {
+                        self.world
+                            .actor_ref(e)
+                            .is_some_and(|a| a.engaged && a.alive)
+                    })
+                    .collect();
+                let targets: Vec<ActorId> = match target {
+                    portunus_gamedata::enemy::EnemyHealTarget::Itself => vec![enemy],
+                    portunus_gamedata::enemy::EnemyHealTarget::AllAllies => live_allies,
+                    portunus_gamedata::enemy::EnemyHealTarget::LowestAlly => live_allies
+                        .into_iter()
+                        .min_by(|&a, &b| {
+                            let fa = self.world.actor_ref(a).map_or(1.0, Actor::health_frac);
+                            let fb = self.world.actor_ref(b).map_or(1.0, Actor::health_frac);
+                            fa.total_cmp(&fb)
+                        })
+                        .into_iter()
+                        .collect(),
+                };
+                for t in targets {
+                    let pct_heal = pct_max_health.map_or(0.0, |pct| {
+                        pct / 100.0 * self.world.actor_ref(t).map_or(0.0, |a| a.max_health as f64)
+                    });
+                    let pts = crate::mechanics::whole_points(flat + pct_heal);
+                    if pts > 0 {
+                        self.world.heal(crate::mechanics::HealEvent {
+                            source: enemy,
+                            target: t,
+                            amount: pts,
+                            spell: None,
+                        });
+                        self.world.followups.push_back(Followup::StateChanged(t));
+                    }
+                }
+                self.drain();
             }
             EnemyAction::SelfAura(aura) => {
                 self.world.apply_aura(AuraApplication {

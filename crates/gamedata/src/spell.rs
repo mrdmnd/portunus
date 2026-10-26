@@ -3,6 +3,7 @@
 use portunus_core::{AuraId, SimDuration, SpellId};
 use serde::{Deserialize, Serialize};
 
+use crate::aura::DispelType;
 use crate::effect::Effect;
 use crate::item::WeaponHand;
 use crate::stats::{Cost, SchoolMask};
@@ -95,12 +96,30 @@ pub enum Requirement {
     TargetHpAtLeast(f64),
     /// The caster holds at least this many stacks of the aura.
     CasterStacksAtLeast { aura: AuraId, stacks: u8 },
+    /// The target is currently casting an interruptible spell.
+    TargetCastingInterruptible,
+    /// The target (`on_target: true`) or caster (`on_target: false`) holds
+    /// an aura applied by an enemy with one of these dispel types.
+    Dispellable {
+        types: Vec<DispelType>,
+        #[serde(default)]
+        on_target: bool,
+    },
 }
 
 impl Requirement {
     /// Whether it's about the target rather than the caster.
     pub fn on_target(&self) -> bool {
-        matches!(self, Self::TargetHpAtMost(_) | Self::TargetHpAtLeast(_))
+        matches!(
+            self,
+            Self::TargetHpAtMost(_)
+                | Self::TargetHpAtLeast(_)
+                | Self::TargetCastingInterruptible
+                | Self::Dispellable {
+                    on_target: true,
+                    ..
+                }
+        )
     }
 }
 
@@ -149,6 +168,11 @@ pub enum CastKind {
         /// duration (SimC's `tick_zero`, Bladestorm).
         #[serde(default)]
         tick_zero: bool,
+        /// Resource costs paid on each periodic channel tick (`1..=ticks`);
+        /// if the caster cannot afford them when a tick comes due, the
+        /// channel stops early.
+        #[serde(default)]
+        cost_per_tick: Vec<Cost>,
         /// Run once its last tick lands (SimC's `last_tick`: Violent
         /// Euphoria after Bladestorm). A channel cut short skips them,
         /// where SimC's cancelled dot still runs `last_tick`.

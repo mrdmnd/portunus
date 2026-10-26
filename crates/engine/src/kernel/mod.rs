@@ -130,6 +130,7 @@ impl<M: Mechanics> Kernel<M> {
                 Followup::Threshold(r) => self.mechanics.aura_threshold(io, r),
                 Followup::Absorbed(ev) => self.mechanics.aura_absorbed(io, &ev),
                 Followup::Moved(seat, moving) => self.mechanics.movement_changed(io, seat, moving),
+                Followup::StateChanged(actor) => self.mechanics.state_changed(io, actor),
                 Followup::DeathPrevented(r) => self.mechanics.death_prevented(io, r),
                 Followup::Released(_) => {}
             }
@@ -1007,6 +1008,37 @@ impl<M: Mechanics> Kernel<M> {
         else {
             return;
         };
+        let tick_costs = self
+            .world
+            .s
+            .setup
+            .data
+            .spells
+            .get(&c.ev.spell)
+            .and_then(|def| match &def.cast {
+                CastKind::Channel { cost_per_tick, .. } if !cost_per_tick.is_empty() => {
+                    Some(cost_per_tick.clone())
+                }
+                _ => None,
+            });
+        if let Some(costs) = tick_costs {
+            if !self
+                .world
+                .pay_tick_costs(actor, c.ev.spell, &costs, c.ev.target)
+            {
+                if let Some(a) = self.world.actor_mut(actor) {
+                    a.casting = None;
+                }
+                self.world.record(TraceEvent::CastEnd {
+                    actor,
+                    spell: c.ev.spell,
+                    reason: CastEndReason::Stopped,
+                });
+                self.world.resume_swings(actor);
+                self.cast_over(c.ev, true);
+                return;
+            }
+        }
         self.world.record(TraceEvent::ChannelTick {
             actor,
             spell: c.ev.spell,

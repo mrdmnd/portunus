@@ -206,17 +206,29 @@ impl World {
 
     /// Count `yards` toward every demand the seat owes; met ones go.
     fn cover(&mut self, seat: Seat, yards: f64) {
+        let actor = self.seat_actor(seat);
+        let before_travelled = self.seat_ref(seat).map_or(0.0, |st| st.travelled);
+        let after_travelled = before_travelled + yards;
+        let crossed_ground = self.actor_ref(actor).is_some_and(|a| {
+            a.auras.iter().any(|i| {
+                i.ground.is_some_and(|g| {
+                    g.yards_left(before_travelled) >= 0.0 && g.yards_left(after_travelled) < 0.0
+                })
+            })
+        });
         let st = self.seat_mut(seat);
-        st.travelled += yards;
+        st.travelled = after_travelled;
         for d in &mut st.demands {
             d.yards = (d.yards - yards).max(0.0);
         }
         let before = st.demands.len();
         st.demands.retain(|d| d.yards > EPS);
         let met = before - st.demands.len();
-        let actor = self.seat_actor(seat);
         for _ in 0..met {
             self.record(TraceEvent::DemandMet { actor });
+        }
+        if crossed_ground {
+            self.followups.push_back(Followup::StateChanged(actor));
         }
     }
 
@@ -226,6 +238,7 @@ impl World {
         let Some(m) = self.seat_ref(seat).and_then(|st| st.moving) else {
             return;
         };
+        let speed = self.speed(seat);
         let ends = match (m.forced_until, m.goal) {
             (Some(until), _) => until,
             (None, Some(goal)) => {
@@ -234,7 +247,6 @@ impl World {
                     self.finish_movement(seat);
                     return;
                 }
-                let speed = self.speed(seat);
                 if speed <= 0.0 {
                     SimTime(u32::MAX / 2)
                 } else {
@@ -246,16 +258,35 @@ impl World {
                 return;
             }
         };
+        let me = self.seat_actor(seat);
+        let travelled = self.seat_ref(seat).map_or(0.0, |st| st.travelled);
+        let ground_exit = if speed > 0.0 {
+            self.actor_ref(me)
+                .and_then(|a| {
+                    a.auras
+                        .iter()
+                        .filter_map(|i| i.ground)
+                        .map(|g| g.yards_left(travelled))
+                        .filter(|&left| left >= 0.0)
+                        .min_by(f64::total_cmp)
+                })
+                .map(|left| {
+                    (self.now + millis_ceil((left + EPS * 2.0) / speed * 1000.0))
+                        .max(self.now + SimDuration(1))
+                })
+        } else {
+            None
+        };
         let st = self.seat_mut(seat);
         st.move_gen += 1;
         let gen = st.move_gen;
         if let Some(m) = &mut st.moving {
             m.ends = ends;
         }
-        if ends < SimTime(u32::MAX / 2) {
-            self.queue.push(ends, Event::MovementEnd { seat, gen });
+        let next_at = ground_exit.map_or(ends, |g| g.min(ends));
+        if next_at < SimTime(u32::MAX / 2) {
+            self.queue.push(next_at, Event::MovementEnd { seat, gen });
         }
-        let me = self.seat_actor(seat);
         self.start_swings(me);
         self.tell_movement(seat);
     }

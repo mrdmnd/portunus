@@ -858,6 +858,7 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                 let mut gcd_steps = 0u64;
                 let mut path: Vec<(usize, usize, f64)> = Vec::new();
                 let mut collided = false;
+                let mut same_state_hops = 0u32;
 
                 enum SimStep<E: Env> {
                     Done(f64),
@@ -1017,8 +1018,13 @@ impl<E: Env> SearchPolicy<E> for Mcts<E::Obs> {
                         nodes[node_id].edges[edge_pos].choice.clone()
                     };
                     let Ok(tr) = sim.step(choice) else {
-                        break SimStep::Done(0.0);
+                        same_state_hops += 1;
+                        if same_state_hops >= 4 {
+                            break SimStep::Done(0.0);
+                        }
+                        continue;
                     };
+                    same_state_hops = 0;
                     if tr.elapsed > SimDuration::ZERO {
                         gcd_steps += 1;
                     }

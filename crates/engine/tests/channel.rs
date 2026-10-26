@@ -37,6 +37,7 @@ fn channel_fixture(haste_pct: f64, rules: Vec<EnemyRule>) -> Fixture {
         hasted: true,
         swings: false,
         tick_zero: false,
+        cost_per_tick: Vec::new(),
         on_end: Vec::new(),
     };
     bolt.speed = None;
@@ -382,4 +383,77 @@ fn committed_seats_wake_on_conditions_and_mid_cast_off_gcd_cooldowns() {
     let start = t0.expect("started");
     assert_eq!(off_gcd_at, Some(ms(start, 1200)));
     assert_eq!(condition_at, Some(ms(start, 2200)));
+}
+
+#[test]
+fn channel_cost_per_tick_spends_resource_and_stops_when_exhausted() {
+    use portunus_gamedata::stats::{Cost, ResourceDef, ResourceKind, SpendScaling};
+
+    let mut f = channel_fixture(0.0, Vec::new());
+    let data = Arc::make_mut(&mut f.data);
+    let bolt = data
+        .spells
+        .get_mut(&LIGHTNING_BOLT)
+        .expect("Lightning Bolt");
+    bolt.cast = CastKind::Channel {
+        duration: SimDuration(3000),
+        ticks: 3,
+        hasted: false,
+        swings: false,
+        tick_zero: false,
+        cost_per_tick: vec![Cost {
+            kind: ResourceKind::Maelstrom,
+            amount: 40.0,
+            extra: 0.0,
+            scaling: SpendScaling::None,
+        }],
+        on_end: Vec::new(),
+    };
+    f.template.resources = vec![ResourceDef {
+        kind: ResourceKind::Maelstrom,
+        max: 100.0,
+        initial: 80.0,
+        regen_per_sec: 0.0,
+        regen_hasted: false,
+        recharge: None,
+        out_of_combat: None,
+    }];
+
+    // Starting at 80 Maelstrom with 40/tick: ticks 1 and 2 succeed (leaving 0),
+    // and tick 3 cannot be afforded so the channel stops early at tick 3!
+    let mut k = kernel(&f, 1, 1, instant());
+    let mut started = false;
+    drive(&mut k, |k, req| {
+        if !started && k.legal(req.seat).abilities[&LIGHTNING_BOLT] == Readiness::Now {
+            started = true;
+            return Some(channel(false));
+        }
+        if started && req.reason == WakeReason::CastEnd {
+            return None;
+        }
+        Some(Choice::Wait(Wait::NextEvent))
+    });
+    let trace = k.drain_trace();
+    let ticks: Vec<u8> = trace
+        .iter()
+        .filter_map(|r| match r.event {
+            TraceEvent::ChannelTick { index, .. } => Some(index),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ticks, vec![1, 2], "only 2 ticks affordable: {ticks:?}");
+    let stopped = trace.iter().any(|r| {
+        matches!(
+            r.event,
+            TraceEvent::CastEnd {
+                spell: LIGHTNING_BOLT,
+                reason: CastEndReason::Stopped,
+                ..
+            }
+        )
+    });
+    assert!(
+        stopped,
+        "channel should stop early when tick 3 is unaffordable"
+    );
 }

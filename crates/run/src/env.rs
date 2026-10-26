@@ -243,10 +243,12 @@ impl<O: Observer> SimEnv<O> {
 }
 
 fn pull_plan<'a>(plan: &'a Plan, run: &ResolvedRun, state: &dyn StateView) -> Option<&'a PullPlan> {
-    let SegmentView::Combat(c) = state.segment() else {
-        return None;
+    let idx = match state.segment() {
+        SegmentView::Combat(c) => usize::from(c.index),
+        SegmentView::Travel { next_combat, .. } => usize::from(next_combat),
+        SegmentView::Finished => return None,
     };
-    let pull = combats(run).nth(usize::from(c.index))?;
+    let pull = combats(run).nth(idx)?;
     plan.pulls.get(&pull.pull)
 }
 

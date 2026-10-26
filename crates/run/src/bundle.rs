@@ -14,7 +14,7 @@ use portunus_ingest::{
 };
 use portunus_loadout::{ActorTemplate, Compiler, Loadout, LoadoutCompiler, LoadoutError};
 use portunus_mechanics::{KitIssue, Kits, SpecRegistry};
-use portunus_plan::Plan;
+use portunus_plan::{Plan, PlanIssue, PlanValidator, Validator as PlanCheck};
 use portunus_policy::Policy;
 use portunus_scenario::{Sampler, ScenarioError, ScenarioSampler, ScenarioSpec, TimelinePriors};
 use serde::{Deserialize, Serialize};
@@ -86,6 +86,8 @@ pub enum RunError {
     Loadout { seat: usize, source: LoadoutError },
     #[error("spec kits: {0:?}")]
     Kits(Vec<KitIssue>),
+    #[error("plan problems: {0:?}")]
+    Plan(Vec<PlanIssue>),
     #[error("seat {seat}: no policy named {name:?}")]
     UnknownPolicy { seat: usize, name: String },
     #[error("a run needs at least one seat")]
@@ -207,6 +209,15 @@ impl Bundle {
                 bundle.priors = Arc::new(new_sampler.priors());
                 bundle.sampler = Arc::new(new_sampler);
             }
+        }
+        let plan_issues = PlanCheck.validate(
+            &bundle.plan,
+            bundle.sampler.spec(),
+            &bundle.enemies,
+            &bundle.templates,
+        );
+        if !plan_issues.is_empty() {
+            return Err(RunError::Plan(plan_issues));
         }
         Ok(bundle)
     }
@@ -361,6 +372,11 @@ impl Bundle {
             Metric::DamageTaken,
             Metric::DemandsFailed,
         ]);
+        if self.plan.constraints.max_death_prob_per_pull.is_some() {
+            for pull in &self.sampler.spec().pulls {
+                metrics.push(Metric::DeathChance(pull.name.clone()));
+            }
+        }
         metrics
     }
 

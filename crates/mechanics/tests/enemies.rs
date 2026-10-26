@@ -517,3 +517,111 @@ fn a_dispel_takes_at_most_its_count() {
     assert_eq!(left.len(), 1, "{left:?}");
     assert!(left[0].0 == FURY || left[0].0 == FRENZY);
 }
+
+#[test]
+fn enemy_heal_restores_lowest_ally_and_pure_interrupt_requires_cast() {
+    use portunus_engine::Readiness;
+    use portunus_gamedata::enemy::EnemyHealTarget;
+    use portunus_gamedata::spell::Requirement;
+
+    let kick_id = SpellId(910_090);
+    let nuke_id = SpellId(910_091);
+
+    let mut f = fixture(Vec::new());
+    f.boss(vec![EnemyRule {
+        name: EventName("dark_mend".into()),
+        phase: None,
+        when: Trigger::Elapsed(SimDuration(2000)),
+        repeat: None,
+        action: EnemyAction::Cast {
+            time: SimDuration(2000),
+            interruptible: true,
+            then: Box::new(EnemyAction::Heal {
+                amount: None,
+                pct_max_health: Some(25.0),
+                target: EnemyHealTarget::LowestAlly,
+            }),
+        },
+    }]);
+    let mut kick_sp = spell(
+        kick_id,
+        vec![Effect::Interrupt {
+            target: EffectTarget::Target,
+        }],
+    );
+    kick_sp.gcd = None;
+    kick_sp.requires = vec![Requirement::TargetCastingInterruptible];
+    add_spell(&mut f, kick_sp);
+
+    let nuke_sp = spell(
+        nuke_id,
+        vec![Effect::Damage {
+            amount: Coefficient::PctMaxHealth(50.0),
+            school: SchoolMask::FIRE,
+            target: EffectTarget::Target,
+            aoe: None,
+            ignores_armor: true,
+            hand: None,
+            per_count: None,
+            unmodified: true,
+        }],
+    );
+    add_spell(&mut f, nuke_sp);
+
+    // 1. Un-interrupted: boss takes 50% damage at t=0, then finishes dark_mend at t=4s and heals 25% (to 75%).
+    let mut k1 = f.kernel();
+    play_at(&mut k1, &[(secs(0), nuke_id, 0)], secs(5));
+    let boss = k1.state().enemies()[0];
+    let b1 = k1.state().actor(boss).unwrap();
+    assert_eq!(
+        b1.health,
+        b1.max_health * 3 / 4,
+        "50% damage + 25% heal = 75% HP"
+    );
+
+    // 2. Interrupted: kick_id is Blocked at t=0 (not casting), becomes Now at t=2s when cast starts, and stops the heal!
+    let mut k2 = f.kernel();
+    let mut kick_blocked_at_start = false;
+    let mut kicked_at_cast = false;
+    loop {
+        match k2.advance().unwrap() {
+            Step::Done(_) => break,
+            Step::Decide(req) => {
+                if req.now >= secs(5) {
+                    break;
+                }
+                if req.now < secs(0) {
+                    k2.submit(req.seat, Choice::Wait(Wait::Until(secs(0))))
+                        .unwrap();
+                    continue;
+                }
+                let mask = k2.legal(req.seat);
+                if req.now == secs(0) {
+                    kick_blocked_at_start = mask.abilities[&kick_id] == Readiness::Blocked;
+                    k2.submit(req.seat, Choice::cast(nuke_id)).unwrap();
+                } else if mask.abilities[&kick_id] == Readiness::Now && !kicked_at_cast {
+                    kicked_at_cast = true;
+                    k2.submit(req.seat, Choice::cast(kick_id)).unwrap();
+                } else {
+                    k2.submit(req.seat, Choice::Wait(Wait::Until(secs(5))))
+                        .unwrap();
+                }
+            }
+        }
+    }
+    assert!(
+        kick_blocked_at_start,
+        "pure interrupt must be Blocked when target is not casting"
+    );
+    assert!(
+        kicked_at_cast,
+        "pure interrupt must become Now when interruptible cast starts"
+    );
+    let boss2 = k2.state().enemies()[0];
+    let b2 = k2.state().actor(boss2).unwrap();
+    assert_eq!(
+        b2.health,
+        b2.max_health / 2,
+        "interrupted heal must not restore health"
+    );
+}

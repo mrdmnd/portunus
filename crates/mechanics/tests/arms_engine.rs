@@ -610,6 +610,7 @@ fn channeler() -> Fixture {
         hasted: false,
         swings: false,
         tick_zero: true,
+        cost_per_tick: Vec::new(),
         on_end: vec![rage(100.0)],
     };
     add_spell(&mut f, ch);

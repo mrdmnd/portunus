@@ -278,6 +278,19 @@ impl World {
                 self.changed(r, 0, stacks);
                 if let Some(seat) = self.player_seat(r.holder) {
                     self.notify(seat, WakeReason::AuraGained(r.aura), false, None, now);
+                    if ground.is_some() && self.seat_ref(seat).is_some_and(|st| st.moving.is_some())
+                    {
+                        self.settle_movement(seat);
+                        self.reschedule_movement(seat);
+                    }
+                }
+                if def.dispel.is_some() && self.enemies.contains(&r.source) {
+                    for s in 0..self.seats.len() {
+                        let seat = portunus_core::Seat(s as u8);
+                        if self.player_seat(r.holder) != Some(seat) {
+                            self.notify(seat, WakeReason::AuraGained(r.aura), false, None, now);
+                        }
+                    }
                 }
                 if def.form.is_some() {
                     self.refresh_weapons(r.holder);

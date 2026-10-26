@@ -127,20 +127,14 @@ nearby items.
 Each of these is small and documented where it lives. They are the first
 places to look if a spec's numbers drift from SimC.
 
-- **Blade Flurry copies don't proc poisons** (nothing listens to a copy,
-  because of the depth guard). SimC's do.
-- **Blade Flurry copies use the landed amount with `ignores_armor`**
-  instead of re-applying each secondary target's armor. Equal when the
-  pack shares armor.
+- **Blade Flurry (`13877`) and Sweeping Strikes (`260708`) use `ChainTargetsAdd` / `ChainSharePct`**, which rolls a separate `RolledHit` per secondary target (applying each secondary target's own armor and firing `WeaponHit` listeners when `Listener.chain: true`). A generic `Effect::Damage { unmodified: true, ignores_armor: true, .. }` copy inside a listener skips armor and crits.
 - **Banks recompute their draw each tick.** Same as SimC unless haste
   changes the tick count mid-bank, in which case ours still empties the
   bank and SimC's doesn't.
-- **Bank ticks run the normal damage pipeline.** SimC's residuals can't
-  crit and snapshot multipliers; revisit when Fire Mage or Arms needs it.
-- **No mana drain per channel tick** (`cost_per_tick`).
-- **Dispels don't refuse a cast when there is nothing to dispel.**
-- **Haste-conditioned modifiers don't reschedule timers** when the
-  condition flips mid-walk or on a health crossing.
+- **Bank ticks never crit (`chance = 0.0`), and `unmodified: true` bank ticks skip target `DamageTakenPct` / `SourceDamageTakenPct` double-dipping.**
+- **Per-tick channel costs (`CastKind::Channel::cost_per_tick`)** are settled and deducted on each periodic tick, stopping the channel early (`CastEndReason::Stopped`) if unaffordable.
+- **Interrupt and Dispel target readiness** can be enforced via `Requirement::TargetCastingInterruptible` and `Requirement::Dispellable { types, on_target }`, with kernel wakes when an enemy begins a cast or gains an enemy-applied dispellable aura.
+- **Conditional haste modifiers (`InOwnGround`, `TargetHpBelow`, `CasterHpBelow`, etc.) reschedule timers immediately** when a seat crosses its ground aura boundary mid-walk or when health crosses via damage, heals, or leech.
 - **Allies are observed with no reaction delay.**
 - **Leech heals each hit at once**; SimC pools it and heals every hasted
   GCD.

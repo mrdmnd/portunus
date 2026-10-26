@@ -550,6 +550,7 @@ fn seats_see_their_channels_progress() {
         hasted: false,
         swings: false,
         tick_zero: false,
+        cost_per_tick: Vec::new(),
         on_end: Vec::new(),
     };
     bolt.speed = None;
@@ -2803,4 +2804,85 @@ fn subtlety_denovo_learns_no_waiting_high_cp_finishers_and_priority_retargeting(
         "expected de novo agent to retarget onto Lieutenant (retargets={retargets_to_lieutenant}, funnel_rate={:.1}%)",
         lt_funnel_rate * 100.0
     );
+}
+
+#[test]
+fn bundle_validates_plan_and_exposes_planned_windows_and_priors() {
+    use portunus_core::{PullName, SimOffset};
+    use portunus_plan::{
+        Anchor, Plan, PlanConstraints, PlanIssue, PlanValidator, PlannedWindow, PullPlan,
+    };
+    use portunus_scenario::ScenarioSampler;
+
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../data/runs/elemental_stormbringer_mechanics.ron");
+    let mut b = Bundle::load(&path).unwrap();
+    let pull_name = b.sampler.spec().pulls[0].name.clone();
+    // 1. An invalid plan is caught by PlanValidator.
+    let mut bad_plan = Plan::default();
+    bad_plan.pulls.insert(
+        PullName("no_such_pull".into()),
+        PullPlan {
+            windows: Vec::new(),
+        },
+    );
+    let issues =
+        portunus_plan::Validator.validate(&bad_plan, b.sampler.spec(), &b.enemies, &b.templates);
+    assert_eq!(
+        issues,
+        vec![PlanIssue::UnknownPull(PullName("no_such_pull".into()))]
+    );
+
+    // 2. A valid plan with a pull-start window for Fire Elemental (198067):
+    //    `mechanics_dummy#1` also has the `swirl` timed rule (8s first).
+    let mut good_plan = Plan {
+        pulls: std::collections::BTreeMap::new(),
+        constraints: PlanConstraints {
+            max_death_prob_per_pull: Some(0.1),
+        },
+    };
+    good_plan.pulls.insert(
+        pull_name.clone(),
+        PullPlan {
+            windows: vec![PlannedWindow {
+                seat: Seat(0),
+                spell: SpellId(198067),
+                target: None,
+                anchor: Anchor::PullStart,
+                offset: SimOffset(0),
+                tolerance: SimDuration(5000),
+            }],
+        },
+    );
+    b.plan = Arc::new(good_plan);
+    assert!(b.metrics().contains(&Metric::DeathChance(pull_name)));
+
+    let mut env = b.env(false);
+    let mut turn = env.reset(Seed(1)).unwrap();
+    let mut saw_open_window_and_prior = false;
+    while let Turn::Decide(d) = turn {
+        if let Some(ct) = d
+            .obs
+            .combat_time
+            .filter(|&t| t >= SimDuration(500) && t < SimDuration(4000))
+        {
+            assert!(
+                d.obs.window_open(SpellId(198067)),
+                "planned window should be open at {ct:?}: {:?}",
+                d.obs.planned_windows
+            );
+            let rem = SimDuration(8000u32.saturating_sub(ct.millis()));
+            assert_eq!(
+                d.obs.next_event_in("swirl"),
+                Some(rem),
+                "upcoming_events should report {rem:?} to swirl: {:?}",
+                d.obs.upcoming_events
+            );
+            saw_open_window_and_prior = true;
+            break;
+        }
+        let c = b.policies[0].act(&d);
+        turn = env.step(c).unwrap().next;
+    }
+    assert!(saw_open_window_and_prior);
 }

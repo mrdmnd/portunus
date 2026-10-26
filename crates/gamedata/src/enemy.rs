@@ -129,6 +129,17 @@ pub enum EnemyAction {
         effects: Vec<Effect>,
         target: EnemyTarget,
     },
+    /// Heal this enemy or engaged allies in the pull: `pct_max_health` in
+    /// `(0, 100]` heals that percentage of each target's maximum health,
+    /// while `amount` adds flat hit points.
+    Heal {
+        #[serde(default)]
+        amount: Option<Dist<f64>>,
+        #[serde(default)]
+        pct_max_health: Option<f64>,
+        #[serde(default)]
+        target: EnemyHealTarget,
+    },
     /// Apply an aura from [`crate::GameData::auras`] to this enemy, e.g. an
     /// immunity shield or an enrage.
     SelfAura(AuraId),
@@ -170,4 +181,17 @@ impl EnemyTarget {
             Self::AllPlayers => true,
         }
     }
+}
+
+/// Which enemy actor(s) an [`EnemyAction::Heal`] restores health to.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EnemyHealTarget {
+    /// Heal only this enemy.
+    #[default]
+    Itself,
+    /// Heal the most-injured engaged enemy in the pull (by health fraction).
+    LowestAlly,
+    /// Heal every engaged enemy in the pull.
+    AllAllies,
 }

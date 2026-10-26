@@ -828,6 +828,8 @@ pub(crate) enum Followup {
     Absorbed(AbsorbEvent),
     /// A seat started (`true`) or stopped moving.
     Moved(Seat, bool),
+    /// An actor's target or ground containment changed.
+    StateChanged(ActorId),
     DeathPrevented(AuraRef),
 }
 
@@ -1399,11 +1401,15 @@ impl World {
     }
 
     pub(crate) fn set_haste(&mut self, actor: ActorId, mult: f64) {
+        let mult = mult.max(f64::MIN_POSITIVE);
         let now = self.now;
         let Some(a) = self.actor_mut(actor) else {
             return;
         };
         let old = a.haste;
+        if (mult - old).abs() <= 1e-12 {
+            return;
+        }
         let old_speed = a.swing_speed();
         for r in &mut a.resources {
             r.settle(now, old);
@@ -1411,7 +1417,7 @@ impl World {
         for cd in a.cooldowns.values_mut() {
             cd.settle(now, old);
         }
-        a.haste = mult.max(f64::MIN_POSITIVE);
+        a.haste = mult;
         let mut keys_buf = [CooldownKey::Spell(SpellId(0)); 32];
         let mut keys_len = 0usize;
         let mut keys_vec: Option<Vec<CooldownKey>> = None;
@@ -1578,7 +1584,9 @@ impl World {
         let now = self.now;
         let s = Arc::clone(&self.s);
         for (i, thresholds) in s.hp_thresholds.iter().enumerate() {
-            let crossed = thresholds.iter().any(|&f| from > f && to <= f);
+            let crossed = thresholds
+                .iter()
+                .any(|&f| (from > f && to <= f) || (from < f && to >= f));
             if crossed
                 && self
                     .actor_ref(self.seat_actors[i])
@@ -1665,12 +1673,17 @@ impl World {
             return;
         }
         let before = t.health;
-        t.health = t.health.saturating_add(h.amount).min(t.max_health);
-        let healed = t.health - before;
+        let max = t.max_health;
+        t.health = t.health.saturating_add(h.amount).min(max);
+        let after = t.health;
+        let healed = after - before;
         if let Some(seat) = self.owner_seat(h.source) {
             self.seat_mut(seat).outcome.healing_done += healed;
         }
         self.record(TraceEvent::Heal(h));
+        if after > before {
+            self.health_crossed(h.target, before, after, max);
+        }
         self.queue_triggers();
     }
 
@@ -2003,13 +2016,15 @@ impl StateView for World {
     }
 
     fn enemy_info(&self, enemy: ActorId) -> Option<state::EnemyInfo<'_>> {
-        let sp = self.spawn_of(self.actor_ref(enemy)?.kind)?;
+        let a = self.actor_ref(enemy)?;
+        let sp = self.spawn_of(a.kind)?;
         Some(state::EnemyInfo {
             key: &sp.key,
             def: self.s.setup.enemies.enemies.get(&sp.key),
             forces: sp.forces,
             spawner: sp.spawner,
             despawned: sp.despawned,
+            engaged_at: a.engaged_at,
         })
     }
 

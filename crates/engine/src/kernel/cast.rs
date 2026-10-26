@@ -3,7 +3,7 @@
 use portunus_core::{ActorId, Seat, SimTime, SpellId};
 use portunus_gamedata::effect::{CooldownChange, ModKind};
 use portunus_gamedata::spell::{CooldownDef, Requirement, SpellDef, Targeting};
-use portunus_gamedata::stats::{ResourceAmount, SpendScaling};
+use portunus_gamedata::stats::{Cost, ResourceAmount, SpendScaling};
 
 use crate::choice::TargetSel;
 use crate::error::IllegalChoice;
@@ -361,6 +361,43 @@ impl World {
         spent
     }
 
+    /// Pay a channel tick's `cost_per_tick` costs if all of them are
+    /// affordable at `self.now`; returns `false` without spending if any
+    /// cost cannot be met.
+    pub(crate) fn pay_tick_costs(
+        &mut self,
+        actor: ActorId,
+        spell: SpellId,
+        costs: &[Cost],
+        target: Option<ActorId>,
+    ) -> bool {
+        if costs.is_empty() {
+            return true;
+        }
+        let mult = self.cost_mult(actor, spell, target);
+        let now = self.now;
+        let Some(a) = self.actor_mut(actor) else {
+            return false;
+        };
+        let haste = a.haste;
+        for cost in costs {
+            let Some(r) = a.resources.iter_mut().find(|r| r.def.kind == cost.kind) else {
+                return false;
+            };
+            r.settle(now, haste);
+            if r.value + 1e-9 < cost.amount * mult {
+                return false;
+            }
+        }
+        for cost in costs {
+            if let Some(r) = a.resources.iter_mut().find(|r| r.def.kind == cost.kind) {
+                let base = (cost.amount * mult).min(r.value);
+                r.change(-base);
+            }
+        }
+        true
+    }
+
     /// The kernel's gates for one ability; mechanics' gate is added on top.
     fn requirements_met(&self, actor: ActorId, def: &SpellDef, target: Option<ActorId>) -> bool {
         def.requires
@@ -397,6 +434,26 @@ impl World {
             &Requirement::CasterStacksAtLeast { aura, stacks } => self
                 .actor_ref(actor)
                 .is_some_and(|a| a.auras.iter().any(|i| i.aura == aura && i.stacks >= stacks)),
+            Requirement::TargetCastingInterruptible => target
+                .and_then(|t| self.actor_ref(t))
+                .and_then(|a| a.enemy_cast.as_ref())
+                .is_some_and(|c| c.interruptible),
+            Requirement::Dispellable { types, on_target } => {
+                let holder = if *on_target { target } else { Some(actor) };
+                holder.and_then(|h| self.actor_ref(h)).is_some_and(|a| {
+                    a.auras.iter().any(|i| {
+                        self.enemies.contains(&i.source)
+                            && self
+                                .s
+                                .setup
+                                .data
+                                .auras
+                                .get(&i.aura)
+                                .and_then(|d| d.dispel)
+                                .is_some_and(|dt| types.contains(&dt))
+                    })
+                })
+            }
         }
     }
 

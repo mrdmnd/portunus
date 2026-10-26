@@ -9,15 +9,20 @@
 
 use std::collections::BTreeSet;
 
-use portunus_core::{AuraId, Seat, SimDuration, SpecId, SpellId};
+use portunus_core::{
+    ActorId, AuraId, EventName, Seat, SimDuration, SimTime, SpawnLabel, SpecId, SpellId,
+};
+use portunus_engine::state::ActorKind;
 use portunus_engine::{ActionMask, Readiness, SegmentView, StateView, WakeReason};
 use portunus_gamedata::effect::Effect;
+use portunus_gamedata::enemy::RuleIndex;
 use portunus_gamedata::spell::{CastKind, Requirement};
 use portunus_gamedata::stats::ResourceKind;
 use portunus_gamedata::talent::Grant;
 use portunus_gamedata::{EnemyData, GameData};
 use portunus_loadout::ActorTemplate;
-use portunus_plan::PullPlan;
+use portunus_plan::{Anchor, PullPlan};
+use portunus_scenario::resolved::{ResolvedCombat, Segment};
 use portunus_scenario::{ResolvedRun, TimelinePriors};
 use serde::{Deserialize, Serialize};
 
@@ -54,6 +59,215 @@ pub trait Observer {
     fn observe(&self, ctx: &ObsContext<'_>, seat: Seat) -> Self::Obs;
     /// The legality mask the seat is shown, derived from the engine's.
     fn legal(&self, ctx: &ObsContext<'_>, seat: Seat, engine_mask: &ActionMask) -> ActionMask;
+}
+
+/// Expected timing of an enemy rule firing in the current pull, derived from
+/// [`TimelinePriors`] and visible rule firing counts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpcomingEventPrior {
+    pub actor: ActorId,
+    pub spawn: SpawnLabel,
+    pub event: EventName,
+    /// Expected time until the next firing of this rule.
+    pub expected_in: SimDuration,
+}
+
+/// Active or upcoming timing of a [`portunus_plan::PlannedWindow`] assigned to a seat.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlannedWindowTiming {
+    pub spell: SpellId,
+    pub target: Option<Seat>,
+    /// Until the window opens (`Some(SimDuration::ZERO)` once open; `None` if
+    /// its anchor has no known timing yet).
+    pub opens_in: Option<SimDuration>,
+    /// Until the window closes (`SimDuration::ZERO` once expired; `None` if
+    /// its anchor has no known timing yet).
+    pub closes_in: Option<SimDuration>,
+}
+
+impl PlannedWindowTiming {
+    /// Whether the current moment lies inside `[anchor + offset - tolerance, anchor + offset + tolerance)`.
+    pub fn is_open(&self) -> bool {
+        self.opens_in == Some(SimDuration::ZERO)
+            && self.closes_in.is_some_and(|c| c > SimDuration::ZERO)
+    }
+}
+
+fn combat_at(run: &ResolvedRun, index: u16) -> Option<&ResolvedCombat> {
+    run.segments
+        .iter()
+        .filter_map(|s| match s {
+            Segment::Combat(c) => Some(c),
+            Segment::Travel { .. } => None,
+        })
+        .nth(usize::from(index))
+}
+
+/// Computes visible upcoming enemy event timings (from [`TimelinePriors`]) and
+/// assigned [`PlannedWindowTiming`]s for `seat`.
+pub fn observe_priors_and_windows(
+    ctx: &ObsContext<'_>,
+    seat: Seat,
+    hidden_enemies: &[ActorId],
+) -> (Vec<UpcomingEventPrior>, Vec<PlannedWindowTiming>) {
+    if ctx.priors.events.is_empty() && ctx.plan.is_none_or(|p| p.windows.is_empty()) {
+        return (Vec::new(), Vec::new());
+    }
+    let state = ctx.state;
+    let now = state.now();
+    let (combat, combat_started, travel_ends) = match state.segment() {
+        SegmentView::Combat(c) => (combat_at(ctx.run, c.index), Some(c.started), None),
+        SegmentView::Travel {
+            next_combat,
+            combat_starts,
+            ..
+        } => (combat_at(ctx.run, next_combat), None, Some(combat_starts)),
+        SegmentView::Finished => (None, None, None),
+    };
+
+    let mut upcoming = Vec::new();
+    if let (Some(combat), Some(_)) = (combat, combat_started) {
+        for &e in state.enemies() {
+            if hidden_enemies.contains(&e) {
+                continue;
+            }
+            let Some(a) = state.actor(e) else { continue };
+            if !(a.engaged && a.alive && a.targetable) {
+                continue;
+            }
+            let ActorKind::Enemy { spawn: sp_idx, .. } = a.kind else {
+                continue;
+            };
+            let Some(info) = state.enemy_info(e) else {
+                continue;
+            };
+            let Some(def) = info.def else { continue };
+            let Some(spawn) = combat.spawns.get(usize::from(sp_idx.0)) else {
+                continue;
+            };
+            for (r, r_def) in def.rules.iter().enumerate() {
+                let r_view = state.rule(e, RuleIndex(r as u16));
+                if !r_view.active {
+                    continue;
+                }
+                let prior = ctx.priors.events.iter().find(|p| {
+                    p.pull == combat.pull && p.spawn == spawn.label && p.event == r_def.name
+                });
+                let expected_at = if r_view.fired == 0 {
+                    info.engaged_at
+                        .zip(prior.and_then(|p| p.first_mean))
+                        .map(|(eng, fm)| eng + fm)
+                } else {
+                    r_view
+                        .last_fired
+                        .zip(prior.and_then(|p| p.interval_mean))
+                        .map(|(lf, im)| lf + im)
+                };
+                if let Some(at) = expected_at {
+                    upcoming.push(UpcomingEventPrior {
+                        actor: e,
+                        spawn: spawn.label.clone(),
+                        event: r_def.name.clone(),
+                        expected_in: at.saturating_since(now),
+                    });
+                }
+            }
+        }
+        upcoming.sort_by_key(|u| u.expected_in);
+    }
+
+    let mut windows = Vec::new();
+    if let Some(plan) = ctx.plan {
+        for w in plan.windows.iter().filter(|w| w.seat == seat) {
+            let anchor_at = match &w.anchor {
+                Anchor::PullStart => combat_started.or(travel_ends),
+                Anchor::SpawnEngaged(label) => combat.and_then(|c| {
+                    state
+                        .enemies()
+                        .iter()
+                        .copied()
+                        .filter(|e| !hidden_enemies.contains(e))
+                        .find_map(|e| {
+                            let a = state.actor(e)?;
+                            let ActorKind::Enemy { spawn: sp_idx, .. } = a.kind else {
+                                return None;
+                            };
+                            let info = state.enemy_info(e)?;
+                            let sp = c.spawns.get(usize::from(sp_idx.0))?;
+                            (&sp.label == label).then_some(info.engaged_at)?
+                        })
+                }),
+                Anchor::EnemyEvent {
+                    spawn: label,
+                    event,
+                    nth,
+                } => combat.and_then(|c| {
+                    state
+                        .enemies()
+                        .iter()
+                        .copied()
+                        .filter(|e| !hidden_enemies.contains(e))
+                        .find_map(|e| {
+                            let a = state.actor(e)?;
+                            let ActorKind::Enemy { spawn: sp_idx, .. } = a.kind else {
+                                return None;
+                            };
+                            let info = state.enemy_info(e)?;
+                            let sp = c.spawns.get(usize::from(sp_idx.0))?;
+                            if &sp.label != label {
+                                return None;
+                            }
+                            let def = info.def?;
+                            let (r, _) = def
+                                .rules
+                                .iter()
+                                .enumerate()
+                                .find(|(_, rd)| &rd.name == event)?;
+                            let r_view = state.rule(e, RuleIndex(r as u16));
+                            if r_view.fired >= *nth {
+                                return r_view.last_fired;
+                            }
+                            let eng = info.engaged_at?;
+                            let prior = ctx.priors.events.iter().find(|p| {
+                                p.pull == c.pull && &p.spawn == label && &p.event == event
+                            })?;
+                            if *nth == 1 {
+                                prior.first_mean.map(|fm| eng + fm)
+                            } else if r_view.fired > 0 {
+                                r_view.last_fired.zip(prior.interval_mean).map(|(lf, im)| {
+                                    lf + SimDuration(im.0.saturating_mul(nth - r_view.fired))
+                                })
+                            } else {
+                                prior.first_mean.zip(prior.interval_mean).map(|(fm, im)| {
+                                    eng + fm + SimDuration(im.0.saturating_mul(nth - 1))
+                                })
+                            }
+                        })
+                }),
+            };
+            let (opens_in, closes_in) = match anchor_at {
+                Some(at) => {
+                    let center = i64::from(at.0) + i64::from(w.offset.0);
+                    let tol = i64::from(w.tolerance.0);
+                    let start = SimTime((center - tol).max(0) as u32);
+                    let end = SimTime((center + tol).max(0) as u32);
+                    (
+                        Some(start.saturating_since(now)),
+                        Some(end.saturating_since(now)),
+                    )
+                }
+                None => (None, None),
+            };
+            windows.push(PlannedWindowTiming {
+                spell: w.spell,
+                target: w.target,
+                opens_in,
+                closes_in,
+            });
+        }
+    }
+
+    (upcoming, windows)
 }
 
 /// Every timed aura referenced by `spec`'s spells, talents, or baseline

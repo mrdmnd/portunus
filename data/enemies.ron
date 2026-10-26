@@ -131,6 +131,26 @@
             forces: 8,
             defense: (level_offset: 2, armor: 0.0),
         ),
+        "dungeon_mender": (
+            key: "dungeon_mender",
+            name: "Dungeon Mender",
+            kind: trash,
+            health: 6000000,
+            forces: 4,
+            defense: (level_offset: 1, armor: 0.0),
+            rules: [
+                (
+                    name: "dark_mending",
+                    when: elapsed(6000),
+                    repeat: Some(fixed(14000)),
+                    action: cast(
+                        time: 2500,
+                        interruptible: true,
+                        then: heal(pct_max_health: Some(15.0), target: lowest_ally),
+                    ),
+                ),
+            ],
+        ),
         "dungeon_trash": (
             key: "dungeon_trash",
             name: "Dungeon Trash",

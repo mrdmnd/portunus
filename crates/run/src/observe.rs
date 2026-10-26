@@ -7,7 +7,10 @@ use portunus_core::{
 };
 use portunus_engine::state::{ActorKind, AuraInstance, CastWhat};
 use portunus_engine::{ActionMask, Readiness, SegmentView, WakeReason};
-use portunus_env::{spec_auras, spec_spells, InfoSet, ObsContext, Observer, DEFAULT_TARGET_SLOTS};
+use portunus_env::{
+    observe_priors_and_windows, spec_auras, spec_spells, InfoSet, ObsContext, Observer,
+    PlannedWindowTiming, UpcomingEventPrior, DEFAULT_TARGET_SLOTS,
+};
 use portunus_gamedata::aura::{AuraValueKind, DispelType};
 use portunus_gamedata::pet::PetKind;
 use portunus_gamedata::stats::ResourceKind;
@@ -198,6 +201,12 @@ pub struct SeatObs {
     /// Remaining health of each visible engaged enemy other than `target`, in
     /// the order of `ActionMask::targets` (`ActionSlot::Retarget(i)`).
     pub other_target_healths: Vec<u64>,
+    /// Upcoming enemy rule firings in the current pull, estimated from
+    /// [`portunus_scenario::TimelinePriors`] and visible firing counts.
+    pub upcoming_events: Vec<UpcomingEventPrior>,
+    /// Planned cooldown windows assigned to this seat in the current (or
+    /// upcoming) pull.
+    pub planned_windows: Vec<PlannedWindowTiming>,
 }
 
 /// A controlled pet, as its owner sees it on the pet frame.
@@ -329,6 +338,23 @@ impl SeatObs {
         self.target.as_ref().map_or(0, |t| {
             1 + t.neighbours.iter().take_while(|&&d| d <= yards).count()
         })
+    }
+
+    /// Whether a planned cooldown window for `spell` is currently open.
+    pub fn window_open(&self, spell: SpellId) -> bool {
+        self.planned_windows
+            .iter()
+            .any(|w| w.spell == spell && w.is_open())
+    }
+
+    /// Expected time until the next firing of an enemy rule named `event`
+    /// (from [`portunus_scenario::TimelinePriors`]).
+    pub fn next_event_in(&self, event: &str) -> Option<SimDuration> {
+        self.upcoming_events
+            .iter()
+            .filter(|e| e.event.0 == event)
+            .map(|e| e.expected_in)
+            .min()
     }
 }
 
@@ -623,6 +649,8 @@ impl Observer for ScriptObserver {
             .filter(|&e| Some(e) != cur_target)
             .filter_map(|e| Some(state.actor(e)?.health))
             .collect();
+        let (upcoming_events, planned_windows) =
+            observe_priors_and_windows(ctx, seat, &hide.enemies);
 
         SeatObs {
             now,
@@ -695,6 +723,8 @@ impl Observer for ScriptObserver {
             },
             pulls_remaining,
             other_target_healths,
+            upcoming_events,
+            planned_windows,
         }
     }
 

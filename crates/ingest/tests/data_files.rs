@@ -974,6 +974,7 @@ fn channels_without_ticks_or_duration_are_reported() {
         hasted: true,
         swings: false,
         tick_zero: false,
+        cost_per_tick: Vec::new(),
         on_end: Vec::new(),
     };
     let bolt = SpellId(188196);
@@ -996,6 +997,7 @@ fn what_a_channel_does_as_it_ends_is_checked() {
         hasted: true,
         swings: false,
         tick_zero: true,
+        cost_per_tick: Vec::new(),
         on_end: vec![Effect::ApplyAura {
             aura: ghost,
             target: EffectTarget::Caster,

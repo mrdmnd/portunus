@@ -338,6 +338,9 @@ impl Mechanics for PartyMechanics {
             self.interp.fire(io, ev.aura.holder, stacked);
         }
         self.interp.refresh_stats(io, ev.aura.holder, def);
+        if def.ground.is_some() {
+            self.interp.refresh_conditional_stats(io, ev.aura.holder);
+        }
     }
 
     fn aura_removed(&self, io: &mut dyn EngineIo, ev: &AuraEvent) {
@@ -406,6 +409,9 @@ impl Mechanics for PartyMechanics {
             self.interp.fire(io, r.holder, removed);
         }
         self.interp.refresh_stats(io, r.holder, def);
+        if def.ground.is_some() {
+            self.interp.refresh_conditional_stats(io, r.holder);
+        }
     }
 
     /// An enemy's death reaches every seat's and pet's listeners.
@@ -557,6 +563,10 @@ impl Mechanics for PartyMechanics {
         };
         self.interp.fire(io, me, moved);
         self.interp.refresh_conditional_stats(io, me);
+    }
+
+    fn state_changed(&self, io: &mut dyn EngineIo, actor: ActorId) {
+        self.interp.refresh_conditional_stats(io, actor);
     }
 
     fn death_prevented(&self, io: &mut dyn EngineIo, aura: AuraRef) {
