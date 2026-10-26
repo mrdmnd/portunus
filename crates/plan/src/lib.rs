@@ -23,7 +23,65 @@ pub struct Plan {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct PullPlan {
+    #[serde(default)]
     pub windows: Vec<PlannedWindow>,
+    #[serde(default)]
+    pub interrupts: Vec<InterruptRule>,
+    #[serde(default)]
+    pub defensives: Vec<DefensiveRule>,
+}
+
+/// Ordered kick / crowd-control rotation for an enemy cast.
+///
+/// On the `k`-th firing (`0`-indexed) of a matching enemy rule, the rotation
+/// starts at `order[k % order.len()]` and selects the first `(seat, spell)`
+/// entry whose seat is alive and whose `spell` cooldown will be ready before
+/// the cast completes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InterruptRule {
+    /// Which spawn (`None`: any enemy in the pull).
+    #[serde(default)]
+    pub spawn: Option<SpawnLabel>,
+    /// Which enemy rule (`None`: any interruptible cast on `spawn`).
+    #[serde(default)]
+    pub event: Option<EventName>,
+    /// Ordered priority / rotation of `(Seat, SpellId)`.
+    pub order: Vec<(Seat, SpellId)>,
+}
+
+/// Assignment for `seat` to press a personal or external defensive `spell`
+/// in response to a telegraphed enemy event or health threshold.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DefensiveRule {
+    pub seat: Seat,
+    pub spell: SpellId,
+    /// Optional ally target for external defensives.
+    #[serde(default)]
+    pub target: Option<Seat>,
+    pub trigger: DefensiveTrigger,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DefensiveTrigger {
+    /// Press before or during `spawn`'s `event` (`nth: None` matches every
+    /// firing; `Some(n)` matches the 1-based `n`-th firing). `lead_time`
+    /// opens the defensive duty window that long before the expected firing.
+    EnemyEvent {
+        spawn: SpawnLabel,
+        event: EventName,
+        #[serde(default)]
+        nth: Option<u32>,
+        #[serde(default = "default_defensive_lead")]
+        lead_time: SimDuration,
+    },
+    /// Press whenever `seat`'s health percentage (`0.0..=100.0`) is at or
+    /// below this threshold.
+    HealthPctAtMost(f64),
+}
+
+fn default_defensive_lead() -> SimDuration {
+    SimDuration(2500)
 }
 
 /// Seat X should use spell Y on seat W, at anchor Z plus an offset.
@@ -82,6 +140,12 @@ pub enum PlanIssue {
     },
     /// The death-chance limit isn't a probability.
     BadDeathLimit,
+    /// An `InterruptRule` has an empty `order` rotation.
+    EmptyInterruptOrder {
+        pull: PullName,
+    },
+    /// A `DefensiveTrigger::HealthPctAtMost` threshold is outside `0.0..=100.0`.
+    BadHealthThreshold,
 }
 
 /// Validation interface for plan-aware loaders.
@@ -179,6 +243,117 @@ impl PlanValidator for Validator {
                             }
                         },
                     }
+                }
+            }
+            for intr in &pull_plan.interrupts {
+                if intr.order.is_empty() {
+                    issues.push(PlanIssue::EmptyInterruptOrder {
+                        pull: pull_name.clone(),
+                    });
+                }
+                for &(seat, spell) in &intr.order {
+                    match party.get(usize::from(seat.0)) {
+                        None => issues.push(PlanIssue::UnknownSeat(seat)),
+                        Some(t) if !t.abilities.contains(&spell) => {
+                            issues.push(PlanIssue::SpellNotKnown { seat, spell });
+                        }
+                        Some(_) => {}
+                    }
+                }
+                if pull_spec.is_some() {
+                    match (&intr.spawn, &intr.event) {
+                        (Some(spawn), None) => {
+                            if !spawns.contains_key(spawn) {
+                                issues.push(PlanIssue::UnknownSpawn {
+                                    pull: pull_name.clone(),
+                                    spawn: spawn.clone(),
+                                });
+                            }
+                        }
+                        (Some(spawn), Some(event)) => match spawns.get(spawn) {
+                            None => issues.push(PlanIssue::UnknownSpawn {
+                                pull: pull_name.clone(),
+                                spawn: spawn.clone(),
+                            }),
+                            Some(key) => {
+                                let has_rule = enemies
+                                    .enemies
+                                    .get(*key)
+                                    .is_some_and(|def| def.rules.iter().any(|r| &r.name == event));
+                                if !has_rule {
+                                    issues.push(PlanIssue::UnknownEvent {
+                                        pull: pull_name.clone(),
+                                        spawn: spawn.clone(),
+                                        event: event.clone(),
+                                    });
+                                }
+                            }
+                        },
+                        (None, Some(event)) => {
+                            let any_has_rule = spawns.values().any(|key| {
+                                enemies
+                                    .enemies
+                                    .get(*key)
+                                    .is_some_and(|def| def.rules.iter().any(|r| &r.name == event))
+                            });
+                            if !any_has_rule {
+                                issues.push(PlanIssue::UnknownEvent {
+                                    pull: pull_name.clone(),
+                                    spawn: SpawnLabel("*".into()),
+                                    event: event.clone(),
+                                });
+                            }
+                        }
+                        (None, None) => {}
+                    }
+                }
+            }
+            for def_rule in &pull_plan.defensives {
+                match party.get(usize::from(def_rule.seat.0)) {
+                    None => issues.push(PlanIssue::UnknownSeat(def_rule.seat)),
+                    Some(t) if !t.abilities.contains(&def_rule.spell) => {
+                        issues.push(PlanIssue::SpellNotKnown {
+                            seat: def_rule.seat,
+                            spell: def_rule.spell,
+                        });
+                    }
+                    Some(_) => {}
+                }
+                if let Some(target) = def_rule.target {
+                    if usize::from(target.0) >= party.len() {
+                        issues.push(PlanIssue::UnknownTarget(target));
+                    }
+                }
+                match &def_rule.trigger {
+                    DefensiveTrigger::HealthPctAtMost(pct) => {
+                        if !(0.0..=100.0).contains(pct) || !pct.is_finite() {
+                            issues.push(PlanIssue::BadHealthThreshold);
+                        }
+                    }
+                    DefensiveTrigger::EnemyEvent {
+                        spawn, event, nth, ..
+                    } if pull_spec.is_some() => match spawns.get(spawn) {
+                        None => issues.push(PlanIssue::UnknownSpawn {
+                            pull: pull_name.clone(),
+                            spawn: spawn.clone(),
+                        }),
+                        Some(key) => {
+                            let nth_ok = nth.is_none_or(|n| n > 0);
+                            let has_rule = nth_ok
+                                && enemies
+                                    .enemies
+                                    .get(*key)
+                                    .is_some_and(|def| def.rules.iter().any(|r| &r.name == event));
+                            if !has_rule {
+                                issues.push(PlanIssue::UnknownEvent {
+                                    pull: pull_name.clone(),
+                                    spawn: spawn.clone(),
+                                    event: event.clone(),
+                                });
+                            }
+                        }
+                    },
+                    DefensiveTrigger::EnemyEvent { .. } => {}
                 }
             }
         }
@@ -284,12 +459,8 @@ mod tests {
                 max_death_prob_per_pull: Some(1.5),
             },
         };
-        plan.pulls.insert(
-            PullName("missing_pull".into()),
-            PullPlan {
-                windows: Vec::new(),
-            },
-        );
+        plan.pulls
+            .insert(PullName("missing_pull".into()), PullPlan::default());
         plan.pulls.insert(
             PullName("pull_1".into()),
             PullPlan {
@@ -315,6 +486,17 @@ mod tests {
                         tolerance: SimDuration(1000),
                     },
                 ],
+                interrupts: vec![InterruptRule {
+                    spawn: Some(SpawnLabel("boss#1".into())),
+                    event: Some(EventName("slam".into())),
+                    order: Vec::new(),
+                }],
+                defensives: vec![DefensiveRule {
+                    seat: Seat(0),
+                    spell: SpellId(198067),
+                    target: None,
+                    trigger: DefensiveTrigger::HealthPctAtMost(120.0),
+                }],
             },
         );
 
@@ -336,5 +518,9 @@ mod tests {
             spawn: SpawnLabel("boss#1".into()),
             event: EventName("no_such_event".into()),
         }));
+        assert!(issues.contains(&PlanIssue::EmptyInterruptOrder {
+            pull: PullName("pull_1".into()),
+        }));
+        assert!(issues.contains(&PlanIssue::BadHealthThreshold));
     }
 }

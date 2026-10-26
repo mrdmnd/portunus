@@ -5040,7 +5040,6 @@
             hostile: true,
             range: Some(5.0),
             castable_while_moving: true,
-            usable_while_casting: true,
             unrecorded: true,
             effects: [
                 interrupt(target: target),
@@ -5338,7 +5337,6 @@
             hostile: true,
             range: Some(15.0),
             castable_while_moving: true,
-            usable_while_casting: true,
             unrecorded: true,
             effects: [
                 interrupt(target: target),
@@ -7125,7 +7123,6 @@
             hostile: true,
             range: Some(40.0),
             castable_while_moving: true,
-            usable_while_casting: true,
             unrecorded: true,
             effects: [
                 interrupt(target: target),
@@ -7142,7 +7139,6 @@
             hostile: true,
             range: Some(5.0),
             castable_while_moving: true,
-            usable_while_casting: true,
             unrecorded: true,
             effects: [
                 interrupt(target: target),
@@ -8725,7 +8721,6 @@
             hostile: true,
             range: Some(5.0),
             castable_while_moving: true,
-            usable_while_casting: true,
             unrecorded: true,
             effects: [
                 interrupt(target: target),
@@ -10192,7 +10187,6 @@
             hostile: true,
             range: Some(40.0),
             castable_while_moving: true,
-            usable_while_casting: true,
             unrecorded: true,
             effects: [
                 interrupt(target: target),
@@ -13935,7 +13929,10 @@
             hostile: true,
             range: Some(40.0),
             castable_while_moving: true,
-            effects: [],
+            unrecorded: true,
+            effects: [
+                interrupt(target: target),
+            ],
         ),
         205636: (
             id: 205636,
@@ -15517,7 +15514,10 @@
             hostile: true,
             range: Some(25.0),
             castable_while_moving: true,
-            effects: [],
+            unrecorded: true,
+            effects: [
+                interrupt(target: target),
+            ],
         ),
         434481: (
             id: 434481,

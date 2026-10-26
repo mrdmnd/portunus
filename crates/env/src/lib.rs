@@ -30,8 +30,8 @@ pub use action_space::{
 };
 pub use episode::{Episode, EpisodeSource};
 pub use observe::{
-    observe_priors_and_windows, spec_auras, FlatObserver, InfoSet, ObsContext, Observer,
-    PlannedWindowTiming, UpcomingEventPrior,
+    apply_interrupt_plan_mask, observe_duties, observe_priors_and_windows, spec_auras, DutyTiming,
+    FlatObserver, InfoSet, ObsContext, Observer, PlannedWindowTiming, UpcomingEventPrior,
 };
 pub use reward::{DenseReward, Progress, ProgressMeter, Reward};
 

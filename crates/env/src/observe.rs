@@ -15,13 +15,13 @@ use portunus_core::{
 use portunus_engine::state::ActorKind;
 use portunus_engine::{ActionMask, Readiness, SegmentView, StateView, WakeReason};
 use portunus_gamedata::effect::Effect;
-use portunus_gamedata::enemy::RuleIndex;
+use portunus_gamedata::enemy::{EnemyAction, EnemyDef, RuleIndex};
 use portunus_gamedata::spell::{CastKind, Requirement};
 use portunus_gamedata::stats::ResourceKind;
 use portunus_gamedata::talent::Grant;
 use portunus_gamedata::{EnemyData, GameData};
 use portunus_loadout::ActorTemplate;
-use portunus_plan::{Anchor, PullPlan};
+use portunus_plan::{Anchor, DefensiveTrigger, InterruptRule, PullPlan};
 use portunus_scenario::resolved::{ResolvedCombat, Segment};
 use portunus_scenario::{ResolvedRun, TimelinePriors};
 use serde::{Deserialize, Serialize};
@@ -90,6 +90,34 @@ impl PlannedWindowTiming {
     pub fn is_open(&self) -> bool {
         self.opens_in == Some(SimDuration::ZERO)
             && self.closes_in.is_some_and(|c| c > SimDuration::ZERO)
+    }
+}
+
+/// An active or upcoming interrupt/CC or defensive duty assigned to a seat by
+/// the pull's [`PullPlan`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DutyTiming {
+    pub spell: SpellId,
+    /// Enemy to interrupt/stun, or ally target for an external defensive.
+    pub target: Option<ActorId>,
+    /// Time until the duty window opens (`SimDuration::ZERO` when the enemy
+    /// cast is already in progress or the defensive window is open).
+    pub opens_in: SimDuration,
+    /// Time until the duty deadline expires (e.g. when the enemy cast finishes).
+    pub deadline_in: SimDuration,
+    /// Whether `spell` is on the GCD (`true` for stuns/GCD-defensives; `false`
+    /// for off-GCD interrupts).
+    pub requires_gcd: bool,
+    /// Whether `spell` cannot be cast while another cast is in progress, so an
+    /// in-progress cast that runs past `deadline_in` must be stopped via
+    /// `Choice::StopCast`.
+    pub requires_not_casting: bool,
+}
+
+impl DutyTiming {
+    /// Whether the duty window is open right now (`opens_in == 0 && deadline_in > 0`).
+    pub fn is_active(&self) -> bool {
+        self.opens_in == SimDuration::ZERO && self.deadline_in > SimDuration::ZERO
     }
 }
 
@@ -268,6 +296,366 @@ pub fn observe_priors_and_windows(
     }
 
     (upcoming, windows)
+}
+
+fn spell_can_stop_cast(
+    data: &GameData,
+    spell: SpellId,
+    interruptible: bool,
+    cc_immune: bool,
+) -> bool {
+    let Some(def) = data.spells.get(&spell) else {
+        return false;
+    };
+    def.effects.iter().any(|e| match e {
+        Effect::Interrupt { .. } => interruptible,
+        Effect::Stun { .. } => !cc_immune,
+        _ => false,
+    })
+}
+
+fn assigned_kicker(
+    ctx: &ObsContext<'_>,
+    intr: &InterruptRule,
+    enemy_def: &EnemyDef,
+    interruptible: bool,
+    firing_k: usize,
+    deadline_at: SimTime,
+) -> Option<(Seat, SpellId)> {
+    let len = intr.order.len();
+    if len == 0 {
+        return None;
+    }
+    let state = ctx.state;
+    let now = state.now();
+    for offset in 0..len {
+        let (cand_seat, cand_spell) = intr.order[(firing_k + offset) % len];
+        let Some(&cand_actor) = state.seats().get(usize::from(cand_seat.0)) else {
+            continue;
+        };
+        if !state.actor(cand_actor).is_some_and(|a| a.alive) {
+            continue;
+        }
+        if !spell_can_stop_cast(ctx.data, cand_spell, interruptible, enemy_def.cc_immune) {
+            continue;
+        }
+        let ready_at = state.cooldown(cand_actor, cand_spell).map_or(now, |cd| {
+            if cd.charges > 0 {
+                now
+            } else {
+                cd.next_charge_at.unwrap_or(SimTime(u32::MAX))
+            }
+        });
+        if ready_at < deadline_at {
+            return Some((cand_seat, cand_spell));
+        }
+    }
+    None
+}
+
+/// Computes `seat`'s next assigned kick/CC duty and next defensive duty from
+/// the pull's [`PullPlan`] and [`TimelinePriors`].
+pub fn observe_duties(
+    ctx: &ObsContext<'_>,
+    seat: Seat,
+    hidden_enemies: &[ActorId],
+) -> (Option<DutyTiming>, Option<DutyTiming>) {
+    let Some(plan) = ctx.plan else {
+        return (None, None);
+    };
+    if plan.interrupts.is_empty() && plan.defensives.is_empty() {
+        return (None, None);
+    }
+    let state = ctx.state;
+    let now = state.now();
+    let SegmentView::Combat(c_view) = state.segment() else {
+        return (None, None);
+    };
+    let Some(combat) = combat_at(ctx.run, c_view.index) else {
+        return (None, None);
+    };
+    let me = state.seats()[usize::from(seat.0)];
+    let unperceived_casts: Vec<ActorId> = if ctx.info == InfoSet::Realistic {
+        state
+            .unperceived(seat)
+            .iter()
+            .filter_map(|p| match p.reason {
+                WakeReason::EnemyCastStart(e) => Some(e),
+                _ => None,
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    let mut best_kick: Option<DutyTiming> = None;
+    if !plan.interrupts.is_empty() {
+        for &e in state.enemies() {
+            if hidden_enemies.contains(&e) {
+                continue;
+            }
+            let Some(a) = state.actor(e) else { continue };
+            if !(a.engaged && a.alive && a.targetable) {
+                continue;
+            }
+            let ActorKind::Enemy { spawn: sp_idx, .. } = a.kind else {
+                continue;
+            };
+            let Some(info) = state.enemy_info(e) else {
+                continue;
+            };
+            let Some(def) = info.def else { continue };
+            let Some(spawn) = combat.spawns.get(usize::from(sp_idx.0)) else {
+                continue;
+            };
+            for (r, r_def) in def.rules.iter().enumerate() {
+                let EnemyAction::Cast {
+                    time: cast_dur,
+                    interruptible,
+                    ..
+                } = &r_def.action
+                else {
+                    continue;
+                };
+                let r_view = state.rule(e, RuleIndex(r as u16));
+                if !r_view.active {
+                    continue;
+                }
+                let Some(intr) = plan.interrupts.iter().find(|intr| {
+                    intr.spawn.as_ref().is_none_or(|s| s == &spawn.label)
+                        && intr.event.as_ref().is_none_or(|ev| ev == &r_def.name)
+                }) else {
+                    continue;
+                };
+
+                let active_cast = a.casting.filter(|c| {
+                    c.what == portunus_engine::state::CastWhat::EnemyRule(RuleIndex(r as u16))
+                        && !unperceived_casts.contains(&e)
+                });
+                let (firing_k, opens_in, deadline_at) = if let Some(cast) = active_cast {
+                    (
+                        r_view.fired.saturating_sub(1) as usize,
+                        SimDuration::ZERO,
+                        cast.ends,
+                    )
+                } else {
+                    let prior = ctx.priors.events.iter().find(|p| {
+                        p.pull == combat.pull && p.spawn == spawn.label && p.event == r_def.name
+                    });
+                    let expected_start = if r_view.fired == 0 {
+                        info.engaged_at
+                            .zip(prior.and_then(|p| p.first_mean))
+                            .map(|(eng, fm)| eng + fm)
+                    } else {
+                        r_view
+                            .last_fired
+                            .zip(prior.and_then(|p| p.interval_mean))
+                            .map(|(lf, im)| lf + im)
+                    };
+                    let Some(start_at) = expected_start else {
+                        continue;
+                    };
+                    (
+                        r_view.fired as usize,
+                        start_at.saturating_since(now),
+                        start_at + *cast_dur,
+                    )
+                };
+                if deadline_at <= now {
+                    continue;
+                }
+                let Some((assigned_seat, assigned_spell)) =
+                    assigned_kicker(ctx, intr, def, *interruptible, firing_k, deadline_at)
+                else {
+                    continue;
+                };
+                if assigned_seat != seat {
+                    continue;
+                }
+                let Some(sp_def) = ctx.data.spells.get(&assigned_spell) else {
+                    continue;
+                };
+                let cand = DutyTiming {
+                    spell: assigned_spell,
+                    target: Some(e),
+                    opens_in,
+                    deadline_in: deadline_at.saturating_since(now),
+                    requires_gcd: sp_def.gcd.is_some(),
+                    requires_not_casting: !sp_def.usable_while_casting,
+                };
+                let replace = best_kick.as_ref().is_none_or(|cur| {
+                    (cand.opens_in, cand.deadline_in) < (cur.opens_in, cur.deadline_in)
+                });
+                if replace {
+                    best_kick = Some(cand);
+                }
+            }
+        }
+    }
+
+    let mut best_def: Option<DutyTiming> = None;
+    for def_rule in plan.defensives.iter().filter(|d| d.seat == seat) {
+        let Some(sp_def) = ctx.data.spells.get(&def_rule.spell) else {
+            continue;
+        };
+        let target_actor = def_rule
+            .target
+            .and_then(|s| state.seats().get(usize::from(s.0)).copied())
+            .unwrap_or(me);
+        let already_buffed = sp_def.effects.iter().any(|ef| match ef {
+            Effect::ApplyAura { aura, .. } => {
+                state.auras(target_actor).iter().any(|i| i.aura == *aura)
+            }
+            _ => false,
+        });
+        if already_buffed {
+            continue;
+        }
+        let timing = match &def_rule.trigger {
+            DefensiveTrigger::HealthPctAtMost(threshold) => {
+                let hp_pct = state
+                    .actor(target_actor)
+                    .map_or(100.0, |a| 100.0 * a.health_frac());
+                if hp_pct <= *threshold {
+                    Some((SimDuration::ZERO, now + SimDuration(5000)))
+                } else {
+                    None
+                }
+            }
+            DefensiveTrigger::EnemyEvent {
+                spawn: label,
+                event,
+                nth,
+                lead_time,
+            } => state
+                .enemies()
+                .iter()
+                .copied()
+                .filter(|e| !hidden_enemies.contains(e))
+                .find_map(|e| {
+                    let a = state.actor(e)?;
+                    if !(a.engaged && a.alive && a.targetable) {
+                        return None;
+                    }
+                    let ActorKind::Enemy { spawn: sp_idx, .. } = a.kind else {
+                        return None;
+                    };
+                    let info = state.enemy_info(e)?;
+                    let sp = combat.spawns.get(usize::from(sp_idx.0))?;
+                    if &sp.label != label {
+                        return None;
+                    }
+                    let def = info.def?;
+                    let (r, r_def) = def
+                        .rules
+                        .iter()
+                        .enumerate()
+                        .find(|(_, rd)| &rd.name == event)?;
+                    let r_view = state.rule(e, RuleIndex(r as u16));
+                    let active_cast = a.casting.filter(|c| {
+                        c.what == portunus_engine::state::CastWhat::EnemyRule(RuleIndex(r as u16))
+                            && !unperceived_casts.contains(&e)
+                    });
+                    if let Some(cast) = active_cast {
+                        if nth.is_none_or(|n| r_view.fired == n) {
+                            return Some((SimDuration::ZERO, cast.ends));
+                        }
+                    }
+                    if nth.is_some_and(|n| r_view.fired >= n) {
+                        return None;
+                    }
+                    if nth.is_some_and(|n| r_view.fired + 1 != n) {
+                        return None;
+                    }
+                    let prior =
+                        ctx.priors.events.iter().find(|p| {
+                            p.pull == combat.pull && &p.spawn == label && &p.event == event
+                        });
+                    let expected_start = if r_view.fired == 0 {
+                        info.engaged_at
+                            .zip(prior.and_then(|p| p.first_mean))
+                            .map(|(eng, fm)| eng + fm)
+                    } else {
+                        r_view
+                            .last_fired
+                            .zip(prior.and_then(|p| p.interval_mean))
+                            .map(|(lf, im)| lf + im)
+                    }?;
+                    let cast_dur = match &r_def.action {
+                        EnemyAction::Cast { time, .. } => *time,
+                        _ => SimDuration::ZERO,
+                    };
+                    let open_at = SimTime(expected_start.0.saturating_sub(lead_time.0));
+                    let deadline_at = expected_start + cast_dur;
+                    (deadline_at > now).then_some((open_at.saturating_since(now), deadline_at))
+                }),
+        };
+        let Some((opens_in, deadline_at)) = timing else {
+            continue;
+        };
+        let ready_at = state.cooldown(me, def_rule.spell).map_or(now, |cd| {
+            if cd.charges > 0 {
+                now
+            } else {
+                cd.next_charge_at.unwrap_or(SimTime(u32::MAX))
+            }
+        });
+        if ready_at >= deadline_at {
+            continue;
+        }
+        let cand = DutyTiming {
+            spell: def_rule.spell,
+            target: def_rule.target.map(|s| state.seats()[usize::from(s.0)]),
+            opens_in,
+            deadline_in: deadline_at.saturating_since(now),
+            requires_gcd: sp_def.gcd.is_some(),
+            requires_not_casting: !sp_def.usable_while_casting,
+        };
+        let replace = best_def
+            .as_ref()
+            .is_none_or(|cur| (cand.opens_in, cand.deadline_in) < (cur.opens_in, cur.deadline_in));
+        if replace {
+            best_def = Some(cand);
+        }
+    }
+
+    (best_kick, best_def)
+}
+
+/// Coordinates multi-seat interrupt legality according to [`PullPlan::interrupts`]:
+/// any pure-interrupt spell governed by the pull's interrupt plan is blocked
+/// unless `seat` has an active kick duty for that spell right now.
+pub fn apply_interrupt_plan_mask(
+    ctx: &ObsContext<'_>,
+    seat: Seat,
+    hidden_enemies: &[ActorId],
+    mask: &mut ActionMask,
+) {
+    let Some(plan) = ctx.plan else { return };
+    if plan.interrupts.is_empty() {
+        return;
+    }
+    let (active_kick, _) = observe_duties(ctx, seat, hidden_enemies);
+    let active_kick_spell = active_kick.filter(DutyTiming::is_active).map(|d| d.spell);
+    for intr in &plan.interrupts {
+        for &(rule_seat, rule_spell) in &intr.order {
+            if rule_seat != seat {
+                continue;
+            }
+            let is_pure_interrupt = ctx.data.spells.get(&rule_spell).is_some_and(|def| {
+                !def.effects.is_empty()
+                    && def
+                        .effects
+                        .iter()
+                        .all(|e| matches!(e, Effect::Interrupt { .. }))
+            });
+            if is_pure_interrupt && active_kick_spell != Some(rule_spell) {
+                if let Some(r) = mask.abilities.get_mut(&rule_spell) {
+                    *r = Readiness::Blocked;
+                }
+            }
+        }
+    }
 }
 
 /// Every timed aura referenced by `spec`'s spells, talents, or baseline
@@ -615,8 +1003,10 @@ impl Observer for FlatObserver {
         let mut mask = engine_mask.clone();
         mask.targets.retain(|&t| Some(t) != cur_target);
         if ctx.info == InfoSet::Privileged {
+            apply_interrupt_plan_mask(ctx, seat, &[], &mut mask);
             return mask;
         }
+        let mut hidden_enemies = Vec::new();
         for p in ctx.state.unperceived(seat) {
             match p.reason {
                 WakeReason::CooldownReady(s) => {
@@ -640,11 +1030,13 @@ impl Observer for FlatObserver {
                     }
                 }
                 WakeReason::EnemyEngaged(e) => {
+                    hidden_enemies.push(e);
                     mask.targets.retain(|&t| t != e);
                 }
                 _ => {}
             }
         }
+        apply_interrupt_plan_mask(ctx, seat, &hidden_enemies, &mut mask);
         mask
     }
 }

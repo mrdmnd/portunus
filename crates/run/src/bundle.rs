@@ -242,6 +242,7 @@ impl Bundle {
         let sampler = Sampler::new(self.sampler.spec().clone(), Arc::clone(&self.enemies))
             .map(Arc::new)
             .unwrap_or_else(|_| Arc::clone(&self.sampler));
+        let priors = Arc::new(sampler.priors());
         Source {
             data: Arc::clone(&self.data),
             enemies: Arc::clone(&self.enemies),
@@ -257,7 +258,7 @@ impl Bundle {
                 .collect(),
             externals: self.config.externals.clone(),
             plan: Arc::clone(&self.plan),
-            priors: Arc::clone(&self.priors),
+            priors,
             record_trace,
         }
     }

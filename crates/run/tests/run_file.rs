@@ -2820,12 +2820,9 @@ fn bundle_validates_plan_and_exposes_planned_windows_and_priors() {
     let pull_name = b.sampler.spec().pulls[0].name.clone();
     // 1. An invalid plan is caught by PlanValidator.
     let mut bad_plan = Plan::default();
-    bad_plan.pulls.insert(
-        PullName("no_such_pull".into()),
-        PullPlan {
-            windows: Vec::new(),
-        },
-    );
+    bad_plan
+        .pulls
+        .insert(PullName("no_such_pull".into()), PullPlan::default());
     let issues =
         portunus_plan::Validator.validate(&bad_plan, b.sampler.spec(), &b.enemies, &b.templates);
     assert_eq!(
@@ -2852,6 +2849,8 @@ fn bundle_validates_plan_and_exposes_planned_windows_and_priors() {
                 offset: SimOffset(0),
                 tolerance: SimDuration(5000),
             }],
+            interrupts: Vec::new(),
+            defensives: Vec::new(),
         },
     );
     b.plan = Arc::new(good_plan);
@@ -2885,4 +2884,245 @@ fn bundle_validates_plan_and_exposes_planned_windows_and_priors() {
         turn = env.step(c).unwrap().next;
     }
     assert!(saw_open_window_and_prior);
+}
+
+#[test]
+fn interrupt_and_defensive_plan_coordinates_multi_seat_kicks_and_caster_stop_cast() {
+    use portunus_core::{Dist, SpawnLabel};
+    use portunus_gamedata::enemy::{EnemyHealTarget, EnemyTarget};
+    use portunus_plan::{
+        DefensiveRule, DefensiveTrigger, InterruptRule, Plan, PlanConstraints, PlanValidator,
+        PullPlan,
+    };
+    use portunus_scenario::ScenarioSampler;
+
+    // Build a 2-seat party: Seat 0 (Fire Mage with Counterspell 2139, 24s CD, usable_while_casting=false)
+    // and Seat 1 (Subtlety Rogue with Kick 1766, 15s CD).
+    let mage_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/runs/fire_sunfury_dummy.ron");
+    let rogue_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../data/runs/subtlety_deathstalker_dummy.ron");
+    let mut b = Bundle::load(&mage_path).unwrap();
+    let rogue_b = Bundle::load(&rogue_path).unwrap();
+    b.templates.push(rogue_b.templates[0].clone());
+    b.config.seats.push(rogue_b.config.seats[0].clone());
+    b.policies.push(rogue_b.policies[0].clone());
+    b.config.info = portunus_env::InfoSet::Privileged;
+
+    // Give target_dummy a repeating interruptible heal ("dark_mending", 2.0s cast every 6.0s, first at 3.0s)
+    // and a telegraphed slam ("crushing_slam", 2.0s uninterruptible cast at 10.0s).
+    let dummy_key = EnemyKey("target_dummy".into());
+    let enemies_mut = Arc::make_mut(&mut b.enemies);
+    let dummy_def = enemies_mut.enemies.get_mut(&dummy_key).unwrap();
+    dummy_def.rules = vec![
+        EnemyRule {
+            name: EventName("dark_mending".into()),
+            phase: None,
+            when: Trigger::Elapsed(SimDuration(3000)),
+            repeat: Some(Dist::Fixed(SimDuration(6000))),
+            action: EnemyAction::Cast {
+                time: SimDuration(1000),
+                interruptible: true,
+                then: Box::new(EnemyAction::Heal {
+                    amount: None,
+                    pct_max_health: Some(20.0),
+                    target: EnemyHealTarget::Itself,
+                }),
+            },
+        },
+        EnemyRule {
+            name: EventName("crushing_slam".into()),
+            phase: None,
+            when: Trigger::Elapsed(SimDuration(10_000)),
+            repeat: None,
+            action: EnemyAction::Cast {
+                time: SimDuration(2000),
+                interruptible: false,
+                then: Box::new(EnemyAction::Damage {
+                    amount: Dist::Fixed(50_000.0),
+                    school: SchoolMask::PHYSICAL,
+                    target: EnemyTarget::AllPlayers,
+                }),
+            },
+        },
+    ];
+    let new_sampler =
+        portunus_scenario::Sampler::new(b.sampler.spec().clone(), Arc::clone(&b.enemies)).unwrap();
+    b.sampler = Arc::new(new_sampler);
+
+    let pull_name = b.sampler.spec().pulls[0].name.clone();
+    let counterspell = SpellId(2139);
+    let kick = SpellId(1766);
+    let combustion = SpellId(190319);
+    let fireball = SpellId(133);
+
+    // Ensure Seat 0 has Counterspell (2139) and Seat 1 has Kick (1766).
+    b.templates[0].abilities.insert(counterspell);
+    b.templates[1].abilities.insert(kick);
+
+    let mut plan = Plan {
+        pulls: BTreeMap::new(),
+        constraints: PlanConstraints::default(),
+    };
+    plan.pulls.insert(
+        pull_name,
+        PullPlan {
+            windows: Vec::new(),
+            interrupts: vec![InterruptRule {
+                spawn: Some(SpawnLabel("target_dummy#1".into())),
+                event: Some(EventName("dark_mending".into())),
+                // Rotation: Seat 0 (Counterspell, 24s CD) -> Seat 1 (Kick, 15s CD).
+                // Cast #0 (at 3s): Seat 0 kicks (Counterspell on CD until 27s).
+                // Cast #1 (at 9s): Seat 1 kicks (Kick on CD until 24s).
+                // Cast #2 (at 15s): Rotation index 2 % 2 == 0 is Seat 0, whose Counterspell is STILL on CD (until 27s),
+                //                    and Seat 1's Kick is also on CD (until 24s), unless we give Seat 1 a 5s CD kick!
+                order: vec![(Seat(0), counterspell), (Seat(1), kick)],
+            }],
+            defensives: vec![DefensiveRule {
+                seat: Seat(0),
+                spell: combustion,
+                target: None,
+                trigger: DefensiveTrigger::EnemyEvent {
+                    spawn: SpawnLabel("target_dummy#1".into()),
+                    event: EventName("crushing_slam".into()),
+                    nth: Some(1),
+                    lead_time: SimDuration(2500),
+                },
+            }],
+        },
+    );
+    // Give Kick (1766) a 5s CD in this test so on Cast #2 (at 15s), when Seat 0's 24s Counterspell
+    // is still on cooldown, the planner automatically falls back from Seat 0 to Seat 1!
+    Arc::make_mut(&mut b.data)
+        .spells
+        .get_mut(&kick)
+        .unwrap()
+        .cooldown
+        .as_mut()
+        .unwrap()
+        .duration = SimDuration(5000);
+
+    let issues =
+        portunus_plan::Validator.validate(&plan, b.sampler.spec(), &b.enemies, &b.templates);
+    assert!(issues.is_empty(), "plan must validate cleanly: {issues:?}");
+    b.plan = Arc::new(plan);
+
+    let mut env = b.env(true);
+    let mut turn = env.reset(Seed(1)).unwrap();
+
+    let mut saw_pre_kick_short_cast_check = false;
+    let mut saw_seat1_blocked_on_cast0 = false;
+    let mut saw_seat0_stop_cast_to_kick = false;
+    let mut saw_seat1_kick_cast1 = false;
+    let mut saw_seat1_fallback_kick_cast2 = false;
+    let mut saw_defensive_duty = false;
+
+    while let Turn::Decide(d) = turn {
+        let Some(ct) = d.obs.combat_time else {
+            turn = env.step(Choice::Wait(Wait::NextEvent)).unwrap().next;
+            continue;
+        };
+        if ct >= SimDuration(18_000) {
+            break;
+        }
+
+        // Before Cast #0 starts (at ct < 3000ms), Seat 0 is on deck for dark_mending (expected at 3.0s, deadline 5.0s).
+        if d.seat == Seat(0) && ct >= SimDuration(1500) && ct < SimDuration(3000) {
+            if let Some(duty) = &d.obs.next_kick_duty {
+                assert_eq!(duty.spell, counterspell);
+                assert!(duty.requires_not_casting);
+                // At ct = 2.0s, deadline is in 3.0s: a 4.0s cast does NOT fit, whereas an instant (0s) cast DOES fit!
+                if duty.deadline_in <= SimDuration(3500) {
+                    assert!(!d
+                        .obs
+                        .cast_fits_before_duty(SimDuration(4000), SimDuration(200)));
+                    assert!(d
+                        .obs
+                        .cast_fits_before_duty(SimDuration::ZERO, SimDuration(200)));
+                    saw_pre_kick_short_cast_check = true;
+                }
+            }
+        }
+
+        // Check defensive duty window before/during crushing_slam (opens at 7.5s, deadline 12.0s).
+        if d.seat == Seat(0) && ct >= SimDuration(8000) && ct <= SimDuration(11_500) {
+            if let Some(def_duty) = &d.obs.next_defensive_duty {
+                assert_eq!(def_duty.spell, combustion);
+                saw_defensive_duty = true;
+            }
+        }
+
+        // While Cast #0 is active (3000ms..5000ms), Seat 1's Kick MUST be Blocked by the plan
+        // because Seat 0 is assigned and Seat 0's Counterspell is available!
+        if d.seat == Seat(1)
+            && ct >= SimDuration(3000)
+            && ct < SimDuration(5000)
+            && d.obs.active_kick_duty().is_none()
+        {
+            assert_eq!(
+                d.legal.abilities.get(&kick),
+                Some(&Readiness::Blocked),
+                "Seat 1 Kick must be blocked while Seat 0 is assigned to Cast #0"
+            );
+            saw_seat1_blocked_on_cast0 = true;
+        }
+
+        // Seat 0 controller: start a Fireball (2.25s cast) around ct = 2.5s so we are mid-cast when
+        // dark_mending (1.0s cast, ends at 4.0s) starts at ct = 3.0s; since Fireball won't finish before 4.0s,
+        // should_stop_cast_for_duty() is true -> StopCast -> Counterspell!
+        let choice = if d.seat == Seat(0) {
+            if d.obs.should_stop_cast_for_duty() && d.legal.can_stop {
+                saw_seat0_stop_cast_to_kick = true;
+                Choice::StopCast
+            } else if d.obs.active_kick_duty().is_some() && d.legal.is_ready(counterspell) {
+                Choice::cast(counterspell)
+            } else if ct >= SimDuration(2500)
+                && ct < SimDuration(3000)
+                && d.legal.is_ready(fireball)
+            {
+                Choice::cast(fireball)
+            } else {
+                Choice::Wait(Wait::Until(d.obs.now + SimDuration(500)))
+            }
+        } else {
+            // Seat 1 controller: kick whenever assigned!
+            if d.obs.active_kick_duty().is_some() && d.legal.is_ready(kick) {
+                if ct >= SimDuration(9000) && ct < SimDuration(12_000) {
+                    saw_seat1_kick_cast1 = true;
+                } else if ct >= SimDuration(15_000) {
+                    saw_seat1_fallback_kick_cast2 = true;
+                }
+                Choice::cast(kick)
+            } else {
+                Choice::Wait(Wait::Until(d.obs.now + SimDuration(500)))
+            }
+        };
+
+        turn = env.step(choice).unwrap().next;
+    }
+
+    assert!(
+        saw_pre_kick_short_cast_check,
+        "Seat 0 should see upcoming kick duty and reject long casts"
+    );
+    assert!(
+        saw_seat1_blocked_on_cast0,
+        "Seat 1 should have Kick masked while Seat 0 is assigned to Cast #0"
+    );
+    assert!(
+        saw_seat0_stop_cast_to_kick,
+        "Seat 0 should StopCast mid-Fireball to kick Cast #0"
+    );
+    assert!(
+        saw_seat1_kick_cast1,
+        "Seat 1 should be assigned to kick Cast #1 at 9s"
+    );
+    assert!(
+        saw_seat1_fallback_kick_cast2,
+        "Seat 1 should automatically take over Cast #2 at 15s when Seat 0's Counterspell is on cooldown"
+    );
+    assert!(
+        saw_defensive_duty,
+        "Seat 0 should see its upcoming defensive duty for crushing_slam"
+    );
 }

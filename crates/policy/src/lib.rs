@@ -720,10 +720,28 @@ impl<O> Mcts<O> {
             })
             .collect();
         let legal_indices = if cast_indices.is_empty() {
+            let allow_stop = matches!(
+                decision.reason,
+                portunus_engine::WakeReason::EnemyCastStart(_)
+                    | portunus_engine::WakeReason::MustMove
+            );
             legal
                 .iter()
                 .enumerate()
-                .filter_map(|(i, &ok)| ok.then_some(i))
+                .filter_map(|(i, &ok)| {
+                    if !ok {
+                        return None;
+                    }
+                    if !allow_stop
+                        && matches!(
+                            self.space.decode(i, &decision.legal),
+                            Some(Choice::StopCast)
+                        )
+                    {
+                        return None;
+                    }
+                    Some(i)
+                })
                 .collect()
         } else {
             cast_indices

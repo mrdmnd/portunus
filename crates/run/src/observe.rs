@@ -8,8 +8,9 @@ use portunus_core::{
 use portunus_engine::state::{ActorKind, AuraInstance, CastWhat};
 use portunus_engine::{ActionMask, Readiness, SegmentView, WakeReason};
 use portunus_env::{
-    observe_priors_and_windows, spec_auras, spec_spells, InfoSet, ObsContext, Observer,
-    PlannedWindowTiming, UpcomingEventPrior, DEFAULT_TARGET_SLOTS,
+    apply_interrupt_plan_mask, observe_duties, observe_priors_and_windows, spec_auras, spec_spells,
+    DutyTiming, InfoSet, ObsContext, Observer, PlannedWindowTiming, UpcomingEventPrior,
+    DEFAULT_TARGET_SLOTS,
 };
 use portunus_gamedata::aura::{AuraValueKind, DispelType};
 use portunus_gamedata::pet::PetKind;
@@ -207,6 +208,11 @@ pub struct SeatObs {
     /// Planned cooldown windows assigned to this seat in the current (or
     /// upcoming) pull.
     pub planned_windows: Vec<PlannedWindowTiming>,
+    /// Next assigned interrupt/CC duty for this seat from [`portunus_plan::PullPlan::interrupts`].
+    pub next_kick_duty: Option<DutyTiming>,
+    /// Next assigned personal or external defensive duty for this seat from
+    /// [`portunus_plan::PullPlan::defensives`].
+    pub next_defensive_duty: Option<DutyTiming>,
 }
 
 /// A controlled pet, as its owner sees it on the pet frame.
@@ -355,6 +361,49 @@ impl SeatObs {
             .filter(|e| e.event.0 == event)
             .map(|e| e.expected_in)
             .min()
+    }
+
+    /// Active interrupt/CC duty right now (`opens_in == 0 && deadline_in > 0`).
+    pub fn active_kick_duty(&self) -> Option<&DutyTiming> {
+        self.next_kick_duty.as_ref().filter(|d| d.is_active())
+    }
+
+    /// Active defensive duty right now (`opens_in == 0 && deadline_in > 0`).
+    pub fn active_defensive_duty(&self) -> Option<&DutyTiming> {
+        self.next_defensive_duty.as_ref().filter(|d| d.is_active())
+    }
+
+    /// Whether the seat is currently casting or channeling a spell that will
+    /// not finish before an active duty (`next_kick_duty` or `next_defensive_duty`)
+    /// that requires not casting, meaning the seat must `Choice::StopCast` now.
+    pub fn should_stop_cast_for_duty(&self) -> bool {
+        let Some(cast_rem) = self.cast_remaining else {
+            return false;
+        };
+        let is_channel = self.channel.is_some();
+        [&self.next_kick_duty, &self.next_defensive_duty]
+            .into_iter()
+            .flatten()
+            .any(|d| {
+                d.is_active() && d.requires_not_casting && (is_channel || cast_rem >= d.deadline_in)
+            })
+    }
+
+    /// Whether a proposed cast of `cast_time` (plus `buffer` safety margin)
+    /// will complete before any upcoming kick or defensive duty assigned to
+    /// this seat.
+    pub fn cast_fits_before_duty(&self, cast_time: SimDuration, buffer: SimDuration) -> bool {
+        let needed = SimDuration(cast_time.0.saturating_add(buffer.0));
+        [&self.next_kick_duty, &self.next_defensive_duty]
+            .into_iter()
+            .flatten()
+            .all(|d| {
+                if d.requires_gcd || (d.requires_not_casting && cast_time > SimDuration::ZERO) {
+                    d.deadline_in > needed
+                } else {
+                    true
+                }
+            })
     }
 }
 
@@ -651,6 +700,7 @@ impl Observer for ScriptObserver {
             .collect();
         let (upcoming_events, planned_windows) =
             observe_priors_and_windows(ctx, seat, &hide.enemies);
+        let (next_kick_duty, next_defensive_duty) = observe_duties(ctx, seat, &hide.enemies);
 
         SeatObs {
             now,
@@ -725,6 +775,8 @@ impl Observer for ScriptObserver {
             other_target_healths,
             upcoming_events,
             planned_windows,
+            next_kick_duty,
+            next_defensive_duty,
         }
     }
 
@@ -740,6 +792,7 @@ impl Observer for ScriptObserver {
         }
         mask.targets
             .retain(|&t| Some(t) != cur_target && !hide.enemies.contains(&t));
+        apply_interrupt_plan_mask(ctx, seat, &hide.enemies, &mut mask);
         mask
     }
 }
