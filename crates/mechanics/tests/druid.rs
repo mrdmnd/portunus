@@ -225,7 +225,7 @@ fn balance_keeper_summons_treants_and_triggers_dream_burst() {
 
 #[test]
 fn feral_druid_of_the_claw_snapshots_tigers_fury_and_unleashes_ravage() {
-    let f = fixture_with("druid_feral_druid_of_the_claw.ron");
+    let f = fixture_with("druid_feral_druidoftheclaw.ron");
     let mut d = Driver::new(&f, 7);
     d.in_combat();
 

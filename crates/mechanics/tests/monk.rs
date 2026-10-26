@@ -226,7 +226,7 @@ fn windwalker_celestial_channels_celestial_conduit_and_triggers_unity_within() {
 
 #[test]
 fn windwalker_shado_pan_stacks_combo_strikes_and_discharges_flurry_strikes() {
-    let f = fixture_with("monk_windwalker_shado_pan.ron");
+    let f = fixture_with("monk_windwalker_shadopan.ron");
     let mut d = Driver::new(&f, 7);
     d.in_combat();
 

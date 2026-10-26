@@ -266,7 +266,7 @@ fn hits(trace: &[TraceRecord], spell: SpellId) -> Vec<(SimTime, bool, u64)> {
 
 #[test]
 fn frost_deathbringer_reapers_mark_exterminate_and_killing_machine_work() {
-    let f = fixture_with("death_knight_frost_deathbringer.ron");
+    let f = fixture_with("deathknight_frost_deathbringer.ron");
     let mut d = Driver::new(&f, 1);
     d.in_combat();
 
@@ -314,7 +314,7 @@ fn frost_deathbringer_reapers_mark_exterminate_and_killing_machine_work() {
 
 #[test]
 fn frost_rider_frostwyrms_fury_chosen_of_frostbrood_and_trollbane_work() {
-    let f = fixture_with("death_knight_frost_rider.ron");
+    let f = fixture_with("deathknight_frost_rider.ron");
     let mut d = Driver::new(&f, 2);
     d.in_combat();
 
@@ -342,7 +342,7 @@ fn frost_rider_frostwyrms_fury_chosen_of_frostbrood_and_trollbane_work() {
 
 #[test]
 fn unholy_rider_plagues_festering_scythe_army_and_putrefy_work() {
-    let f = fixture_with("death_knight_unholy_rider.ron");
+    let f = fixture_with("deathknight_unholy_rider.ron");
     let mut d = Driver::new(&f, 3);
     d.in_combat();
 
@@ -391,7 +391,7 @@ fn unholy_rider_plagues_festering_scythe_army_and_putrefy_work() {
 
 #[test]
 fn unholy_sanlayn_vampiric_strike_blood_beast_and_blightfall_work() {
-    let f = fixture_with("death_knight_unholy_sanlayn.ron");
+    let f = fixture_with("deathknight_unholy_sanlayn.ron");
     let mut d = Driver::new(&f, 4);
     d.in_combat();
 

@@ -334,7 +334,7 @@ fn templar_wake_of_ashes_hammer_of_light_and_empyrean_hammers_work() {
 
 #[test]
 fn herald_of_the_sun_dawnlight_suns_avatar_and_walk_into_light_work() {
-    let f = fixture_with("paladin_retribution_herald_of_the_sun.ron");
+    let f = fixture_with("paladin_retribution_heraldofthesun.ron");
     let mut d = Driver::new(&f, 3);
     d.in_combat();
 

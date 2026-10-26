@@ -132,7 +132,7 @@ Warrior (`docs/ARMS_PLAN.md`, `crates/mechanics/tests/arms.rs`):
     *Flashing Skies*, *Thorim's Might*, *Keep Your Feet on the Ground*,
     *Avatar of the Storm*.
   - Loadouts `data/loadouts/warrior_fury_slayer.ron` and
-    `data/loadouts/warrior_fury_mountain_thane.ron`, run file
+    `data/loadouts/warrior_fury_mountainthane.ron`, run file
     `data/runs/fury_dummy.ron`, script `crates/run/src/scripts/fury.rs`,
     and test suite `crates/mechanics/tests/fury.rs`.
 

@@ -350,7 +350,7 @@ fn fury_slayer_procs_opportunist_and_unhinged_bloodthirst() {
 
 #[test]
 fn fury_mountain_thane_avatar_grants_thunder_blast_and_lightning_strike() {
-    let f = fixture_with("warrior_fury_mountain_thane.ron");
+    let f = fixture_with("warrior_fury_mountainthane.ron");
     let mut d = Driver::new(&f, 4);
     d.in_combat();
     d.press(CHARGE);

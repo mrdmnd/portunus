@@ -6,7 +6,7 @@
     scenario: "../scenarios/target_dummy.ron",
     seats: [
         (
-            loadout: "../loadouts/death_knight_unholy_rider.ron",
+            loadout: "../loadouts/deathknight_unholy_rider.ron",
             policy: "unholy_dk",
             latency: (
                 anticipated: fixed(0),

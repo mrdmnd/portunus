@@ -270,7 +270,7 @@ fn fury_loadouts_compile() {
     let game = game();
     for (file, hero) in [
         ("warrior_fury_slayer.ron", Some(HeroTreeId(60))),
-        ("warrior_fury_mountain_thane.ron", Some(HeroTreeId(61))),
+        ("warrior_fury_mountainthane.ron", Some(HeroTreeId(61))),
     ] {
         let loadout: Loadout = read_ron(&data_dir().join("loadouts").join(file)).expect(file);
         assert_eq!(Compiler.validate(&game, &loadout), vec![], "{file}");
@@ -315,7 +315,7 @@ fn retribution_loadouts_compile() {
     for (file, hero) in [
         ("paladin_retribution_templar.ron", Some(HeroTreeId(48))),
         (
-            "paladin_retribution_herald_of_the_sun.ron",
+            "paladin_retribution_heraldofthesun.ron",
             Some(HeroTreeId(50)),
         ),
     ] {
@@ -339,8 +339,8 @@ fn retribution_loadouts_compile() {
 fn frost_and_unholy_dk_loadouts_compile() {
     let game = game();
     for (file, hero) in [
-        ("death_knight_frost_deathbringer.ron", Some(HeroTreeId(33))),
-        ("death_knight_frost_rider.ron", Some(HeroTreeId(32))),
+        ("deathknight_frost_deathbringer.ron", Some(HeroTreeId(33))),
+        ("deathknight_frost_rider.ron", Some(HeroTreeId(32))),
     ] {
         let loadout: Loadout = read_ron(&data_dir().join("loadouts").join(file)).expect(file);
         assert_eq!(Compiler.validate(&game, &loadout), vec![], "{file}");
@@ -357,8 +357,8 @@ fn frost_and_unholy_dk_loadouts_compile() {
         assert!(template.main_hand.is_some() && template.off_hand.is_some());
     }
     for (file, hero) in [
-        ("death_knight_unholy_rider.ron", Some(HeroTreeId(32))),
-        ("death_knight_unholy_sanlayn.ron", Some(HeroTreeId(31))),
+        ("deathknight_unholy_rider.ron", Some(HeroTreeId(32))),
+        ("deathknight_unholy_sanlayn.ron", Some(HeroTreeId(31))),
     ] {
         let loadout: Loadout = read_ron(&data_dir().join("loadouts").join(file)).expect(file);
         assert_eq!(Compiler.validate(&game, &loadout), vec![], "{file}");
@@ -381,13 +381,13 @@ fn hunter_loadouts_compile() {
     let game = game();
     let cases: &[(&str, SpecId, Option<u32>, &[u32])] = &[
         (
-            "loadouts/hunter_beast_mastery_pack_leader.ron",
+            "loadouts/hunter_beastmastery_packleader.ron",
             SpecId(253),
             Some(43),
             &[34026, 217200, 193455, 19574],
         ),
         (
-            "loadouts/hunter_beast_mastery_dark_ranger.ron",
+            "loadouts/hunter_beastmastery_darkranger.ron",
             SpecId(253),
             Some(44),
             &[34026, 217200, 193455, 19574, 466930],
@@ -399,13 +399,13 @@ fn hunter_loadouts_compile() {
             &[19434, 257044, 212431, 53351, 288613, 260243],
         ),
         (
-            "loadouts/hunter_marksmanship_dark_ranger.ron",
+            "loadouts/hunter_marksmanship_darkranger.ron",
             SpecId(254),
             Some(44),
             &[19434, 257044, 212431, 466930, 288613, 260243],
         ),
         (
-            "loadouts/hunter_survival_pack_leader.ron",
+            "loadouts/hunter_survival_packleader.ron",
             SpecId(255),
             Some(43),
             &[259489, 259495, 186270, 1261193, 1250646],
@@ -564,7 +564,7 @@ fn warlock_loadouts_compile() {
             ],
         ),
         (
-            "loadouts/warlock_affliction_soul_harvester.ron",
+            "loadouts/warlock_affliction_soulharvester.ron",
             SpecId(265),
             Some(57),
             &[980, 172, 1259790, 27243, 48181, 198590, 1257052, 205180],
@@ -578,7 +578,7 @@ fn warlock_loadouts_compile() {
             ],
         ),
         (
-            "loadouts/warlock_demonology_soul_harvester.ron",
+            "loadouts/warlock_demonology_soulharvester.ron",
             SpecId(266),
             Some(57),
             &[
@@ -669,7 +669,7 @@ fn monk_loadouts_compile() {
             ],
         ),
         (
-            "loadouts/monk_windwalker_shado_pan.ron",
+            "loadouts/monk_windwalker_shadopan.ron",
             SpecId(269),
             Some(65),
             &[
@@ -706,7 +706,7 @@ fn druid_loadouts_compile() {
             ],
         ),
         (
-            "loadouts/druid_balance_elunes_chosen.ron",
+            "loadouts/druid_balance_eluneschosen.ron",
             SpecId(102),
             Some(24),
             &[
@@ -714,7 +714,7 @@ fn druid_loadouts_compile() {
             ],
         ),
         (
-            "loadouts/druid_feral_druid_of_the_claw.ron",
+            "loadouts/druid_feral_druidoftheclaw.ron",
             SpecId(103),
             Some(21),
             &[
@@ -751,7 +751,7 @@ fn demon_hunter_loadouts_compile() {
     let game = game();
     let cases: &[(&str, SpecId, Option<u32>, &[u32])] = &[
         (
-            "loadouts/demon_hunter_havoc_fel_scarred.ron",
+            "loadouts/demonhunter_havoc_felscarred.ron",
             SpecId(577),
             Some(34),
             &[
@@ -759,7 +759,7 @@ fn demon_hunter_loadouts_compile() {
             ],
         ),
         (
-            "loadouts/demon_hunter_havoc_aldrachi_reaver.ron",
+            "loadouts/demonhunter_havoc_aldrachireaver.ron",
             SpecId(577),
             Some(35),
             &[
@@ -768,7 +768,7 @@ fn demon_hunter_loadouts_compile() {
             ],
         ),
         (
-            "loadouts/demon_hunter_devourer_annihilator.ron",
+            "loadouts/demonhunter_devourer_annihilator.ron",
             SpecId(1480),
             Some(124),
             &[
@@ -777,7 +777,7 @@ fn demon_hunter_loadouts_compile() {
             ],
         ),
         (
-            "loadouts/demon_hunter_devourer_void_scarred.ron",
+            "loadouts/demonhunter_devourer_voidscarred.ron",
             SpecId(1480),
             Some(126),
             &[
