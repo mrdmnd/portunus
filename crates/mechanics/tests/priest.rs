@@ -170,7 +170,7 @@ fn hits(trace: &[TraceRecord], spell: SpellId) -> usize {
 
 #[test]
 fn shadow_voidweaver_opens_entropic_rift_and_detonates_collapsing_void() {
-    let f = fixture_with("shadow_voidweaver.ron");
+    let f = fixture_with("priest_shadow_voidweaver.ron");
     let mut d = Driver::new(&f, 7);
     d.in_combat();
 
@@ -212,7 +212,7 @@ fn shadow_voidweaver_opens_entropic_rift_and_detonates_collapsing_void() {
 
 #[test]
 fn shadow_archon_pulses_halo_waves_and_channels_mind_flay_insanity() {
-    let f = fixture_with("shadow_archon.ron");
+    let f = fixture_with("priest_shadow_archon.ron");
     let mut d = Driver::new(&f, 7);
     d.in_combat();
 

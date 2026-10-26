@@ -6,7 +6,7 @@
     scenario: "../scenarios/target_dummy.ron",
     seats: [
         (
-            loadout: "../loadouts/augmentation_chronowarden.ron",
+            loadout: "../loadouts/evoker_augmentation_chronowarden.ron",
             policy: "augmentation",
             latency: (
                 anticipated: fixed(0),

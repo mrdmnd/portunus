@@ -172,7 +172,7 @@ fn hits(trace: &[TraceRecord], spell: SpellId) -> usize {
 
 #[test]
 fn affliction_hellcaller_stacks_wither_and_channels_malefic_grasp() {
-    let f = fixture_with("affliction_hellcaller.ron");
+    let f = fixture_with("warlock_affliction_hellcaller.ron");
     let mut d = Driver::new(&f, 7);
     d.in_combat();
 
@@ -204,7 +204,7 @@ fn affliction_hellcaller_stacks_wither_and_channels_malefic_grasp() {
 
 #[test]
 fn demonology_diabolist_advances_diabolic_ritual_and_fires_ruination() {
-    let f = fixture_with("demonology_diabolist.ron");
+    let f = fixture_with("warlock_demonology_diabolist.ron");
     let mut d = Driver::new(&f, 7);
     d.in_combat();
 
@@ -236,7 +236,7 @@ fn demonology_diabolist_advances_diabolic_ritual_and_fires_ruination() {
 
 #[test]
 fn destruction_diabolist_guaranteed_chaos_bolt_crits_and_summons_infernal() {
-    let f = fixture_with("destruction_diabolist.ron");
+    let f = fixture_with("warlock_destruction_diabolist.ron");
     let mut d = Driver::new(&f, 7);
     d.in_combat();
 

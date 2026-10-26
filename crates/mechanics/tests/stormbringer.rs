@@ -4,7 +4,8 @@
 mod common;
 
 use common::{
-    aura, completed, fixture, holds, play_until, Fixture, Stacks, EARTH_SHOCK, LIGHTNING_BOLT,
+    aura, bare_elemental, completed, fixture_from, hero_kit, holds, play_until, Fixture, Stacks,
+    EARTH_SHOCK, LIGHTNING_BOLT, STORMKEEPER,
 };
 use portunus_core::{AuraId, SimDuration, SimTime, SpellId, TalentId};
 use portunus_engine::trace::{CastEndReason, TraceEvent};
@@ -30,7 +31,11 @@ const SPEND_MARKER: AuraId = AuraId(900_002);
 const UNLIMITED_POWER_DURATION: SimDuration = SimDuration(15_000);
 
 fn stormbringer() -> Fixture {
-    fixture("elemental_stormbringer.ron", |_| {})
+    hero_kit(
+        "shaman_elemental_stormbringer.ron",
+        &[STORMKEEPER.0],
+        |_| {},
+    )
 }
 
 /// Draws one card per Maelstrom spent from `deck`, applying a marker on a
@@ -83,7 +88,7 @@ fn markers_per_spend(trace: &[TraceRecord]) -> Vec<usize> {
 fn per_unit_decks_draw_a_card_per_point_and_proc_once() {
     // 60 Maelstrom per Earth Shock draws a whole 60-card deck each time.
     for successes in [1, 2] {
-        let mut f = fixture("elemental.ron", |_| {});
+        let mut f = fixture_from(bare_elemental(), |_| {});
         with_spend_deck(&mut f, successes, 60);
         for seed in 0..3 {
             let per = markers_per_spend(&f.rollout(seed));
@@ -93,7 +98,7 @@ fn per_unit_decks_draw_a_card_per_point_and_proc_once() {
     }
 
     // A 120-card deck lasts exactly two spends.
-    let mut f = fixture("elemental.ron", |_| {});
+    let mut f = fixture_from(bare_elemental(), |_| {});
     with_spend_deck(&mut f, 1, 120);
     for seed in 0..3 {
         let per = markers_per_spend(&f.rollout(seed));
@@ -102,7 +107,7 @@ fn per_unit_decks_draw_a_card_per_point_and_proc_once() {
         }
     }
 
-    let mut f = fixture("elemental.ron", |_| {});
+    let mut f = fixture_from(bare_elemental(), |_| {});
     with_spend_deck(&mut f, 1, 60);
     f.data.auras.get_mut(&SPEND_COUNTER).unwrap().listeners[0].on = ListenFor::DamageTaken;
     assert!(check_game_data(&f.data)
@@ -341,7 +346,7 @@ fn unlimited_power_stacks_expire_on_their_own_timers() {
 
 #[test]
 fn storm_swell_adds_mastery_points() {
-    let f = fixture("elemental_stormbringer.ron", |l| {
+    let f = hero_kit("shaman_elemental_stormbringer.ron", &[STORMKEEPER.0], |l| {
         l.talents.0.remove(&SUPERCHARGE);
         l.talents.0.insert(STORM_SWELL, 1);
     });

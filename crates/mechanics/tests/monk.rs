@@ -191,7 +191,7 @@ fn hits(trace: &[TraceRecord], spell: SpellId) -> usize {
 
 #[test]
 fn windwalker_celestial_channels_celestial_conduit_and_triggers_unity_within() {
-    let f = fixture_with("windwalker_celestial.ron");
+    let f = fixture_with("monk_windwalker_celestial.ron");
     let mut d = Driver::new(&f, 7);
     d.in_combat();
 
@@ -226,7 +226,7 @@ fn windwalker_celestial_channels_celestial_conduit_and_triggers_unity_within() {
 
 #[test]
 fn windwalker_shado_pan_stacks_combo_strikes_and_discharges_flurry_strikes() {
-    let f = fixture_with("windwalker_shado_pan.ron");
+    let f = fixture_with("monk_windwalker_shado_pan.ron");
     let mut d = Driver::new(&f, 7);
     d.in_combat();
 

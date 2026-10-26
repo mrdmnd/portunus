@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use portunus_core::{
-    ActorId, AuraId, EnemyKey, EventName, HeroTreeId, PetId, Seat, Seed, SimDuration, SimTime,
-    SpellId, Trigger,
+    ActorId, AuraId, EnemyKey, EventName, HeroTreeId, ItemId, PetId, Seat, Seed, SimDuration,
+    SimTime, SpecId, SpellId, Trigger,
 };
 use portunus_engine::trace::TraceEvent;
 use portunus_engine::{
@@ -21,10 +21,12 @@ use portunus_gamedata::aura::{
 };
 use portunus_gamedata::effect::{Coefficient, Effect, EffectTarget};
 use portunus_gamedata::enemy::{EnemyAction, EnemyKind, EnemyRule};
+use portunus_gamedata::item::GearSlot;
 use portunus_gamedata::spell::{CastKind, Targeting};
 use portunus_gamedata::stats::{
     Cost, RechargeDef, ResourceDef, ResourceKind, SchoolMask, SpendScaling,
 };
+use portunus_loadout::{Compiler, EquippedItem, Loadout, LoadoutCompiler};
 use portunus_run::scripts::buff_top_ally;
 use portunus_run::{
     compare, report, BattleResObs, Bundle, ChannelObs, CompareSpec, Comparison, EmpowerObs,
@@ -37,6 +39,37 @@ fn bundle() -> Bundle {
     let path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/runs/elemental_dummy.ron");
     Bundle::load(&path).unwrap()
+}
+
+/// Elemental with no talents. The shipped dummy is the Stormbringer default;
+/// tests that measure a baseline cast use this shell instead.
+fn bare_elemental() -> Loadout {
+    Loadout {
+        spec: SpecId(262),
+        gear: BTreeMap::from([(
+            GearSlot::Chest,
+            EquippedItem {
+                item: ItemId(1),
+                item_level: 600,
+                enchant: None,
+                gems: Vec::new(),
+            },
+        )]),
+        hero_tree: None,
+        talents: Default::default(),
+        consumables: Vec::new(),
+        race: None,
+        loa: None,
+        elune: None,
+        earthen_gem: None,
+    }
+}
+
+fn untalent(bundle: &mut Bundle) {
+    let template = Compiler.compile(&bundle.data, &bare_elemental()).unwrap();
+    for seat in &mut bundle.templates {
+        *seat = template.clone();
+    }
 }
 
 #[test]
@@ -540,6 +573,7 @@ fn the_shield_dummys_barriers_soak_its_share_of_health_first() {
 #[test]
 fn seats_see_their_channels_progress() {
     let mut b = bundle();
+    untalent(&mut b);
     let bolt = Arc::make_mut(&mut b.data)
         .spells
         .get_mut(&LIGHTNING_BOLT)
@@ -591,6 +625,7 @@ fn seats_see_their_channels_progress() {
 #[test]
 fn seats_see_their_empowers_progress() {
     let mut b = bundle();
+    untalent(&mut b);
     let bolt = Arc::make_mut(&mut b.data)
         .spells
         .get_mut(&LIGHTNING_BOLT)
@@ -904,7 +939,8 @@ fn gained(trace: &[TraceRecord], aura: AuraId) -> Vec<(SimTime, ActorId)> {
 
 #[test]
 fn bloodlust_left_to_policies_waits_for_a_cast_and_sated_stops_the_second() {
-    let b = lust_pair();
+    let mut b = lust_pair();
+    untalent(&mut b);
     let elemental = Arc::clone(&b.arm(false).policies[0]);
     // Seat 0 lusts 15 s in, seat 1 tries 25 s in; until then neither may.
     let lust_at = |seat: Seat| SimDuration(if seat == Seat(0) { 15_000 } else { 25_000 });
@@ -979,6 +1015,7 @@ fn power_infusion_goes_to_the_ally_with_the_most_damage_and_allies_see_it() {
     config.seats.push(config.seats[0].clone());
     config.seats.push(config.seats[0].clone());
     let mut b = Bundle::from_config(config, &path).unwrap();
+    untalent(&mut b);
     let data = Arc::make_mut(&mut b.data);
     let mut infused = data.auras[&AuraId(2825)].clone();
     infused.id = INFUSED;
@@ -1062,6 +1099,7 @@ fn unknown_policies_are_rejected() {
 #[test]
 fn slain_adds_count_toward_forces_but_despawned_ones_do_not() {
     let mut b = bundle();
+    untalent(&mut b);
     let enemies = Arc::make_mut(&mut b.enemies);
     let dummy = EnemyKey("target_dummy".into());
     let add = |key: &str, forces: u32| {
@@ -2429,14 +2467,7 @@ fn subtlety_rogue_single_target_boss_talent_setups_run_cleanly() {
 
     for &(run, hero_ability) in &[
         ("subtlety_deathstalker_boss", "Deathstalker's Mark"),
-        (
-            "subtlety_deathstalker_dark_brew_boss",
-            "Deathstalker's Mark",
-        ),
-        ("subtlety_deathstalker_danse_boss", "Deathstalker's Mark"),
         ("subtlety_trickster_boss", "Coup de Grace"),
-        ("subtlety_trickster_burst_boss", "Coup de Grace"),
-        ("subtlety_trickster_unseen_boss", "Coup de Grace"),
     ] {
         let path =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../data/runs/{run}.ron"));
@@ -2511,16 +2542,8 @@ fn mythic_plus_three_pull_wing_tracks_pulls_remaining_and_clears_all_pulls() {
     use portunus_scenario::ScenarioSampler;
 
     for &(run, aoe_spell, st_spell) in &[
-        (
-            "subtlety_deathstalker_danse_mplus",
-            "Black Powder",
-            "Eviscerate",
-        ),
-        (
-            "subtlety_trickster_burst_mplus",
-            "Black Powder",
-            "Coup de Grace",
-        ),
+        ("subtlety_deathstalker_mplus", "Black Powder", "Eviscerate"),
+        ("subtlety_trickster_mplus", "Black Powder", "Coup de Grace"),
         ("elemental_farseer_mplus", "Chain Lightning", "Lava Burst"),
         ("elemental_stormbringer_mplus", "Chain Lightning", "Tempest"),
     ] {
@@ -2530,7 +2553,7 @@ fn mythic_plus_three_pull_wing_tracks_pulls_remaining_and_clears_all_pulls() {
 
         // Verify that on Pull 1 engage, `pulls_remaining == 2`, initial target is a trash mob,
         // `other_target_healths[3]` is the 3x higher-HP Lieutenant, and `SeatObsFeaturizer` exposes `feat[9..18]`.
-        if run == "subtlety_deathstalker_danse_mplus" {
+        if run == "subtlety_deathstalker_mplus" {
             let sf = SeatObsFeaturizer::for_spec(&b.data, b.templates[0].spec).unwrap();
             let mut env = b.env_with(
                 portunus_run::ScriptObserver,
@@ -2611,8 +2634,8 @@ fn subtlety_denovo_learns_no_waiting_high_cp_finishers_and_priority_retargeting(
     use portunus_scenario::ScenarioSampler;
 
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../data/runs/subtlety_deathstalker_danse_mplus.ron");
-    let mut b = Bundle::load(&path).expect("load subtlety_deathstalker_danse_mplus");
+        .join("../../data/runs/subtlety_deathstalker_mplus.ron");
+    let mut b = Bundle::load(&path).expect("load subtlety_deathstalker_mplus");
     let mut scen = portunus_scenario::ScenarioSampler::spec(&*b.sampler).clone();
     scen.pulls.truncate(1);
     scen.forces_required = Some(16);

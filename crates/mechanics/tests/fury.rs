@@ -62,10 +62,23 @@ struct Fixture {
 }
 
 fn fixture_with(loadout: &str) -> Fixture {
+    load_fixture(loadout, true)
+}
+
+/// The Slayer default with its hero tree removed, so core-kit tests don't
+/// see Slayer procs.
+fn spec_tree() -> Fixture {
+    load_fixture("warrior_fury_slayer.ron", false)
+}
+
+fn load_fixture(loadout: &str, keep_hero: bool) -> Fixture {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data");
     let data: GameData = GameDataSource::load(&RonFile::new(dir.join("game.ron"))).unwrap();
     let enemies: EnemyData = EnemyDataSource::load(&RonFile::new(dir.join("enemies.ron"))).unwrap();
-    let loadout: Loadout = read_ron(&dir.join("loadouts").join(loadout)).unwrap();
+    let mut loadout: Loadout = read_ron(&dir.join("loadouts").join(loadout)).unwrap();
+    if !keep_hero {
+        strip_hero(&data, &mut loadout);
+    }
     let template = Compiler.compile(&data, &loadout).unwrap();
     let mut spec: ScenarioSpec = read_ron(&dir.join("scenarios/target_dummy.ron")).unwrap();
     spec.pulls[0].health = Dist::Fixed(30.0);
@@ -75,6 +88,19 @@ fn fixture_with(loadout: &str) -> Fixture {
         template,
         spec,
     }
+}
+
+fn strip_hero(data: &GameData, loadout: &mut Loadout) {
+    let Some(id) = loadout.hero_tree.take() else {
+        return;
+    };
+    let hero: std::collections::BTreeSet<_> = data.hero_trees[&id]
+        .tree
+        .nodes
+        .iter()
+        .flat_map(|node| node.choices.iter())
+        .collect();
+    loadout.talents.0.retain(|talent, _| !hero.contains(talent));
 }
 
 impl Fixture {
@@ -237,7 +263,7 @@ fn hits(trace: &[TraceRecord], spell: SpellId) -> Vec<(SimTime, bool, u64)> {
 
 #[test]
 fn fury_raging_blow_and_rampage_strike_with_both_weapons_and_enrage() {
-    let f = fixture_with("fury.ron");
+    let f = spec_tree();
     let mut d = Driver::new(&f, 1);
     d.in_combat();
     d.press(CHARGE);
@@ -289,7 +315,7 @@ fn fury_raging_blow_and_rampage_strike_with_both_weapons_and_enrage() {
 
 #[test]
 fn fury_whirlwind_cleaves_single_target_attacks_to_four_nearby_targets() {
-    let mut f = fixture_with("fury.ron");
+    let mut f = spec_tree();
     f.template.passive_auras.push(AuraId(280772));
     f.template.passive_auras.push(AuraId(280392));
     f.spec.pulls[0].waves[0].mobs[0].1 = 5;
@@ -308,7 +334,7 @@ fn fury_whirlwind_cleaves_single_target_attacks_to_four_nearby_targets() {
 
 #[test]
 fn fury_slayer_procs_opportunist_and_unhinged_bloodthirst() {
-    let f = fixture_with("fury_slayer.ron");
+    let f = fixture_with("warrior_fury_slayer.ron");
     let mut d = Driver::new(&f, 3);
     d.in_combat();
     d.press(CHARGE);
@@ -324,7 +350,7 @@ fn fury_slayer_procs_opportunist_and_unhinged_bloodthirst() {
 
 #[test]
 fn fury_mountain_thane_avatar_grants_thunder_blast_and_lightning_strike() {
-    let f = fixture_with("fury_mountain_thane.ron");
+    let f = fixture_with("warrior_fury_mountain_thane.ron");
     let mut d = Driver::new(&f, 4);
     d.in_combat();
     d.press(CHARGE);

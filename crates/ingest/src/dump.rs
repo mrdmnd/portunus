@@ -1176,6 +1176,15 @@ pub struct SimcProfile {
     pub spec_name: String,
     pub level: u8,
     pub race: String,
+    /// `race=` was present. The default `"dwarf"` is only a placeholder
+    /// until then, and is not a chosen race.
+    pub race_specified: bool,
+    /// `zandalari_loa=`, when the profile names one.
+    pub loa: Option<String>,
+    /// `timeofday=`, `day` or `night`.
+    pub time_of_day: Option<String>,
+    /// `earthen_gem=`, a Khaz Algar gem an Earthen has ingested.
+    pub earthen_gem: Option<String>,
     pub avg_item_level: u16,
     pub gear_stats: StatBlock,
     pub slots: BTreeMap<GearSlot, SimcEquippedSlot>,
@@ -1210,6 +1219,10 @@ impl SimcProfile {
             spec_name: String::new(),
             level: 90,
             race: "dwarf".into(),
+            race_specified: false,
+            loa: None,
+            time_of_day: None,
+            earthen_gem: None,
             avg_item_level: 339,
             gear_stats: StatBlock::default(),
             slots: BTreeMap::new(),
@@ -1303,7 +1316,13 @@ impl SimcProfile {
                         profile.level = lvl;
                     }
                 }
-                "race" => profile.race = val.to_owned(),
+                "race" => {
+                    profile.race = val.to_owned();
+                    profile.race_specified = true;
+                }
+                "zandalari_loa" => profile.loa = Some(val.to_owned()),
+                "timeofday" => profile.time_of_day = Some(val.to_owned()),
+                "earthen_gem" => profile.earthen_gem = Some(val.to_owned()),
                 "potion" => profile.potion = Some(val.to_owned()),
                 "flask" | "phial" => profile.flask = Some(val.to_owned()),
                 "food" => profile.food = Some(val.to_owned()),
@@ -2629,6 +2648,8 @@ main_hand=mazeroa_warlords_fury,id=268213,enchant_id=8689
 # set_bonus=midnight_season_2_4pc=1
 ";
         let prof = SimcProfile::parse_str(sample_profile);
+        assert!(prof.race_specified);
+        assert_eq!(prof.race, "dwarf");
         assert_eq!(prof.actor_name, "MID2_Warrior_Arms");
         assert_eq!(prof.spec_name, "arms");
         assert_eq!(prof.avg_item_level, 339);

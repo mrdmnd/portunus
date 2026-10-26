@@ -1,5 +1,6 @@
-//! The checked-in Arms data (SimC's reference build, its spec tree alone
-//! and then with Slayer) through the real mechanics and kernel.
+//! The checked-in Arms data (SimC's Slayer single-target default, and that
+//! same build with the hero tree removed for the core kit) through the real
+//! mechanics and kernel.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -87,23 +88,30 @@ struct Fixture {
 }
 
 /// The reference build's spec tree on a dummy of exactly the listed
-/// health.
+/// health. The hero tree is dropped so Slayer procs stay out of the core kit.
 fn fixture() -> Fixture {
-    fixture_with("arms.ron")
+    fixture_keeping_hero("warrior_arms_slayer.ron", false)
 }
 
 /// The whole reference build, Slayer and all, on a dummy that lasts.
 fn slayer() -> Fixture {
-    let mut f = fixture_with("arms_slayer.ron");
+    let mut f = fixture_keeping_hero("warrior_arms_slayer.ron", true);
     f.dummy_health(30_000_000);
     f
 }
 
 fn fixture_with(loadout: &str) -> Fixture {
+    fixture_keeping_hero(loadout, true)
+}
+
+fn fixture_keeping_hero(loadout: &str, keep_hero: bool) -> Fixture {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data");
     let data: GameData = GameDataSource::load(&RonFile::new(dir.join("game.ron"))).unwrap();
     let enemies: EnemyData = EnemyDataSource::load(&RonFile::new(dir.join("enemies.ron"))).unwrap();
-    let loadout: Loadout = read_ron(&dir.join("loadouts").join(loadout)).unwrap();
+    let mut loadout: Loadout = read_ron(&dir.join("loadouts").join(loadout)).unwrap();
+    if !keep_hero {
+        strip_hero(&data, &mut loadout);
+    }
     let template = Compiler.compile(&data, &loadout).unwrap();
     let mut spec: ScenarioSpec = read_ron(&dir.join("scenarios/target_dummy.ron")).unwrap();
     spec.pulls[0].health = Dist::Fixed(1.0);
@@ -113,6 +121,19 @@ fn fixture_with(loadout: &str) -> Fixture {
         template,
         spec,
     }
+}
+
+fn strip_hero(data: &GameData, loadout: &mut Loadout) {
+    let Some(id) = loadout.hero_tree.take() else {
+        return;
+    };
+    let hero: std::collections::BTreeSet<_> = data.hero_trees[&id]
+        .tree
+        .nodes
+        .iter()
+        .flat_map(|node| node.choices.iter())
+        .collect();
+    loadout.talents.0.retain(|talent, _| !hero.contains(talent));
 }
 
 impl Fixture {
@@ -1312,7 +1333,7 @@ fn colossus_builds_colossal_might_and_channels_demolish() {
     const CELERITOUS_HASTE: AuraId = AuraId(1270843);
     const CELERITOUS_MS: AuraId = AuraId(1270846);
 
-    let mut f = fixture_with("arms_colossus.ron");
+    let mut f = fixture_with("warrior_arms_colossus.ron");
     f.dummy_health(30_000_000);
     let mut d = Driver::new(&f, 15);
     d.in_combat();

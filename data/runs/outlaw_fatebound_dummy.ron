@@ -6,7 +6,7 @@
     scenario: "../scenarios/target_dummy.ron",
     seats: [
         (
-            loadout: "../loadouts/outlaw_fatebound.ron",
+            loadout: "../loadouts/rogue_outlaw_fatebound.ron",
             policy: "outlaw",
             latency: (
                 anticipated: fixed(0),

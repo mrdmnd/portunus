@@ -32,9 +32,9 @@ Warrior (`docs/ARMS_PLAN.md`, `crates/mechanics/tests/arms.rs`):
    - `SpellDef`, `AuraDef`, and `PetDef` entries with coefficients, proc
      rates, and durations taken from `SpellDataDump/<class>.txt` and
      `sc_<class>.cpp`.
-4. **Loadouts (`data/loadouts/`):** One compiled reference loadout per
-   `(spec, hero_tree)` pair (e.g., `arms_slayer.ron`, `arms_colossus.ron`,
-   `fury_slayer.ron`, `fury_mountain_thane.ron`).
+4. **Loadouts (`data/loadouts/`):** One single-target default per
+   `(spec, hero_tree)`, named `{class}_{spec}_{hero}.ron`
+   (e.g. `warrior_arms_slayer.ron`, `shaman_elemental_stormbringer.ron`).
 5. **Policies (`crates/run/src/scripts/`):** Port of SimC's single-target,
    execute, and multi-target/AoE action priority lists for both hero trees,
    registered in `SCRIPTS`.
@@ -106,7 +106,7 @@ Warrior (`docs/ARMS_PLAN.md`, `crates/mechanics/tests/arms.rs`):
     *Colossal Might*, *Earthquaker*, *Arterial Bleed*, *Tide of Battle*,
     *No Stranger to Pain*, *Practiced Strikes*, *Mountain of Muscle and
     Scars*, *Crashing Force*, *One Against Many*.
-  - Loadout `data/loadouts/arms_colossus.ron` and policy lists
+  - Loadout `data/loadouts/warrior_arms_colossus.ron` and policy lists
     `colossus_st`, `colossus_execute`, and `colossus_aoe` in `arms.rs`.
 - **Fury Warrior (`SpecId(72)`):**
   - Dual-wield two-handers (*Titan's Grip*), *Enrage* (`184362`, haste +
@@ -131,8 +131,8 @@ Warrior (`docs/ARMS_PLAN.md`, `crates/mechanics/tests/arms.rs`):
     *Ground Current*, *Strength of the Mountain*, *Burst of Power*,
     *Flashing Skies*, *Thorim's Might*, *Keep Your Feet on the Ground*,
     *Avatar of the Storm*.
-  - Loadouts `data/loadouts/fury_slayer.ron` and
-    `data/loadouts/fury_mountain_thane.ron`, run file
+  - Loadouts `data/loadouts/warrior_fury_slayer.ron` and
+    `data/loadouts/warrior_fury_mountain_thane.ron`, run file
     `data/runs/fury_dummy.ron`, script `crates/run/src/scripts/fury.rs`,
     and test suite `crates/mechanics/tests/fury.rs`.
 

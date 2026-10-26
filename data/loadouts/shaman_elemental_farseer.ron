@@ -1,6 +1,6 @@
-// A full single-target Farseer build: the lava side of the spec tree with
+// Single-target Farseer default: the lava side of the spec tree with
 // Elemental Blast, Master of the Elements, Purging Flames, and the Fire
-// Elemental from Ascendance; Farseer as in elemental_farseer.ron.
+// Elemental from Ascendance, plus the Farseer hero tree.
 (
     spec: 262,
     gear: {

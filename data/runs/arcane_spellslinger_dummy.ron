@@ -6,7 +6,7 @@
     scenario: "../scenarios/target_dummy.ron",
     seats: [
         (
-            loadout: "../loadouts/arcane_spellslinger.ron",
+            loadout: "../loadouts/mage_arcane_spellslinger.ron",
             policy: "arcane",
             latency: (
                 anticipated: fixed(0),

@@ -1,9 +1,11 @@
 //! Auto-attacks and what triggers off them, on a made-up melee kit grafted
-//! onto the checked-in Elemental data: rage from swings, poisons on
+//! onto an untelented Elemental shell: rage from swings, poisons on
 //! weapon hits, dual-wield misses, Skyfury's extra swings, and a made-up
 //! druid's forms and stealth. Also casting (channels, empowers, shared
 //! cooldowns, strikes with both hands) and aura values (thresholds, caps,
 //! absorbs).
+
+mod common;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -30,7 +32,7 @@ use portunus_gamedata::spell::{CastKind, CooldownDef, GcdDef, Requirement, Spell
 use portunus_gamedata::stats::{Cost, ResourceDef, ResourceKind, SchoolMask, SpendScaling, Stat};
 use portunus_gamedata::{EnemyData, GameData};
 use portunus_ingest::{read_ron, EnemyDataSource, GameDataSource, RonFile};
-use portunus_loadout::{ActorTemplate, Compiler, Loadout, LoadoutCompiler};
+use portunus_loadout::{ActorTemplate, Compiler, LoadoutCompiler};
 use portunus_mechanics::{Kits, PartyMechanics};
 use portunus_scenario::{Sampler, ScenarioSampler, ScenarioSpec};
 
@@ -103,7 +105,7 @@ fn fixture(main_hand: WeaponDef, off_hand: Option<WeaponDef>, kit: Vec<Listener>
     for e in enemies.enemies.values_mut() {
         e.health = 1_000_000_000_000;
     }
-    let loadout: Loadout = read_ron(&dir.join("loadouts/elemental.ron")).unwrap();
+    let loadout = common::bare_elemental();
     let mut template = Compiler.compile(&data, &loadout).unwrap();
     template.abilities.retain(|s| data.spells[s].hostile);
     template.melee = true;

@@ -6,7 +6,7 @@
     scenario: "../scenarios/target_dummy.ron",
     seats: [
         (
-            loadout: "../loadouts/affliction_hellcaller.ron",
+            loadout: "../loadouts/warlock_affliction_hellcaller.ron",
             policy: "affliction",
             latency: (
                 anticipated: fixed(0),

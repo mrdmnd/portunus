@@ -186,7 +186,7 @@ fn hits(trace: &[TraceRecord], spell: SpellId) -> usize {
 
 #[test]
 fn beast_mastery_pack_leader_spawns_pets_and_fires_stampede() {
-    let f = fixture_with("beast_mastery_pack_leader.ron");
+    let f = fixture_with("hunter_beast_mastery_pack_leader.ron");
     let mut d = Driver::new(&f, 1);
     d.in_combat();
 
@@ -230,7 +230,7 @@ fn beast_mastery_pack_leader_spawns_pets_and_fires_stampede() {
 
 #[test]
 fn marksmanship_sentinel_fires_aimed_shot_moonlight_chakram_and_lunar_storm() {
-    let f = fixture_with("marksmanship_sentinel.ron");
+    let f = fixture_with("hunter_marksmanship_sentinel.ron");
     let mut d = Driver::new(&f, 1);
     d.in_combat();
 
@@ -266,7 +266,7 @@ fn marksmanship_sentinel_fires_aimed_shot_moonlight_chakram_and_lunar_storm() {
 
 #[test]
 fn marksmanship_dark_ranger_fires_black_arrow_withering_fire_and_wailing_arrow() {
-    let f = fixture_with("marksmanship_dark_ranger.ron");
+    let f = fixture_with("hunter_marksmanship_dark_ranger.ron");
     let mut d = Driver::new(&f, 1);
     d.in_combat();
 
@@ -300,7 +300,7 @@ fn marksmanship_dark_ranger_fires_black_arrow_withering_fire_and_wailing_arrow()
 
 #[test]
 fn survival_sentinel_consumes_tip_of_the_spear_and_upgrades_raptor_swipe() {
-    let f = fixture_with("survival_sentinel.ron");
+    let f = fixture_with("hunter_survival_sentinel.ron");
     let mut d = Driver::new(&f, 1);
     d.in_combat();
 

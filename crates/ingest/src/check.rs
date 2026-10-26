@@ -13,6 +13,7 @@ use portunus_gamedata::effect::{
     ProcChance, TargetCount, RECENT_CASTS,
 };
 use portunus_gamedata::enemy::{EnemyAction, EnemyKind};
+use portunus_gamedata::race::Race;
 use portunus_gamedata::spell::{CastKind, CooldownDef, Requirement};
 use portunus_gamedata::stats::{ResourceDef, Stat};
 use portunus_gamedata::talent::Grant;
@@ -31,6 +32,7 @@ pub enum Owner {
     HeroTree(HeroTreeId),
     Pet(PetId),
     Enemy(EnemyKey),
+    Race(Race),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -278,6 +280,21 @@ pub fn check_game_data(data: &GameData) -> Vec<DataIssue> {
         {
             c.issues.push(DataIssue::KeystoneNotInTree(hero.id));
         }
+    }
+    for race in data.races.values() {
+        let owner = Owner::Race(race.id);
+        race.spells
+            .iter()
+            .chain(race.class_spells.iter().map(|(_, spell)| spell))
+            .for_each(|&spell| c.spell(&owner, spell));
+        race.auras
+            .iter()
+            .chain(race.class_auras.iter().map(|(_, aura)| aura))
+            .chain(race.aura_alts.iter().map(|alt| &alt.aura))
+            .chain(race.aura_alts.iter().map(|alt| &alt.instead_of))
+            .chain(race.loas.iter().map(|(_, aura)| aura))
+            .chain(race.gems.iter().map(|(_, aura)| aura))
+            .for_each(|&aura| c.aura(&owner, aura));
     }
     for spell in data.spells.values() {
         let owner = Owner::Spell(spell.id);
@@ -570,6 +587,12 @@ impl Checker<'_> {
                     .iter()
                     .filter(|(k, v)| **k != v.id)
                     .map(|(k, _)| Owner::Pet(*k)),
+            )
+            .chain(
+                d.races
+                    .iter()
+                    .filter(|(k, v)| **k != v.id)
+                    .map(|(k, _)| Owner::Race(*k)),
             );
         self.issues.extend(mismatched.map(DataIssue::KeyMismatch));
     }

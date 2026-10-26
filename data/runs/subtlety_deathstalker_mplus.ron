@@ -1,14 +1,14 @@
-// Subtlety Rogue [Deathstalker — Danse Macabre + Finisher Amp] on a 3-pull Mythic+ dungeon wing
+// Subtlety Rogue Deathstalker single-target default on a 3-pull Mythic+ dungeon wing
 // (Pull 1: 1 Lieutenant + 4 Trash -> Pull 2: 1 Lieutenant + 4 Trash -> Pull 3: Wing Boss).
 (
-    name: "subtlety_deathstalker_danse_mplus",
+    name: "subtlety_deathstalker_mplus",
     game: "../game.ron",
     enemies: "../enemies.ron",
     scenario: "../scenarios/mythic_plus_wing.ron",
     simc_profile: Some("../../target/simc/profiles/MID2/MID2_Rogue_Subtlety.simc"),
     seats: [
         (
-            loadout: "../loadouts/subtlety_deathstalker_danse.ron",
+            loadout: "../loadouts/rogue_subtlety_deathstalker.ron",
             policy: "subtlety",
             latency: (
                 anticipated: fixed(0),

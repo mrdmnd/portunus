@@ -1,5 +1,7 @@
 //! The checked-in Elemental data through the real mechanics and kernel.
 
+mod common;
+
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -15,7 +17,7 @@ use portunus_gamedata::effect::{Effect, EffectTarget};
 use portunus_gamedata::spell::CastKind;
 use portunus_gamedata::{EnemyData, GameData};
 use portunus_ingest::{read_ron, EnemyDataSource, GameDataSource, RonFile};
-use portunus_loadout::{ActorTemplate, Compiler, Loadout, LoadoutCompiler};
+use portunus_loadout::{ActorTemplate, Compiler, LoadoutCompiler};
 use portunus_mechanics::{CombatMath, EffectCtx, KitIssue, Kits, PartyMechanics, SpecRegistry};
 use portunus_scenario::{Sampler, ScenarioSampler, ScenarioSpec};
 
@@ -47,7 +49,7 @@ fn fixture() -> Fixture {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data");
     let data: GameData = GameDataSource::load(&RonFile::new(dir.join("game.ron"))).unwrap();
     let enemies: EnemyData = EnemyDataSource::load(&RonFile::new(dir.join("enemies.ron"))).unwrap();
-    let loadout: Loadout = read_ron(&dir.join("loadouts/elemental.ron")).unwrap();
+    let loadout = common::bare_elemental();
     let template = Compiler.compile(&data, &loadout).unwrap();
     let spec: ScenarioSpec = read_ron(&dir.join("scenarios/target_dummy.ron")).unwrap();
     let enemies = Arc::new(enemies);

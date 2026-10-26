@@ -18,6 +18,7 @@ pub mod effect;
 pub mod enemy;
 pub mod item;
 pub mod pet;
+pub mod race;
 pub mod spec;
 pub mod spell;
 pub mod stats;
@@ -35,6 +36,7 @@ pub use class::ClassDef;
 pub use enemy::EnemyDef;
 pub use item::{ItemDef, ItemSetDef};
 pub use pet::PetDef;
+pub use race::{AuraAlt, EarthenGem, Loa, Race, RaceDef, TimeOfDay};
 pub use spec::SpecDef;
 pub use spell::SpellDef;
 pub use stats::StatCurves;
@@ -63,6 +65,9 @@ pub struct GameData {
     #[serde(default)]
     pub hero_trees: BTreeMap<HeroTreeId, HeroTreeDef>,
     pub pets: BTreeMap<PetId, PetDef>,
+    /// Playable races. Empty until `data/racials.ron` is merged in.
+    #[serde(default)]
+    pub races: BTreeMap<Race, RaceDef>,
     pub curves: StatCurves,
 }
 

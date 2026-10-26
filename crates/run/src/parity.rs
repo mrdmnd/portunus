@@ -9,6 +9,7 @@ use std::sync::Arc;
 use portunus_core::{AuraId, Dist, EnemyKey, HeroTreeId, SpecId};
 use portunus_engine::{BloodlustMode, Externals, PullAura};
 use portunus_eval::{Estimate, LocalRunner, SeedSet};
+use portunus_gamedata::{EarthenGem, Loa, Race, TimeOfDay};
 use portunus_ingest::{sync_game_data_with_dump, DumpDiff, IngestError, SimcProfile, SpellDump};
 use portunus_loadout::{Compiler, EquippedItem, LoadoutCompiler};
 use portunus_scenario::{Sampler, ScenarioSampler};
@@ -225,6 +226,18 @@ impl Bundle {
                 );
             }
             loadout.consumables = consumables;
+            if profile.race_specified {
+                loadout.race = Race::from_simc(&profile.race);
+            }
+            loadout.loa = profile.loa.as_deref().and_then(Loa::from_simc);
+            loadout.elune = profile
+                .time_of_day
+                .as_deref()
+                .and_then(TimeOfDay::from_simc);
+            loadout.earthen_gem = profile
+                .earthen_gem
+                .as_deref()
+                .and_then(EarthenGem::from_simc);
             *tpl = Compiler
                 .compile(&self.data, &loadout)
                 .map_err(|source| RunError::Loadout { seat, source })?;

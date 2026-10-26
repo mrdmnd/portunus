@@ -173,7 +173,7 @@ fn hits(trace: &[TraceRecord], spell: SpellId) -> usize {
 
 #[test]
 fn arcane_spellslinger_builds_salvo_splinters_and_detonates_touch_of_the_magi() {
-    let f = fixture_with("arcane_spellslinger.ron");
+    let f = fixture_with("mage_arcane_spellslinger.ron");
     let mut d = Driver::new(&f, 7);
     d.in_combat();
 
@@ -217,7 +217,7 @@ fn arcane_spellslinger_builds_salvo_splinters_and_detonates_touch_of_the_magi() 
 
 #[test]
 fn fire_sunfury_chains_combustion_hot_streaks_and_summons_arcane_phoenix() {
-    let f = fixture_with("fire_sunfury.ron");
+    let f = fixture_with("mage_fire_sunfury.ron");
     let mut d = Driver::new(&f, 7);
     d.in_combat();
 
@@ -248,7 +248,7 @@ fn fire_sunfury_chains_combustion_hot_streaks_and_summons_arcane_phoenix() {
 
 #[test]
 fn frost_frostfire_stacks_freezing_and_fires_glacial_spike_and_frostfire_burst() {
-    let f = fixture_with("frost_frostfire.ron");
+    let f = fixture_with("mage_frost_frostfire.ron");
     let mut d = Driver::new(&f, 7);
     d.in_combat();
 

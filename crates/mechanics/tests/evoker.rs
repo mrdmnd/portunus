@@ -175,7 +175,7 @@ fn hits(trace: &[TraceRecord], spell: SpellId) -> usize {
 
 #[test]
 fn devastation_flameshaper_empowers_fire_breath_and_detonates_consume_flame() {
-    let f = fixture_with("devastation_flameshaper.ron");
+    let f = fixture_with("evoker_devastation_flameshaper.ron");
     let mut d = Driver::new(&f, 7);
     d.in_combat();
 
@@ -199,7 +199,7 @@ fn devastation_flameshaper_empowers_fire_breath_and_detonates_consume_flame() {
 
 #[test]
 fn augmentation_chronowarden_extends_ebon_might_and_triggers_chrono_flame_and_afterimage() {
-    let f = fixture_with("augmentation_chronowarden.ron");
+    let f = fixture_with("evoker_augmentation_chronowarden.ron");
     let mut d = Driver::new(&f, 7);
     d.in_combat();
 

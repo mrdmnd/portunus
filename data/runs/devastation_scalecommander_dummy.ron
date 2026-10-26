@@ -6,7 +6,7 @@
     scenario: "../scenarios/target_dummy.ron",
     seats: [
         (
-            loadout: "../loadouts/devastation_scalecommander.ron",
+            loadout: "../loadouts/evoker_devastation_scalecommander.ron",
             policy: "devastation",
             latency: (
                 anticipated: fixed(0),

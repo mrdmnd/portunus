@@ -1,8 +1,11 @@
-//! Made-up spells grafted onto the checked-in Elemental data: a seat that
+//! Made-up spells grafted onto an untelented Elemental shell: a seat that
 //! never crits, with rage as a counter for what its listeners saw, and a
 //! boss that can spawn adds at the pull.
 
 #![allow(dead_code)]
+
+#[path = "../common/mod.rs"]
+mod common;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -24,7 +27,7 @@ use portunus_gamedata::spell::{CastKind, GcdDef, SpellDef, Targeting};
 use portunus_gamedata::stats::{ResourceAmount, ResourceDef, ResourceKind, SchoolMask};
 use portunus_gamedata::{EnemyData, GameData};
 use portunus_ingest::{read_ron, EnemyDataSource, GameDataSource, RonFile};
-use portunus_loadout::{ActorTemplate, Compiler, Loadout, LoadoutCompiler};
+use portunus_loadout::{ActorTemplate, Compiler, LoadoutCompiler};
 use portunus_mechanics::{Kits, PartyMechanics};
 use portunus_scenario::{Sampler, ScenarioSampler, ScenarioSpec};
 
@@ -161,7 +164,7 @@ pub fn fixture(kit: Vec<Listener>) -> Fixture {
     for e in enemies.enemies.values_mut() {
         e.health = 1_000_000_000_000;
     }
-    let loadout: Loadout = read_ron(&dir.join("loadouts/elemental.ron")).unwrap();
+    let loadout = common::bare_elemental();
     let mut template = Compiler.compile(&data, &loadout).unwrap();
     template.abilities.clear();
     template.melee = true;

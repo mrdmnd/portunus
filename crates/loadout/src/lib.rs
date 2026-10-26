@@ -12,6 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use portunus_core::{AuraId, HeroTreeId, ItemId, PetId, SpecId, SpellId, TalentId};
 use portunus_gamedata::item::{GearSlot, WeaponDef};
+use portunus_gamedata::race::{EarthenGem, Loa, Race, TimeOfDay};
 use portunus_gamedata::spec::Role;
 use portunus_gamedata::stats::{DerivedStats, ResourceDef, StatBlock};
 use portunus_gamedata::GameData;
@@ -32,6 +33,22 @@ pub struct Loadout {
     pub talents: TalentSelection,
     #[serde(default)]
     pub consumables: Vec<ItemId>,
+    /// Playable race. Omitted, the character has no racial spells or passives.
+    #[serde(default)]
+    pub race: Option<Race>,
+    /// Zandalari Embrace of the Loa. Requires [`Race::ZandalariTroll`].
+    /// Kimbul requires a hunter.
+    #[serde(default)]
+    pub loa: Option<Loa>,
+    /// Night elf Touch of Elune. Omitted, a night elf has the daytime
+    /// critical strike. Requires [`Race::NightElf`].
+    #[serde(default)]
+    pub elune: Option<TimeOfDay>,
+    /// Earthen Ingest Minerals gem. Requires [`Race::Earthen`]. The meal's
+    /// size is not one published number, so the gem is recorded and grants
+    /// no stat.
+    #[serde(default)]
+    pub earthen_gem: Option<EarthenGem>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -60,7 +77,8 @@ pub struct ActorTemplate {
     pub stats: StatBlock,
     pub derived: DerivedStats,
     /// Every spell the seat can press, by the id it was granted under:
-    /// baseline and talent spells, equipped on-use items, and consumables.
+    /// baseline and talent spells, racial actives, equipped on-use items,
+    /// and consumables.
     pub abilities: BTreeSet<SpellId>,
     /// Applied at run start and never expire: spec passives, talents,
     /// set bonuses, item effects, enchants, consumables.
@@ -116,6 +134,17 @@ pub enum LoadoutIssue {
     HeroTreeNotForSpec(HeroTreeId),
     /// A hero talent from a tree the loadout didn't choose.
     HeroTalentWithoutTree(TalentId),
+    UnknownRace(Race),
+    /// `loa` is set on a race that has no Embrace of the Loa, or names a
+    /// loa that race's data doesn't list.
+    LoaNotForRace(Loa),
+    /// Embrace of Kimbul is the hunter loa.
+    KimbulRequiresHunter,
+    /// `elune` is set on a race other than night elf.
+    EluneNotForRace,
+    /// `earthen_gem` is set on a race other than earthen, or names a gem
+    /// that race's data doesn't list.
+    GemNotForRace(EarthenGem),
 }
 
 #[derive(Debug, Error)]

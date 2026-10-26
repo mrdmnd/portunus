@@ -6,7 +6,7 @@
     scenario: "../scenarios/target_dummy.ron",
     seats: [
         (
-            loadout: "../loadouts/shadow_archon.ron",
+            loadout: "../loadouts/priest_shadow_archon.ron",
             policy: "shadow",
             latency: (
                 anticipated: fixed(0),

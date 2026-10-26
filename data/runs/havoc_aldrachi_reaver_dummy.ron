@@ -6,7 +6,7 @@
     scenario: "../scenarios/target_dummy.ron",
     seats: [
         (
-            loadout: "../loadouts/havoc_aldrachi_reaver.ron",
+            loadout: "../loadouts/demon_hunter_havoc_aldrachi_reaver.ron",
             policy: "havoc",
             latency: (
                 anticipated: fixed(0),

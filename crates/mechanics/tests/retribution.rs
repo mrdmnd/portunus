@@ -59,10 +59,23 @@ struct Fixture {
 }
 
 fn fixture_with(loadout: &str) -> Fixture {
+    load_fixture(loadout, true)
+}
+
+/// The Templar default with its hero tree removed, so the core kit is
+/// checked without Templar procs.
+fn spec_tree() -> Fixture {
+    load_fixture("paladin_retribution_templar.ron", false)
+}
+
+fn load_fixture(loadout: &str, keep_hero: bool) -> Fixture {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data");
     let data: GameData = GameDataSource::load(&RonFile::new(dir.join("game.ron"))).unwrap();
     let enemies: EnemyData = EnemyDataSource::load(&RonFile::new(dir.join("enemies.ron"))).unwrap();
-    let loadout: Loadout = read_ron(&dir.join("loadouts").join(loadout)).unwrap();
+    let mut loadout: Loadout = read_ron(&dir.join("loadouts").join(loadout)).unwrap();
+    if !keep_hero {
+        strip_hero(&data, &mut loadout);
+    }
     let template = Compiler.compile(&data, &loadout).unwrap();
     let mut spec: ScenarioSpec = read_ron(&dir.join("scenarios/target_dummy.ron")).unwrap();
     spec.pulls[0].health = Dist::Fixed(30.0);
@@ -72,6 +85,19 @@ fn fixture_with(loadout: &str) -> Fixture {
         template,
         spec,
     }
+}
+
+fn strip_hero(data: &GameData, loadout: &mut Loadout) {
+    let Some(id) = loadout.hero_tree.take() else {
+        return;
+    };
+    let hero: std::collections::BTreeSet<_> = data.hero_trees[&id]
+        .tree
+        .nodes
+        .iter()
+        .flat_map(|node| node.choices.iter())
+        .collect();
+    loadout.talents.0.retain(|talent, _| !hero.contains(talent));
 }
 
 impl Fixture {
@@ -234,7 +260,7 @@ fn hits(trace: &[TraceRecord], spell: SpellId) -> Vec<(SimTime, bool, u64)> {
 
 #[test]
 fn core_blade_of_justice_judgment_and_execution_sentence_work() {
-    let f = fixture_with("retribution.ron");
+    let f = spec_tree();
     let mut d = Driver::new(&f, 1);
     d.in_combat();
 
@@ -270,7 +296,7 @@ fn core_blade_of_justice_judgment_and_execution_sentence_work() {
 
 #[test]
 fn templar_wake_of_ashes_hammer_of_light_and_empyrean_hammers_work() {
-    let f = fixture_with("retribution_templar.ron");
+    let f = fixture_with("paladin_retribution_templar.ron");
     let mut d = Driver::new(&f, 2);
     d.in_combat();
 
@@ -308,7 +334,7 @@ fn templar_wake_of_ashes_hammer_of_light_and_empyrean_hammers_work() {
 
 #[test]
 fn herald_of_the_sun_dawnlight_suns_avatar_and_walk_into_light_work() {
-    let f = fixture_with("retribution_herald_of_the_sun.ron");
+    let f = fixture_with("paladin_retribution_herald_of_the_sun.ron");
     let mut d = Driver::new(&f, 3);
     d.in_combat();
 

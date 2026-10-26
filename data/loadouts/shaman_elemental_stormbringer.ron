@@ -1,7 +1,6 @@
-// A full single-target Stormbringer build: the lightning side of the spec
-// tree with Earth Shock, Master of the Elements, Lightning Rod, and the
-// Storm Elemental from Stormkeeper; Stormbringer as in
-// elemental_stormbringer.ron.
+// Single-target Stormbringer default: the lightning side of the spec tree
+// with Earth Shock, Master of the Elements, Lightning Rod, and the Storm
+// Elemental from Stormkeeper, plus the Stormbringer hero tree.
 (
     spec: 262,
     gear: {

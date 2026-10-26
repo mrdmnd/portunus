@@ -197,7 +197,7 @@ fn hits(trace: &[TraceRecord], spell: SpellId) -> usize {
 
 #[test]
 fn assassination_deathstalker_applies_marks_and_triggers_darkest_night() {
-    let f = fixture_with("assassination_deathstalker.ron");
+    let f = fixture_with("rogue_assassination_deathstalker.ron");
     let mut d = Driver::new(&f, 1);
     d.in_combat();
 
@@ -240,7 +240,7 @@ fn assassination_deathstalker_applies_marks_and_triggers_darkest_night() {
 
 #[test]
 fn outlaw_trickster_builds_escalating_blade_into_coup_de_grace() {
-    let f = fixture_with("outlaw_trickster.ron");
+    let f = fixture_with("rogue_outlaw_trickster.ron");
     let mut d = Driver::new(&f, 1);
     d.in_combat();
 
@@ -269,7 +269,7 @@ fn outlaw_trickster_builds_escalating_blade_into_coup_de_grace() {
 
 #[test]
 fn outlaw_fatebound_flips_coins_and_lucky_coin_triggers_both() {
-    let f = fixture_with("outlaw_fatebound.ron");
+    let f = fixture_with("rogue_outlaw_fatebound.ron");
     let mut d = Driver::new(&f, 1);
     d.in_combat();
 
@@ -292,7 +292,7 @@ fn outlaw_fatebound_flips_coins_and_lucky_coin_triggers_both() {
 
 #[test]
 fn subtlety_deathstalker_shadow_dance_shadowstrike_and_secret_technique() {
-    let f = fixture_with("subtlety_deathstalker.ron");
+    let f = fixture_with("rogue_subtlety_deathstalker.ron");
     let mut d = Driver::new(&f, 1);
     d.in_combat();
 

@@ -7,7 +7,7 @@
     simc_profile: Some("../../target/simc/profiles/MID2/MID2_Rogue_Subtlety.simc"),
     seats: [
         (
-            loadout: "../loadouts/subtlety_deathstalker.ron",
+            loadout: "../loadouts/rogue_subtlety_deathstalker.ron",
             policy: "subtlety",
             latency: (
                 anticipated: fixed(0),

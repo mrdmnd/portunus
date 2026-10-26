@@ -6,7 +6,7 @@
     scenario: "../scenarios/target_dummy.ron",
     seats: [
         (
-            loadout: "../loadouts/windwalker_celestial.ron",
+            loadout: "../loadouts/monk_windwalker_celestial.ron",
             policy: "windwalker",
             latency: (
                 anticipated: fixed(0),

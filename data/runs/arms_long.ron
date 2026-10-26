@@ -7,7 +7,7 @@
     scenario: "../scenarios/long_dummy.ron",
     seats: [
         (
-            loadout: "../loadouts/arms_slayer.ron",
+            loadout: "../loadouts/warrior_arms_slayer.ron",
             policy: "arms",
             latency: (
                 anticipated: fixed(0),

@@ -1,5 +1,7 @@
-//! Pets, guardians, totems, and deck-of-cards procs, on the checked-in
-//! Elemental data plus hand-written placeholder definitions.
+//! Pets, guardians, totems, and deck-of-cards procs, on an untelented
+//! Elemental shell plus hand-written placeholder definitions.
+
+mod common;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -24,7 +26,7 @@ use portunus_gamedata::{EnemyData, GameData};
 use portunus_ingest::{
     check_game_data, read_ron, DataIssue, EnemyDataSource, GameDataSource, Owner, RonFile,
 };
-use portunus_loadout::{ActorTemplate, Compiler, Loadout, LoadoutCompiler};
+use portunus_loadout::{ActorTemplate, Compiler, LoadoutCompiler};
 use portunus_mechanics::{CombatMath, EffectCtx, Kits, Outgoing, PartyMechanics};
 use portunus_scenario::{Sampler, ScenarioSampler, ScenarioSpec};
 
@@ -189,7 +191,7 @@ fn fixture() -> Fixture {
     for e in enemies.enemies.values_mut() {
         e.health = 400_000;
     }
-    let loadout: Loadout = read_ron(&dir.join("loadouts/elemental.ron")).unwrap();
+    let loadout = common::bare_elemental();
     let template = Compiler.compile(&data, &loadout).unwrap();
     let mut spec: ScenarioSpec = read_ron(&dir.join("scenarios/target_dummy.ron")).unwrap();
     spec.pulls[0].health = Dist::Fixed(1.0);

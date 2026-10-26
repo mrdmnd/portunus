@@ -195,7 +195,7 @@ fn hits(trace: &[TraceRecord], spell: SpellId) -> usize {
 
 #[test]
 fn havoc_aldrachi_reaver_chains_reavers_glaive_into_thrill_of_the_fight() {
-    let f = fixture_with("havoc_aldrachi_reaver.ron");
+    let f = fixture_with("demon_hunter_havoc_aldrachi_reaver.ron");
     let mut d = Driver::new(&f, 7);
     d.in_combat();
 
@@ -233,7 +233,7 @@ fn havoc_aldrachi_reaver_chains_reavers_glaive_into_thrill_of_the_fight() {
 
 #[test]
 fn devourer_annihilator_channels_void_ray_and_detonates_collapsing_star_and_world_killer() {
-    let f = fixture_with("devourer_annihilator.ron");
+    let f = fixture_with("demon_hunter_devourer_annihilator.ron");
     let mut d = Driver::new(&f, 7);
     d.in_combat();
 

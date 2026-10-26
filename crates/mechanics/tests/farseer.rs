@@ -6,7 +6,7 @@ mod common;
 use std::collections::{BTreeMap, BTreeSet};
 
 use common::{
-    completed, fixture, holds, play_until, Fixture, Stacks, ANCESTRAL_SWIFTNESS, EARTH_SHOCK,
+    completed, hero_kit, holds, play_until, Fixture, Stacks, ANCESTRAL_SWIFTNESS, EARTH_SHOCK,
     FLAME_SHOCK, LAVA_BURST, LIGHTNING_BOLT, STORMKEEPER,
 };
 use portunus_core::{ActorId, AuraId, PetId, Seat, SimDuration, SimTime, SpellId, TalentId};
@@ -38,7 +38,7 @@ const ELEMENTAL_BLAST_BUFFS: [AuraId; 3] = [AuraId(118522), AuraId(173183), Aura
 const OWNER: ActorId = ActorId(0);
 
 fn farseer() -> Fixture {
-    fixture("elemental_farseer.ron", |_| {})
+    hero_kit("shaman_elemental_farseer.ron", &[STORMKEEPER.0], |_| {})
 }
 
 /// Each Ancestor's arrival and departure, by actor.
@@ -117,7 +117,7 @@ fn every_ancestor_echoes_each_cast_as_it_lands() {
 fn ancestor_lava_burst_always_crits_for_one_plus_crit_chance() {
     // Without Ancestral Influence or Final Calling's Elemental Blast buffs
     // the Ancestors' power never changes.
-    let f = fixture("elemental_farseer.ron", |l| {
+    let f = hero_kit("shaman_elemental_farseer.ron", &[STORMKEEPER.0], |l| {
         l.talents.0.remove(&ANCESTRAL_INFLUENCE);
         l.talents.0.remove(&FINAL_CALLING);
     });
@@ -401,7 +401,7 @@ fn the_buff_counts_active_ancestors_and_raises_intellect() {
 
 #[test]
 fn ancestors_last_8_seconds_or_12_with_heed_my_call() {
-    let heeded = fixture("elemental_farseer.ron", |l| {
+    let heeded = hero_kit("shaman_elemental_farseer.ron", &[STORMKEEPER.0], |l| {
         l.talents.0.remove(&ROUTINE_COMMUNICATION);
         l.talents.0.insert(HEED_MY_CALL, 1);
     });

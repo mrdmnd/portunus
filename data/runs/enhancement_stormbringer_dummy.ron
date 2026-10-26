@@ -6,7 +6,7 @@
     scenario: "../scenarios/target_dummy.ron",
     seats: [
         (
-            loadout: "../loadouts/enhancement_stormbringer.ron",
+            loadout: "../loadouts/shaman_enhancement_stormbringer.ron",
             policy: "enhancement",
             latency: (
                 anticipated: fixed(0),

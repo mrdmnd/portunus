@@ -6,7 +6,7 @@
     scenario: "../scenarios/target_dummy.ron",
     seats: [
         (
-            loadout: "../loadouts/retribution_herald_of_the_sun.ron",
+            loadout: "../loadouts/paladin_retribution_herald_of_the_sun.ron",
             policy: "retribution",
             latency: (
                 anticipated: fixed(0),

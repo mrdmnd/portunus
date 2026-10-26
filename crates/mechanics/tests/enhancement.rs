@@ -242,7 +242,7 @@ fn hits(trace: &[TraceRecord], spell: SpellId) -> Vec<(SimTime, bool, u64)> {
 
 #[test]
 fn enhancement_stormstrike_imbues_and_maelstrom_weapon_spenders() {
-    let f = fixture_with("enhancement_stormbringer.ron");
+    let f = fixture_with("shaman_enhancement_stormbringer.ron");
     let mut d = Driver::new(&f, 1);
     d.in_combat();
 
@@ -301,7 +301,7 @@ fn enhancement_stormstrike_imbues_and_maelstrom_weapon_spenders() {
 
 #[test]
 fn enhancement_totemic_surging_totem_whirling_elements_and_sundering() {
-    let f = fixture_with("enhancement_totemic.ron");
+    let f = fixture_with("shaman_enhancement_totemic.ron");
     let mut d = Driver::new(&f, 2);
     d.in_combat();
 

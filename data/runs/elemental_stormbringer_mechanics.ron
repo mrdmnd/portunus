@@ -8,7 +8,7 @@
     scenario: "../scenarios/mechanics_dummy.ron",
     seats: [
         (
-            loadout: "../loadouts/elemental_stormbringer_build.ron",
+            loadout: "../loadouts/shaman_elemental_stormbringer.ron",
             policy: "elemental",
             latency: (
                 anticipated: fixed(0),

@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use portunus_core::{AuraId, ItemSetId, SpellId, TalentId};
 use portunus_gamedata::item::{EquipKind, GearSlot, ItemDef};
+use portunus_gamedata::race::{AuraAltWhen, Loa, TimeOfDay};
 use portunus_gamedata::spec::SpecDef;
 use portunus_gamedata::stats::{DerivedStats, RatingCurve, Stat, StatBlock, StatCurves};
 use portunus_gamedata::talent::{Grant, HeroTreeDef, TalentNode, TalentTree};
@@ -22,6 +23,7 @@ impl LoadoutCompiler for Compiler {
         check_gear(data, loadout, &mut issues);
         check_talents(data, spec, loadout, &mut issues);
         check_on_use(data, loadout, &mut issues);
+        check_race(data, spec, loadout, &mut issues);
         issues
     }
 
@@ -395,11 +397,104 @@ fn grants(data: &GameData, spec: &SpecDef, loadout: &Loadout) -> (BTreeSet<Spell
         }
     }
     abilities.extend(on_use_items(data, loadout).filter_map(|d| d.on_use));
+    grant_race(data, spec, loadout, &mut abilities, &mut auras);
 
     let mut seen = BTreeSet::new();
     auras.retain(|a| seen.insert(*a));
     auras.extend(extra_ranks);
     (abilities, auras)
+}
+
+fn check_race(data: &GameData, spec: &SpecDef, loadout: &Loadout, issues: &mut Vec<LoadoutIssue>) {
+    let Some(race) = loadout.race else {
+        if let Some(loa) = loadout.loa {
+            issues.push(LoadoutIssue::LoaNotForRace(loa));
+        }
+        if loadout.elune.is_some() {
+            issues.push(LoadoutIssue::EluneNotForRace);
+        }
+        if let Some(gem) = loadout.earthen_gem {
+            issues.push(LoadoutIssue::GemNotForRace(gem));
+        }
+        return;
+    };
+    let Some(def) = data.races.get(&race) else {
+        issues.push(LoadoutIssue::UnknownRace(race));
+        return;
+    };
+    match loadout.loa {
+        Some(loa) if def.loas.iter().all(|(have, _)| *have != loa) => {
+            issues.push(LoadoutIssue::LoaNotForRace(loa));
+        }
+        Some(Loa::Kimbul) if spec.class != "Hunter" => {
+            issues.push(LoadoutIssue::KimbulRequiresHunter);
+        }
+        _ => {}
+    }
+    if loadout.elune.is_some()
+        && !def
+            .aura_alts
+            .iter()
+            .any(|alt| alt.when == AuraAltWhen::Night)
+    {
+        issues.push(LoadoutIssue::EluneNotForRace);
+    }
+    if let Some(gem) = loadout.earthen_gem {
+        if def.gems.iter().all(|(have, _)| *have != gem) {
+            issues.push(LoadoutIssue::GemNotForRace(gem));
+        }
+    }
+}
+
+/// Actives and permanent passives for the loadout's race. Class rows match
+/// [`SpecDef::class`]. Intellect and nighttime alternates replace the aura
+/// they name.
+fn grant_race(
+    data: &GameData,
+    spec: &SpecDef,
+    loadout: &Loadout,
+    abilities: &mut BTreeSet<SpellId>,
+    auras: &mut Vec<AuraId>,
+) {
+    let Some(race) = loadout.race else {
+        return;
+    };
+    let Some(def) = data.races.get(&race) else {
+        return;
+    };
+    abilities.extend(def.spells.iter().copied());
+    auras.extend(def.auras.iter().copied());
+    for (class, spell) in &def.class_spells {
+        if class == &spec.class {
+            abilities.insert(*spell);
+        }
+    }
+    for (class, aura) in &def.class_auras {
+        if class == &spec.class {
+            auras.push(*aura);
+        }
+    }
+    for alt in &def.aura_alts {
+        let applies = match alt.when {
+            AuraAltWhen::Intellect => spec.primary_stat == Stat::Intellect,
+            AuraAltWhen::Night => loadout.elune == Some(TimeOfDay::Night),
+        };
+        if applies {
+            if let Some(slot) = auras.iter_mut().find(|a| **a == alt.instead_of) {
+                *slot = alt.aura;
+            }
+        }
+    }
+    if let Some(loa) = loadout.loa {
+        if let Some((_, aura)) = def.loas.iter().find(|(have, _)| *have == loa) {
+            auras.push(*aura);
+        }
+    }
+    if let Some(gem) = loadout.earthen_gem {
+        if let Some((_, aura)) = def.gems.iter().find(|(have, _)| *have == gem) {
+            auras.push(*aura);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -585,6 +680,7 @@ mod tests {
             .map(|h| (h.id, h))
             .collect(),
             pets: BTreeMap::new(),
+            races: BTreeMap::new(),
             curves: StatCurves {
                 ratings: BTreeMap::from([(
                     Stat::CritRating,
@@ -624,6 +720,10 @@ mod tests {
             hero_tree: None,
             talents: TalentSelection(BTreeMap::from([(TalentId(1), 2), (TalentId(2), 1)])),
             consumables: vec![ItemId(13), ItemId(14)],
+            race: None,
+            loa: None,
+            elune: None,
+            earthen_gem: None,
         }
     }
 

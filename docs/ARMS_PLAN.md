@@ -126,9 +126,9 @@ either.
 As built:
 
 - Data: hero tree 60 in `game.ron` (SimC's 12.1 trait rows, keystone
-  Slayer's Dominance, 14 points), and `data/loadouts/arms_slayer.ron`:
-  the whole reference build. `arms.ron` stays the spec tree alone, for
-  checking the core kit; both run files now use `arms_slayer`.
+  Slayer's Dominance, 14 points), and `data/loadouts/warrior_arms_slayer.ron`:
+  the single-target default. Core-kit tests load that file and drop the
+  hero tree; both run files use it.
 - Slayer's Dominance: one shared PRD (Arms's 25%, effect 2) with a 0.5 s
   cooldown, rolled on hits on the primary target by Mortal Strike (and
   Unhinged's), Slam, Heroic Strike, Overpower, and each Execute; on any
@@ -167,7 +167,7 @@ As built:
 ## Phase D: multiple targets & Colossus (done)
 
 - **Multi-target (Phase D):** Sweeping Strikes (`260708`, 12 stacks, 18 with Powerful Momentum `1261050`; +6 stacks on Colossus Smash with Broad Strokes `1261049`; chains single-target strikes to 1 nearby target at 75% and spreads Rend's bleed `388539` on Rend cast), Collateral Damage (`334779` / `334783`), Dreadnaught (`262150` / `315961`), Fervor of Battle (`202316` / `910105`), Overpowering Finish (`400205`), Mass Execution (`1273075`), Reap the Storm off Cleave (20% at 3+ targets), and SimC's `slayer_aoe` list in `crates/run/src/scripts/arms.rs`.
-- **Colossus (`HeroTreeId(62)`):** Hero tree 62 in `data/game.ron` (`436358` *Demolish* 3-tick hasted channel triggering `440884` / `440886` / `440888`, `440989` *Colossal Might*, `429638` *Martial Expert*, `440992` *Earthquaker*, `1270704` *Decimator*, `429637` *One Against Many*, `440995` *Arterial Bleed*, `429641` *Tide of Battle*, `1270709` *Cut to the Bone*, `429647` *Practiced Strikes*, `431548` *Precise Might*, `429642` *Mountain of Muscle and Scars*, `1270710` *Celeritous Conclusion* / `1270843` / `1270846`, and `429636` *Dominance of the Colossus* / `447513` *Wrecked*), `data/loadouts/arms_colossus.ron`, `data/runs/arms_colossus_dummy.ron`, and SimC's `colossus_st` / `colossus_execute` / `colossus_aoe` lists.
+- **Colossus (`HeroTreeId(62)`):** Hero tree 62 in `data/game.ron` (`436358` *Demolish* 3-tick hasted channel triggering `440884` / `440886` / `440888`, `440989` *Colossal Might*, `429638` *Martial Expert*, `440992` *Earthquaker*, `1270704` *Decimator*, `429637` *One Against Many*, `440995` *Arterial Bleed*, `429641` *Tide of Battle*, `1270709` *Cut to the Bone*, `429647` *Practiced Strikes*, `431548` *Precise Might*, `429642` *Mountain of Muscle and Scars*, `1270710` *Celeritous Conclusion* / `1270843` / `1270846`, and `429636` *Dominance of the Colossus* / `447513` *Wrecked*), `data/loadouts/warrior_arms_colossus.ron`, `data/runs/arms_colossus_dummy.ron`, and SimC's `colossus_st` / `colossus_execute` / `colossus_aoe` lists.
 
 ## Known divergences (kept up to date)
 

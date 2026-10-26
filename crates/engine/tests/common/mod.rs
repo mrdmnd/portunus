@@ -3,10 +3,11 @@
 
 #![allow(dead_code)]
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use portunus_core::{ActorId, AuraId, Dist, Seat, Seed, SimDuration, SpellId};
+use portunus_core::{ActorId, AuraId, Dist, ItemId, Seat, Seed, SimDuration, SpecId, SpellId};
 use portunus_engine::mechanics::{
     whole_points, AuraApplication, AuraChange, AuraEvent, CastEvent, DamageEvent, DeathEvent,
     EnemyHit, PetEvent, RolledHit, SwingEvent, TickEvent, TimerEvent,
@@ -17,11 +18,12 @@ use portunus_engine::{
     Readiness, RunSetup, SeatSetup, StateView, Step, TargetSel, Wait,
 };
 use portunus_gamedata::effect::{Coefficient, Effect, EffectTarget};
+use portunus_gamedata::item::GearSlot;
 use portunus_gamedata::spell::CastKind;
 use portunus_gamedata::stats::SchoolMask;
 use portunus_gamedata::{EnemyData, GameData};
 use portunus_ingest::{read_ron, EnemyDataSource, GameDataSource, RonFile};
-use portunus_loadout::{ActorTemplate, Compiler, Loadout, LoadoutCompiler};
+use portunus_loadout::{ActorTemplate, Compiler, EquippedItem, Loadout, LoadoutCompiler};
 use portunus_scenario::{Sampler, ScenarioSampler, ScenarioSpec};
 
 pub const SPELL_POWER: f64 = 3000.0;
@@ -42,11 +44,35 @@ fn data_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data")
 }
 
+/// Elemental with no talents: a spec id and a 600 robe. Shipped loadouts are
+/// single-target defaults; these tests want the bare shell.
+fn bare_elemental() -> Loadout {
+    Loadout {
+        spec: SpecId(262),
+        gear: BTreeMap::from([(
+            GearSlot::Chest,
+            EquippedItem {
+                item: ItemId(1),
+                item_level: 600,
+                enchant: None,
+                gems: Vec::new(),
+            },
+        )]),
+        hero_tree: None,
+        talents: Default::default(),
+        consumables: Vec::new(),
+        race: None,
+        loa: None,
+        elune: None,
+        earthen_gem: None,
+    }
+}
+
 pub fn fixture() -> Fixture {
     let dir = data_dir();
     let data: GameData = GameDataSource::load(&RonFile::new(dir.join("game.ron"))).unwrap();
     let enemies: EnemyData = EnemyDataSource::load(&RonFile::new(dir.join("enemies.ron"))).unwrap();
-    let loadout: Loadout = read_ron(&dir.join("loadouts/elemental.ron")).unwrap();
+    let loadout = bare_elemental();
     let mut template = Compiler.compile(&data, &loadout).unwrap();
     // The tests start at the pull: nothing may be castable before it.
     template.abilities.retain(|s| data.spells[s].hostile);

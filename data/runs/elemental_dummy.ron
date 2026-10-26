@@ -1,4 +1,5 @@
-// One Elemental Shaman on the target dummy. Paths are relative to this file.
+// Elemental Shaman, Stormbringer single-target default, on the target dummy.
+// Paths are relative to this file.
 (
     name: "elemental_dummy",
     game: "../game.ron",
@@ -6,7 +7,7 @@
     scenario: "../scenarios/target_dummy.ron",
     seats: [
         (
-            loadout: "../loadouts/elemental.ron",
+            loadout: "../loadouts/shaman_elemental_stormbringer.ron",
             policy: "elemental",
             latency: (
                 anticipated: fixed(0),

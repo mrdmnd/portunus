@@ -6,7 +6,7 @@
     scenario: "../scenarios/target_dummy.ron",
     seats: [
         (
-            loadout: "../loadouts/marksmanship_sentinel.ron",
+            loadout: "../loadouts/hunter_marksmanship_sentinel.ron",
             policy: "marksmanship",
             latency: (
                 anticipated: fixed(0),

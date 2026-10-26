@@ -393,6 +393,10 @@ mod tests {
                 hero_tree: None,
                 talents: TalentSelection::default(),
                 consumables: Vec::new(),
+                race: None,
+                loa: None,
+                elune: None,
+                earthen_gem: None,
             },
         }
     }

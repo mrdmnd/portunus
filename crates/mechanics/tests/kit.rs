@@ -31,7 +31,7 @@ const ELEMENTAL_RESONANCE: TalentId = TalentId(1258895);
 const THUNDERSTRIKE_WARD_TALENT: TalentId = TalentId(462757);
 
 fn stormbringer() -> Fixture {
-    fixture("elemental_stormbringer_build.ron", |_| {})
+    fixture("shaman_elemental_stormbringer.ron", |_| {})
 }
 
 fn press(k: &mut Kernel<PartyMechanics>, spell: SpellId) {
@@ -119,7 +119,7 @@ fn storm_elementals_come_out_primal_and_last_longer() {
 
 #[test]
 fn thunderstrike_ward_calls_two_strikes_on_a_share_of_casts() {
-    let f = fixture("elemental_stormbringer_build.ron", |l| {
+    let f = fixture("shaman_elemental_stormbringer.ron", |l| {
         l.talents.0.remove(&ELEMENTAL_RESONANCE);
         l.talents.0.insert(THUNDERSTRIKE_WARD_TALENT, 1);
     });

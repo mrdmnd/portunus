@@ -6,7 +6,7 @@
     scenario: "../scenarios/target_dummy.ron",
     seats: [
         (
-            loadout: "../loadouts/affliction_soul_harvester.ron",
+            loadout: "../loadouts/warlock_affliction_soul_harvester.ron",
             policy: "affliction",
             latency: (
                 anticipated: fixed(0),

@@ -3,20 +3,23 @@
 
 #![allow(dead_code)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use portunus_core::{ActorId, AuraId, Dist, Seat, Seed, SimDuration, SimTime, SpellId};
+use portunus_core::{
+    ActorId, AuraId, Dist, ItemId, Seat, Seed, SimDuration, SimTime, SpecId, SpellId, TalentId,
+};
 use portunus_engine::trace::{CastEndReason, TraceEvent};
 use portunus_engine::{
     CastOpts, Choice, Engine, Externals, Kernel, Latency, Outcome, Readiness, RunSetup, SeatSetup,
     StateView, Step, TargetSel, TraceRecord, Wait,
 };
 use portunus_gamedata::aura::AuraDef;
+use portunus_gamedata::item::GearSlot;
 use portunus_gamedata::{EnemyData, GameData};
 use portunus_ingest::{read_ron, EnemyDataSource, GameDataSource, RonFile};
-use portunus_loadout::{ActorTemplate, Compiler, Loadout, LoadoutCompiler};
+use portunus_loadout::{ActorTemplate, Compiler, EquippedItem, Loadout, LoadoutCompiler};
 use portunus_mechanics::{Kits, PartyMechanics};
 use portunus_scenario::{Sampler, ScenarioSampler, ScenarioSpec};
 
@@ -39,15 +42,64 @@ fn dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data")
 }
 
+/// Elemental with no talents: a spec id and a 600 robe. Shipped loadouts are
+/// single-target defaults; tests that want the bare shell build it here.
+pub fn bare_elemental() -> Loadout {
+    Loadout {
+        spec: SpecId(262),
+        gear: BTreeMap::from([(
+            GearSlot::Chest,
+            EquippedItem {
+                item: ItemId(1),
+                item_level: 600,
+                enchant: None,
+                gems: Vec::new(),
+            },
+        )]),
+        hero_tree: None,
+        talents: Default::default(),
+        consumables: Vec::new(),
+        race: None,
+        loa: None,
+        elune: None,
+        earthen_gem: None,
+    }
+}
+
 /// The game data, minus classes' group buffs, with a loadout from
 /// `data/loadouts`, edited by `edit`.
 pub fn fixture(loadout: &str, edit: impl FnOnce(&mut Loadout)) -> Fixture {
+    let loadout: Loadout = read_ron(&dir().join("loadouts").join(loadout)).unwrap();
+    fixture_from(loadout, edit)
+}
+
+/// The shipped single-target default with the spec tree removed, leaving the
+/// hero tree and `also` (spec talents the hero kit needs, such as Stormkeeper).
+pub fn hero_kit(loadout: &str, also: &[u32], edit: impl FnOnce(&mut Loadout)) -> Fixture {
+    let mut loadout: Loadout = read_ron(&dir().join("loadouts").join(loadout)).unwrap();
+    let data: GameData = GameDataSource::load(&RonFile::new(dir().join("game.ron"))).unwrap();
+    let id = loadout.hero_tree.expect("a hero tree");
+    let hero: BTreeSet<TalentId> = data.hero_trees[&id]
+        .tree
+        .nodes
+        .iter()
+        .flat_map(|node| node.choices.iter().copied())
+        .collect();
+    loadout
+        .talents
+        .0
+        .retain(|talent, _| hero.contains(talent) || also.contains(&talent.0));
+    edit(&mut loadout);
+    fixture_from(loadout, |_| {})
+}
+
+/// Same as [`fixture`], starting from a loadout the caller built.
+pub fn fixture_from(mut loadout: Loadout, edit: impl FnOnce(&mut Loadout)) -> Fixture {
     let mut data: GameData = GameDataSource::load(&RonFile::new(dir().join("game.ron"))).unwrap();
     // The kits are tested on their own, without the class's group buffs.
     data.classes.clear();
     let enemies: EnemyData =
         EnemyDataSource::load(&RonFile::new(dir().join("enemies.ron"))).unwrap();
-    let mut loadout: Loadout = read_ron(&dir().join("loadouts").join(loadout)).unwrap();
     edit(&mut loadout);
     let template = Compiler.compile(&data, &loadout).unwrap();
     let scenario: ScenarioSpec = read_ron(&dir().join("scenarios/target_dummy.ron")).unwrap();
