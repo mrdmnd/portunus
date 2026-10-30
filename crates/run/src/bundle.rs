@@ -10,7 +10,7 @@ use portunus_eval::{ArmError, Experiment, Metric, SeedSet};
 use portunus_gamedata::{EnemyData, GameData};
 use portunus_ingest::{
     check_enemy_data, check_game_data, read_ron, DataIssue, EnemyDataSource, GameDataSource,
-    IngestError, RonFile,
+    IngestError, RonFile, UnmodelledEffect,
 };
 use portunus_loadout::{ActorTemplate, Compiler, Loadout, LoadoutCompiler, LoadoutError};
 use portunus_mechanics::{KitIssue, Kits, SpecRegistry};
@@ -107,6 +107,8 @@ pub struct Bundle {
     pub policies: Vec<Arc<dyn Policy<SeatObs>>>,
     pub plan: Arc<Plan>,
     pub sampler: Arc<Sampler>,
+    /// Gear effects of an ingested SimC profile left out of the simulation.
+    pub unmodelled_gear: Vec<UnmodelledEffect>,
     priors: Arc<TimelinePriors>,
     kits: Arc<dyn SpecRegistry>,
 }
@@ -176,6 +178,7 @@ impl Bundle {
         let mut bundle = Self {
             priors: Arc::new(sampler.priors()),
             sampler: Arc::new(sampler),
+            unmodelled_gear: Vec::new(),
             data: Arc::new(data),
             enemies,
             templates,

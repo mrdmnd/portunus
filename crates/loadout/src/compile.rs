@@ -681,6 +681,7 @@ mod tests {
             .collect(),
             pets: BTreeMap::new(),
             races: BTreeMap::new(),
+            derived_auras: BTreeSet::new(),
             curves: StatCurves {
                 ratings: BTreeMap::from([(
                     Stat::CritRating,

@@ -146,12 +146,14 @@ pub fn subtlety(d: &Decision<SeatObs>) -> Choice {
         return move_in;
     }
     let finish_threshold = if s.darkest_night { 7.0 } else { 6.0 };
-    let act = s.cds().or_else(|| {
-        if s.cp >= finish_threshold {
-            s.finish()
-        } else {
-            s.build()
-        }
-    });
+    let act = super::use_buff_trinket(d, s.obs.has_buff(SHADOW_BLADES_BUFF))
+        .or_else(|| s.cds())
+        .or_else(|| {
+            if s.cp >= finish_threshold {
+                s.finish()
+            } else {
+                s.build()
+            }
+        });
     act.map_or(Choice::Wait(Wait::NextEvent), Choice::cast)
 }

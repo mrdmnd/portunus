@@ -10,7 +10,11 @@
 
 mod check;
 pub mod dump;
+pub mod gear;
+pub mod items;
+pub mod modifiers;
 mod ron_file;
+pub mod talent_string;
 
 pub use check::{check_enemy_data, check_game_data, DataIssue, Owner};
 pub use dump::{
@@ -18,7 +22,10 @@ pub use dump::{
     DumpSyncedSource, SimcEquippedSlot, SimcPopulatedLoadout, SimcProfile, SpellDump,
     TalentAuditFinding, TalentFindingKind,
 };
-pub use ron_file::{read_ron, RonFile};
+pub use gear::{EquippedGear, GearLibrary, UnmodelledEffect};
+pub use items::{GearEffect, GearSource, ItemTables, ItemTrigger};
+pub use ron_file::{merge_derived, read_ron, RonFile};
+pub use talent_string::{DecodedTalents, TalentPick, TraitTable, TraitTree};
 
 use portunus_core::{EnemyKey, EventName, SimTime};
 use portunus_gamedata::{EnemyData, GameBuild, GameData};

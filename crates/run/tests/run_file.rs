@@ -999,7 +999,13 @@ fn the_elemental_script_lusts_at_the_pull_when_it_has_the_spell() {
         let o = b.arm(false).rollout(Seed(1)).unwrap();
         o.seats.iter().map(|s| s.damage_done).collect::<Vec<_>>()
     };
-    assert_eq!(damage(&b), damage(&auto));
+    // Pets that start a cast at the pull act before their owner's decision
+    // there, so only the automatic Bloodlust hastes it (the Storm
+    // Elemental's first Call Lightning).
+    for (scripted, auto) in damage(&b).into_iter().zip(damage(&auto)) {
+        let off = scripted.abs_diff(auto) as f64 / auto as f64;
+        assert!(off < 0.03, "{scripted} vs {auto}");
+    }
 }
 
 const POWER_INFUSION: SpellId = SpellId(10060);
@@ -1608,10 +1614,11 @@ fn rogue_runs_execute_their_hero_kits() {
     for &(run, expected) in runs {
         let path =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../data/runs/{run}.ron"));
-        let bd = Bundle::load(&path)
-            .unwrap()
-            .breakdown(SeedSet { first: 0, count: 4 })
-            .unwrap();
+        let mut b = Bundle::load(&path).unwrap();
+        for e in Arc::make_mut(&mut b.enemies).enemies.values_mut() {
+            e.health = 5_000_000;
+        }
+        let bd = b.breakdown(SeedSet { first: 0, count: 4 }).unwrap();
         for name in expected {
             assert!(
                 bd.rows

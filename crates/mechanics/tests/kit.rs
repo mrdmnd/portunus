@@ -171,6 +171,7 @@ fn chances_and_listener_conditions_are_checked() {
     mastery.listeners[1].effects = vec![Effect::Chance {
         chance: 1.5,
         then: Vec::new(),
+        per_event_amount: false,
     }];
     let issues = check_game_data(&f.data);
     assert!(issues.contains(&DataIssue::UnknownAura {

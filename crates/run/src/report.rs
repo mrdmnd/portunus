@@ -330,6 +330,23 @@ pub fn render_parity(r: &SimcParityReport) -> String {
         r.simc_profile.display(),
         r.dump_diffs_applied
     );
+    if let Some(t) = &r.talents_override {
+        let _ = writeln!(out, "  simc ran this loadout's hero tree: talents={t}");
+    }
+    if !r.unmapped_talents.is_empty() {
+        let _ = writeln!(
+            out,
+            "  simc talents missing here: {}",
+            r.unmapped_talents.join(", ")
+        );
+    }
+    if !r.unmodelled_gear.is_empty() {
+        let _ = writeln!(
+            out,
+            "  simc gear effects missing here: {}",
+            r.unmodelled_gear.join(", ")
+        );
+    }
     let _ = writeln!(
         out,
         "  portunus dps: {:>10.1} ± {:<7.1} ({:.1}s combat, n={})",

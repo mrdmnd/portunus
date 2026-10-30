@@ -29,8 +29,8 @@ const FLAME_SHOCK: SpellId = SpellId(188389);
 const EARTH_SHOCK: SpellId = SpellId(8042);
 const FLAME_SHOCK_DOT: AuraId = AuraId(188389);
 
-/// The loadout's 2600 intellect.
-const SPELL_POWER: f64 = 2600.0;
+/// The loadout's 2600 intellect, plus Mail Specialization's 5%.
+const SPELL_POWER: f64 = 2600.0 * 1.05;
 /// 5% base plus 250 crit rating at 700 per percent.
 const CRIT_PCT: f64 = 5.0 + 250.0 / 700.0;
 /// 8% base plus 250 mastery rating at 700 per percent.
@@ -200,6 +200,7 @@ fn kits_cover_the_data() {
         aura: FLAME_SHOCK_DOT,
         target: EffectTarget::Target,
         max: None,
+        up_to_deficit: None,
         then: vec![Effect::Hook(HookKey("on_cast_hook".into()))],
     }];
     let issues = Kits::standard().validate(&data);

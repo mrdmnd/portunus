@@ -11,7 +11,7 @@ use portunus_core::{ActorId, PetId, Seat, SimDuration, SimTime, SpellId};
 use portunus_gamedata::enemy::RuleIndex;
 use portunus_gamedata::item::WeaponHand;
 
-use crate::mechanics::RolledHit;
+use crate::mechanics::{Inherited, RolledHit};
 use crate::order::EventClass;
 use crate::state::AuraRef;
 use crate::step::WakeReason;
@@ -58,6 +58,7 @@ pub(crate) enum Event {
         spell: SpellId,
         target: Option<ActorId>,
         rolled: Option<Vec<RolledHit>>,
+        inherited: Inherited,
     },
     AuraTick {
         aura: AuraRef,

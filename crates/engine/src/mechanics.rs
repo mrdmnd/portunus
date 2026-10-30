@@ -166,6 +166,7 @@ pub trait EngineIo {
     /// its parent launches: they are delivered through
     /// [`Mechanics::projectile_landed`] (at once if the spell doesn't
     /// travel), and the cast arrives with [`CastEvent::prerolled`] set.
+    /// The cast arrives with `inherited` as [`CastEvent::inherited`].
     fn trigger_spell(
         &mut self,
         caster: ActorId,
@@ -173,6 +174,7 @@ pub trait EngineIo {
         target: Option<ActorId>,
         delay: SimDuration,
         rolled: Option<Vec<RolledHit>>,
+        inherited: Inherited,
     );
     /// Stop `target`'s cast if it is interruptible. Returns whether one was
     /// stopped.
@@ -218,10 +220,27 @@ pub struct CastEvent {
     /// What the spell's scaling cost actually consumed (see
     /// `SpendScaling`), else what its variable cost (one with `extra`) did.
     pub spent: Option<ResourceAmount>,
+    /// Units the spell counts as spending beyond `spent` (the caster's
+    /// `ModKind::SpendBonus` as it paid).
+    #[serde(default)]
+    pub spend_bonus: f64,
     /// A triggered spell whose direct damage was rolled when it was
     /// triggered (see [`EngineIo::trigger_spell`]): don't roll it again;
     /// the hits arrive with its landing.
     pub prerolled: bool,
+    /// For a triggered spell, what it took from the effect triggering it.
+    pub inherited: Inherited,
+}
+
+/// What a triggered spell takes from the effect that triggered it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct Inherited {
+    /// The amount a triggering listener reacted to: what the spell's
+    /// `Coefficient::EventAmount` reads (Shadow Blades' share of a hit).
+    pub amount: Option<f64>,
+    /// What the triggering cast spent: what the spell's `spent_at_least`
+    /// reads (a Shadow Clone's copy of a finisher).
+    pub spent: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

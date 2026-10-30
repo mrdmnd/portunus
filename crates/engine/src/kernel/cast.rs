@@ -321,8 +321,18 @@ impl World {
         }
     }
 
-    pub(crate) fn cost_mult(&self, actor: ActorId, spell: SpellId, target: Option<ActorId>) -> f64 {
-        (1.0 + self.mod_sum(actor, spell, ModKind::CostPct, target) / 100.0).max(0.0)
+    pub(crate) fn cost_amount(
+        &self,
+        actor: ActorId,
+        spell: SpellId,
+        cost: &Cost,
+        target: Option<ActorId>,
+    ) -> f64 {
+        let kind = cost.kind;
+        let flat = self.mod_sum(actor, spell, ModKind::ResourceCostFlat(kind), target);
+        let pct = self.mod_sum(actor, spell, ModKind::CostPct, target)
+            + self.mod_sum(actor, spell, ModKind::ResourceCostPct(kind), target);
+        ((cost.amount + flat) * (1.0 + pct / 100.0)).max(0.0)
     }
 
     /// Spend a completed cast's costs; returns what a scaling cost
@@ -334,18 +344,22 @@ impl World {
         def: &SpellDef,
         target: Option<ActorId>,
     ) -> Option<ResourceAmount> {
-        let mult = self.cost_mult(actor, spell, target);
+        let amounts: Vec<f64> = def
+            .costs
+            .iter()
+            .map(|c| self.cost_amount(actor, spell, c, target))
+            .collect();
         let now = self.now;
         let a = self.actor_mut(actor)?;
         let haste = a.haste;
         let mut spent = None;
         let mut scaled = false;
-        for cost in &def.costs {
+        for (cost, &amount) in def.costs.iter().zip(&amounts) {
             let Some(r) = a.resources.iter_mut().find(|r| r.def.kind == cost.kind) else {
                 continue;
             };
             r.settle(now, haste);
-            let base = (cost.amount * mult).min(r.value);
+            let base = amount.min(r.value);
             r.change(-base);
             let extra = cost.extra.min(r.value).max(0.0);
             r.change(-extra);
@@ -374,24 +388,27 @@ impl World {
         if costs.is_empty() {
             return true;
         }
-        let mult = self.cost_mult(actor, spell, target);
+        let amounts: Vec<f64> = costs
+            .iter()
+            .map(|c| self.cost_amount(actor, spell, c, target))
+            .collect();
         let now = self.now;
         let Some(a) = self.actor_mut(actor) else {
             return false;
         };
         let haste = a.haste;
-        for cost in costs {
+        for (cost, &amount) in costs.iter().zip(&amounts) {
             let Some(r) = a.resources.iter_mut().find(|r| r.def.kind == cost.kind) else {
                 return false;
             };
             r.settle(now, haste);
-            if r.value + 1e-9 < cost.amount * mult {
+            if r.value + 1e-9 < amount {
                 return false;
             }
         }
-        for cost in costs {
+        for (cost, &amount) in costs.iter().zip(&amounts) {
             if let Some(r) = a.resources.iter_mut().find(|r| r.def.kind == cost.kind) {
-                let base = (cost.amount * mult).min(r.value);
+                let base = amount.min(r.value);
                 r.change(-base);
             }
         }
@@ -550,13 +567,12 @@ impl World {
         if let Some(t) = self.empty_until(actor, spell) {
             need.until(t, WakeReason::CooldownReady(ability));
         }
-        let mult = self.cost_mult(actor, spell, target);
         for cost in &def.costs {
             let Some(r) = a.resources.iter().find(|r| r.def.kind == cost.kind) else {
                 need.block();
                 continue;
             };
-            let want = cost.amount * mult;
+            let want = self.cost_amount(actor, spell, cost, target);
             let have = r.value_at(now, a.haste);
             if have + 1e-9 < want {
                 let rate = r.rate(a.haste);

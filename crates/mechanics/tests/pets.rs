@@ -42,6 +42,7 @@ const FIRE_BLAST: SpellId = SpellId(57984);
 const LIQUID_MAGMA_TOTEM: SpellId = SpellId(192222);
 const LIQUID_MAGMA_TOTEM_PET: PetId = PetId(97369);
 const MAGMA_PULSE: AuraId = AuraId(192226);
+const MAIL_SPECIALIZATION: AuraId = AuraId(86108);
 
 const PRIMAL_FIRE_ELEMENTAL: PetId = PetId(61029);
 const METEOR_COMMAND: SpellId = SpellId(117588);
@@ -105,6 +106,8 @@ fn spell(id: SpellId, cast: CastKind, gcd: Option<GcdDef>, effects: Vec<Effect>)
         usable_while_casting: false,
         weapon: None,
         unrecorded: false,
+        item: false,
+        no_procs: false,
         requires: Vec::new(),
         on_cast: Vec::new(),
         effects,
@@ -185,6 +188,10 @@ fn fixture() -> Fixture {
     let mut data: GameData = GameDataSource::load(&RonFile::new(dir.join("game.ron"))).unwrap();
     // No group buffs: the pet tests' Bloodlust is their own.
     data.classes.clear();
+    // The owner's intellect is the loadout's, without Mail Specialization.
+    for spec in data.specs.values_mut() {
+        spec.baseline_auras.retain(|&a| a != MAIL_SPECIALIZATION);
+    }
     let mut enemies: EnemyData =
         EnemyDataSource::load(&RonFile::new(dir.join("enemies.ron"))).unwrap();
     // The fight lengths below assume a 400k dummy.
@@ -624,6 +631,7 @@ fn decks_proc_exactly_once_per_deck() {
         on: ListenFor::CastComplete {
             spell: Some(LIGHTNING_BOLT),
             school: None,
+            hostile: false,
         },
         chance: ProcChance::Deck {
             successes: 1,
@@ -705,6 +713,7 @@ fn decks_persist_across_reapplication() {
         on: ListenFor::CastComplete {
             spell: Some(LIGHTNING_BOLT),
             school: None,
+            hostile: false,
         },
         chance: ProcChance::Deck {
             successes: 1,
@@ -1281,6 +1290,7 @@ fn spirits_echo_the_owners_casts_for_a_fixed_share() {
         on: ListenFor::CastComplete {
             spell: Some(LIGHTNING_BOLT),
             school: None,
+            hostile: false,
         },
         chance: ProcChance::Always,
         internal_cooldown: None,

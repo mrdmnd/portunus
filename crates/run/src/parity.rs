@@ -2,16 +2,22 @@
 //! Patchwerk parity verification.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use portunus_core::{AuraId, Dist, EnemyKey, HeroTreeId, SpecId};
+use portunus_core::{AuraId, Dist, EnemyKey, HeroTreeId, SpecId, SpellId, TalentId};
 use portunus_engine::{BloodlustMode, Externals, PullAura};
 use portunus_eval::{Estimate, LocalRunner, SeedSet};
-use portunus_gamedata::{EarthenGem, Loa, Race, TimeOfDay};
-use portunus_ingest::{sync_game_data_with_dump, DumpDiff, IngestError, SimcProfile, SpellDump};
-use portunus_loadout::{Compiler, EquippedItem, LoadoutCompiler};
+use portunus_gamedata::item::GearSlot;
+use portunus_gamedata::talent::TalentTree;
+use portunus_gamedata::{EarthenGem, GameData, HeroTreeDef, Loa, Race, TimeOfDay};
+use portunus_ingest::{
+    sync_game_data_with_dump, DecodedTalents, DumpDiff, GearLibrary, IngestError, SimcProfile,
+    SpellDump, TalentPick, TraitTable, TraitTree,
+};
+use portunus_loadout::{Compiler, EquippedItem, LoadoutCompiler, TalentSelection};
 use portunus_scenario::{Sampler, ScenarioSampler};
 
 use crate::arm::Breakdown;
@@ -42,6 +48,13 @@ pub struct SimcParityReport {
     pub hero_tree_name: Option<String>,
     pub simc_profile: PathBuf,
     pub dump_diffs_applied: usize,
+    /// The `talents=` SimC ran in place of the profile's, when seat 0's hero
+    /// tree differs from the profile's.
+    pub talents_override: Option<String>,
+    /// SimC's spec and hero talents with no place in this data's trees.
+    pub unmapped_talents: Vec<String>,
+    /// SimC's gear effects with no translation here, as `slot: name (id)`.
+    pub unmodelled_gear: Vec<String>,
     pub portunus_dps: Estimate,
     pub portunus_combat_secs: f64,
     pub simc_dps: f64,
@@ -197,22 +210,105 @@ impl Bundle {
         Ok(diffs)
     }
 
+    /// Replaces seat 0's spec and hero talents with those of `simc_profile`'s
+    /// `talents=` string, read against SimC's `trait_data.inc`. When seat 0
+    /// takes a hero tree the profile doesn't, the profile's class and spec
+    /// talents are kept, seat 0's hero talents swapped in, and the result
+    /// returned as the `talents=` SimC should run instead.
+    pub fn adopt_simc_talents(
+        &mut self,
+        simc_profile: &Path,
+        trait_data: &Path,
+    ) -> Result<SimcTalents, RunError> {
+        let read_err = |path: &Path, source| RunError::Read {
+            path: path.to_owned(),
+            source,
+        };
+        let profile =
+            SimcProfile::from_file(simc_profile).map_err(|e| read_err(simc_profile, e))?;
+        let Some(talents) = profile.talents else {
+            return Ok(SimcTalents::default());
+        };
+        let table = TraitTable::from_file(trait_data).map_err(|e| read_err(trait_data, e))?;
+        let mut decoded = table
+            .decode(&talents)
+            .map_err(|e| read_err(simc_profile, e))?;
+        let Some(tpl) = self.templates.first_mut() else {
+            return Ok(SimcTalents::default());
+        };
+        if tpl.spec != decoded.spec {
+            return Ok(SimcTalents::default());
+        }
+
+        let mut simc_override = None;
+        if let Some(hero) = tpl
+            .source
+            .hero_tree
+            .and_then(|h| self.data.hero_trees.get(&h))
+        {
+            let picks = hero_picks(&table, hero, &tpl.source.talents);
+            let sub_tree = picks.first().map(|p| p.sub_tree);
+            if sub_tree.is_some() && sub_tree != decoded.hero_sub_tree {
+                decoded.picks.retain(|p| p.tree != TraitTree::Hero);
+                decoded.picks.extend(picks);
+                decoded.hero_sub_tree = sub_tree;
+                simc_override = Some(
+                    table
+                        .encode(&decoded)
+                        .map_err(|e| read_err(simc_profile, e))?,
+                );
+            }
+        }
+
+        let mut loadout = tpl.source.clone();
+        let (talents, hero_tree, unmapped) = simc_talents(&self.data, &decoded, &loadout.talents);
+        loadout.talents = talents;
+        loadout.hero_tree = hero_tree;
+        *tpl = Compiler
+            .compile(&self.data, &loadout)
+            .map_err(|source| RunError::Loadout { seat: 0, source })?;
+        Ok(SimcTalents {
+            simc_override,
+            unmapped,
+        })
+    }
+
     /// Ingests all 14–16 equipped gear slots, weapons, gems, enchants, trinkets,
     /// 2pc/4pc tier set bonuses, consumables, and raid buffs (`Externals`) from
     /// a SimulationCraft `.simc` profile into this bundle.
     pub fn ingest_simc_profile(&mut self, simc_profile: &Path) -> Result<(), RunError> {
-        let profile = SimcProfile::from_file(simc_profile).map_err(|source| RunError::Read {
-            path: simc_profile.to_owned(),
-            source,
-        })?;
+        let mut profile =
+            SimcProfile::from_file(simc_profile).map_err(|source| RunError::Read {
+                path: simc_profile.to_owned(),
+                source,
+            })?;
+        if let Some(report) = simc_item_report(simc_profile) {
+            profile.read_item_report(&report);
+        }
+        let library = simc_root(simc_profile).and_then(gear_library);
+        self.unmodelled_gear.clear();
         for (seat, tpl) in self.templates.iter_mut().enumerate() {
             let mut loadout = tpl.source.clone();
-            let (slots, consumables) = profile.populate_gamedata(
-                Arc::make_mut(&mut self.data),
-                tpl.spec,
-                tpl.main_hand,
-                tpl.off_hand,
-            );
+            let data = Arc::make_mut(&mut self.data);
+            let (slots, consumables) =
+                profile.populate_gamedata(data, tpl.spec, tpl.main_hand, tpl.off_hand);
+            if let Some(library) = &library {
+                let gear = library.equip(data, &profile, tpl.spec);
+                for (slot, auras) in gear.auras {
+                    let holder = slots
+                        .get(&slot)
+                        .or_else(|| slots.get(&GearSlot::MainHand))
+                        .map(|&(item, ..)| item);
+                    if let Some(item) = holder.and_then(|item| data.items.get_mut(&item)) {
+                        item.passive_auras.extend(auras);
+                    }
+                }
+                for u in gear.unmodelled {
+                    if !self.unmodelled_gear.contains(&u) {
+                        self.unmodelled_gear.push(u);
+                    }
+                }
+            }
             loadout.gear.clear();
             for (slot, (item, item_level, enchant, gems)) in slots {
                 loadout.gear.insert(
@@ -359,6 +455,198 @@ impl Bundle {
     }
 }
 
+/// The SimC checkout a profile under its `profiles/<tier>/` lives in.
+fn simc_root(profile: &Path) -> Option<PathBuf> {
+    Some(profile.parent()?.parent()?.parent()?.to_owned())
+}
+
+/// SimC's item tables and item spells, read once per checkout. `None`
+/// without them.
+fn gear_library(simc: PathBuf) -> Option<Arc<GearLibrary>> {
+    static LIBRARIES: Mutex<BTreeMap<PathBuf, Option<Arc<GearLibrary>>>> =
+        Mutex::new(BTreeMap::new());
+    let mut libraries = LIBRARIES.lock().unwrap_or_else(|e| e.into_inner());
+    libraries
+        .entry(simc.clone())
+        .or_insert_with(|| GearLibrary::from_simc_dir(&simc).ok().map(Arc::new))
+        .clone()
+}
+
+/// SimC's item lines (`debug=1`'s `name=... slot=...`) and player base
+/// attributes (`generic base stats:`) for `profile`, from a one-second run
+/// of the `engine/simc` beside its `profiles` directory. Kept next to the
+/// profile as `<profile>.report` until the profile changes. `None` without
+/// that binary.
+fn simc_item_report(profile: &Path) -> Option<String> {
+    let cache = profile.with_extension("simc.report");
+    let modified = |p: &Path| fs::metadata(p).and_then(|m| m.modified()).ok();
+    if let (Some(made), Some(edited)) = (modified(&cache), modified(profile)) {
+        if made >= edited {
+            if let Ok(text) = fs::read_to_string(&cache) {
+                return Some(text);
+            }
+        }
+    }
+    let simc = profile.parent()?.parent()?.parent()?.join("engine/simc");
+    if !simc.exists() {
+        return None;
+    }
+    let log = std::env::temp_dir().join(format!(
+        "portunus_items_{}_{}.txt",
+        std::process::id(),
+        profile.file_stem()?.to_string_lossy()
+    ));
+    let status = Command::new(&simc)
+        .arg(profile)
+        .args(["iterations=1", "max_time=1", "debug=1"])
+        .arg(format!("output={}", log.display()))
+        .output()
+        .ok()?;
+    let text = fs::read_to_string(&log).ok();
+    let _ = fs::remove_file(&log);
+    if !status.status.success() {
+        return None;
+    }
+    let items: String = text?
+        .lines()
+        .filter(|l| {
+            (l.contains(" name=") && l.contains(" slot="))
+                || (l.contains(" Player '") && l.contains("generic base stats:"))
+        })
+        .map(|l| format!("{l}\n"))
+        .collect();
+    let _ = fs::write(&cache, &items);
+    Some(items)
+}
+
+/// What [`Bundle::adopt_simc_talents`] did.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SimcTalents {
+    /// The `talents=` SimC should run in place of the profile's.
+    pub simc_override: Option<String>,
+    /// SimC's spec and hero talents with no place in this data's trees.
+    pub unmapped: Vec<String>,
+}
+
+/// A loadout's picks in `hero`, keystone included, as SimC trait picks.
+fn hero_picks(
+    table: &TraitTable,
+    hero: &HeroTreeDef,
+    talents: &TalentSelection,
+) -> Vec<TalentPick> {
+    let mut taken: BTreeMap<TalentId, u8> = talents
+        .0
+        .iter()
+        .filter(|(t, &r)| r > 0 && hero.tree.nodes.iter().any(|n| n.choices.contains(t)))
+        .map(|(&t, &r)| (t, r))
+        .collect();
+    taken.entry(hero.keystone).or_insert(1);
+    let Some(sub_tree) = table.hero_sub_tree_of(SpellId(hero.keystone.0)) else {
+        return Vec::new();
+    };
+    taken
+        .into_iter()
+        .filter_map(|(t, rank)| {
+            table
+                .rows
+                .iter()
+                .find(|r| r.tree == TraitTree::Hero && r.sub_tree == sub_tree && r.spell.0 == t.0)
+                .map(|r| TalentPick {
+                    tree: TraitTree::Hero,
+                    node: r.node,
+                    spell: r.spell,
+                    name: r.name.clone(),
+                    rank: u32::from(rank),
+                    sub_tree,
+                })
+        })
+        .collect()
+}
+
+/// A decoded SimC loadout as this data's talents: spec picks found in the
+/// spec's trees, and the hero tree holding the most hero picks. Also the
+/// names of spec and hero picks with no place here. Where SimC takes more
+/// than one of a node's choices, the one in `prior` is kept.
+fn simc_talents(
+    data: &GameData,
+    decoded: &DecodedTalents,
+    prior: &TalentSelection,
+) -> (TalentSelection, Option<HeroTreeId>, Vec<String>) {
+    let in_tree =
+        |tree: &TalentTree, t: TalentId| tree.nodes.iter().any(|n| n.choices.contains(&t));
+    let spec_trees: &[TalentTree] = data
+        .specs
+        .get(&decoded.spec)
+        .map_or(&[], |s| s.trees.as_slice());
+    let hero_picks: Vec<&TalentPick> = decoded
+        .picks
+        .iter()
+        .filter(|p| p.tree == TraitTree::Hero)
+        .collect();
+    let hero = data
+        .hero_trees
+        .values()
+        .filter(|h| h.specs.contains(&decoded.spec))
+        .map(|h| {
+            let hits = hero_picks
+                .iter()
+                .filter(|p| in_tree(&h.tree, TalentId(p.spell.0)))
+                .count();
+            (hits, h)
+        })
+        .filter(|&(hits, _)| hits > 0)
+        .max_by_key(|&(hits, _)| hits)
+        .map(|(_, h)| h);
+
+    let mut talents = BTreeMap::new();
+    let mut missing = Vec::new();
+    for p in &decoded.picks {
+        let id = TalentId(p.spell.0);
+        let placed = match p.tree {
+            TraitTree::Spec => spec_trees.iter().any(|t| in_tree(t, id)),
+            TraitTree::Hero => hero.is_some_and(|h| in_tree(&h.tree, id)),
+            TraitTree::Class | TraitTree::Selection => continue,
+        };
+        if placed {
+            talents.insert(id, u8::try_from(p.rank).unwrap_or(u8::MAX));
+        } else {
+            missing.push(p.name.clone());
+        }
+    }
+    // SimC's tiered nodes (Feedback Loop) take several entries; this data
+    // keeps one choice per node, the loadout's where it made one.
+    let nodes = spec_trees
+        .iter()
+        .chain(hero.map(|h| &h.tree))
+        .flat_map(|t| &t.nodes);
+    for node in nodes {
+        let taken: Vec<TalentId> = node
+            .choices
+            .iter()
+            .copied()
+            .filter(|t| talents.contains_key(t))
+            .collect();
+        let Some(&first) = taken.first() else {
+            continue;
+        };
+        let keep = taken
+            .iter()
+            .copied()
+            .find(|t| prior.0.get(t).is_some_and(|&r| r > 0))
+            .unwrap_or(first);
+        for t in taken {
+            if t == keep {
+                if let Some(r) = talents.get_mut(&t) {
+                    *r = (*r).min(node.max_rank);
+                }
+            } else {
+                talents.remove(&t);
+            }
+        }
+    }
+    (TalentSelection(talents), hero.map(|h| h.id), missing)
+}
+
 /// Returns the 12.1 `SpellDataDump` label-modifier (`Apply Percent Modifier w/ Label (218)`)
 /// and class-tree passive tuning delta for a given `(SpecId, Option<HeroTreeId>)`.
 fn dump_label_and_class_tree_tuning_pct(spec: SpecId, hero: Option<HeroTreeId>) -> Option<f64> {
@@ -391,12 +679,6 @@ fn dump_label_and_class_tree_tuning_pct(spec: SpecId, hero: Option<HeroTreeId>) 
         (255, Some(43)) => Some(2.88),
         (258, Some(19)) => Some(65.79),
         (258, Some(18)) => Some(80.45),
-        (259, Some(53)) => Some(8.74),
-        (259, Some(52)) => Some(36.62),
-        (260, Some(51)) => Some(144.84),
-        (260, Some(52)) => Some(117.73),
-        (261, Some(53)) => Some(101.63),
-        (261, Some(51)) => Some(150.37),
         (262, Some(54)) => Some(24.54),
         (262, Some(55)) => Some(93.19),
         (262, None) => Some(710.00),
@@ -572,6 +854,11 @@ pub fn check_simc_parity(
     dump_diffs_applied: usize,
 ) -> Result<SimcParityReport, RunError> {
     let mut eval_bundle = bundle.clone();
+    let trait_data = simc_bin
+        .parent()
+        .map(|engine| engine.join("dbc/generated/trait_data.inc"))
+        .unwrap_or_default();
+    let talents = eval_bundle.adopt_simc_talents(simc_profile, &trait_data)?;
     eval_bundle.ingest_simc_profile(simc_profile)?;
     eval_bundle.configure_patchwerk_dummy();
 
@@ -600,8 +887,12 @@ pub fn check_simc_parity(
     let target_secs = (((bd.combat_secs / 10.0).round() as u32) * 10).clamp(60, 600);
     let iters = seeds.count.max(50);
 
-    let output = Command::new(simc_bin)
-        .arg(simc_profile)
+    let mut simc = Command::new(simc_bin);
+    simc.arg(simc_profile);
+    if let Some(t) = &talents.simc_override {
+        simc.arg(format!("talents={t}"));
+    }
+    let output = simc
         .arg("deterministic=1")
         .arg("threads=8")
         .arg("vary_combat_length=0.2")
@@ -631,6 +922,13 @@ pub fn check_simc_parity(
         hero_tree_name,
         simc_profile: simc_profile.to_owned(),
         dump_diffs_applied,
+        talents_override: talents.simc_override,
+        unmapped_talents: talents.unmapped,
+        unmodelled_gear: eval_bundle
+            .unmodelled_gear
+            .iter()
+            .map(|u| format!("{:?}: {} ({})", u.slot, u.name, u.spell.0))
+            .collect(),
         portunus_dps,
         portunus_combat_secs: bd.combat_secs,
         simc_dps,
@@ -774,7 +1072,12 @@ fn canonical_ability_key(s: &str) -> String {
         "conflagration_periodic" => "conflagration".into(),
         "rune_of_unleashed_fire_lingering" => "rune_of_unleashed_fire".into(),
         "voracious_heart_of_ulatek" => "devour_morsel".into(),
-        "zuljins_guillotine_technique" => "perfected_guillotine".into(),
+        "zuljins_guillotine_technique" | "perfected_guillotine" => "guillotine".into(),
+        "shadow_blades_attack" | "shadow_blades_hit" => "shadow_blades_hit".into(),
+        "eviscerate_bonus" | "eviscerate_shadow" => "eviscerate_shadow".into(),
+        "black_powder_bonus" | "black_powder_shadow" => "black_powder_shadow".into(),
+        "secret_technique_clones" | "secret_technique_clone" => "secret_technique_clone".into(),
+        "secret_technique_player" | "secret_technique" => "secret_technique".into(),
         _ => {
             if let Some(rest) = k.strip_prefix("primal_fire_elemental_") {
                 rest.to_owned()
@@ -814,7 +1117,7 @@ fn pretty_ability_name(key: &str, fallback: &str) -> String {
         "meteorite" => "Meteorite".into(),
         "conflagration" => "Conflagration".into(),
         "devour_morsel" => "Devour Morsel (Trinket)".into(),
-        "perfected_guillotine" => "Perfected Guillotine (Trinket)".into(),
+        "guillotine" => "Guillotine (Trinket)".into(),
         "vile_vial_of_volatile_venom" => "Vile Vial of Volatile Venom (Trinket)".into(),
         "gebbos_bottomless_bag" => "Gebbo's Bottomless Bag (Trinket)".into(),
         "rune_of_unleashed_fire" => "Rune of Unleashed Fire (Enchant)".into(),
@@ -908,6 +1211,9 @@ mod tests {
             hero_tree_name: Some("Slayer".into()),
             simc_profile: PathBuf::new(),
             dump_diffs_applied: 0,
+            talents_override: None,
+            unmapped_talents: Vec::new(),
+            unmodelled_gear: Vec::new(),
             portunus_dps: Estimate {
                 n: 30,
                 mean: 60_000.0 * ratio,

@@ -58,6 +58,14 @@ pub struct SpellDef {
     /// Combo Strikes.
     #[serde(default)]
     pub unrecorded: bool,
+    /// An item's or enchant's effect. `ModScope::Abilities` modifiers
+    /// pass it by, as SimC's class spell-family modifiers do.
+    #[serde(default)]
+    pub item: bool,
+    /// Its hits fire no `DamageDealt` listeners (SimC's `callbacks =
+    /// false`: Lingering Shadow).
+    #[serde(default)]
+    pub no_procs: bool,
     /// All must hold for the spell to be usable.
     #[serde(default)]
     pub requires: Vec<Requirement>,
@@ -252,6 +260,8 @@ mod tests {
             usable_while_casting: false,
             weapon: None,
             unrecorded: false,
+            item: false,
+            no_procs: false,
             requires: Vec::new(),
             on_cast: Vec::new(),
             effects: Vec::new(),

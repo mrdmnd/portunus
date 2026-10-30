@@ -17,7 +17,7 @@ use portunus_gamedata::pet::PetKind;
 use crate::choice::CastOpts;
 use crate::mask::Readiness;
 use crate::mechanics::{
-    whole_points, AuraApplication, AuraRemoval, CastEvent, Mechanics, PetEvent,
+    whole_points, AuraApplication, AuraRemoval, CastEvent, Inherited, Mechanics, PetEvent,
 };
 use crate::state::{ActorKind, AuraRef};
 use crate::trace::{CastEndReason, TraceEvent};
@@ -236,6 +236,7 @@ impl World {
                     spell,
                     target: Some(target),
                     rolled: None,
+                    inherited: Inherited::default(),
                 },
             );
         }
@@ -269,7 +270,7 @@ impl World {
         else {
             return false;
         };
-        let need = cost.amount * self.cost_mult(actor, spell, None);
+        let need = self.cost_amount(actor, spell, cost, None);
         a.resources
             .iter()
             .find(|r| r.def.kind == kind)
@@ -474,7 +475,9 @@ impl<M: Mechanics> Kernel<M> {
             started: now,
             empower: None,
             spent: None,
+            spend_bonus: 0.0,
             prerolled: false,
+            inherited: Inherited::default(),
         };
         self.begin_cast(ev, CastOpts::default());
     }

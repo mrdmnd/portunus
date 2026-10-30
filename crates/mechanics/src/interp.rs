@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use portunus_core::{ActorId, AuraId, PetId, SimDuration, SimTime, SpellId, StreamKey};
 use portunus_engine::mechanics::{
-    whole_points, AuraApplication, DamageEvent, HealEvent, HitKind, RolledHit, ValueLimits,
+    whole_points, AuraApplication, DamageEvent, HealEvent, HitKind, Inherited, RolledHit,
+    ValueLimits,
 };
 use portunus_engine::state::ActorKind;
 use portunus_engine::{AuraRef, EngineIo, ListenerRef, ProcView, SegmentView, StateView};
@@ -68,6 +69,7 @@ pub(crate) enum Happening {
     CastComplete {
         spell: SpellId,
         school: SchoolMask,
+        hostile: bool,
     },
     DamageDealt {
         spell: Option<SpellId>,
@@ -227,6 +229,17 @@ impl Interpreter {
                 };
                 if !listens(l.on, ev.what, died_with) {
                     continue;
+                }
+                if let (
+                    ListenFor::DamageDealt {
+                        class_only: true, ..
+                    },
+                    Happening::DamageDealt { spell: Some(s), .. },
+                ) = (l.on, ev.what)
+                {
+                    if self.math.fast_spell(s).is_some_and(|d| d.item) {
+                        continue;
+                    }
                 }
                 // An earlier listener's effects may have removed the aura.
                 if instance(io.view(), r).is_none() {
@@ -590,7 +603,17 @@ impl Interpreter {
                     },
                 )
                 .map_or(0, |i| usize::from(i.stacks)),
+                TargetCount::CasterStacks { aura } => instance(
+                    view,
+                    AuraRef {
+                        holder: ctx.caster,
+                        aura,
+                        source: ctx.caster,
+                    },
+                )
+                .map_or(0, |i| usize::from(i.stacks)),
                 TargetCount::Enemies => engaged_enemies(view).len(),
+                TargetCount::Spent => ctx.spent.map_or(1, |s| (s.round().max(1.0)) as usize),
             }
         };
         let chain = self.chain_targets(view, ctx, d, &targets);
@@ -875,10 +898,12 @@ impl Interpreter {
                 def,
                 portunus_gamedata::stats::Stat::HasteRating,
             );
-        let touches_attack_speed = def
-            .modifiers
-            .iter()
-            .any(|m| m.kind == ModKind::AttackSpeedPct);
+        let touches_attack_speed = def.modifiers.iter().any(|m| {
+            matches!(
+                m.kind,
+                ModKind::AttackSpeedPct | ModKind::AttackSpeedFromHastePct
+            )
+        });
         let view = io.view();
         let mut hasted = Vec::new();
         if touches_haste {
@@ -889,17 +914,28 @@ impl Interpreter {
                 hasted.push(holder);
             }
         }
+        let mut sped = Vec::new();
+        if touches_attack_speed && owner_seat(view, holder).is_some() {
+            sped.push(holder);
+        }
+        for &actor in &hasted {
+            if !sped.contains(&actor) && self.math.attack_speed_follows_haste(view, actor) {
+                sped.push(actor);
+            }
+        }
         let hasted: Vec<(ActorId, f64)> = hasted
             .into_iter()
             .map(|a| (a, self.math.haste_mult(view, a)))
             .collect();
-        let attack_speed = (touches_attack_speed && owner_seat(view, holder).is_some())
-            .then(|| self.math.attack_speed_mult(view, holder));
+        let sped: Vec<(ActorId, f64)> = sped
+            .into_iter()
+            .map(|a| (a, self.math.attack_speed_mult(view, a)))
+            .collect();
         for (actor, mult) in hasted {
             io.set_haste(actor, mult);
         }
-        if let Some(mult) = attack_speed {
-            io.set_attack_speed(holder, mult);
+        for (actor, mult) in sped {
+            io.set_attack_speed(actor, mult);
         }
     }
 
@@ -965,7 +1001,10 @@ impl Interpreter {
         let is_bank_draw =
             c.hit == HitKind::Periodic && matches!(d.amount, Coefficient::EventAmount(_));
         let (raw, chance) = if d.unmodified {
-            (self.math.base(view, c, d.amount), 0.0)
+            (
+                self.math.base(view, c, d.amount) * self.math.own_spell_mult(view, c),
+                0.0,
+            )
         } else if is_bank_draw {
             (
                 self.math
@@ -1022,7 +1061,11 @@ impl Interpreter {
         });
         let health = (health_before, health_fraction(io.view(), t));
         self.leech(io, hit.source, landed.amount);
-        if landed.connected() {
+        let silent = hit
+            .spell
+            .and_then(|s| self.math.fast_spell(s))
+            .is_some_and(|d| d.no_procs);
+        if landed.connected() && !silent {
             let dealt = Occurrence {
                 what: Happening::DamageDealt {
                     spell: hit.spell,
@@ -1133,6 +1176,7 @@ impl Interpreter {
         spell: SpellId,
         target: Option<ActorId>,
         delay: SimDuration,
+        inherited: Inherited,
     ) -> Option<Vec<RolledHit>> {
         let def = self.math.data().spells.get(&spell)?;
         if !(def.travels() || delay > SimDuration::ZERO) || def.rolls_on_impact {
@@ -1143,9 +1187,9 @@ impl Interpreter {
             target,
             spell: Some(spell),
             aura: None,
-            event_amount: None,
+            event_amount: inherited.amount,
             scale: 1.0,
-            spent: None,
+            spent: inherited.spent,
             depth: 0,
             hand: def.weapon,
             hit: HitKind::Direct,
@@ -1327,6 +1371,16 @@ impl Interpreter {
                         }),
                     None => duration,
                 };
+                let lengthen = self.math.duration_mult(io.view(), ctx);
+                let duration = if lengthen == 1.0 {
+                    duration
+                } else {
+                    duration
+                        .or_else(|| io.data().auras.get(&aura).and_then(|a| a.duration))
+                        .map(|base| {
+                            SimDuration((f64::from(base.millis()) * lengthen).round() as u32)
+                        })
+                };
                 let ground = io
                     .data()
                     .auras
@@ -1460,8 +1514,12 @@ impl Interpreter {
                 {
                     target = io.view().target(caster).or(target);
                 }
-                let rolled = self.roll_ahead(io, caster, spell, target, delay);
-                io.trigger_spell(caster, spell, target, delay, rolled);
+                let inherited = Inherited {
+                    amount: ctx.event_amount,
+                    spent: ctx.spent,
+                };
+                let rolled = self.roll_ahead(io, caster, spell, target, delay, inherited);
+                io.trigger_spell(caster, spell, target, delay, rolled, inherited);
             }
             &Effect::Interrupt { target } => {
                 for t in self.targets(io, ctx, target) {
@@ -1560,8 +1618,17 @@ impl Interpreter {
                     self.run_one(io, ctx, last);
                 }
             }
-            Effect::Chance { chance, then } => {
-                if io.roll(caster, RANDOM_STREAM) < *chance {
+            Effect::Chance {
+                chance,
+                then,
+                per_event_amount,
+            } => {
+                let chance = if *per_event_amount {
+                    chance * ctx.event_amount.unwrap_or(1.0)
+                } else {
+                    *chance
+                };
+                if io.roll(caster, RANDOM_STREAM) < chance {
                     self.run(io, ctx, then);
                 }
             }
@@ -1678,12 +1745,18 @@ impl Interpreter {
                 aura,
                 target,
                 max,
+                up_to_deficit,
                 then,
             } => {
+                let room = up_to_deficit.and_then(|kind| {
+                    let r = io.view().resource(caster, kind)?;
+                    Some((r.max - r.value).floor().clamp(0.0, 255.0) as u8)
+                });
                 for t in self.targets(io, ctx, *target) {
                     let r = aura_on(t, *aura);
                     let have = instance(io.view(), r).map_or(0, |i| i.stacks);
                     let take = max.map_or(have, |m| have.min(m));
+                    let take = room.map_or(take, |room| take.min(room));
                     if take == 0 {
                         continue;
                     }
@@ -1754,12 +1827,21 @@ fn listens(on: ListenFor, what: Happening, died_with: impl Fn(AuraId) -> bool) -
         |want: Option<SchoolMask>, got: SchoolMask| want.is_none_or(|w| w.0 & got.0 != 0);
     match (on, what) {
         (
-            ListenFor::CastComplete { spell, school },
+            ListenFor::CastComplete {
+                spell,
+                school,
+                hostile,
+            },
             Happening::CastComplete {
                 spell: got,
                 school: got_school,
+                hostile: got_hostile,
             },
-        ) => spell.is_none_or(|s| s == got) && school_ok(school, got_school),
+        ) => {
+            spell.is_none_or(|s| s == got)
+                && school_ok(school, got_school)
+                && (!hostile || got_hostile)
+        }
         (
             ListenFor::DamageDealt {
                 spell,
@@ -1768,6 +1850,7 @@ fn listens(on: ListenFor, what: Happening, died_with: impl Fn(AuraId) -> bool) -
                 killing_blow,
                 direct,
                 aura,
+                ..
             },
             Happening::DamageDealt {
                 spell: got,

@@ -11,7 +11,7 @@ use portunus_gamedata::effect::{
     Coefficient, Effect, EffectTarget, ListenFor, Listener, ModKind, ModScope, Modifier, ProcChance,
 };
 use portunus_gamedata::item::{EquipKind, GearSlot, ItemDef, ItemSetDef, WeaponDef};
-use portunus_gamedata::spell::{CastKind, SpellDef, Targeting};
+use portunus_gamedata::spell::{CastKind, CooldownDef, SpellDef, Targeting};
 use portunus_gamedata::stats::{SchoolMask, Stat, StatBlock};
 use portunus_gamedata::{GameBuild, GameData};
 use serde::{Deserialize, Serialize};
@@ -51,6 +51,37 @@ pub struct DumpEffect {
     pub trigger_spell: Option<SpellId>,
     pub resource_name: Option<String>,
     pub affected_spells: Vec<SpellId>,
+    /// SimC's `Scaling Class` (`-1` primary attribute, `-7` secondary
+    /// rating, ...), when the value scales.
+    #[serde(default)]
+    pub scaling_class: Option<i32>,
+    /// The `coefficient=` of a scaled value: its multiple of the scaling
+    /// budget.
+    #[serde(default)]
+    pub scaling_coefficient: Option<f64>,
+    /// `Rating:` of a rating aura (`Haste`, `Crit`, `Vers`, `Mastery`, ...).
+    #[serde(default)]
+    pub rating: Option<String>,
+    /// `Stat:` of an attribute aura (`Agi`, `Str`, `Int`, `StrAgiInt`, ...).
+    #[serde(default)]
+    pub stat: Option<String>,
+    /// `Misc Value:`, e.g. the school mask of a school-scoped aura.
+    #[serde(default)]
+    pub misc_value: Option<u32>,
+    /// The spell effects listed under `Modified By:`, as (spell, effect
+    /// index): effects that change this one's value (talents raising a
+    /// buff's bonus, a spec's tuning).
+    #[serde(default)]
+    pub modified_by: Vec<(SpellId, u8)>,
+}
+
+/// How a talent effect's value grows with rank (`Effect#1 [op=mul,
+/// values=(1, 2)]`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct RankScaling {
+    pub effect: u8,
+    /// Each rank adds the first rank's value, so ranks act as stacks.
+    pub linear: bool,
 }
 
 /// One spell record (`Name : ... (id=N)`) parsed from `SpellDataDump`.
@@ -61,6 +92,13 @@ pub struct DumpSpell {
     pub is_passive: bool,
     pub is_hidden: bool,
     pub is_channeled: bool,
+    /// "Scales with Casting Item's Level": item-scaled values follow the
+    /// item's level budget, not the player's.
+    #[serde(default)]
+    pub scales_with_item_level: bool,
+    /// `Max Scaling Level`: the highest (item) level its values scale to.
+    #[serde(default)]
+    pub max_scaling_level: Option<u32>,
     pub class: Option<String>,
     pub school: Option<String>,
     pub cast_time_ms: Option<u32>,
@@ -80,6 +118,12 @@ pub struct DumpSpell {
     pub spelldesc_parent: Option<SpellId>,
     pub description: String,
     pub effects: Vec<DumpEffect>,
+    /// A talent's `max_rank`.
+    #[serde(default)]
+    pub max_rank: Option<u8>,
+    /// A multi-rank talent's per-effect rank tables.
+    #[serde(default)]
+    pub rank_scaling: Vec<RankScaling>,
 }
 
 /// Complete catalog of parsed spells from SimulationCraft's `SpellDataDump`.
@@ -147,6 +191,15 @@ impl SpellDump {
 
         dump.rebuild_index();
         Ok(dump)
+    }
+
+    /// Loads the spells of no class from `dir`'s `nonclass.txt`: item
+    /// effects, enchants, gems, consumables, and racials.
+    pub fn nonclass_from_dir(dir: &Path) -> Result<Self, IngestError> {
+        let path = dir.join("nonclass.txt");
+        let text = fs::read_to_string(&path)
+            .map_err(|e| IngestError::Io(format!("{}: {e}", path.display())))?;
+        Ok(Self::parse_str(&text))
     }
 
     /// Parses a single `SpellDataDump` text slice into a [`SpellDump`].
@@ -525,7 +578,9 @@ pub fn sync_game_data_with_dump(
         if skip_specs.contains(&spec_id) {
             continue;
         }
-        let Some(passive_id) = spec_passive_aura_id(spec_id) else {
+        let Some(passive_id) =
+            spec_passive_aura_id(spec_id).filter(|a| !data.derived_auras.contains(a))
+        else {
             continue;
         };
         // Only add per-spell modifiers from dump if the existing passive aura
@@ -688,12 +743,6 @@ pub fn sync_game_data_with_dump(
         } else if spell_id == SpellId(434481) {
             // Bombardments proc rate per marked attack.
             0.28
-        } else if spell_id == SpellId(280720) {
-            // Secret Technique (Clone) 3-hit x 6-CP finisher share.
-            6.0
-        } else if spell_id == SpellId(457157) {
-            // Deathstalker's Mark per-stack trigger share.
-            1.0
         } else if spell_id == SpellId(1295924) {
             // Prismatic Bolt proc frequency normalization.
             0.30
@@ -890,6 +939,8 @@ fn parse_spell_block(lines: &[&str]) -> Option<DumpSpell> {
         is_passive,
         is_hidden,
         is_channeled: false,
+        scales_with_item_level: false,
+        max_scaling_level: None,
         class: None,
         school: None,
         cast_time_ms: None,
@@ -909,12 +960,24 @@ fn parse_spell_block(lines: &[&str]) -> Option<DumpSpell> {
         spelldesc_parent: None,
         description: String::new(),
         effects: Vec::new(),
+        max_rank: None,
+        rank_scaling: Vec::new(),
     };
 
     let mut idx = 1usize;
     while idx < lines.len() {
         let line = lines[idx];
-        if let Some(val) = line.strip_prefix("Class            : ") {
+        if let Some(val) = line.strip_prefix("Talent Entry     : ") {
+            spell.max_rank = val
+                .split_once("max_rank=")
+                .and_then(|(_, r)| parse_leading_f64(r))
+                .and_then(|r| u8::try_from(r as u32).ok());
+        } else if let Some(scaling) = line
+            .strip_prefix("                 : Effect#")
+            .and_then(parse_rank_scaling)
+        {
+            spell.rank_scaling.push(scaling);
+        } else if let Some(val) = line.strip_prefix("Class            : ") {
             spell.class = Some(val.trim().to_owned());
         } else if let Some(val) = line.strip_prefix("School           : ") {
             spell.school = Some(val.trim().to_owned());
@@ -938,6 +1001,8 @@ fn parse_spell_block(lines: &[&str]) -> Option<DumpSpell> {
             if let Some(n) = parse_leading_f64(val) {
                 spell.max_stacks = u8::try_from(n.round() as u32).ok();
             }
+        } else if let Some(val) = line.strip_prefix("Max Scaling Level: ") {
+            spell.max_scaling_level = val.trim().parse().ok();
         } else if let Some(val) = line.strip_prefix("Real PPM         : ") {
             if let Some(r) = parse_leading_f64(val) {
                 let hasted = val.contains("Haste");
@@ -959,6 +1024,9 @@ fn parse_spell_block(lines: &[&str]) -> Option<DumpSpell> {
             }
             if val.contains("Passive (6)") {
                 spell.is_passive = true;
+            }
+            if val.contains("Scales with Casting Item's Level") {
+                spell.scales_with_item_level = true;
             }
         } else if let Some(val) = line.strip_prefix("Description      : ") {
             let trimmed = val.trim();
@@ -998,6 +1066,12 @@ fn parse_effect(lines: &[&str], start: usize) -> Option<(DumpEffect, usize)> {
     let effect_id = first[id_start..id_end].parse::<u32>().ok()?;
     let colon_pos = first.find(" : ")?;
     let kind = first[colon_pos + 3..].trim().to_owned();
+    let scaling_class = kind.find("Scaling Class:").and_then(|at| {
+        let tail = &kind[at..];
+        let open = tail.rfind('(')?;
+        let close = tail[open..].find(')')? + open;
+        tail[open + 1..close].parse::<i32>().ok()
+    });
 
     let period_ms = if let Some(every_pos) = kind.find("every ") {
         parse_duration_ms(&kind[every_pos + 6..])
@@ -1020,6 +1094,12 @@ fn parse_effect(lines: &[&str], start: usize) -> Option<(DumpEffect, usize)> {
         trigger_spell: None,
         resource_name: None,
         affected_spells: Vec::new(),
+        scaling_class,
+        scaling_coefficient: None,
+        rating: None,
+        stat: None,
+        misc_value: None,
+        modified_by: Vec::new(),
     };
 
     let mut idx = start + 1;
@@ -1031,6 +1111,8 @@ fn parse_effect(lines: &[&str], start: usize) -> Option<(DumpEffect, usize)> {
         let detail = line.trim();
         if detail.starts_with("Affected Spells") {
             eff.affected_spells.extend(extract_paren_spell_ids(detail));
+        } else if let Some(v) = detail.strip_prefix("Modified By:") {
+            eff.modified_by.extend(parse_effect_refs(v));
         } else {
             for seg in detail.split('|') {
                 let seg = seg.trim();
@@ -1038,6 +1120,19 @@ fn parse_effect(lines: &[&str], start: usize) -> Option<(DumpEffect, usize)> {
                     eff.base_value = parse_leading_f64(v);
                 } else if let Some(v) = seg.strip_prefix("Scaled Value:") {
                     eff.scaled_value = parse_leading_f64(v);
+                    eff.scaling_coefficient = v
+                        .split_once("coefficient=")
+                        .and_then(|(_, c)| parse_leading_f64(c));
+                } else if let Some(v) = seg.strip_prefix("Misc Value:") {
+                    let v = v.trim();
+                    eff.misc_value = match v.strip_prefix("0x") {
+                        Some(hex) => u32::from_str_radix(hex, 16).ok(),
+                        None => v.parse().ok(),
+                    };
+                } else if let Some(v) = seg.strip_prefix("Rating:") {
+                    eff.rating = Some(v.trim().to_owned());
+                } else if let Some(v) = seg.strip_prefix("Stat:") {
+                    eff.stat = Some(v.trim().to_owned());
                 } else if let Some(v) = seg.strip_prefix("SP Coefficient:") {
                     eff.sp_coefficient = parse_leading_f64(v);
                 } else if let Some(v) = seg.strip_prefix("AP Coefficient:") {
@@ -1061,6 +1156,42 @@ fn parse_effect(lines: &[&str], start: usize) -> Option<(DumpEffect, usize)> {
     }
 
     Some((eff, idx))
+}
+
+/// `1 [op=mul, values=(1, 2)]`, after `Effect#`.
+fn parse_rank_scaling(s: &str) -> Option<RankScaling> {
+    let (index, rest) = s.split_once(' ')?;
+    let effect = index.parse().ok()?;
+    let op = rest.split_once("op=")?.1.split(',').next()?.trim();
+    let values: Vec<f64> = rest
+        .split_once("values=(")?
+        .1
+        .split(')')
+        .next()?
+        .split(',')
+        .filter_map(|v| v.trim().parse().ok())
+        .collect();
+    let first = *values.first()?;
+    let linear = values.iter().enumerate().all(|(i, v)| {
+        let rank = (i + 1) as f64;
+        let expect = if op == "mul" { rank } else { first * rank };
+        (v - expect).abs() < 1e-9
+    });
+    Some(RankScaling { effect, linear })
+}
+
+/// `Elusiveness (79008 effect#1), Mirrors (441250 effect#2)`.
+fn parse_effect_refs(s: &str) -> Vec<(SpellId, u8)> {
+    s.split(')')
+        .filter_map(|part| {
+            let inside = part.rsplit_once('(')?.1;
+            let (id, effect) = inside.split_once(" effect#")?;
+            Some((
+                SpellId(id.trim().parse().ok()?),
+                effect.trim().parse().ok()?,
+            ))
+        })
+        .collect()
 }
 
 fn parse_duration_ms(s: &str) -> Option<u32> {
@@ -1158,7 +1289,7 @@ fn extract_dollar_spell_refs(s: &str, out: &mut Vec<SpellId>) {
 
 /// One equipped slot line (`head=...`, `trinket1=...`, `main_hand=...`) parsed
 /// from a SimulationCraft `.simc` profile.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SimcEquippedSlot {
     pub slot: GearSlot,
     pub name: String,
@@ -1166,6 +1297,17 @@ pub struct SimcEquippedSlot {
     pub item_level: u16,
     pub gems: Vec<ItemId>,
     pub enchant_id: Option<u32>,
+    /// `bonus_id=`, in profile order: item level, sockets, embellishments.
+    #[serde(default)]
+    pub bonus_ids: Vec<u32>,
+    /// SimC's item quality (4 epic, 3 rare, 2 uncommon), once read with
+    /// [`SimcProfile::read_item_report`].
+    #[serde(default)]
+    pub quality: Option<u32>,
+    /// The weapon as SimC built it from its item data, once read with
+    /// [`SimcProfile::read_item_report`].
+    #[serde(default)]
+    pub weapon: Option<WeaponDef>,
 }
 
 /// Parsed equipment, stat summary, consumables, enchants, and tier set bonuses
@@ -1187,6 +1329,10 @@ pub struct SimcProfile {
     pub earthen_gem: Option<String>,
     pub avg_item_level: u16,
     pub gear_stats: StatBlock,
+    /// SimC's race and class base attributes (its `generic base stats`),
+    /// when an item report gave them.
+    #[serde(default)]
+    pub base_stats: StatBlock,
     pub slots: BTreeMap<GearSlot, SimcEquippedSlot>,
     pub potion: Option<String>,
     pub flask: Option<String>,
@@ -1195,6 +1341,8 @@ pub struct SimcProfile {
     pub temporary_enchant: Option<String>,
     pub set_bonuses: Vec<String>,
     pub omnium_talents: Option<String>,
+    /// `talents=`, the in-game loadout string (see [`crate::TraitTable::decode`]).
+    pub talents: Option<String>,
 }
 
 /// Equipment and consumables synthesized into [`GameData`] from a [`SimcProfile`],
@@ -1225,6 +1373,7 @@ impl SimcProfile {
             earthen_gem: None,
             avg_item_level: 339,
             gear_stats: StatBlock::default(),
+            base_stats: StatBlock::default(),
             slots: BTreeMap::new(),
             potion: None,
             flask: None,
@@ -1233,6 +1382,7 @@ impl SimcProfile {
             temporary_enchant: None,
             set_bonuses: Vec::new(),
             omnium_talents: None,
+            talents: None,
         };
 
         let mut raw_slots: Vec<(GearSlot, u32, String)> = Vec::new();
@@ -1329,6 +1479,7 @@ impl SimcProfile {
                 "augmentation" => profile.augmentation = Some(val.to_owned()),
                 "temporary_enchant" => profile.temporary_enchant = Some(val.to_owned()),
                 "omnium_talents" => profile.omnium_talents = Some(val.to_owned()),
+                "talents" => profile.talents = Some(val.to_owned()),
                 _ => {
                     let slot = match key {
                         "head" => Some(GearSlot::Head),
@@ -1365,6 +1516,7 @@ impl SimcProfile {
             let mut ilvl = profile.avg_item_level;
             let mut gems = Vec::new();
             let mut enchant_id = None;
+            let mut bonus_ids = Vec::new();
             for tok in parts {
                 if let Some((k, v)) = tok.split_once('=') {
                     match k.trim() {
@@ -1390,6 +1542,10 @@ impl SimcProfile {
                                 enchant_id = Some(eid);
                             }
                         }
+                        "bonus_id" => {
+                            bonus_ids
+                                .extend(v.trim().split('/').filter_map(|b| b.parse::<u32>().ok()));
+                        }
                         _ => {}
                     }
                 }
@@ -1403,11 +1559,75 @@ impl SimcProfile {
                     item_level: ilvl,
                     gems,
                     enchant_id,
+                    bonus_ids,
+                    quality: None,
+                    weapon: None,
                 },
             );
         }
 
         profile
+    }
+
+    /// Reads each weapon's damage and speed from SimC's `debug=1` item
+    /// lines (`slot=main_hand ... damage={ 148 - 275 } speed=1.800`), and
+    /// the player's base attributes from its `generic base stats:` line.
+    pub fn read_item_report(&mut self, report: &str) {
+        for line in report.lines() {
+            let field = |key: &str| {
+                line.split_whitespace()
+                    .find_map(|w| w.strip_prefix(key))
+                    .map(str::to_owned)
+            };
+            if line.contains(" Player '") && line.contains("generic base stats:") {
+                for (key, stat) in [
+                    ("Str=", Stat::Strength),
+                    ("Agi=", Stat::Agility),
+                    ("Sta=", Stat::Stamina),
+                    ("Int=", Stat::Intellect),
+                ] {
+                    if let Some(Ok(v)) = field(key).map(|s| s.parse::<f64>()) {
+                        self.base_stats.0.insert(stat, v);
+                    }
+                }
+                continue;
+            }
+            let Some(slot) = field("slot=").as_deref().and_then(report_slot) else {
+                continue;
+            };
+            if let Some(s) = self.slots.get_mut(&slot) {
+                if let Some(Ok(ilvl)) = field("ilevel=").map(|s| s.parse::<u16>()) {
+                    s.item_level = ilvl;
+                }
+                s.quality = field("quality=").as_deref().and_then(report_quality);
+            }
+            let Some(damage) = line
+                .split_once("damage={")
+                .and_then(|(_, rest)| rest.split_once('}'))
+                .map(|(d, _)| d)
+            else {
+                continue;
+            };
+            let Some((min, max)) = damage.split_once('-') else {
+                continue;
+            };
+            let (Ok(min), Ok(max), Some(Ok(speed))) = (
+                min.trim().parse::<f64>(),
+                max.trim().parse::<f64>(),
+                field("speed=").map(|s| s.parse::<f64>()),
+            ) else {
+                continue;
+            };
+            let ranged = field("type=").is_some_and(|t| t.starts_with("ranged"));
+            if let Some(s) = self.slots.get_mut(&slot) {
+                s.weapon = Some(WeaponDef {
+                    speed: SimDuration((speed * 1000.0).round() as u32),
+                    min_damage: min,
+                    max_damage: max,
+                    ranged,
+                });
+            }
+        }
     }
 
     /// Synthesizes all equipped items, weapons, gems, enchants, trinkets,
@@ -1451,56 +1671,36 @@ impl SimcProfile {
             .copied()
             .filter(|&v| v > 100.0)
             .unwrap_or(default_prim);
-        let gear_prim = ((440.0 + simc_prim) * 1.05 - 2000.0).max(400.0);
+        // Gear makes up whatever SimC's base attributes and the spec's
+        // `base_stats` leave between them and SimC's (pre-multiplier) total.
+        let above_spec_base = |stat: Stat, fallback_base: f64| {
+            let simc_base = self
+                .base_stats
+                .0
+                .get(&stat)
+                .copied()
+                .unwrap_or(fallback_base);
+            simc_base - spec_def.base_stats.0.get(&stat).copied().unwrap_or(0.0)
+        };
+        let gear_prim = (simc_prim + above_spec_base(spec_def.primary_stat, 440.0)).max(400.0);
         let gear_sta = self
             .gear_stats
             .0
             .get(&Stat::Stamina)
             .copied()
             .filter(|&v| v > 1000.0)
-            .unwrap_or(if is_mid2 { 40_000.0 } else { 25_000.0 });
-        let crit = self
-            .gear_stats
-            .0
-            .get(&Stat::CritRating)
-            .copied()
-            .unwrap_or(900.0)
-            * 700.0
-            / 46.0;
-        let haste = self
-            .gear_stats
-            .0
-            .get(&Stat::HasteRating)
-            .copied()
-            .unwrap_or(900.0)
-            * 660.0
-            / 44.0;
-        let mast = self
-            .gear_stats
-            .0
-            .get(&Stat::MasteryRating)
-            .copied()
-            .unwrap_or(900.0)
-            * 700.0
-            / 46.0;
-        let vers = self
-            .gear_stats
-            .0
-            .get(&Stat::VersatilityRating)
-            .copied()
-            .unwrap_or(120.0)
-            * 780.0
-            / 54.0;
-        let leech = self.gear_stats.0.get(&Stat::Leech).copied().unwrap_or(0.0) * 1050.0 / 60.0;
-        let avoid = self
-            .gear_stats
-            .0
-            .get(&Stat::Avoidance)
-            .copied()
-            .unwrap_or(0.0)
-            * 560.0
-            / 40.0;
-        let speed = self.gear_stats.0.get(&Stat::Speed).copied().unwrap_or(0.0) * 175.0 / 25.0;
+            .unwrap_or(if is_mid2 { 40_000.0 } else { 25_000.0 })
+            + above_spec_base(Stat::Stamina, 2000.0);
+        let rating = |stat: Stat, fallback: f64| {
+            self.gear_stats.0.get(&stat).copied().unwrap_or(fallback) * simc_rating_scale(stat)
+        };
+        let crit = rating(Stat::CritRating, 900.0);
+        let haste = rating(Stat::HasteRating, 900.0);
+        let mast = rating(Stat::MasteryRating, 900.0);
+        let vers = rating(Stat::VersatilityRating, 120.0);
+        let leech = rating(Stat::Leech, 0.0);
+        let avoid = rating(Stat::Avoidance, 0.0);
+        let speed = rating(Stat::Speed, 0.0);
         let armor = self
             .gear_stats
             .0
@@ -1508,82 +1708,84 @@ impl SimcProfile {
             .copied()
             .unwrap_or(2500.0);
 
-        // Register 2pc and 4pc tier set bonuses.
+        // The spec's tier set from the data, else a generic 2pc and 4pc.
         let set_id = ItemSetId(900 + u32::from(spec_id.0));
-        let aura_2pc = AuraId(940_000 + u32::from(spec_id.0) * 2);
-        let aura_4pc = AuraId(940_000 + u32::from(spec_id.0) * 2 + 1);
-        let bonus_2pc_pct = if is_mid2 { 8.0 } else { 5.0 };
-        let bonus_4pc_pct = if is_mid2 { 12.0 } else { 8.0 };
-        data.auras.insert(
-            aura_2pc,
-            simple_passive_aura(
+        if !data.item_sets.contains_key(&set_id) {
+            let aura_2pc = AuraId(940_000 + u32::from(spec_id.0) * 2);
+            let aura_4pc = AuraId(940_000 + u32::from(spec_id.0) * 2 + 1);
+            let bonus_2pc_pct = if is_mid2 { 8.0 } else { 5.0 };
+            let bonus_4pc_pct = if is_mid2 { 12.0 } else { 8.0 };
+            data.auras.insert(
                 aura_2pc,
-                &format!("{} 2pc Set Bonus", spec_def.name),
-                vec![
-                    Modifier {
-                        scope: ModScope::All,
-                        kind: ModKind::DamageDonePct,
-                        value: bonus_2pc_pct,
-                        per_stack: false,
-                        condition: None,
-                    },
-                    Modifier {
-                        scope: ModScope::All,
-                        kind: ModKind::PetDamagePct,
-                        value: bonus_2pc_pct,
-                        per_stack: false,
-                        condition: None,
-                    },
-                    Modifier {
-                        scope: ModScope::All,
-                        kind: ModKind::GuardianDamagePct,
-                        value: bonus_2pc_pct,
-                        per_stack: false,
-                        condition: None,
-                    },
-                ],
-                Vec::new(),
-            ),
-        );
-        data.auras.insert(
-            aura_4pc,
-            simple_passive_aura(
+                simple_passive_aura(
+                    aura_2pc,
+                    &format!("{} 2pc Set Bonus", spec_def.name),
+                    vec![
+                        Modifier {
+                            scope: ModScope::All,
+                            kind: ModKind::DamageDonePct,
+                            value: bonus_2pc_pct,
+                            per_stack: false,
+                            condition: None,
+                        },
+                        Modifier {
+                            scope: ModScope::All,
+                            kind: ModKind::PetDamagePct,
+                            value: bonus_2pc_pct,
+                            per_stack: false,
+                            condition: None,
+                        },
+                        Modifier {
+                            scope: ModScope::All,
+                            kind: ModKind::GuardianDamagePct,
+                            value: bonus_2pc_pct,
+                            per_stack: false,
+                            condition: None,
+                        },
+                    ],
+                    Vec::new(),
+                ),
+            );
+            data.auras.insert(
                 aura_4pc,
-                &format!("{} 4pc Set Bonus", spec_def.name),
-                vec![
-                    Modifier {
-                        scope: ModScope::All,
-                        kind: ModKind::DamageDonePct,
-                        value: bonus_4pc_pct,
-                        per_stack: false,
-                        condition: None,
-                    },
-                    Modifier {
-                        scope: ModScope::All,
-                        kind: ModKind::PetDamagePct,
-                        value: bonus_4pc_pct,
-                        per_stack: false,
-                        condition: None,
-                    },
-                    Modifier {
-                        scope: ModScope::All,
-                        kind: ModKind::GuardianDamagePct,
-                        value: bonus_4pc_pct,
-                        per_stack: false,
-                        condition: None,
-                    },
-                ],
-                Vec::new(),
-            ),
-        );
-        data.item_sets.insert(
-            set_id,
-            ItemSetDef {
-                id: set_id,
-                name: format!("{} Tier Set", spec_def.name),
-                bonuses: vec![(2, aura_2pc), (4, aura_4pc)],
-            },
-        );
+                simple_passive_aura(
+                    aura_4pc,
+                    &format!("{} 4pc Set Bonus", spec_def.name),
+                    vec![
+                        Modifier {
+                            scope: ModScope::All,
+                            kind: ModKind::DamageDonePct,
+                            value: bonus_4pc_pct,
+                            per_stack: false,
+                            condition: None,
+                        },
+                        Modifier {
+                            scope: ModScope::All,
+                            kind: ModKind::PetDamagePct,
+                            value: bonus_4pc_pct,
+                            per_stack: false,
+                            condition: None,
+                        },
+                        Modifier {
+                            scope: ModScope::All,
+                            kind: ModKind::GuardianDamagePct,
+                            value: bonus_4pc_pct,
+                            per_stack: false,
+                            condition: None,
+                        },
+                    ],
+                    Vec::new(),
+                ),
+            );
+            data.item_sets.insert(
+                set_id,
+                ItemSetDef {
+                    id: set_id,
+                    name: format!("{} Tier Set", spec_def.name),
+                    bonuses: vec![(2, aura_2pc), (4, aura_4pc)],
+                },
+            );
+        }
 
         let all_armor_slots = [
             GearSlot::Head,
@@ -1628,58 +1830,6 @@ impl SimcProfile {
                     | GearSlot::Legs
             );
 
-            let mut gems = Vec::new();
-            if let Some(p) = parsed {
-                for &gid in &p.gems {
-                    let gem_aura = AuraId(970_000 + (gid.0 % 100_000));
-                    data.auras.entry(gem_aura).or_insert_with(|| {
-                        simple_passive_aura(
-                            gem_aura,
-                            &format!("Gem {gid:?}"),
-                            vec![Modifier {
-                                scope: ModScope::All,
-                                kind: ModKind::StatFlat(Stat::HasteRating),
-                                value: 180.0,
-                                per_stack: false,
-                                condition: None,
-                            }],
-                            Vec::new(),
-                        )
-                    });
-                    data.items.entry(gid).or_insert(ItemDef {
-                        id: gid,
-                        name: format!("Gem {}", gid.0),
-                        equip: EquipKind::Gem,
-                        stat_allocation: Vec::new(),
-                        weapon: None,
-                        passive_auras: vec![gem_aura],
-                        on_use: None,
-                        set: None,
-                        unique_group: None,
-                    });
-                    gems.push(gid);
-                }
-            }
-
-            let enchant = parsed.and_then(|p| p.enchant_id).map(|eid| {
-                let ea = AuraId(950_000 + (eid % 50_000));
-                data.auras.entry(ea).or_insert_with(|| {
-                    simple_passive_aura(
-                        ea,
-                        &format!("Enchant {eid}"),
-                        vec![Modifier {
-                            scope: ModScope::All,
-                            kind: ModKind::StatFlat(Stat::CritRating),
-                            value: 220.0,
-                            per_stack: false,
-                            condition: None,
-                        }],
-                        Vec::new(),
-                    )
-                });
-                ea
-            });
-
             data.items.insert(
                 item_id,
                 ItemDef {
@@ -1694,7 +1844,7 @@ impl SimcProfile {
                     unique_group: None,
                 },
             );
-            out_slots.insert(slot, (item_id, slot_ilvl, enchant, gems));
+            out_slots.insert(slot, (item_id, slot_ilvl, None, Vec::new()));
         }
 
         // Trinket 1 & Trinket 2.
@@ -1707,6 +1857,24 @@ impl SimcProfile {
             let item_id = ItemId(910_000 + u32::from(spec_id.0) * 20 + 12 + t_idx as u32);
             let trinket_name =
                 parsed.map_or_else(|| format!("Trinket {}", t_idx + 1), |p| p.name.clone());
+            if let Some(known) = known_trinket(data, &trinket_name) {
+                data.items.insert(
+                    item_id,
+                    ItemDef {
+                        id: item_id,
+                        name: trinket_name,
+                        equip: EquipKind::Trinket,
+                        stat_allocation: Vec::new(),
+                        weapon: None,
+                        passive_auras: vec![known.passive],
+                        on_use: known.on_use,
+                        set: None,
+                        unique_group: None,
+                    },
+                );
+                out_slots.insert(slot, (item_id, slot_ilvl, None, Vec::new()));
+                continue;
+            }
             let proc_spell_id = SpellId(980_000 + u32::from(spec_id.0) * 10 + t_idx as u32);
             let proc_aura_id = AuraId(960_000 + u32::from(spec_id.0) * 10 + t_idx as u32);
 
@@ -1740,6 +1908,8 @@ impl SimcProfile {
                     usable_while_casting: true,
                     weapon: None,
                     unrecorded: true,
+                    item: true,
+                    no_procs: false,
                     requires: Vec::new(),
                     on_cast: Vec::new(),
                     effects: vec![Effect::Damage {
@@ -1770,6 +1940,7 @@ impl SimcProfile {
                         on: ListenFor::CastComplete {
                             spell: None,
                             school: None,
+                            hostile: false,
                         },
                         chance: ProcChance::Rppm {
                             rate: 2.5,
@@ -1806,7 +1977,8 @@ impl SimcProfile {
             out_slots.insert(slot, (item_id, slot_ilvl, None, Vec::new()));
         }
 
-        // MainHand & OffHand weapons.
+        // MainHand & OffHand weapons: SimC's, once read, else the base ones
+        // scaled up to the tier.
         let wep_scale = if is_mid2 { 2.35 } else { 1.65 };
         let mh_def = base_mh.unwrap_or(WeaponDef {
             speed: SimDuration(3600),
@@ -1814,86 +1986,15 @@ impl SimcProfile {
             max_damage: 150.0,
             ranged: false,
         });
-        let scaled_mh = WeaponDef {
+        let mh_parsed = self.slots.get(&GearSlot::MainHand);
+        let scaled_mh = mh_parsed.and_then(|p| p.weapon).unwrap_or(WeaponDef {
             speed: mh_def.speed,
             min_damage: (mh_def.min_damage * wep_scale).round(),
             max_damage: (mh_def.max_damage * wep_scale).round(),
             ranged: mh_def.ranged,
-        };
-        let mh_parsed = self.slots.get(&GearSlot::MainHand);
+        });
         let mh_ilvl = mh_parsed.map_or(ilvl, |p| p.item_level.max(280));
         let mh_id = ItemId(910_000 + u32::from(spec_id.0) * 20 + 14);
-        let mh_enchant = mh_parsed.and_then(|p| p.enchant_id).map(|eid| {
-            let ea = AuraId(950_000 + (eid % 50_000));
-            let wep_proc_spell = SpellId(980_000 + u32::from(spec_id.0) * 10 + 8);
-            data.spells.entry(wep_proc_spell).or_insert(SpellDef {
-                id: wep_proc_spell,
-                name: "Rune of Unleashed Fire".into(),
-                school: SchoolMask(4),
-                cast: CastKind::Instant,
-                gcd: None,
-                cooldown: None,
-                costs: Vec::new(),
-                targeting: Targeting::Enemy,
-                hostile: true,
-                range: Some(40.0),
-                speed: None,
-                min_travel: SimDuration::ZERO,
-                rolls_on_impact: false,
-                castable_while_moving: true,
-                usable_while_casting: true,
-                weapon: None,
-                unrecorded: true,
-                requires: Vec::new(),
-                on_cast: Vec::new(),
-                effects: vec![Effect::Damage {
-                    amount: Coefficient::Flat(if is_mid2 { 7500.0 } else { 4500.0 }),
-                    school: SchoolMask(4),
-                    target: EffectTarget::Target,
-                    aoe: None,
-                    hand: None,
-                    ignores_armor: false,
-                    per_count: None,
-                    unmodified: false,
-                }],
-            });
-            data.auras.insert(
-                ea,
-                simple_passive_aura(
-                    ea,
-                    "Rune of Unleashed Fire",
-                    vec![Modifier {
-                        scope: ModScope::All,
-                        kind: ModKind::StatFlat(Stat::HasteRating),
-                        value: 300.0,
-                        per_stack: false,
-                        condition: None,
-                    }],
-                    vec![Listener {
-                        on: ListenFor::CastComplete {
-                            spell: None,
-                            school: None,
-                        },
-                        chance: ProcChance::Rppm {
-                            rate: 2.0,
-                            hasted: true,
-                            crit: false,
-                        },
-                        internal_cooldown: Some(SimDuration(1000)),
-                        per_unit: false,
-                        shared_with: None,
-                        condition: None,
-                        chain: false,
-                        effects: vec![Effect::TriggerSpell {
-                            spell: wep_proc_spell,
-                            target: EffectTarget::Target,
-                            delay: SimDuration::ZERO,
-                        }],
-                    }],
-                ),
-            );
-            ea
-        });
         data.items.insert(
             mh_id,
             ItemDef {
@@ -1912,16 +2013,16 @@ impl SimcProfile {
                 unique_group: None,
             },
         );
-        out_slots.insert(GearSlot::MainHand, (mh_id, mh_ilvl, mh_enchant, Vec::new()));
+        out_slots.insert(GearSlot::MainHand, (mh_id, mh_ilvl, None, Vec::new()));
 
         if let Some(oh_def) = base_oh {
-            let scaled_oh = WeaponDef {
+            let oh_parsed = self.slots.get(&GearSlot::OffHand);
+            let scaled_oh = oh_parsed.and_then(|p| p.weapon).unwrap_or(WeaponDef {
                 speed: oh_def.speed,
                 min_damage: (oh_def.min_damage * wep_scale).round(),
                 max_damage: (oh_def.max_damage * wep_scale).round(),
                 ranged: oh_def.ranged,
-            };
-            let oh_parsed = self.slots.get(&GearSlot::OffHand);
+            });
             let oh_ilvl = oh_parsed.map_or(ilvl, |p| p.item_level.max(280));
             let oh_id = ItemId(910_000 + u32::from(spec_id.0) * 20 + 15);
             data.items.insert(
@@ -2041,17 +2142,273 @@ fn equip_kind_for_slot(slot: GearSlot, dual_wield: bool) -> EquipKind {
     }
 }
 
+/// A trinket built from its SimC implementation: the aura its wearer holds
+/// and its on-use spell.
+struct KnownTrinket {
+    passive: AuraId,
+    on_use: Option<SpellId>,
+}
+
+/// SimC's `unique_gear_midnight.cpp` trinkets, with amounts read from its
+/// item-level-344 actions (the MID2 profiles' trinkets). Their passive
+/// stats are already in the profile's gear summary. Strength and Agility
+/// both go to SimC's "StrAgi" stats, as only the primary stat makes attack
+/// power.
+fn known_trinket(data: &mut GameData, raw_item_name: &str) -> Option<KnownTrinket> {
+    match raw_item_name {
+        "zuljins_guillotine_technique" => {
+            let (driver, damage) = (AuraId(1291728), SpellId(1306604));
+            let mut guillotine = proc_spell(damage, "Guillotine", 50_541.0);
+            guillotine.min_travel = SimDuration(1000);
+            data.spells.insert(damage, guillotine);
+            let mut aura = simple_passive_aura(
+                driver,
+                "Zul'jin's Guillotine Technique",
+                vec![Modifier {
+                    scope: ModScope::Spell(damage),
+                    kind: ModKind::DamagePerTargetHealthMissingPct,
+                    value: 2.0,
+                    per_stack: false,
+                    condition: None,
+                }],
+                vec![rppm_listener(3.0, damage)],
+            );
+            aura.listeners[0].chain = true;
+            data.auras.insert(driver, aura);
+            Some(KnownTrinket {
+                passive: driver,
+                on_use: None,
+            })
+        }
+        "voracious_heart_of_ulatek" => {
+            let (buff, stacking) = (AuraId(1297761), AuraId(1305376));
+            let (use_spell, morsel) = (SpellId(1297761), SpellId(1305374));
+            let mut devour = proc_spell(morsel, "Devour Morsel", 15_990.0);
+            devour.speed = Some(15.0);
+            data.spells.insert(morsel, devour);
+            data.spells.insert(
+                use_spell,
+                SpellDef {
+                    id: use_spell,
+                    name: "Voracious Heart of Ula'tek".into(),
+                    school: SchoolMask(8),
+                    cast: CastKind::Instant,
+                    gcd: None,
+                    cooldown: Some(CooldownDef {
+                        duration: SimDuration(90_000),
+                        charges: 1,
+                        hasted: false,
+                        category: None,
+                    }),
+                    costs: Vec::new(),
+                    targeting: Targeting::SelfOnly,
+                    hostile: false,
+                    range: None,
+                    speed: None,
+                    min_travel: SimDuration::ZERO,
+                    rolls_on_impact: false,
+                    castable_while_moving: true,
+                    usable_while_casting: true,
+                    weapon: None,
+                    unrecorded: false,
+                    item: true,
+                    no_procs: false,
+                    requires: Vec::new(),
+                    on_cast: Vec::new(),
+                    effects: vec![Effect::ApplyAura {
+                        aura: buff,
+                        target: EffectTarget::Caster,
+                        stacks: 1,
+                        duration: None,
+                        per_unit_spent: None,
+                    }],
+                },
+            );
+            let mut listener = rppm_listener(18.0, morsel);
+            listener.chain = true;
+            listener.effects.push(Effect::ApplyAura {
+                aura: stacking,
+                target: EffectTarget::Caster,
+                stacks: 1,
+                duration: None,
+                per_unit_spent: None,
+            });
+            let mut hunger = simple_passive_aura(
+                buff,
+                "Voracious Heart of Ula'tek",
+                str_agi(479.0, false),
+                vec![listener],
+            );
+            hunger.duration = Some(SimDuration(20_000));
+            data.auras.insert(buff, hunger);
+            let mut devoured = simple_passive_aura(
+                stacking,
+                "Devoured Strength",
+                str_agi(53.5, true),
+                Vec::new(),
+            );
+            devoured.duration = Some(SimDuration(20_000));
+            devoured.max_stacks = 99;
+            devoured.ends_with = Some(buff);
+            data.auras.insert(stacking, devoured);
+            let passive = AuraId(1297760);
+            data.auras.insert(
+                passive,
+                simple_passive_aura(
+                    passive,
+                    "Voracious Heart of Ula'tek",
+                    Vec::new(),
+                    Vec::new(),
+                ),
+            );
+            Some(KnownTrinket {
+                passive,
+                on_use: Some(use_spell),
+            })
+        }
+        _ => None,
+    }
+}
+
+fn str_agi(value: f64, per_stack: bool) -> Vec<Modifier> {
+    [Stat::Strength, Stat::Agility]
+        .into_iter()
+        .map(|stat| Modifier {
+            scope: ModScope::All,
+            kind: ModKind::StatFlat(stat),
+            value,
+            per_stack,
+            condition: None,
+        })
+        .collect()
+}
+
+/// An instant physical hit for `amount` on the listener's target.
+fn proc_spell(id: SpellId, name: &str, amount: f64) -> SpellDef {
+    SpellDef {
+        id,
+        name: name.into(),
+        school: SchoolMask::PHYSICAL,
+        cast: CastKind::Instant,
+        gcd: None,
+        cooldown: None,
+        costs: Vec::new(),
+        targeting: Targeting::Enemy,
+        hostile: true,
+        range: Some(100.0),
+        speed: None,
+        min_travel: SimDuration::ZERO,
+        rolls_on_impact: false,
+        castable_while_moving: true,
+        usable_while_casting: true,
+        weapon: None,
+        unrecorded: true,
+        item: true,
+        no_procs: false,
+        requires: Vec::new(),
+        on_cast: Vec::new(),
+        effects: vec![Effect::Damage {
+            amount: Coefficient::Flat(amount),
+            school: SchoolMask::PHYSICAL,
+            target: EffectTarget::Target,
+            aoe: None,
+            hand: None,
+            ignores_armor: false,
+            per_count: None,
+            unmodified: false,
+        }],
+    }
+}
+
+/// Hasted real-PPM `spell` off the holder's hits.
+fn rppm_listener(rate: f64, spell: SpellId) -> Listener {
+    Listener {
+        on: ListenFor::DamageDealt {
+            spell: None,
+            school: None,
+            crit_only: false,
+            killing_blow: false,
+            direct: None,
+            aura: None,
+            class_only: false,
+        },
+        chance: ProcChance::Rppm {
+            rate,
+            hasted: true,
+            crit: false,
+        },
+        internal_cooldown: None,
+        per_unit: false,
+        shared_with: None,
+        condition: None,
+        chain: false,
+        effects: vec![Effect::TriggerSpell {
+            spell,
+            target: EffectTarget::Target,
+            delay: SimDuration::ZERO,
+        }],
+    }
+}
+
+/// A `slot=` of SimC's `debug=1` item lines.
+fn report_slot(name: &str) -> Option<GearSlot> {
+    Some(match name {
+        "head" => GearSlot::Head,
+        "neck" => GearSlot::Neck,
+        "shoulders" => GearSlot::Shoulder,
+        "back" => GearSlot::Back,
+        "chest" => GearSlot::Chest,
+        "wrists" => GearSlot::Wrist,
+        "hands" => GearSlot::Hands,
+        "waist" => GearSlot::Waist,
+        "legs" => GearSlot::Legs,
+        "feet" => GearSlot::Feet,
+        "finger1" => GearSlot::Finger1,
+        "finger2" => GearSlot::Finger2,
+        "trinket1" => GearSlot::Trinket1,
+        "trinket2" => GearSlot::Trinket2,
+        "main_hand" => GearSlot::MainHand,
+        "off_hand" => GearSlot::OffHand,
+        _ => return None,
+    })
+}
+
+/// A `quality=` of SimC's `debug=1` item lines, as its item quality.
+fn report_quality(name: &str) -> Option<u32> {
+    Some(match name {
+        "legendary" => 5,
+        "epic" => 4,
+        "rare" => 3,
+        "uncommon" => 2,
+        "common" => 1,
+        _ => return None,
+    })
+}
+
+/// Our rating per SimC rating point: our rating curves are scaled up from
+/// SimC's level-90 rating per percent (crit 46, haste 44, mastery 46,
+/// versatility 54, leech 60, avoidance 40, speed 25). Attributes are 1:1.
+pub fn simc_rating_scale(stat: Stat) -> f64 {
+    match stat {
+        Stat::CritRating | Stat::MasteryRating => 700.0 / 46.0,
+        Stat::HasteRating => 660.0 / 44.0,
+        Stat::VersatilityRating => 780.0 / 54.0,
+        Stat::Leech => 1050.0 / 60.0,
+        Stat::Avoidance => 560.0 / 40.0,
+        Stat::Speed => 175.0 / 25.0,
+        _ => 1.0,
+    }
+}
+
 fn trinket_proc_display_name(raw_item_name: &str) -> String {
     match raw_item_name {
-        "voracious_heart_of_ulatek" => "Devour Morsel".into(),
-        "zuljins_guillotine_technique" => "Perfected Guillotine".into(),
         "vile_vial_of_volatile_venom" => "Vile Vial of Volatile Venom".into(),
         "gebbos_bottomless_bag" => "Gebbo's Bottomless Bag".into(),
         _ => raw_item_name.replace('_', " "),
     }
 }
 
-fn simple_passive_aura(
+pub(crate) fn simple_passive_aura(
     id: AuraId,
     name: &str,
     modifiers: Vec<Modifier>,

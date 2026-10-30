@@ -74,7 +74,9 @@ use portunus_scenario::resolved::Segment;
 use crate::choice::{CastOpts, Choice, MoveGoal, Wait};
 use crate::error::{EngineError, IllegalChoice};
 use crate::mask::{ActionMask, Readiness};
-use crate::mechanics::{AuraApplication, CastEvent, EngineIo, Mechanics, RolledHit, TickEvent};
+use crate::mechanics::{
+    AuraApplication, CastEvent, EngineIo, Inherited, Mechanics, RolledHit, TickEvent,
+};
 use crate::order::EventClass;
 use crate::outcome::{Outcome, PullOutcome};
 use crate::setup::RunSetup;
@@ -666,7 +668,9 @@ impl<M: Mechanics> Kernel<M> {
             started: now,
             empower: None,
             spent: None,
+            spend_bonus: 0.0,
             prerolled: false,
+            inherited: Inherited::default(),
         };
         self.begin_cast(ev, opts);
         if def.hostile && instant {
@@ -924,6 +928,10 @@ impl<M: Mechanics> Kernel<M> {
     /// Returns the event with what a scaling cost consumed.
     fn take_effect(&mut self, mut ev: CastEvent, def: &SpellDef) -> CastEvent {
         ev.spent = self.world.pay_costs(ev.actor, ev.spell, def, ev.target);
+        ev.spend_bonus = ev.spent.map_or(0.0, |s| {
+            self.world
+                .mod_sum(ev.actor, ev.spell, ModKind::SpendBonus(s.kind), ev.target)
+        });
         if let Some(cd) = &def.cooldown {
             self.world.consume_charge(ev.actor, ev.spell, cd);
         }
@@ -1104,6 +1112,7 @@ impl<M: Mechanics> Kernel<M> {
         spell: SpellId,
         target: Option<ActorId>,
         rolled: Option<Vec<RolledHit>>,
+        inherited: Inherited,
     ) {
         let s = Arc::clone(&self.world.s);
         let Some(def) = s.setup.data.spells.get(&spell) else {
@@ -1129,7 +1138,9 @@ impl<M: Mechanics> Kernel<M> {
             started: self.world.now,
             empower: None,
             spent: None,
+            spend_bonus: 0.0,
             prerolled: rolled.is_some(),
+            inherited,
         };
         if let CastKind::Channel {
             ticks,
@@ -1237,7 +1248,8 @@ impl<M: Mechanics> Kernel<M> {
                 spell,
                 target,
                 rolled,
-            } => self.resolve_triggered(caster, spell, target, rolled),
+                inherited,
+            } => self.resolve_triggered(caster, spell, target, rolled, inherited),
             Event::AuraTick { aura, uid } => {
                 let Some(index) = self.world.take_tick(aura, uid) else {
                     return;

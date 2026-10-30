@@ -35,12 +35,12 @@ pub enum Effect {
         /// the Crane, Meat Cleaver).
         #[serde(default)]
         per_count: Option<CountScale>,
-        /// The amount as given: no caster damage modifiers, versatility or
-        /// snapshot, and no crit. SimC's `SX_DISABLE_PLAYER_MULT` with
-        /// `SX_CANNOT_CRIT`, as on copies of damage already dealt (Blade
-        /// Flurry's `trigger_residual_action`, with an `EventAmount`
-        /// coefficient). The target's mitigation still applies unless
-        /// `ignores_armor`.
+        /// The amount as given: no caster damage modifiers but those scoped
+        /// to the spell itself, no versatility or snapshot, and no crit.
+        /// SimC's `SX_DISABLE_PLAYER_MULT` with `SX_CANNOT_CRIT`, as on
+        /// copies of damage already dealt (Blade Flurry's
+        /// `trigger_residual_action`, with an `EventAmount` coefficient).
+        /// The target's mitigation still applies unless `ignores_armor`.
         #[serde(default)]
         unmodified: bool,
     },
@@ -170,6 +170,11 @@ pub enum Effect {
     Chance {
         chance: f64,
         then: Vec<Effect>,
+        /// The chance is per unit of the event amount (inside
+        /// `ConsumeStacks`, per stack consumed: Ancient Arts' clone chance
+        /// per Shadow Techniques stack expended).
+        #[serde(default)]
+        per_event_amount: bool,
     },
     /// Apply one of these auras, chosen evenly among those the target
     /// lacks, or among all of them if it has every one (Elemental Blast's
@@ -225,6 +230,10 @@ pub enum Effect {
         target: EffectTarget,
         #[serde(default)]
         max: Option<u8>,
+        /// Also at most the whole units of this resource the caster is
+        /// missing (Shadow Techniques' stored combo points, never wasted).
+        #[serde(default)]
+        up_to_deficit: Option<ResourceKind>,
         then: Vec<Effect>,
     },
     /// Stun enemies that aren't `cc_immune`: their cast stops, even one
@@ -317,8 +326,14 @@ pub enum TargetCount {
     TargetsHit,
     /// Stacks of the caster's `aura` on the target being hit.
     TargetStacks { aura: AuraId },
+    /// Stacks of the caster's own `aura` (Lingering Shadow's 1% per stack).
+    CasterStacks { aura: AuraId },
     /// Every engaged enemy (SimC's `target_non_sleeping_list`).
     Enemies,
+    /// The units the cast (or the cast triggering it) spent, or 1 if none:
+    /// a Shadow Clone's copy of a finisher (SimC's
+    /// `shadow_clone_t::combo_point_da_multiplier`).
+    Spent,
 }
 
 /// How an amount scales.
@@ -561,6 +576,16 @@ pub enum ModScope {
 #[serde(rename_all = "snake_case")]
 pub enum ModKind {
     DamageDonePct,
+    /// `DamageDonePct` for direct hits only, not periodic ticks (the
+    /// game's "Spell Direct Amount" modifiers).
+    DirectDamagePct,
+    /// `DamageDonePct` for periodic ticks only (the game's "Spell Periodic
+    /// Amount" modifiers).
+    PeriodicDamagePct,
+    /// `DamageDonePct` of `value` for each percent of health the target is
+    /// missing, multiplying with the rest: Zul'jin's Guillotine Technique,
+    /// SimC's `1 + 0.02 * (100 - health_percentage)`.
+    DamagePerTargetHealthMissingPct,
     /// On an owner's aura: damage done by its [`crate::pet::PetKind::Pet`]s,
     /// scoped by the pet's spell (SimC's pet damage multiplier).
     PetDamagePct,
@@ -576,6 +601,10 @@ pub enum ModKind {
     HastePct,
     /// Auto-attack speed only, on top of haste.
     AttackSpeedPct,
+    /// Adds `value` percent of the holder's haste (its multiplier less
+    /// one) to its aura's `AttackSpeedPct` factor, inside that factor:
+    /// Swift Slasher on Slice and Dice, SimC's `1 + 0.5 + (haste - 1)`.
+    AttackSpeedFromHastePct,
     /// Periodic damage multiplier captured when an aura is applied and kept
     /// for its whole duration (a DoT's `pmultiplier`, e.g. Tiger's Fury on
     /// Rake). Live modifiers still apply on top.
@@ -588,10 +617,27 @@ pub enum ModKind {
     /// Reverb). Read when the cooldown is first used.
     ChargesAdd,
     CostPct,
+    /// `CostPct` for one resource's cost only, adding to it: SimC's
+    /// "Spell Resource Cost 1" on a finisher's energy (Tight Spender),
+    /// leaving its combo points whole.
+    ResourceCostPct(ResourceKind),
+    /// Added to one resource's cost before the percent modifiers: SimC's
+    /// "Add Flat Modifier: Spell Resource Cost 1" (the Subtlety 12.1 set's
+    /// cheaper Backstab).
+    ResourceCostFlat(ResourceKind),
+    /// Units a scaling cost of this resource counts as spending beyond what
+    /// it took, read as it is paid: effects and spend scaling see them,
+    /// `ResourceSpent` listeners don't (Supercharger's charged combo
+    /// points).
+    SpendBonus(ResourceKind),
     /// A seat's maximum of this resource, in points (Primordial Capacity).
     /// Read from the seat's passive auras at the start of the run; `scope`
     /// is unused.
     ResourceMax(ResourceKind),
+    /// A seat's regeneration of this resource, in percent; several
+    /// multiply (Vigor, SimC's "Modify Power Regen"). Read from the seat's
+    /// passive auras at the start of the run; `scope` is unused.
+    ResourceRegenPct(ResourceKind),
     StatPct(Stat),
     StatFlat(Stat),
     /// A seat's attack power, after it is derived from primary stats
@@ -667,6 +713,10 @@ pub enum ModKind {
     /// halves the period so it ticks twice as fast: Exsanguinate, Malefic
     /// Grasp). Several multiply.
     TickPeriodPct,
+    /// Lengthens the auras the scoped spell applies by `value` percent per
+    /// percent of the caster's haste from rating (Deepening Shadows: Shadow
+    /// Dance lasts 1.5% longer per 1% haste). Several add.
+    DurationPerHastePct,
 }
 
 /// A reaction to combat events: procs, on-hit effects, and the like.
@@ -708,6 +758,9 @@ pub enum ListenFor {
     CastComplete {
         spell: Option<SpellId>,
         school: Option<SchoolMask>,
+        /// Only hostile spells (SimC's `harmful`), e.g. Earthen Rage.
+        #[serde(default)]
+        hostile: bool,
     },
     DamageDealt {
         spell: Option<SpellId>,
@@ -723,6 +776,10 @@ pub enum ListenFor {
         /// Only hits from this aura's ticks or effects.
         #[serde(default)]
         aura: Option<AuraId>,
+        /// Only the holder's class spells and swings, not item or enchant
+        /// effects (`SpellDef::item`).
+        #[serde(default)]
+        class_only: bool,
     },
     DamageTaken,
     /// An auto-attack landed (rage, Windfury). `None` matches both hands.

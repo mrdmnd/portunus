@@ -135,6 +135,18 @@ pub fn buff_top_ally(d: &Decision<SeatObs>, spell: SpellId, buff: AuraId) -> Opt
     })
 }
 
+/// On-use trinkets that grant a buff, as SimC's `use_items` sees them.
+const BUFF_TRINKETS: &[SpellId] = &[SpellId(1297761)];
+
+/// An equipped buff trinket that's ready, if `when` holds: SimC's
+/// `use_items` synced to the spec's cooldowns. Off the GCD.
+pub fn use_buff_trinket(d: &Decision<SeatObs>, when: bool) -> Option<SpellId> {
+    if !when || d.obs.combat_time.is_none() {
+        return None;
+    }
+    BUFF_TRINKETS.iter().copied().find(|&s| d.legal.is_ready(s))
+}
+
 /// Never acts.
 pub fn idle(_: &Decision<SeatObs>) -> Choice {
     Choice::Wait(Wait::NextEvent)

@@ -453,20 +453,20 @@ fn rogue_loadouts_compile() {
             "loadouts/rogue_outlaw_trickster.ron",
             SpecId(260),
             Some(51),
-            &[193315, 185763, 315341, 2098, 13750, 271877, 51690, 441776],
+            &[193315, 185763, 315341, 2098, 13750, 51690, 441776],
         ),
         (
             "loadouts/rogue_outlaw_fatebound.ron",
             SpecId(260),
             Some(52),
-            &[193315, 185763, 315341, 2098, 13750, 271877, 51690],
+            &[193315, 185763, 315341, 2098, 13750, 51690],
         ),
         (
             "loadouts/rogue_subtlety_deathstalker.ron",
             SpecId(261),
             Some(53),
             &[
-                200758, 185438, 197835, 196819, 319175, 280719, 185313, 121471, 426591,
+                53, 185438, 197835, 196819, 319175, 280719, 185313, 121471, 426591,
             ],
         ),
         (
@@ -474,7 +474,7 @@ fn rogue_loadouts_compile() {
             SpecId(261),
             Some(51),
             &[
-                200758, 185438, 197835, 196819, 319175, 280719, 185313, 121471, 426591, 441776,
+                53, 185438, 197835, 196819, 319175, 280719, 185313, 121471, 426591, 441776,
             ],
         ),
     ];
@@ -1668,6 +1668,7 @@ fn resurrections_need_a_health_share_and_stones_must_survive_death() {
             aura,
             target: EffectTarget::Target,
             max: Some(0),
+            up_to_deficit: None,
             then: Vec::new(),
         },
     ];

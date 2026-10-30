@@ -42,21 +42,27 @@ use super::resurrect::{ResOffer, ResPool};
 #[inline]
 pub(crate) const fn engine_mod_bit(kind: ModKind) -> u32 {
     match kind {
-        ModKind::DamageDonePct => 0,
+        ModKind::DamageDonePct
+        | ModKind::DirectDamagePct
+        | ModKind::PeriodicDamagePct
+        | ModKind::DamagePerTargetHealthMissingPct => 0,
         ModKind::PetDamagePct => 1,
         ModKind::GuardianDamagePct => 2,
         ModKind::DamageTakenPct => 3,
         ModKind::CritChanceAdd => 4,
         ModKind::CritDamagePct => 5,
         ModKind::HastePct => 6,
-        ModKind::AttackSpeedPct => 7,
+        ModKind::AttackSpeedPct | ModKind::AttackSpeedFromHastePct => 7,
         ModKind::PersistentPct => 8,
         ModKind::CastTimePct => 9,
         ModKind::GcdPct => 10,
         ModKind::CooldownPct => 11,
         ModKind::ChargesAdd => 12,
-        ModKind::CostPct => 13,
-        ModKind::ResourceMax(_) => 14,
+        ModKind::CostPct
+        | ModKind::ResourceCostPct(_)
+        | ModKind::ResourceCostFlat(_)
+        | ModKind::SpendBonus(_) => 13,
+        ModKind::ResourceMax(_) | ModKind::ResourceRegenPct(_) => 14,
         ModKind::StatPct(_) => 15,
         ModKind::StatFlat(_) => 16,
         ModKind::AttackPowerPct => 17,
@@ -74,7 +80,7 @@ pub(crate) const fn engine_mod_bit(kind: ModKind) -> u32 {
         ModKind::ChannelTicksAdd => 29,
         ModKind::ChainTargetsAdd => 30,
         ModKind::CooldownRatePct => 31,
-        ModKind::ChainSharePct | ModKind::TickPeriodPct => 31,
+        ModKind::ChainSharePct | ModKind::TickPeriodPct | ModKind::DurationPerHastePct => 31,
     }
 }
 

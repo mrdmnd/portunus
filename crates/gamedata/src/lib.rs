@@ -24,7 +24,7 @@ pub mod spell;
 pub mod stats;
 pub mod talent;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use portunus_core::{
     AuraId, EnemyKey, HeroTreeId, ItemId, ItemSetId, PetId, SpecId, SpellId, TalentId,
@@ -69,6 +69,10 @@ pub struct GameData {
     #[serde(default)]
     pub races: BTreeMap<Race, RaceDef>,
     pub curves: StatCurves,
+    /// Auras whose damage modifiers `data/derived_modifiers.ron` reads from
+    /// the spell dump; dump syncing leaves their modifiers alone.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub derived_auras: BTreeSet<AuraId>,
 }
 
 /// Enemy-side game data for one build.

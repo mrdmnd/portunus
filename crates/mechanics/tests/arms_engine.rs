@@ -252,6 +252,7 @@ fn pseudo_random_procs_hit_their_rate_without_long_droughts() {
             killing_blow: false,
             direct: None,
             aura: None,
+            class_only: false,
         },
         vec![Effect::TriggerSpell {
             spell: PROC,
@@ -452,6 +453,7 @@ fn single_target_hits_chain_to_the_nearest_others_at_a_share() {
             killing_blow: false,
             direct: None,
             aura: None,
+            class_only: false,
         },
         vec![rage(1.0)],
     )]);
@@ -503,6 +505,7 @@ fn modifiers_and_listeners_can_ask_about_the_pack_and_the_current_target() {
             killing_blow: false,
             direct: None,
             aura: None,
+            class_only: false,
         },
         vec![rage(1.0)],
     );

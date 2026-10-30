@@ -266,11 +266,18 @@ pub(crate) fn build(setup: RunSetup) -> World {
                         .filter(|m| m.kind == ModKind::ResourceMax(def.kind))
                         .map(|m| m.value)
                         .sum();
+                    let regen_mult: f64 = passives
+                        .iter()
+                        .filter(|m| m.kind == ModKind::ResourceRegenPct(def.kind))
+                        .map(|m| (1.0 + m.value / 100.0).max(0.0))
+                        .product();
                     let def = ResourceDef {
                         max: (def.max + extra).max(0.0),
                         ..def
                     };
-                    Resource::new(def, SimTime::ZERO, false)
+                    let mut resource = Resource::new(def, SimTime::ZERO, false);
+                    resource.regen_mult = regen_mult;
+                    resource
                 })
                 .collect();
             actor

@@ -32,6 +32,7 @@ fn deaths_reach_listeners_by_killer_and_by_what_the_enemy_carried() {
                 killing_blow: true,
                 direct: None,
                 aura: None,
+                class_only: false,
             },
             vec![rage(1.0)],
         ),
@@ -276,6 +277,7 @@ fn blade_flurry_copies_a_share_of_each_hit_to_a_few_others_but_never_a_copy() {
             killing_blow: false,
             direct: None,
             aura: None,
+            class_only: false,
         },
         vec![flurry],
     )]);

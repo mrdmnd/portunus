@@ -124,6 +124,10 @@ pub enum Outgoing {
 pub trait CombatMath {
     /// The coefficient's raw value times `ctx.scale`, before any modifier.
     fn base(&self, view: &dyn StateView, ctx: &EffectCtx, amount: Coefficient) -> f64;
+    /// The product of the caster's `DamageDonePct` modifiers scoped to
+    /// `ctx.spell` itself: what an `unmodified` hit still takes, as SimC's
+    /// spell-family modifiers outlast `SX_DISABLE_PLAYER_MULT`.
+    fn own_spell_mult(&self, view: &dyn StateView, ctx: &EffectCtx) -> f64;
     /// Pre-crit amount after stats and every active modifier.
     fn outgoing(
         &self,

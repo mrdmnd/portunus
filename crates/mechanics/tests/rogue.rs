@@ -16,7 +16,7 @@ use portunus_gamedata::spec::MELEE_RANGE;
 use portunus_gamedata::{EnemyData, GameData};
 use portunus_ingest::{read_ron, EnemyDataSource, GameDataSource, RonFile};
 use portunus_loadout::{ActorTemplate, Compiler, Loadout, LoadoutCompiler};
-use portunus_mechanics::{Kits, PartyMechanics};
+use portunus_mechanics::{CombatMath, Kits, PartyMechanics};
 use portunus_scenario::{Sampler, ScenarioSampler, ScenarioSpec};
 
 const SEAT: Seat = Seat(0);
@@ -46,9 +46,19 @@ fn fixture_with(loadout: &str) -> Fixture {
 
 impl Fixture {
     fn kernel(&self, seed: u64) -> Kernel<PartyMechanics> {
+        let setup = self.setup(seed);
+        let mechanics = PartyMechanics::new(&setup, Arc::new(Kits::standard())).unwrap();
+        Kernel::new(setup, mechanics).unwrap()
+    }
+
+    fn mechanics(&self, seed: u64) -> PartyMechanics {
+        PartyMechanics::new(&self.setup(seed), Arc::new(Kits::standard())).unwrap()
+    }
+
+    fn setup(&self, seed: u64) -> RunSetup {
         let enemies = Arc::new(self.enemies.clone());
         let sampler = Sampler::new(self.spec.clone(), Arc::clone(&enemies)).unwrap();
-        let setup = RunSetup {
+        RunSetup {
             run: Arc::new(sampler.sample(Seed(seed))),
             data: Arc::new(self.data.clone()),
             enemies,
@@ -62,9 +72,7 @@ impl Fixture {
             }],
             externals: Externals::default(),
             record_trace: true,
-        };
-        let mechanics = PartyMechanics::new(&setup, Arc::new(Kits::standard())).unwrap();
-        Kernel::new(setup, mechanics).unwrap()
+        }
     }
 }
 
@@ -239,6 +247,53 @@ fn assassination_deathstalker_applies_marks_and_triggers_darkest_night() {
 }
 
 #[test]
+fn swift_slasher_adds_haste_to_slice_and_dice_attack_speed() {
+    let f = fixture_with("rogue_assassination_deathstalker.ron");
+    let m = f.mechanics(1);
+    let mut d = Driver::new(&f, 1);
+    d.in_combat();
+    d.press(SpellId(1329));
+    d.press(SpellId(315496));
+    assert_eq!(buff(&d.k, AuraId(315496)), 1, "Slice and Dice is up");
+
+    let state = d.k.state();
+    let haste = m.math().haste_mult(state, me(&d.k));
+    let speed = m.math().attack_speed_mult(state, me(&d.k));
+    assert!(
+        (speed - (1.5 + (haste - 1.0))).abs() < 1e-9,
+        "SimC's 1 + 0.5 + (haste - 1): haste {haste}, speed {speed}"
+    );
+
+    let from = d.k.state().now();
+    let until = from + SimDuration::from_millis(10_000);
+    d.until(idle, |k| k.state().now() >= until);
+    let hits: Vec<f64> = d
+        .trace
+        .iter()
+        .filter(|r| r.time >= from && r.time < until)
+        .filter(|r| matches!(r.event, TraceEvent::Damage(h) if h.spell.is_none() && h.source == me(&d.k)))
+        .map(|r| r.time.millis() as f64)
+        .collect();
+    // Misses leave no trace, so each hand shows up as hits a whole number
+    // of swing periods apart.
+    let period = 1800.0 / (haste * speed);
+    let on_beat = hits
+        .iter()
+        .filter(|&&t| {
+            hits.iter().any(|&u| {
+                let k = ((u - t) / period).round();
+                k != 0.0 && k.abs() <= 3.0 && (u - t - k * period).abs() <= 2.0 * k.abs()
+            })
+        })
+        .count();
+    assert!(
+        hits.len() >= 10 && on_beat * 5 >= hits.len() * 4,
+        "{on_beat} of {} white hits sit on a {period:.0} ms beat",
+        hits.len()
+    );
+}
+
+#[test]
 fn outlaw_trickster_builds_escalating_blade_into_coup_de_grace() {
     let f = fixture_with("rogue_outlaw_trickster.ron");
     let mut d = Driver::new(&f, 1);
@@ -306,11 +361,12 @@ fn subtlety_deathstalker_shadow_dance_shadowstrike_and_secret_technique() {
         "Deathstalker's Mark applied"
     );
 
-    d.press(SpellId(280719)); // Secret Technique -> 3 Shadow Clone strikes + consumes 1 Deathstalker's Mark
+    // Secret Technique: the rogue's strike, then two clone strikes 1 s and
+    // 1.3 s later; consumes 1 Deathstalker's Mark.
+    let cast_at = d.press(SpellId(280719));
     assert_eq!(debuff(&d.k, AuraId(457129)), 2);
-    assert_eq!(
-        hits(&d.trace, SpellId(280720)),
-        3,
-        "Secret Technique fired 3 clones"
-    );
+    let after_clones = cast_at + SimDuration(1500);
+    d.until(idle, |k| k.state().now() >= after_clones);
+    assert_eq!(hits(&d.trace, SpellId(280720)), 1, "the rogue's strike");
+    assert_eq!(hits(&d.trace, SpellId(282449)), 2, "both clone strikes");
 }

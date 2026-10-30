@@ -103,6 +103,8 @@ pub fn spell(id: SpellId, effects: Vec<Effect>) -> SpellDef {
         usable_while_casting: false,
         weapon: None,
         unrecorded: false,
+        item: false,
+        no_procs: false,
         requires: Vec::new(),
         on_cast: Vec::new(),
         effects,
@@ -159,6 +161,10 @@ pub fn fixture(kit: Vec<Listener>) -> Fixture {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data");
     let mut data: GameData = GameDataSource::load(&RonFile::new(dir.join("game.ron"))).unwrap();
     data.classes.clear();
+    // The template's stats are the loadout's, without Mail Specialization.
+    for spec in data.specs.values_mut() {
+        spec.baseline_auras.retain(|&a| a != AuraId(86108));
+    }
     let mut enemies: EnemyData =
         EnemyDataSource::load(&RonFile::new(dir.join("enemies.ron"))).unwrap();
     for e in enemies.enemies.values_mut() {

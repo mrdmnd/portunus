@@ -93,21 +93,27 @@ enum Role {
 #[inline]
 pub(crate) const fn mod_kind_bit(kind: ModKind) -> u32 {
     match kind {
-        ModKind::DamageDonePct => 0,
+        ModKind::DamageDonePct
+        | ModKind::DirectDamagePct
+        | ModKind::PeriodicDamagePct
+        | ModKind::DamagePerTargetHealthMissingPct => 0,
         ModKind::PetDamagePct => 1,
         ModKind::GuardianDamagePct => 2,
         ModKind::DamageTakenPct => 3,
         ModKind::CritChanceAdd => 4,
         ModKind::CritDamagePct => 5,
         ModKind::HastePct => 6,
-        ModKind::AttackSpeedPct => 7,
+        ModKind::AttackSpeedPct | ModKind::AttackSpeedFromHastePct => 7,
         ModKind::PersistentPct => 8,
         ModKind::CastTimePct => 9,
         ModKind::GcdPct => 10,
         ModKind::CooldownPct => 11,
         ModKind::ChargesAdd => 12,
-        ModKind::CostPct => 13,
-        ModKind::ResourceMax(_) => 14,
+        ModKind::CostPct
+        | ModKind::ResourceCostPct(_)
+        | ModKind::ResourceCostFlat(_)
+        | ModKind::SpendBonus(_) => 13,
+        ModKind::ResourceMax(_) | ModKind::ResourceRegenPct(_) => 14,
         ModKind::StatPct(_) => 15,
         ModKind::StatFlat(_) => 16,
         ModKind::AttackPowerPct => 17,
@@ -124,7 +130,10 @@ pub(crate) const fn mod_kind_bit(kind: ModKind) -> u32 {
         ModKind::SourceDamageTakenPct => 28,
         ModKind::ChannelTicksAdd => 29,
         ModKind::ChainTargetsAdd => 30,
-        ModKind::ChainSharePct | ModKind::CooldownRatePct | ModKind::TickPeriodPct => 31,
+        ModKind::ChainSharePct
+        | ModKind::CooldownRatePct
+        | ModKind::TickPeriodPct
+        | ModKind::DurationPerHastePct => 31,
     }
 }
 
@@ -208,6 +217,7 @@ impl FastAuraTable {
                     m.kind,
                     ModKind::HastePct
                         | ModKind::AttackSpeedPct
+                        | ModKind::AttackSpeedFromHastePct
                         | ModKind::StatFlat(_)
                         | ModKind::StatPct(_)
                         | ModKind::StatShare(_)
@@ -328,6 +338,8 @@ struct Query {
     /// An auto-attack's damage, for `ModScope::AutoAttack` and
     /// `ModScope::Abilities`.
     auto: bool,
+    /// An item's spell, which `ModScope::Abilities` leaves out.
+    item: bool,
 }
 
 impl Query {
@@ -338,6 +350,7 @@ impl Query {
             spell: None,
             school: None,
             auto: false,
+            item: false,
         }
     }
 
@@ -527,6 +540,24 @@ impl Formulas {
         (n.round().max(0.0) as usize, share)
     }
 
+    /// How much longer the auras `ctx`'s spell applies last: one plus the
+    /// sum of its `DurationPerHastePct` times the caster's haste percent.
+    pub(crate) fn duration_mult(&self, view: &dyn StateView, ctx: &EffectCtx) -> f64 {
+        let q = self.spell_query(view, ctx, None);
+        let mut per_haste = 0.0;
+        let mask = 1u32 << mod_kind_bit(ModKind::DurationPerHastePct);
+        self.each_mod_masked(view, &q, mask, |m, v| {
+            if m.kind == ModKind::DurationPerHastePct {
+                per_haste += v;
+            }
+        });
+        if per_haste == 0.0 {
+            return 1.0;
+        }
+        let haste = self.rated_pct(view, ctx.caster, RatedStat::Haste).max(0.0);
+        1.0 + per_haste / 100.0 * haste
+    }
+
     /// The product of a seat's `AttackPowerPct` modifiers; 1 for others.
     fn ap_mult(&self, view: &dyn StateView, actor: ActorId) -> f64 {
         self.stat_block(view, actor).map_or(1.0, |s| s.ap_mult)
@@ -544,13 +575,57 @@ impl Formulas {
         }
     }
 
-    /// The product of `AttackSpeedPct` modifiers on the actor's own auras.
+    /// The product of `AttackSpeedPct` modifiers on the actor's own auras,
+    /// each aura's `AttackSpeedFromHastePct` added to its own factor.
     pub fn attack_speed_mult(&self, view: &dyn StateView, actor: ActorId) -> f64 {
-        self.mod_product(
-            view,
-            &Query::holder_targeted(view, actor),
-            ModKind::AttackSpeedPct,
-        )
+        let q = Query::holder_targeted(view, actor);
+        let mask = 1u32 << mod_kind_bit(ModKind::AttackSpeedPct);
+        let mut haste_bonus = None;
+        let mut total = 1.0;
+        for inst in view.auras(q.holder) {
+            let Some(fast) = self.fast_aura(inst.aura) else {
+                continue;
+            };
+            if fast.mod_mask & mask == 0 {
+                continue;
+            }
+            let mut factor = 1.0;
+            let mut from_haste = 0.0;
+            for m in &fast.def.modifiers {
+                if !self.applies(view, &q, m) {
+                    continue;
+                }
+                let value = if m.per_stack {
+                    m.value * f64::from(inst.stacks)
+                } else {
+                    m.value
+                };
+                match m.kind {
+                    ModKind::AttackSpeedPct => factor *= 1.0 + value / 100.0,
+                    ModKind::AttackSpeedFromHastePct => from_haste += value / 100.0,
+                    _ => {}
+                }
+            }
+            if from_haste != 0.0 {
+                let bonus = *haste_bonus.get_or_insert_with(|| self.haste_mult(view, actor) - 1.0);
+                factor += from_haste * bonus;
+            }
+            total *= factor;
+        }
+        total
+    }
+
+    /// Whether the actor's attack speed follows its haste
+    /// (`AttackSpeedFromHastePct` on one of its auras).
+    pub(crate) fn attack_speed_follows_haste(&self, view: &dyn StateView, actor: ActorId) -> bool {
+        view.auras(actor).iter().any(|inst| {
+            self.fast_aura(inst.aura).is_some_and(|f| {
+                f.def
+                    .modifiers
+                    .iter()
+                    .any(|m| m.kind == ModKind::AttackSpeedFromHastePct)
+            })
+        })
     }
 
     /// The spec of a seat, if the setup had one there.
@@ -772,6 +847,7 @@ impl Formulas {
             spell: hit.spell,
             school: Some(hit.school),
             auto: false,
+            item: false,
         };
         let mut kept = 1.0;
         let mask = 1u32 << mod_kind_bit(ModKind::ArmorPenPct);
@@ -886,7 +962,7 @@ impl Formulas {
             ModScope::Spell(s) => q.spell == Some(s),
             ModScope::School(mask) => q.school.is_some_and(|s| s.0 & mask.0 != 0),
             ModScope::AutoAttack => q.auto,
-            ModScope::Abilities => !q.auto,
+            ModScope::Abilities => !q.auto && !q.item,
         };
         in_scope
             && m.condition
@@ -928,6 +1004,10 @@ impl Formulas {
             spell: ctx.spell,
             school: school.or_else(|| self.spell_school(ctx.spell)),
             auto: ctx.spell.is_none() && ctx.aura.is_none() && ctx.hand.is_some(),
+            item: ctx
+                .spell
+                .and_then(|s| self.fast_spell(s))
+                .is_some_and(|d| d.item),
         }
     }
 
@@ -971,6 +1051,28 @@ impl Formulas {
 }
 
 impl CombatMath for Formulas {
+    fn own_spell_mult(&self, view: &dyn StateView, ctx: &EffectCtx) -> f64 {
+        let Some(spell) = ctx.spell else {
+            return 1.0;
+        };
+        let q = self.spell_query(view, ctx, None);
+        let mut mult = 1.0;
+        let mask = 1u32 << mod_kind_bit(ModKind::DamageDonePct);
+        let periodic = ctx.hit == HitKind::Periodic;
+        self.each_mod_masked(view, &q, mask, |m, v| {
+            let applies = match m.kind {
+                ModKind::DamageDonePct => true,
+                ModKind::DirectDamagePct => !periodic,
+                ModKind::PeriodicDamagePct => periodic,
+                _ => false,
+            };
+            if applies && m.scope == ModScope::Spell(spell) {
+                mult *= 1.0 + v / 100.0;
+            }
+        });
+        mult
+    }
+
     fn base(&self, view: &dyn StateView, ctx: &EffectCtx, amount: Coefficient) -> f64 {
         let raw = match amount {
             Coefficient::Flat(x) => x,
@@ -1023,11 +1125,24 @@ impl CombatMath for Formulas {
                 let mut crit_adds = false;
                 let mut by_mastery = 1.0;
                 let mut damage_done = 1.0;
+                let missing_pct = ctx
+                    .target
+                    .and_then(|t| view.actor(t))
+                    .map_or(0.0, |a| 100.0 * (1.0 - a.health_frac()));
                 self.each_mod_masked(view, &q, OUTGOING_MOD_MASK, |m, v| match m.kind {
                     ModKind::CritChanceScalesDamage => crit_scales = true,
                     ModKind::CritChanceAddsDamage => crit_adds = true,
                     ModKind::MasteryDamagePct => by_mastery *= 1.0 + v * mastery,
                     ModKind::DamageDonePct => damage_done *= 1.0 + v / 100.0,
+                    ModKind::DirectDamagePct if ctx.hit != HitKind::Periodic => {
+                        damage_done *= 1.0 + v / 100.0;
+                    }
+                    ModKind::PeriodicDamagePct if ctx.hit == HitKind::Periodic => {
+                        damage_done *= 1.0 + v / 100.0;
+                    }
+                    ModKind::DamagePerTargetHealthMissingPct => {
+                        damage_done *= 1.0 + v / 100.0 * missing_pct;
+                    }
                     _ => {}
                 });
                 let mut by_crit = if crit_scales {

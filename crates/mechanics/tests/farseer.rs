@@ -261,12 +261,21 @@ fn press(k: &mut FarseerKernel, spell: SpellId) {
 
 /// Wait, without acting, until the seat may cast `spell`, then cast it.
 fn press_when_ready(k: &mut FarseerKernel, spell: SpellId) {
+    assert!(
+        try_press_when_ready(k, spell),
+        "ended before {spell:?} was ready"
+    );
+}
+
+/// [`press_when_ready`], or `false` if the fight ends first.
+fn try_press_when_ready(k: &mut FarseerKernel, spell: SpellId) -> bool {
     loop {
         let Step::Decide(_) = k.advance().unwrap() else {
-            panic!("ended before {spell:?} was ready");
+            return false;
         };
         if k.legal(Seat(0)).abilities.get(&spell) == Some(&Readiness::Now) {
-            return press(k, spell);
+            press(k, spell);
+            return true;
         }
         k.submit(Seat(0), Choice::Wait(Wait::NextEvent)).unwrap();
     }
@@ -333,9 +342,16 @@ fn lava_burst_spends_ancestral_swiftness_before_lava_surge() {
     let both = |k: &FarseerKernel| {
         holds(k, LAVA_SURGE_BUFF) > 0 && ready(k, ANCESTRAL_SWIFTNESS) && ready(k, LAVA_BURST)
     };
+    let fits = |s: u64| {
+        let mut k = f.kernel(s);
+        play_until(&mut k, both).is_none() && {
+            press(&mut k, ANCESTRAL_SWIFTNESS);
+            try_press_when_ready(&mut k, LAVA_BURST) && try_press_when_ready(&mut k, LAVA_BURST)
+        }
+    };
     let seed = (0..30)
-        .find(|&s| play_until(&mut f.kernel(s), both).is_none())
-        .expect("Lava Surge with Ancestral Swiftness ready");
+        .find(|&s| fits(s))
+        .expect("Lava Surge with Ancestral Swiftness ready, and time for two Lava Bursts");
     let mut k = f.kernel(seed);
     assert!(play_until(&mut k, both).is_none());
     press(&mut k, ANCESTRAL_SWIFTNESS);

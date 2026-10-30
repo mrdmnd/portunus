@@ -111,9 +111,12 @@ impl PartyMechanics {
             target: cast.target,
             spell: Some(cast.spell),
             aura: None,
-            event_amount: None,
+            event_amount: cast.inherited.amount,
             scale: self.spend_scale(cast),
-            spent: cast.spent.map(|s| s.amount),
+            spent: cast
+                .spent
+                .map(|s| s.amount + cast.spend_bonus)
+                .or(cast.inherited.spent),
             depth: 0,
             hand: self.spell(cast.spell).and_then(|d| d.weapon),
             hit: HitKind::Direct,
@@ -130,7 +133,7 @@ impl PartyMechanics {
         };
         match cost.scaling {
             SpendScaling::None => 1.0,
-            SpendScaling::PerUnit => spent.amount,
+            SpendScaling::PerUnit => spent.amount + cast.spend_bonus,
             SpendScaling::Extra(coef) if cost.extra > 0.0 => {
                 1.0 + coef * ((spent.amount - cost.amount) / cost.extra).clamp(0.0, 1.0)
             }
@@ -196,6 +199,7 @@ impl Mechanics for PartyMechanics {
             what: Happening::CastComplete {
                 spell: cast.spell,
                 school: def.school,
+                hostile: def.hostile,
             },
             target: cast.target,
             amount: None,

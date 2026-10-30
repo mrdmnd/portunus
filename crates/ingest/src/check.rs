@@ -821,7 +821,8 @@ impl Checker<'_> {
                                 .push(DataIssue::InvalidCountScale(owner.clone()));
                         }
                         if let TargetCount::EnemiesWithAura { aura, .. }
-                        | TargetCount::TargetStacks { aura } = scale.count
+                        | TargetCount::TargetStacks { aura }
+                        | TargetCount::CasterStacks { aura } = scale.count
                         {
                             self.aura(owner, aura);
                         }
@@ -906,6 +907,7 @@ impl Checker<'_> {
                     target,
                     max,
                     then,
+                    ..
                 } => {
                     self.aura(owner, *aura);
                     self.target(owner, target);
@@ -943,7 +945,7 @@ impl Checker<'_> {
                         self.effects(owner, std::slice::from_ref(e));
                     }
                 }
-                Effect::Chance { chance, then } => {
+                Effect::Chance { chance, then, .. } => {
                     if !(0.0..=1.0).contains(chance) {
                         self.issues.push(DataIssue::InvalidChance(owner.clone()));
                     }

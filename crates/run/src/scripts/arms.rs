@@ -222,7 +222,8 @@ fn play(d: &Decision<SeatObs>, tweaks: Tweaks) -> Choice {
     } else {
         slayer_st(&a)
     };
-    a.opener()
+    super::use_buff_trinket(d, a.obs.has_buff(AVATAR_BUFF))
+        .or_else(|| a.opener())
         .or(list)
         .map_or(Choice::Wait(Wait::NextEvent), Choice::cast)
 }

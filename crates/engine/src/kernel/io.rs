@@ -6,7 +6,8 @@ use portunus_gamedata::stats::ResourceKind;
 use portunus_gamedata::GameData;
 
 use crate::mechanics::{
-    AuraApplication, DamageEvent, EngineIo, HealEvent, Landed, RolledHit, TimerEvent, ValueLimits,
+    AuraApplication, DamageEvent, EngineIo, HealEvent, Inherited, Landed, RolledHit, TimerEvent,
+    ValueLimits,
 };
 use crate::state::{AuraRef, ListenerRef, StateView};
 use crate::step::WakeReason;
@@ -156,6 +157,7 @@ impl EngineIo for Io<'_> {
         target: Option<ActorId>,
         delay: SimDuration,
         rolled: Option<Vec<RolledHit>>,
+        inherited: Inherited,
     ) {
         let at = self.w.now + delay;
         self.w.queue.push(
@@ -165,6 +167,7 @@ impl EngineIo for Io<'_> {
                 spell,
                 target,
                 rolled,
+                inherited,
             },
         );
     }

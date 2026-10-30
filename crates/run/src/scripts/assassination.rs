@@ -202,12 +202,16 @@ pub fn assassination(d: &Decision<SeatObs>) -> Choice {
     }
     let finish_ready =
         (!a.darkest_night && a.cp >= 5.0) || (a.darkest_night && a.cp_deficit == 0.0);
-    let act = a.cds().or_else(|| a.core_dot()).or_else(|| {
-        if finish_ready {
-            a.spend()
-        } else {
-            a.generate()
-        }
-    });
+    let deathmark = a.dot_rem(DEATHMARK_DOT) > SimDuration::ZERO;
+    let act = super::use_buff_trinket(d, deathmark)
+        .or_else(|| a.cds())
+        .or_else(|| a.core_dot())
+        .or_else(|| {
+            if finish_ready {
+                a.spend()
+            } else {
+                a.generate()
+            }
+        });
     act.map_or(Choice::Wait(Wait::NextEvent), Choice::cast)
 }

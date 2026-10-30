@@ -39,7 +39,7 @@ pub use observe::{
 };
 pub use opt::{optimize_stats, BundleStatObjective, OptimizeReport, StatPoint, StatSearchSpace};
 pub use parity::{
-    check_simc_parity, default_simc_profile, AbilityParityRow, SimcParityReport,
+    check_simc_parity, default_simc_profile, AbilityParityRow, SimcParityReport, SimcTalents,
     DEFAULT_PARITY_TOLERANCE,
 };
 pub use train::{train_rl, IterationSummary, TrainReport, TrainSpec};

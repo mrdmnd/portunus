@@ -40,7 +40,7 @@
             // Grace, and Gust of Wind come from the class tree, which isn't
             // modelled.
             baseline_spells: [188196, 51505, 188389, 8042, 188443, 196840, 192106, 79206, 192063],
-            baseline_auras: [168534, 77756, 51505, 60188],
+            baseline_auras: [168534, 77756, 51505, 60188, 86108],
             trees: [
                 // The 12.0 tree as SimC's dump lays it out, each talent
                 // once; Elemental Fury is baseline here. Links between
@@ -105,7 +105,7 @@
             mastery_coef: 2.0,
             resources: [],
             baseline_spells: [17364, 60103, 188196, 188443, 188389, 196840, 192106],
-            baseline_auras: [137041, 77223, 192106, 382886, 462796, 381655, 1270350, 1270375],
+            baseline_auras: [137041, 77223, 192106, 382886, 462796, 381655, 1270350, 1270375, 86099],
             trees: [
                 (
                     name: "Enhancement",
@@ -172,7 +172,7 @@
             // the reference build's damage talents in it are baseline here
             // (the auras after Seasoned Soldier), at the ranks it takes.
             baseline_spells: [163201, 1464, 100, 772, 107570, 384110, 260708],
-            baseline_auras: [137049, 1258398, 279423, 386164, 262231, 382896, 383082, 392792, 382946, 382767, 392777, 152278],
+            baseline_auras: [137049, 1258398, 279423, 386164, 262231, 382896, 383082, 392792, 382946, 382767, 392777, 152278, 86101],
             trees: [
                 // The 12.1 tree from SimC's trait data, each talent once.
                 // Master of Warfare's four ranks are three spells (1269306
@@ -236,7 +236,7 @@
                 (kind: rage, max: 100.0, initial: 0.0, regen_per_sec: 0.0, regen_hasted: false, out_of_combat: Some(-1.0)),
             ],
             baseline_spells: [5308, 190411, 1464, 100, 6343, 107570, 384110],
-            baseline_auras: [137050, 76856, 910200, 386196, 382900, 382946, 382767, 392777],
+            baseline_auras: [137050, 76856, 910200, 386196, 382900, 382946, 382767, 392777, 86110],
             trees: [
                 (
                     name: "Fury",
@@ -301,7 +301,7 @@
                 (kind: holy_power, max: 5.0, initial: 0.0, regen_per_sec: 0.0, regen_hasted: false),
             ],
             baseline_spells: [35395, 20271, 24275, 85256, 26573, 375576, 96231],
-            baseline_auras: [267316, 137027, 408459, 384052, 385126, 385349, 1266307],
+            baseline_auras: [267316, 137027, 408459, 384052, 385126, 385349, 1266307, 86539],
             trees: [
                 (
                     name: "Retribution",
@@ -368,7 +368,7 @@
                 (kind: runic_power, max: 100.0, initial: 0.0, regen_per_sec: 0.0, regen_hasted: false),
             ],
             baseline_spells: [196770, 194913, 47541, 43265, 49998, 47528, 46585],
-            baseline_auras: [77514, 137006, 81229, 59057, 207104, 194878, 374504, 374574, 374265, 53344, 53343],
+            baseline_auras: [77514, 137006, 81229, 59057, 207104, 194878, 374504, 374574, 374265, 53344, 53343, 86113],
             trees: [
                 (
                     name: "Frost",
@@ -440,7 +440,7 @@
                 (kind: runic_power, max: 100.0, initial: 0.0, regen_per_sec: 0.0, regen_hasted: false),
             ],
             baseline_spells: [85948, 47541, 207317, 43265, 49998, 47528, 46584],
-            baseline_auras: [77515, 137007, 51462, 207104, 194878, 374504, 374574, 374265, 356367, 53344, 327082],
+            baseline_auras: [77515, 137007, 51462, 207104, 194878, 374504, 374574, 374265, 356367, 53344, 327082, 86536],
             trees: [
                 (
                     name: "Unholy",
@@ -502,7 +502,7 @@
                 (kind: focus, max: 100.0, initial: 100.0, regen_per_sec: 5.0, regen_hasted: true),
             ],
             baseline_spells: [56641, 185358, 2643, 883, 147362],
-            baseline_auras: [76657, 137015, 1267003, 459502, 459534, 459542, 378004, 459527],
+            baseline_auras: [76657, 137015, 1267003, 459502, 459534, 459542, 378004, 459527, 86538],
             permanent_pet: Some(165189),
             trees: [
                 (
@@ -569,7 +569,7 @@
                 (kind: focus, max: 100.0, initial: 100.0, regen_per_sec: 5.0, regen_hasted: true),
             ],
             baseline_spells: [56641, 185358, 257620, 147362],
-            baseline_auras: [193468, 137016, 1219616, 1267003, 459502, 459534, 459542, 378004, 459527],
+            baseline_auras: [193468, 137016, 1219616, 1267003, 459502, 459534, 459542, 378004, 459527, 86538],
             trees: [
                 (
                     name: "Marksmanship",
@@ -632,7 +632,7 @@
                 (kind: focus, max: 100.0, initial: 100.0, regen_per_sec: 5.0, regen_hasted: true),
             ],
             baseline_spells: [56641, 185358, 2643, 883, 187707],
-            baseline_auras: [263135, 137017, 1267003, 459502, 459534, 459542, 378004, 459527],
+            baseline_auras: [263135, 137017, 1267003, 459502, 459534, 459542, 378004, 459527, 86538],
             permanent_pet: Some(165189),
             trees: [
                 (
@@ -692,11 +692,11 @@
             base_mastery_pct: 13.6,
             mastery_coef: 1.7,
             resources: [
-                (kind: energy, max: 150.0, initial: 150.0, regen_per_sec: 10.0, regen_hasted: true),
+                (kind: energy, max: 100.0, initial: 100.0, regen_per_sec: 10.0, regen_hasted: true),
                 (kind: combo_points, max: 7.0, initial: 0.0, regen_per_sec: 0.0, regen_hasted: false),
             ],
             baseline_spells: [1329, 703, 1943, 32645, 51723, 8676, 315496, 1784, 1856, 5938, 381623, 1766],
-            baseline_auras: [76803, 382238, 381621, 378813],
+            baseline_auras: [137037, 76803, 157442, 382238, 381621, 378813, 381988, 381542, 1267216, 193531, 381543, 193539, 14983, 382245, 1267182, 86092, 1267210, 470347, 470668],
             trees: [
                 (
                     name: "Assassination",
@@ -756,11 +756,11 @@
             base_mastery_pct: 16.0,
             mastery_coef: 2.0,
             resources: [
-                (kind: energy, max: 150.0, initial: 150.0, regen_per_sec: 10.0, regen_hasted: true),
+                (kind: energy, max: 100.0, initial: 100.0, regen_per_sec: 10.0, regen_hasted: true),
                 (kind: combo_points, max: 7.0, initial: 0.0, regen_per_sec: 0.0, regen_hasted: false),
             ],
             baseline_spells: [193315, 185763, 315341, 2098, 13877, 1214909, 8676, 315496, 1784, 1856, 1766],
-            baseline_auras: [76806, 79096, 382238, 381621, 378813],
+            baseline_auras: [137036, 76806, 79096, 157442, 381621, 378813, 381988, 381542, 1267216, 193531, 381543, 193539, 14983, 86092, 1267210, 470347, 470668],
             trees: [
                 (
                     name: "Outlaw",
@@ -820,11 +820,11 @@
             base_mastery_pct: 19.6,
             mastery_coef: 2.45,
             resources: [
-                (kind: energy, max: 150.0, initial: 150.0, regen_per_sec: 10.0, regen_hasted: true),
+                (kind: energy, max: 100.0, initial: 100.0, regen_per_sec: 10.0, regen_hasted: true),
                 (kind: combo_points, max: 7.0, initial: 0.0, regen_per_sec: 0.0, regen_hasted: false),
             ],
             baseline_spells: [53, 185438, 197835, 196819, 319175, 280719, 185313, 315496, 1784, 1856, 1766],
-            baseline_auras: [76808, 196912, 382238, 381621, 378813],
+            baseline_auras: [137035, 76808, 196912, 157442, 382238, 378813, 381988, 381542, 1267216, 193531, 381543, 193539, 382245, 381620, 86092, 1267210, 470347, 470668],
             trees: [
                 (
                     name: "Subtlety",
@@ -1348,7 +1348,7 @@
                 (kind: chi, max: 5.0, initial: 2.0, regen_per_sec: 0.0, regen_hasted: false),
             ],
             baseline_spells: [100780, 100784, 107428, 101546, 322109],
-            baseline_auras: [115636],
+            baseline_auras: [115636, 120227],
             trees: [
                 (
                     name: "Windwalker",
@@ -1421,7 +1421,7 @@
                 (kind: astral_power, max: 100.0, initial: 50.0, regen_per_sec: 0.0, regen_hasted: false),
             ],
             baseline_spells: [190984, 194153, 8921, 93402, 78674, 191034, 24858],
-            baseline_auras: [77492, 24858],
+            baseline_auras: [77492, 24858, 86104],
             trees: [
                 (
                     name: "Balance",
@@ -1485,7 +1485,7 @@
                 (kind: combo_points, max: 5.0, initial: 0.0, regen_per_sec: 0.0, regen_hasted: false),
             ],
             baseline_spells: [768, 5215, 5221, 1822, 106785, 106830, 1079, 22568],
-            baseline_auras: [77493, 768],
+            baseline_auras: [77493, 768, 86097],
             trees: [
                 (
                     name: "Feral",
@@ -1549,7 +1549,7 @@
                 (kind: fury, max: 120.0, initial: 40.0, regen_per_sec: 0.0, regen_hasted: false),
             ],
             baseline_spells: [162243, 162794, 201427, 188499, 210152, 258920, 232893, 185123, 198793, 191427, 204596],
-            baseline_auras: [185164, 203555],
+            baseline_auras: [185164, 203555, 178976],
             trees: [
                 (
                     name: "Havoc",
@@ -1613,7 +1613,7 @@
                 (kind: fury, max: 120.0, initial: 50.0, regen_per_sec: 0.0, regen_hasted: false),
             ],
             baseline_spells: [473662, 1217605, 1226019, 1226025, 1215602, 198793, 191427],
-            baseline_auras: [185164],
+            baseline_auras: [185164, 1277734],
             trees: [
                 (
                     name: "Devourer",
@@ -1684,7 +1684,7 @@
                 ),
             ],
             baseline_spells: [361469, 362969, 356995, 357208, 357210, 358267, 370553],
-            baseline_auras: [362980],
+            baseline_auras: [362980, 366524],
             trees: [
                 (
                     name: "Devastation",
@@ -1756,7 +1756,7 @@
                 ),
             ],
             baseline_spells: [361469, 362969, 357208, 357210, 358267, 370553],
-            baseline_auras: [395286],
+            baseline_auras: [395286, 366524],
             trees: [
                 (
                     name: "Augmentation",
@@ -9067,9 +9067,6 @@
             effects: [
                 apply_aura(aura: 360194, target: target, stacks: 1),
                 apply_aura(aura: 360195, target: caster, stacks: 1),
-                if(when: caster_has_aura(457056), then: [
-                    apply_aura(aura: 457060, target: caster, stacks: 1),
-                ]),
                 if(when: caster_has_aura(1248970), then: [
                     apply_aura(aura: 1248971, target: caster, stacks: 1),
                 ]),
@@ -9507,7 +9504,6 @@
                 resource((kind: combo_points, amount: 1.0)),
                 if(when: caster_has_aura(121471), then: [
                     resource((kind: combo_points, amount: 1.0)),
-                    trigger_spell(spell: 279043, target: target),
                 ]),
                 if(when: caster_has_aura(382518), then: [
                     apply_aura(aura: 382519, target: caster, stacks: 1),
@@ -9529,12 +9525,7 @@
                 ]),
                 if(when: caster_has_aura(193537), then: [
                     chance(chance: 0.15, then: [
-                        trigger_spell(spell: 1269336, target: target),
-                    ]),
-                ]),
-                if(when: caster_has_aura(1268932), then: [
-                    chance(chance: 0.25, then: [
-                        trigger_spell(spell: 1269336, target: target),
+                        trigger_spell(spell: 1269209, target: target, delay: 200),
                     ]),
                 ]),
                 if(when: caster_has_aura(1264398), then: [
@@ -9543,6 +9534,8 @@
                 ]),
                 remove_stacks(aura: 382016, target: caster, stacks: 1),
                 remove_stacks(aura: 1248775, target: caster, stacks: 1),
+                consume_stacks(aura: 196911, target: caster, up_to_deficit: Some(combo_points), then: [gain_resource(kind: combo_points, amount: event_amount(1.0)), if(when: caster_has_aura(1268932), then: [if(when: caster_has_aura(382506), then: [chance(chance: 0.2, per_event_amount: true, then: [trigger_spell(spell: 1269209, target: target, delay: 200)])], otherwise: [chance(chance: 0.15, per_event_amount: true, then: [trigger_spell(spell: 1269209, target: target, delay: 200)])])])]),
+                if(when: caster_has_aura(1268939), then: [if(when: caster_stacks_at_least(aura: 196911, stacks: 5), then: [apply_aura(aura: 1269163, target: caster, stacks: 1)])]),
             ],
         ),
         200758: (
@@ -9562,7 +9555,6 @@
                 resource((kind: combo_points, amount: 1.0)),
                 if(when: caster_has_aura(121471), then: [
                     resource((kind: combo_points, amount: 1.0)),
-                    trigger_spell(spell: 279043, target: target),
                 ]),
                 if(when: caster_has_aura(382518), then: [
                     apply_aura(aura: 382519, target: caster, stacks: 1),
@@ -9584,12 +9576,7 @@
                 ]),
                 if(when: caster_has_aura(193537), then: [
                     chance(chance: 0.15, then: [
-                        trigger_spell(spell: 1269336, target: target),
-                    ]),
-                ]),
-                if(when: caster_has_aura(1268932), then: [
-                    chance(chance: 0.25, then: [
-                        trigger_spell(spell: 1269336, target: target),
+                        trigger_spell(spell: 1269214, target: target, delay: 200),
                     ]),
                 ]),
                 if(when: caster_has_aura(1264398), then: [
@@ -9598,6 +9585,8 @@
                 ]),
                 remove_stacks(aura: 382016, target: caster, stacks: 1),
                 remove_stacks(aura: 1248775, target: caster, stacks: 1),
+                consume_stacks(aura: 196911, target: caster, up_to_deficit: Some(combo_points), then: [gain_resource(kind: combo_points, amount: event_amount(1.0)), if(when: caster_has_aura(1268932), then: [if(when: caster_has_aura(382506), then: [chance(chance: 0.2, per_event_amount: true, then: [trigger_spell(spell: 1269214, target: target, delay: 200)])], otherwise: [chance(chance: 0.15, per_event_amount: true, then: [trigger_spell(spell: 1269214, target: target, delay: 200)])])])]),
+                if(when: caster_has_aura(1268939), then: [if(when: caster_stacks_at_least(aura: 196911, stacks: 5), then: [apply_aura(aura: 1269163, target: caster, stacks: 1)])]),
             ],
         ),
         185438: (
@@ -9618,7 +9607,6 @@
                 resource((kind: combo_points, amount: 2.0)),
                 if(when: caster_has_aura(121471), then: [
                     resource((kind: combo_points, amount: 2.0)),
-                    trigger_spell(spell: 279043, target: target),
                 ]),
                 if(when: caster_has_aura(343161), then: [
                     resource((kind: combo_points, amount: 2.0)),
@@ -9651,12 +9639,7 @@
                 ]),
                 if(when: caster_has_aura(193537), then: [
                     chance(chance: 0.15, then: [
-                        trigger_spell(spell: 1269336, target: target),
-                    ]),
-                ]),
-                if(when: caster_has_aura(1268932), then: [
-                    chance(chance: 0.30, then: [
-                        trigger_spell(spell: 1269336, target: target),
+                        trigger_spell(spell: 1269336, target: target, delay: 200),
                     ]),
                 ]),
                 if(when: caster_has_aura(1264398), then: [
@@ -9666,6 +9649,8 @@
                 remove_aura(aura: 382519, target: caster),
                 remove_stacks(aura: 382016, target: caster, stacks: 1),
                 remove_stacks(aura: 1248775, target: caster, stacks: 1),
+                consume_stacks(aura: 196911, target: caster, up_to_deficit: Some(combo_points), then: [gain_resource(kind: combo_points, amount: event_amount(1.0)), if(when: caster_has_aura(1268932), then: [if(when: caster_has_aura(382506), then: [chance(chance: 0.2, per_event_amount: true, then: [trigger_spell(spell: 1269336, target: target, delay: 200)])], otherwise: [chance(chance: 0.15, per_event_amount: true, then: [trigger_spell(spell: 1269336, target: target, delay: 200)])])])]),
+                if(when: caster_has_aura(1268939), then: [if(when: caster_stacks_at_least(aura: 196911, stacks: 5), then: [apply_aura(aura: 1269163, target: caster, stacks: 1)])]),
             ],
         ),
         197835: (
@@ -9714,6 +9699,8 @@
                     trigger_spell(spell: 1264397, target: target),
                 ]),
                 remove_stacks(aura: 382016, target: caster, stacks: 1),
+                consume_stacks(aura: 196911, target: caster, up_to_deficit: Some(combo_points), then: [gain_resource(kind: combo_points, amount: event_amount(1.0)), if(when: caster_has_aura(1268932), then: [if(when: caster_has_aura(382506), then: [chance(chance: 0.2, per_event_amount: true, then: [trigger_spell(spell: 1269340, target: target, delay: 200)])], otherwise: [chance(chance: 0.15, per_event_amount: true, then: [trigger_spell(spell: 1269340, target: target, delay: 200)])])])]),
+                if(when: caster_has_aura(1268939), then: [if(when: caster_stacks_at_least(aura: 196911, stacks: 5), then: [apply_aura(aura: 1269163, target: caster, stacks: 1)])]),
             ],
         ),
         1264397: (
@@ -9737,22 +9724,108 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
-            range: Some(10.0),
+            range: Some(100.0),
             effects: [
-                damage(amount: attack_power(0.315), school: 32, target: all_enemies, aoe: Some((max_targets: None, sqrt_cap: Some(8), secondary: 1.0))),
+                damage(amount: attack_power(0.63), school: 32, target: all_enemies, aoe: Some((max_targets: None, sqrt_cap: Some(8), secondary: 1.0)), per_count: Some((count: spent, pct: 50.0, form: times))),
+                if(when: caster_has_aura(1268936), then: [if(when: caster_stacks_at_least(aura: 1268936, stacks: 2), then: [apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))], otherwise: [chance(chance: 0.5, then: [apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))])])]),
             ],
         ),
         1269336: (
             id: 1269336,
-            name: "Ancient Arts (Shadow Clone)",
+            name: "Shadowstrike (Shadow Clone)",
             school: 32,
             cast: instant,
             gcd: None,
             targeting: enemy,
             hostile: true,
-            range: Some(10.0),
+            range: Some(100.0),
             effects: [
-                damage(amount: attack_power(0.85), school: 32, target: target),
+                damage(amount: attack_power(5.59), school: 32, target: target, per_count: Some((count: spent, pct: 50.0, form: times))),
+                if(when: caster_has_aura(1268936), then: [if(when: caster_stacks_at_least(aura: 1268936, stacks: 2), then: [apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))], otherwise: [chance(chance: 0.5, then: [apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))])])]),
+            ],
+        ),
+        1269205: (
+            id: 1269205,
+            name: "Eviscerate (Shadow Clone)",
+            school: 32,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            range: Some(100.0),
+            effects: [
+                damage(amount: attack_power(0.37325), school: 32, target: target, per_count: Some((count: spent, pct: 50.0, form: times))),
+                if(when: caster_has_aura(1268936), then: [if(when: caster_stacks_at_least(aura: 1268936, stacks: 2), then: [apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))], otherwise: [chance(chance: 0.5, then: [apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))])])]),
+            ],
+        ),
+        1269209: (
+            id: 1269209,
+            name: "Backstab (Shadow Clone)",
+            school: 32,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            range: Some(100.0),
+            effects: [
+                damage(amount: attack_power(1.0731), school: 32, target: target, per_count: Some((count: spent, pct: 50.0, form: times))),
+                if(when: caster_has_aura(1268936), then: [if(when: caster_stacks_at_least(aura: 1268936, stacks: 2), then: [apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))], otherwise: [chance(chance: 0.5, then: [apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))])])]),
+            ],
+        ),
+        1269214: (
+            id: 1269214,
+            name: "Gloomblade (Shadow Clone)",
+            school: 32,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            range: Some(100.0),
+            effects: [
+                damage(amount: attack_power(1.23), school: 32, target: target, per_count: Some((count: spent, pct: 50.0, form: times))),
+                if(when: caster_has_aura(1268936), then: [if(when: caster_stacks_at_least(aura: 1268936, stacks: 2), then: [apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))], otherwise: [chance(chance: 0.5, then: [apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))])])]),
+            ],
+        ),
+        1269217: (
+            id: 1269217,
+            name: "Goremaw's Bite (Shadow Clone)",
+            school: 32,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            range: Some(100.0),
+            effects: [
+                damage(amount: attack_power(3.267), school: 32, target: target, per_count: Some((count: spent, pct: 50.0, form: times))),
+                if(when: caster_has_aura(1268936), then: [if(when: caster_stacks_at_least(aura: 1268936, stacks: 2), then: [apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))], otherwise: [chance(chance: 0.5, then: [apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))])])]),
+            ],
+        ),
+        1269560: (
+            id: 1269560,
+            name: "Secret Technique (Shadow Clone)",
+            school: 32,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            range: Some(100.0),
+            effects: [
+                damage(amount: attack_power(0.8424), school: 32, target: near_target(yards: 8), aoe: Some((max_targets: None, sqrt_cap: Some(6), secondary: 1.0, full_primary: true)), per_count: Some((count: spent, pct: 50.0, form: times))),
+                if(when: caster_has_aura(1268936), then: [if(when: caster_stacks_at_least(aura: 1268936, stacks: 2), then: [apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))], otherwise: [chance(chance: 0.5, then: [apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))])])]),
+            ],
+        ),
+        1269565: (
+            id: 1269565,
+            name: "Black Powder (Shadow Clone)",
+            school: 32,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            range: Some(100.0),
+            effects: [
+                damage(amount: attack_power(0.185), school: 32, target: all_enemies, aoe: Some((max_targets: None, sqrt_cap: Some(8), secondary: 1.0)), per_count: Some((count: spent, pct: 50.0, form: times))),
+                if(when: caster_has_aura(1268936), then: [if(when: caster_stacks_at_least(aura: 1268936, stacks: 2), then: [apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))], otherwise: [chance(chance: 0.5, then: [apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))])])]),
             ],
         ),
         196819: (
@@ -9772,16 +9845,17 @@
             castable_while_moving: true,
             effects: [
                 damage(amount: attack_power(0.37325), school: 1, target: target, hand: Some(main_hand)),
+                if(when: caster_has_aura(1269163), then: [
+                    consume_stacks(aura: 196911, target: caster, up_to_deficit: Some(combo_points), then: [gain_resource(kind: combo_points, amount: event_amount(1.0)), if(when: caster_has_aura(1268932), then: [if(when: caster_has_aura(382506), then: [chance(chance: 0.2, per_event_amount: true, then: [trigger_spell(spell: 1269205, target: target, delay: 500)])], otherwise: [chance(chance: 0.15, per_event_amount: true, then: [trigger_spell(spell: 1269205, target: target, delay: 500)])])])]),
+                    remove_aura(aura: 1269163, target: caster),
+                ]),
                 if(when: spent_at_least(5), then: [
                     if(when: caster_has_aura(382511), then: [
                         if(when: target_has_aura(aura: 316220, from_self: true), then: [
-                            trigger_spell(spell: 328082, target: target),
+                            trigger_spell(spell: 328082, target: target, delay: 1),
                         ]),
                     ]),
                     apply_aura(aura: 315496, target: caster, stacks: 1, duration: Some(36000)),
-                    if(when: caster_has_aura(382517), then: [
-                        apply_aura(aura: 382516, target: caster, stacks: 1),
-                    ]),
                     if(when: caster_has_aura(457280), then: [
                         apply_aura(aura: 457129, target: target, stacks: 3),
                         remove_aura(aura: 457280, target: caster),
@@ -9834,9 +9908,6 @@
                         trigger_spell(spell: 319190, target: target),
                     ]),
                     apply_aura(aura: 315496, target: caster, stacks: 1, duration: Some(36000)),
-                    if(when: caster_has_aura(382517), then: [
-                        apply_aura(aura: 382516, target: caster, stacks: 1),
-                    ]),
                     if(when: target_has_aura(aura: 457129, from_self: true), then: [
                         remove_stacks(aura: 457129, target: target, stacks: 1),
                         trigger_spell(spell: 457157, target: target),
@@ -9847,6 +9918,10 @@
                     trigger_spell(spell: 1264397, target: target),
                 ]),
                 remove_aura(aura: 457167, target: caster),
+                if(when: caster_has_aura(1269163), then: [
+                    consume_stacks(aura: 196911, target: caster, up_to_deficit: Some(combo_points), then: [gain_resource(kind: combo_points, amount: event_amount(1.0)), if(when: caster_has_aura(1268932), then: [if(when: caster_has_aura(382506), then: [chance(chance: 0.2, per_event_amount: true, then: [trigger_spell(spell: 1269565, target: target, delay: 500)])], otherwise: [chance(chance: 0.15, per_event_amount: true, then: [trigger_spell(spell: 1269565, target: target, delay: 500)])])])]),
+                    remove_aura(aura: 1269163, target: caster),
+                ]),
             ],
         ),
         319190: (
@@ -9880,13 +9955,15 @@
             castable_while_moving: true,
             effects: [
                 trigger_spell(spell: 280720, target: target),
+                if(when: caster_has_aura(1269163), then: [
+                    trigger_spell(spell: 282449, target: target, delay: 500),
+                    trigger_spell(spell: 282449, target: target, delay: 500),
+                ], otherwise: [
+                    trigger_spell(spell: 282449, target: target, delay: 1000),
+                    trigger_spell(spell: 282449, target: target, delay: 1300),
+                ]),
                 if(when: spent_at_least(5), then: [
-                    trigger_spell(spell: 280720, target: target),
-                    trigger_spell(spell: 280720, target: target),
                     apply_aura(aura: 315496, target: caster, stacks: 1, duration: Some(36000)),
-                    if(when: caster_has_aura(382517), then: [
-                        apply_aura(aura: 382516, target: caster, stacks: 1),
-                    ]),
                     if(when: caster_has_aura(441274), then: [
                         apply_aura(aura: 441275, target: caster, stacks: 2),
                     ]),
@@ -9907,19 +9984,37 @@
                     remove_stacks(aura: 1264398, target: caster, stacks: 1),
                     trigger_spell(spell: 1264397, target: target),
                 ]),
+                if(when: caster_has_aura(1269163), then: [
+                    consume_stacks(aura: 196911, target: caster, up_to_deficit: Some(combo_points), then: [gain_resource(kind: combo_points, amount: event_amount(1.0)), if(when: caster_has_aura(1268932), then: [if(when: caster_has_aura(382506), then: [chance(chance: 0.2, per_event_amount: true, then: [trigger_spell(spell: 1269560, target: target, delay: 500)])], otherwise: [chance(chance: 0.15, per_event_amount: true, then: [trigger_spell(spell: 1269560, target: target, delay: 500)])])])]),
+                    remove_aura(aura: 1269163, target: caster),
+                ]),
             ],
         ),
         280720: (
             id: 280720,
+            name: "Secret Technique",
+            school: 1,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            range: Some(100.0),
+            effects: [
+                damage(amount: attack_power(0.2808), school: 1, target: near_target(yards: 8), aoe: Some((max_targets: None, sqrt_cap: Some(6), secondary: 1.0, full_primary: true)), per_count: Some((count: spent, pct: 100.0, form: times))),
+            ],
+        ),
+        282449: (
+            id: 282449,
             name: "Secret Technique (Clone)",
             school: 32,
             cast: instant,
             gcd: None,
             targeting: enemy,
             hostile: true,
-            range: Some(10.0),
+            range: Some(100.0),
             effects: [
-                damage(amount: attack_power(1.68), school: 32, target: near_target(yards: 8), aoe: Some((max_targets: None, sqrt_cap: Some(6), secondary: 1.0, full_primary: true))),
+                damage(amount: attack_power(0.2808), school: 32, target: near_target(yards: 8), aoe: Some((max_targets: None, sqrt_cap: Some(6), secondary: 1.0, full_primary: true)), per_count: Some((count: spent, pct: 100.0, form: times))),
+                if(when: caster_has_aura(1268936), then: [if(when: caster_stacks_at_least(aura: 1268936, stacks: 2), then: [apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))], otherwise: [chance(chance: 0.5, then: [apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))])])]),
             ],
         ),
         185313: (
@@ -9934,18 +10029,10 @@
             castable_while_moving: true,
             effects: [
                 if(when: caster_has_aura(470678), then: [
-                    if(when: caster_has_aura(185314), then: [
-                        apply_aura(aura: 185422, target: caster, stacks: 1, duration: Some(11500)),
-                    ], otherwise: [
-                        apply_aura(aura: 185422, target: caster, stacks: 1, duration: Some(10000)),
-                    ]),
+                    apply_aura(aura: 185422, target: caster, stacks: 1, duration: Some(10000)),
                     remove_aura(aura: 470678, target: caster),
                 ], otherwise: [
-                    if(when: caster_has_aura(185314), then: [
-                        apply_aura(aura: 185422, target: caster, stacks: 1, duration: Some(7200)),
-                    ], otherwise: [
-                        apply_aura(aura: 185422, target: caster, stacks: 1),
-                    ]),
+                    apply_aura(aura: 185422, target: caster, stacks: 1),
                 ]),
                 if(when: caster_has_aura(196976), then: [
                     resource((kind: energy, amount: 30.0)),
@@ -9961,9 +10048,6 @@
                 ]),
                 if(when: caster_has_aura(382528), then: [
                     apply_aura(aura: 1264398, target: caster, stacks: 3),
-                ]),
-                if(when: caster_has_aura(457056), then: [
-                    apply_aura(aura: 457060, target: caster, stacks: 1),
                 ]),
             ],
         ),
@@ -9981,6 +10065,22 @@
                 apply_aura(aura: 121471, target: caster, stacks: 1),
             ],
         ),
+        // SimC's `shadow_blades_attack`: a share of each hit as Shadow, taken
+        // after mitigation, with no caster modifiers or crit.
+        457236: (
+            id: 457236,
+            name: "Singular Focus",
+            school: 40,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            range: Some(100.0),
+            no_procs: true,
+            effects: [
+                damage(amount: event_amount(0.05), school: 40, target: enemies_with_aura(aura: 457129, from_self: true), ignores_armor: true, unmodified: true),
+            ],
+        ),
         279043: (
             id: 279043,
             name: "Shadow Blades (Hit)",
@@ -9989,9 +10089,41 @@
             gcd: None,
             targeting: enemy,
             hostile: true,
-            range: Some(5.0),
+            range: Some(100.0),
+            no_procs: true,
             effects: [
-                damage(amount: attack_power(0.35), school: 32, target: target),
+                damage(amount: event_amount(0.2), school: 32, target: target, ignores_armor: true, unmodified: true),
+            ],
+        ),
+        // 1% per Lingering Shadow stack of the hit after mitigation, with no
+        // caster modifiers or crit.
+        386081: (
+            id: 386081,
+            name: "Lingering Shadow",
+            school: 32,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            range: Some(100.0),
+            no_procs: true,
+            effects: [
+                damage(amount: event_amount(0.01), school: 32, target: target, ignores_armor: true, unmodified: true, per_count: Some((count: caster_stacks(aura: 385960), pct: 100.0, form: times))),
+            ],
+        ),
+        // The Subtlety 12.1 4pc's Lingering Shadow on finishers, at 60%.
+        1296593: (
+            id: 1296593,
+            name: "Lingering Shadow",
+            school: 32,
+            cast: instant,
+            gcd: None,
+            targeting: enemy,
+            hostile: true,
+            range: Some(100.0),
+            no_procs: true,
+            effects: [
+                damage(amount: event_amount(0.006), school: 32, target: target, ignores_armor: true, unmodified: true, per_count: Some((count: caster_stacks(aura: 385960), pct: 100.0, form: times))),
             ],
         ),
         426591: (
@@ -10017,6 +10149,8 @@
                     trigger_spell(spell: 1264397, target: target),
                 ]),
                 remove_stacks(aura: 382016, target: caster, stacks: 1),
+                consume_stacks(aura: 196911, target: caster, up_to_deficit: Some(combo_points), then: [gain_resource(kind: combo_points, amount: event_amount(1.0)), if(when: caster_has_aura(1268932), then: [if(when: caster_has_aura(382506), then: [chance(chance: 0.2, per_event_amount: true, then: [trigger_spell(spell: 1269217, target: target, delay: 200)])], otherwise: [chance(chance: 0.15, per_event_amount: true, then: [trigger_spell(spell: 1269217, target: target, delay: 200)])])])]),
+                if(when: caster_has_aura(1268939), then: [if(when: caster_stacks_at_least(aura: 196911, stacks: 5), then: [apply_aura(aura: 1269163, target: caster, stacks: 1)])]),
             ],
         ),
         426592: (
@@ -10099,9 +10233,6 @@
                 if(when: caster_has_aura(441321), then: [
                     apply_aura(aura: 441326, target: caster, stacks: 5),
                 ]),
-                if(when: caster_has_aura(382517), then: [
-                    apply_aura(aura: 382516, target: caster, stacks: 1),
-                ]),
                 if(when: caster_has_aura(1264398), then: [
                     remove_stacks(aura: 1264398, target: caster, stacks: 1),
                     trigger_spell(spell: 1264397, target: target),
@@ -10158,9 +10289,6 @@
                 ]),
                 if(when: caster_has_aura(1248774), then: [
                     apply_aura(aura: 1248775, target: caster, stacks: 1),
-                ]),
-                if(when: caster_has_aura(457055), then: [
-                    apply_aura(aura: 457236, target: caster, stacks: 1),
                 ]),
                 if(when: target_has_aura(aura: 457129, from_self: true), then: [], otherwise: [
                     if(when: caster_has_aura(457058), then: [
@@ -15736,6 +15864,215 @@
         357209: (id: 357209, name: "Fire Breath (Periodic)", school: 4, cast: instant, gcd: None, targeting: enemy, hostile: true, range: Some(25.0), effects: []),
     },
     auras: {
+        // Armor specializations: the primary stat in matching armor.
+        86108: (
+            id: 86108,
+            name: "Mail Specialization",
+            duration: None,
+            modifiers: [(scope: all, kind: stat_pct(intellect), value: 5.0)],
+        ),
+        86099: (
+            id: 86099,
+            name: "Mail Specialization",
+            duration: None,
+            modifiers: [(scope: all, kind: stat_pct(agility), value: 5.0)],
+        ),
+        86538: (
+            id: 86538,
+            name: "Mail Specialization",
+            duration: None,
+            modifiers: [(scope: all, kind: stat_pct(agility), value: 5.0)],
+        ),
+        366524: (
+            id: 366524,
+            name: "Mail Specialization",
+            duration: None,
+            modifiers: [(scope: all, kind: stat_pct(intellect), value: 5.0)],
+        ),
+        86101: (
+            id: 86101,
+            name: "Plate Specialization",
+            duration: None,
+            modifiers: [(scope: all, kind: stat_pct(strength), value: 5.0)],
+        ),
+        86110: (
+            id: 86110,
+            name: "Plate Specialization",
+            duration: None,
+            modifiers: [(scope: all, kind: stat_pct(strength), value: 5.0)],
+        ),
+        86539: (
+            id: 86539,
+            name: "Plate Specialization",
+            duration: None,
+            modifiers: [(scope: all, kind: stat_pct(strength), value: 5.0)],
+        ),
+        86113: (
+            id: 86113,
+            name: "Plate Specialization",
+            duration: None,
+            modifiers: [(scope: all, kind: stat_pct(strength), value: 5.0)],
+        ),
+        86536: (
+            id: 86536,
+            name: "Plate Specialization",
+            duration: None,
+            modifiers: [(scope: all, kind: stat_pct(strength), value: 5.0)],
+        ),
+        86092: (
+            id: 86092,
+            name: "Leather Specialization",
+            duration: None,
+            modifiers: [(scope: all, kind: stat_pct(agility), value: 5.0)],
+        ),
+        120227: (
+            id: 120227,
+            name: "Leather Specialization",
+            duration: None,
+            modifiers: [(scope: all, kind: stat_pct(agility), value: 5.0)],
+        ),
+        86104: (
+            id: 86104,
+            name: "Leather Specialization",
+            duration: None,
+            modifiers: [(scope: all, kind: stat_pct(intellect), value: 5.0)],
+        ),
+        86097: (
+            id: 86097,
+            name: "Leather Specialization",
+            duration: None,
+            modifiers: [(scope: all, kind: stat_pct(agility), value: 5.0)],
+        ),
+        178976: (
+            id: 178976,
+            name: "Leather Specialization",
+            duration: None,
+            modifiers: [(scope: all, kind: stat_pct(agility), value: 5.0)],
+        ),
+        1277734: (
+            id: 1277734,
+            name: "Leather Specialization",
+            duration: None,
+            modifiers: [(scope: all, kind: stat_pct(intellect), value: 5.0)],
+        ),
+        // Supercharger (rank 2): Shadow Dance, Adrenaline Rush, or Kingsbane
+        // charges two combo points; a damaging finisher spends one to count
+        // two more (three with Forced Induction).
+        470347: (
+            id: 470347,
+            name: "Supercharger",
+            duration: None,
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(185313), school: None),
+                    chance: always,
+                    effects: [apply_aura(aura: 470398, target: caster, stacks: 2)],
+                ),
+                (
+                    on: cast_complete(spell: Some(13750), school: None),
+                    chance: always,
+                    effects: [apply_aura(aura: 470398, target: caster, stacks: 2)],
+                ),
+                (
+                    on: cast_complete(spell: Some(385627), school: None),
+                    chance: always,
+                    effects: [apply_aura(aura: 470398, target: caster, stacks: 2)],
+                ),
+            ],
+        ),
+        470398: (
+            id: 470398,
+            name: "Supercharge",
+            duration: None,
+            max_stacks: 7,
+            modifiers: [
+                (scope: spell(196819), kind: spend_bonus(combo_points), value: 2.0),
+                (scope: spell(319175), kind: spend_bonus(combo_points), value: 2.0),
+                (scope: spell(1943), kind: spend_bonus(combo_points), value: 2.0),
+                (scope: spell(280719), kind: spend_bonus(combo_points), value: 2.0),
+                (scope: spell(441776), kind: spend_bonus(combo_points), value: 2.0),
+                (scope: spell(2098), kind: spend_bonus(combo_points), value: 2.0),
+                (scope: spell(315341), kind: spend_bonus(combo_points), value: 2.0),
+                (scope: spell(32645), kind: spend_bonus(combo_points), value: 2.0),
+                (scope: spell(1247227), kind: spend_bonus(combo_points), value: 2.0),
+                (scope: spell(51690), kind: spend_bonus(combo_points), value: 2.0),
+            ],
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(196819), school: None),
+                    chance: always,
+                    effects: [remove_stacks(aura: 470398, target: caster, stacks: 1)],
+                ),
+                (
+                    on: cast_complete(spell: Some(319175), school: None),
+                    chance: always,
+                    effects: [remove_stacks(aura: 470398, target: caster, stacks: 1)],
+                ),
+                (
+                    on: cast_complete(spell: Some(1943), school: None),
+                    chance: always,
+                    effects: [remove_stacks(aura: 470398, target: caster, stacks: 1)],
+                ),
+                (
+                    on: cast_complete(spell: Some(280719), school: None),
+                    chance: always,
+                    effects: [remove_stacks(aura: 470398, target: caster, stacks: 1)],
+                ),
+                (
+                    on: cast_complete(spell: Some(441776), school: None),
+                    chance: always,
+                    effects: [remove_stacks(aura: 470398, target: caster, stacks: 1)],
+                ),
+                (
+                    on: cast_complete(spell: Some(2098), school: None),
+                    chance: always,
+                    effects: [remove_stacks(aura: 470398, target: caster, stacks: 1)],
+                ),
+                (
+                    on: cast_complete(spell: Some(315341), school: None),
+                    chance: always,
+                    effects: [remove_stacks(aura: 470398, target: caster, stacks: 1)],
+                ),
+                (
+                    on: cast_complete(spell: Some(32645), school: None),
+                    chance: always,
+                    effects: [remove_stacks(aura: 470398, target: caster, stacks: 1)],
+                ),
+                (
+                    on: cast_complete(spell: Some(1247227), school: None),
+                    chance: always,
+                    effects: [remove_stacks(aura: 470398, target: caster, stacks: 1)],
+                ),
+                (
+                    on: cast_complete(spell: Some(51690), school: None),
+                    chance: always,
+                    effects: [remove_stacks(aura: 470398, target: caster, stacks: 1)],
+                ),
+            ],
+        ),
+        470668: (
+            id: 470668,
+            name: "Forced Induction",
+            duration: None,
+            modifiers: [
+                (scope: spell(196819), kind: spend_bonus(combo_points), value: 1.0, condition: Some(caster_has_aura(470398))),
+                (scope: spell(319175), kind: spend_bonus(combo_points), value: 1.0, condition: Some(caster_has_aura(470398))),
+                (scope: spell(1943), kind: spend_bonus(combo_points), value: 1.0, condition: Some(caster_has_aura(470398))),
+                (scope: spell(280719), kind: spend_bonus(combo_points), value: 1.0, condition: Some(caster_has_aura(470398))),
+                (scope: spell(441776), kind: spend_bonus(combo_points), value: 1.0, condition: Some(caster_has_aura(470398))),
+                (scope: spell(2098), kind: spend_bonus(combo_points), value: 1.0, condition: Some(caster_has_aura(470398))),
+                (scope: spell(315341), kind: spend_bonus(combo_points), value: 1.0, condition: Some(caster_has_aura(470398))),
+                (scope: spell(32645), kind: spend_bonus(combo_points), value: 1.0, condition: Some(caster_has_aura(470398))),
+                (scope: spell(1247227), kind: spend_bonus(combo_points), value: 1.0, condition: Some(caster_has_aura(470398))),
+                (scope: spell(51690), kind: spend_bonus(combo_points), value: 1.0, condition: Some(caster_has_aura(470398))),
+            ],
+        ),
+        1267210: (
+            id: 1267210,
+            name: "Quick Fingers",
+            duration: None,
+            modifiers: [(scope: all, kind: stat_pct(agility), value: 3.0)],
+        ),
         // Raid buffs and debuffs a full group brings, for run externals.
         1459: (
             id: 1459,
@@ -16434,7 +16771,7 @@
             duration: None,
             listeners: [
                 (
-                    on: cast_complete(spell: None, school: None),
+                    on: cast_complete(spell: None, school: None, hostile: true),
                     chance: always,
                     effects: [apply_aura(aura: 170377, target: caster)],
                 ),
@@ -25426,12 +25763,6 @@
             name: "Mastery: Potent Assassin",
             duration: None,
             modifiers: [
-                (scope: school(40), kind: mastery_damage_pct, value: 1.0),
-                (scope: spell(703), kind: mastery_damage_pct, value: 1.0),
-                (scope: spell(1943), kind: mastery_damage_pct, value: 1.0),
-                (scope: spell(360194), kind: mastery_damage_pct, value: 1.0),
-                (scope: spell(381628), kind: mastery_damage_pct, value: 1.0),
-                (scope: spell(1247227), kind: mastery_damage_pct, value: 1.0),
             ],
         ),
         76806: (
@@ -25456,12 +25787,6 @@
             name: "Mastery: Executioner",
             duration: None,
             modifiers: [
-                (scope: spell(196819), kind: mastery_damage_pct, value: 1.0),
-                (scope: spell(328082), kind: mastery_damage_pct, value: 1.0),
-                (scope: spell(319175), kind: mastery_damage_pct, value: 1.0),
-                (scope: spell(319190), kind: mastery_damage_pct, value: 1.0),
-                (scope: spell(280720), kind: mastery_damage_pct, value: 1.0),
-                (scope: spell(441776), kind: mastery_damage_pct, value: 1.0),
             ],
         ),
         382238: (
@@ -25469,17 +25794,336 @@
             name: "Lethality",
             duration: None,
             modifiers: [
-                (scope: all, kind: crit_damage_pct, value: 10.0),
+            ],
+        ),
+        157442: (
+            id: 157442,
+            name: "Critical Strikes",
+            duration: None,
+            modifiers: [
+            ],
+        ),
+        381542: (
+            id: 381542,
+            name: "Deadly Precision",
+            duration: None,
+            modifiers: [
+            ],
+        ),
+        1267216: (
+            id: 1267216,
+            name: "Deep Cuts",
+            duration: None,
+            modifiers: [
+            ],
+        ),
+        193531: (
+            id: 193531,
+            name: "Deeper Stratagem",
+            duration: None,
+            modifiers: [
+            ],
+        ),
+        381543: (
+            id: 381543,
+            name: "Virulent Poisons",
+            duration: None,
+            modifiers: [
+            ],
+        ),
+        1296590: (
+            id: 1296590,
+            name: "Rogue Assassination 12.1 Class Set 2pc",
+            duration: None,
+            modifiers: [
+                (scope: abilities, kind: damage_done_pct, value: 3.0, condition: Some(caster_has_aura(32645))),
+                (scope: auto_attack, kind: damage_done_pct, value: 3.0, condition: Some(caster_has_aura(32645))),
+            ],
+        ),
+        1296591: (id: 1296591, name: "Rogue Assassination 12.1 Class Set 4pc", duration: None),
+        1296588: (
+            id: 1296588,
+            name: "Rogue Outlaw 12.1 Class Set 2pc",
+            duration: None,
+            modifiers: [
+            ],
+        ),
+        1296589: (id: 1296589, name: "Rogue Outlaw 12.1 Class Set 4pc", duration: None),
+        1296592: (
+            id: 1296592,
+            name: "Rogue Subtlety 12.1 Class Set 2pc",
+            duration: None,
+            modifiers: [
+                (scope: spell(53), kind: resource_cost_flat(energy), value: -10.0),
+                (scope: spell(1269209), kind: resource_cost_flat(energy), value: -10.0),
+                (scope: spell(200758), kind: resource_cost_flat(energy), value: -10.0),
+                (scope: spell(1269214), kind: resource_cost_flat(energy), value: -10.0),
+                (scope: spell(197835), kind: resource_cost_flat(energy), value: -5.0),
+                (scope: spell(1269340), kind: resource_cost_flat(energy), value: -5.0),
+            ],
+        ),
+        1296593: (id: 1296593, name: "Rogue Subtlety 12.1 Class Set 4pc", duration: None),
+        193539: (
+            id: 193539,
+            name: "Alacrity",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: haste_pct, value: 3.0),
+            ],
+        ),
+        14983: (
+            id: 14983,
+            name: "Vigor",
+            duration: None,
+            modifiers: [
+                (scope: all, kind: resource_max(energy), value: 100.0),
+                (scope: all, kind: resource_regen_pct(energy), value: 10.0),
+            ],
+        ),
+        1267182: (
+            id: 1267182,
+            name: "Toxic Stiletto",
+            duration: None,
+            modifiers: [
+                (scope: spell(5938), kind: cost_pct, value: -100.0),
+                (scope: spell(5938), kind: cooldown_pct, value: -60.0),
+            ],
+        ),
+        381620: (
+            id: 381620,
+            name: "Improved Ambush",
+            duration: None,
+            modifiers: [
+            ],
+        ),
+        382245: (
+            id: 382245,
+            name: "Cold Blooded Killer",
+            duration: None,
+            listeners: [
+                (
+                    on: damage_dealt(spell: Some(53), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    internal_cooldown: Some(100),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(703), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(5374), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(5938), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(8676), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(27576), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(51723), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(185438), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(185763), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(193315), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(197834), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(197835), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(200758), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(385627), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(426591), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(426592), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(426593), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(1247227), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(1269336), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(1269340), school: None, crit_only: true),
+                    chance: flat(1.0),
+                    shared_with: Some(0),
+                    effects: [apply_aura(aura: 1264297, target: caster, stacks: 1)],
+                ),
+            ],
+        ),
+        1264297: (
+            id: 1264297,
+            name: "Cold Blood",
+            duration: None,
+            modifiers: [
+            ],
+            listeners: [
+                (
+                    on: cast_complete(spell: Some(2098), school: None),
+                    chance: flat(1.0),
+                    effects: [remove_aura(aura: 1264297, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(32645), school: None),
+                    chance: flat(1.0),
+                    effects: [remove_aura(aura: 1264297, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(51690), school: None),
+                    chance: flat(1.0),
+                    effects: [remove_aura(aura: 1264297, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(57841), school: None),
+                    chance: flat(1.0),
+                    effects: [remove_aura(aura: 1264297, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(57842), school: None),
+                    chance: flat(1.0),
+                    effects: [remove_aura(aura: 1264297, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(196819), school: None),
+                    chance: flat(1.0),
+                    effects: [remove_aura(aura: 1264297, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(280719), school: None),
+                    chance: flat(1.0),
+                    effects: [remove_aura(aura: 1264297, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(280720), school: None),
+                    chance: flat(1.0),
+                    effects: [remove_aura(aura: 1264297, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(315341), school: None),
+                    chance: flat(1.0),
+                    effects: [remove_aura(aura: 1264297, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(319175), school: None),
+                    chance: flat(1.0),
+                    effects: [remove_aura(aura: 1264297, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(319190), school: None),
+                    chance: flat(1.0),
+                    effects: [remove_aura(aura: 1264297, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(328082), school: None),
+                    chance: flat(1.0),
+                    effects: [remove_aura(aura: 1264297, target: caster)],
+                ),
+                (
+                    on: cast_complete(spell: Some(441776), school: None),
+                    chance: flat(1.0),
+                    effects: [remove_aura(aura: 1264297, target: caster)],
+                ),
             ],
         ),
         381621: (
             id: 381621,
-            name: "Precision",
+            name: "Tight Spender",
             duration: None,
             modifiers: [
-                (scope: all, kind: crit_chance_add, value: 4.0),
+                (scope: spell(1943), kind: resource_cost_pct(energy), value: -6.0),
+                (scope: spell(2098), kind: resource_cost_pct(energy), value: -6.0),
+                (scope: spell(32645), kind: resource_cost_pct(energy), value: -6.0),
+                (scope: spell(51690), kind: resource_cost_pct(energy), value: -6.0),
+                (scope: spell(57841), kind: resource_cost_pct(energy), value: -6.0),
+                (scope: spell(57842), kind: resource_cost_pct(energy), value: -6.0),
+                (scope: spell(196819), kind: resource_cost_pct(energy), value: -6.0),
+                (scope: spell(1269205), kind: resource_cost_pct(energy), value: -6.0),
+                (scope: spell(280719), kind: resource_cost_pct(energy), value: -6.0),
+                (scope: spell(280720), kind: resource_cost_pct(energy), value: -6.0),
+                (scope: spell(282449), kind: resource_cost_pct(energy), value: -6.0),
+                (scope: spell(1269560), kind: resource_cost_pct(energy), value: -6.0),
+                (scope: spell(315341), kind: resource_cost_pct(energy), value: -6.0),
+                (scope: spell(319175), kind: resource_cost_pct(energy), value: -6.0),
+                (scope: spell(1269565), kind: resource_cost_pct(energy), value: -6.0),
+                (scope: spell(319190), kind: resource_cost_pct(energy), value: -6.0),
+                (scope: spell(328082), kind: resource_cost_pct(energy), value: -6.0),
+                (scope: spell(441776), kind: resource_cost_pct(energy), value: -6.0),
+                (scope: spell(315496), kind: resource_cost_pct(energy), value: -6.0),
             ],
         ),
+        381988: (id: 381988, name: "Swift Slasher", duration: None),
         378813: (
             id: 378813,
             name: "Fleet Footed",
@@ -25536,6 +26180,7 @@
             modifiers: [
                 (scope: all, kind: attack_speed_pct, value: 50.0),
                 (scope: all, kind: attack_speed_pct, value: 5.0, condition: Some(caster_has_aura(441346))),
+                (scope: all, kind: attack_speed_from_haste_pct, value: 100.0, condition: Some(caster_has_aura(381988))),
             ],
         ),
         319504: (
@@ -25543,10 +26188,6 @@
             name: "Shiv",
             duration: Some(8000),
             modifiers: [
-                (scope: school(8), kind: source_damage_taken_pct, value: 30.0),
-                (scope: school(40), kind: source_damage_taken_pct, value: 30.0),
-                (scope: spell(703), kind: source_damage_taken_pct, value: 30.0),
-                (scope: spell(1943), kind: source_damage_taken_pct, value: 30.0),
             ],
         ),
         381623: (
@@ -25594,9 +26235,7 @@
             name: "Motivated Murderer",
             duration: None,
             modifiers: [
-                (scope: spell(5374), kind: damage_done_pct, value: 15.0),
-                (scope: spell(27576), kind: damage_done_pct, value: 15.0),
-                (scope: spell(8676), kind: damage_done_pct, value: 15.0),
+                (scope: all, kind: resource_regen_pct(energy), value: 20.0),
             ],
         ),
         381624: (
@@ -25621,7 +26260,6 @@
             name: "Canny Strikes",
             duration: None,
             modifiers: [
-                (scope: all, kind: crit_chance_add, value: 3.0),
             ],
         ),
         381627: (id: 381627, name: "Internal Bleeding", duration: None),
@@ -25724,8 +26362,6 @@
             duration: Some(5000),
             refresh: pandemic(0.3),
             modifiers: [
-                (scope: spell(2818), kind: damage_done_pct, value: 15.0),
-                (scope: spell(113780), kind: damage_done_pct, value: 15.0),
             ],
         ),
         381626: (
@@ -25733,8 +26369,6 @@
             name: "Bloody Mess",
             duration: None,
             modifiers: [
-                (scope: spell(703), kind: damage_done_pct, value: 15.0),
-                (scope: spell(1943), kind: damage_done_pct, value: 15.0),
             ],
         ),
         360194: (
@@ -25742,11 +26376,6 @@
             name: "Deathmark",
             duration: Some(16000),
             modifiers: [
-                (scope: spell(703), kind: source_damage_taken_pct, value: 75.0),
-                (scope: spell(1943), kind: source_damage_taken_pct, value: 75.0),
-                (scope: spell(2818), kind: source_damage_taken_pct, value: 75.0),
-                (scope: spell(113780), kind: source_damage_taken_pct, value: 75.0),
-                (scope: spell(385627), kind: source_damage_taken_pct, value: 75.0),
             ],
             periodic: Some((
                 period: 2000,
@@ -25759,7 +26388,16 @@
                 ],
             )),
         ),
-        360195: (id: 360195, name: "Deathmark (Caster)", duration: Some(16000)),
+        360195: (
+            id: 360195,
+            name: "Deathmark (Caster)",
+            duration: Some(16000),
+            on_expire: [
+                if(when: caster_has_aura(457056), then: [
+                    apply_aura(aura: 457273, target: caster, stacks: 1),
+                ]),
+            ],
+        ),
         421975: (
             id: 421975,
             name: "Caustic Spatter",
@@ -25782,8 +26420,6 @@
             duration: None,
             modifiers: [
                 (scope: all, kind: resource_max(combo_points), value: 1.0),
-                (scope: spell(32645), kind: damage_done_pct, value: 5.0),
-                (scope: spell(1943), kind: damage_done_pct, value: 5.0),
             ],
         ),
         381630: (id: 381630, name: "Intent to Kill", duration: None),
@@ -25794,9 +26430,6 @@
             duration: None,
             max_stacks: 2,
             modifiers: [
-                (scope: spell(2818), kind: damage_done_pct, value: 8.0, per_stack: true),
-                (scope: spell(113780), kind: damage_done_pct, value: 8.0, per_stack: true),
-                (scope: spell(32645), kind: damage_done_pct, value: 8.0, per_stack: true),
             ],
         ),
         1249809: (
@@ -25825,7 +26458,7 @@
             name: "Flying Daggers",
             duration: None,
             modifiers: [
-                (scope: spell(51723), kind: damage_done_pct, value: 15.0, condition: Some(enemies_at_least(5))),
+                (scope: spell(51723), kind: damage_done_pct, value: 10.0, condition: Some(enemies_at_least(5))),
             ],
         ),
         1250141: (
@@ -25903,7 +26536,6 @@
             duration: Some(14000),
             max_stacks: 50,
             modifiers: [
-                (scope: spell(385627), kind: damage_done_pct, value: 2.0, per_stack: true),
             ],
         ),
         455072: (
@@ -25965,7 +26597,6 @@
             name: "Avulsion",
             duration: None,
             modifiers: [
-                (scope: spell(1943), kind: damage_done_pct, value: 15.0),
             ],
         ),
         381799: (id: 381799, name: "Scent of Blood", duration: None, max_stacks: 2),
@@ -25983,7 +26614,6 @@
             name: "Unstable Toxin",
             duration: None,
             modifiers: [
-                (scope: spell(32645), kind: damage_done_pct, value: 15.0),
             ],
         ),
         381801: (
@@ -26000,8 +26630,6 @@
             name: "Sudden Demise",
             duration: None,
             modifiers: [
-                (scope: spell(703), kind: damage_done_pct, value: 10.0),
-                (scope: spell(1943), kind: damage_done_pct, value: 10.0),
             ],
         ),
         1265385: (
@@ -26009,7 +26637,6 @@
             name: "Implacable (Rank 1)",
             duration: None,
             modifiers: [
-                (scope: spell(32645), kind: damage_done_pct, value: 10.0),
             ],
             listeners: [
                 (
@@ -26027,10 +26654,6 @@
             duration: None,
             max_stacks: 2,
             modifiers: [
-                (scope: school(8), kind: damage_done_pct, value: 10.0, per_stack: true),
-                (scope: school(40), kind: damage_done_pct, value: 10.0, per_stack: true),
-                (scope: spell(703), kind: damage_done_pct, value: 10.0, per_stack: true),
-                (scope: spell(1943), kind: damage_done_pct, value: 10.0, per_stack: true),
             ],
         ),
         1265387: (id: 1265387, name: "Implacable (Rank 4)", duration: None),
@@ -26063,8 +26686,6 @@
             max_stacks: 6,
             modifiers: [
                 (scope: spell(185763), kind: cost_pct, value: -50.0),
-                (scope: spell(185763), kind: damage_done_pct, value: 100.0),
-                (scope: spell(185763), kind: damage_done_pct, value: 50.0, condition: Some(caster_has_aura(196938))),
             ],
         ),
         196922: (id: 196922, name: "Hit and Run", duration: None),
@@ -26076,7 +26697,6 @@
             modifiers: [
                 (scope: all, kind: attack_speed_pct, value: 20.0),
                 (scope: all, kind: gcd_pct, value: -20.0),
-                (scope: all, kind: damage_done_pct, value: 15.0, condition: Some(caster_has_aura(1256630))),
                 (scope: all, kind: haste_pct, value: 10.0, condition: Some(caster_has_aura(1259465))),
             ],
             periodic: Some((
@@ -26129,8 +26749,6 @@
             name: "Precision Shot",
             duration: None,
             modifiers: [
-                (scope: spell(315341), kind: damage_done_pct, value: 10.0),
-                (scope: spell(185763), kind: damage_done_pct, value: 10.0),
             ],
         ),
         1259499: (
@@ -26138,8 +26756,6 @@
             name: "Crescendo of Violence",
             duration: None,
             modifiers: [
-                (scope: spell(193315), kind: damage_done_pct, value: 10.0),
-                (scope: spell(185763), kind: damage_done_pct, value: 10.0),
             ],
         ),
         381878: (id: 381878, name: "Deft Maneuvers", duration: None),
@@ -26149,8 +26765,6 @@
             duration: None,
             modifiers: [
                 (scope: all, kind: resource_max(combo_points), value: 1.0),
-                (scope: spell(2098), kind: damage_done_pct, value: 5.0),
-                (scope: spell(315341), kind: damage_done_pct, value: 5.0),
             ],
         ),
         35551: (id: 35551, name: "Fatal Flourish", duration: None),
@@ -26207,7 +26821,6 @@
             refresh: pandemic(0.3),
             modifiers: [
                 (scope: all, kind: haste_pct, value: 8.0),
-                (scope: all, kind: damage_done_pct, value: 5.0),
             ],
         ),
         381839: (id: 381839, name: "Sleight of Hand", duration: None),
@@ -26216,7 +26829,6 @@
             name: "Improved Between the Eyes",
             duration: None,
             modifiers: [
-                (scope: spell(315341), kind: crit_damage_pct, value: 100.0),
             ],
         ),
         315341: (
@@ -26227,7 +26839,6 @@
             max_stacks: 2,
             modifiers: [
                 (scope: all, kind: crit_chance_add, value: 20.0),
-                (scope: all, kind: damage_done_pct, value: 5.0, per_stack: true),
             ],
         ),
         13877: (
@@ -26255,8 +26866,6 @@
             name: "Flickering Steel",
             duration: None,
             modifiers: [
-                (scope: spell(193315), kind: damage_done_pct, value: 10.0),
-                (scope: spell(8676), kind: damage_done_pct, value: 10.0),
             ],
         ),
         381845: (id: 381845, name: "Audacity", duration: None),
@@ -26267,8 +26876,6 @@
             duration: None,
             max_stacks: 2,
             modifiers: [
-                (scope: spell(193315), kind: damage_done_pct, value: 5.0, per_stack: true),
-                (scope: spell(8676), kind: damage_done_pct, value: 5.0, per_stack: true),
             ],
         ),
         395422: (id: 395422, name: "Improved Adrenaline Rush", duration: None),
@@ -26360,6 +26967,10 @@
             ],
         ),
         // Subtlety (261) auras.
+        // SimC's `trigger_shadow_techniques`: each landed swing counts; at 3
+        // (or 2, half the time; always at 2 with Shadowcraft in Dance) it
+        // stores a combo point unless its 450 ms internal cooldown is running,
+        // which leaves the count to carry on.
         196912: (
             id: 196912,
             name: "Shadow Techniques",
@@ -26367,22 +26978,29 @@
             listeners: [
                 (
                     on: swing(hand: None),
-                    chance: flat(0.45),
-                    icd: Some(450),
+                    chance: always,
                     effects: [
-                        apply_aura(aura: 196911, target: caster, stacks: 1),
-                        resource((kind: energy, amount: 6.0)),
-                        resource((kind: combo_points, amount: 1.0)),
+                        apply_aura(aura: 912601, target: caster, stacks: 1),
                         if(when: caster_has_aura(426594), then: [
                             if(when: caster_has_aura(185422), then: [
-                                resource((kind: combo_points, amount: 1.0)),
+                                if(when: caster_stacks_at_least(aura: 912601, stacks: 2), then: [if(when: caster_lacks_aura(912602), then: [remove_aura(aura: 912601, target: caster), apply_aura(aura: 912602, target: caster, stacks: 1), apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))])]),
+                            ], otherwise: [
+                                if(when: caster_stacks_at_least(aura: 912601, stacks: 3), then: [if(when: caster_lacks_aura(912602), then: [remove_aura(aura: 912601, target: caster), apply_aura(aura: 912602, target: caster, stacks: 1), apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))])], otherwise: [
+                                    if(when: caster_stacks_at_least(aura: 912601, stacks: 2), then: [chance(chance: 0.5, then: [if(when: caster_lacks_aura(912602), then: [remove_aura(aura: 912601, target: caster), apply_aura(aura: 912602, target: caster, stacks: 1), apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))])])]),
+                                ]),
+                            ]),
+                        ], otherwise: [
+                            if(when: caster_stacks_at_least(aura: 912601, stacks: 3), then: [if(when: caster_lacks_aura(912602), then: [remove_aura(aura: 912601, target: caster), apply_aura(aura: 912602, target: caster, stacks: 1), apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))])], otherwise: [
+                                if(when: caster_stacks_at_least(aura: 912601, stacks: 2), then: [chance(chance: 0.5, then: [if(when: caster_lacks_aura(912602), then: [remove_aura(aura: 912601, target: caster), apply_aura(aura: 912602, target: caster, stacks: 1), apply_aura(aura: 196911, target: caster, stacks: 1), if(when: caster_has_aura(426594), then: [if(when: caster_has_aura(185422), then: [apply_aura(aura: 196911, target: caster, stacks: 1)])]), resource((kind: energy, amount: 5.0))])])]),
                             ]),
                         ]),
                     ],
                 ),
             ],
         ),
-        196911: (id: 196911, name: "Shadow Techniques (Stacks)", duration: Some(30000), max_stacks: 10),
+        912601: (id: 912601, name: "Shadow Techniques (Count)", duration: None, max_stacks: 10),
+        912602: (id: 912602, name: "Shadow Techniques (Cooldown)", duration: Some(450)),
+        196911: (id: 196911, name: "Shadow Techniques (Stacks)", duration: None, max_stacks: 10),
         91023: (id: 91023, name: "Find Weakness", duration: None),
         316220: (
             id: 316220,
@@ -26390,6 +27008,10 @@
             duration: Some(18000),
             refresh: pandemic(0.3),
             modifiers: [
+                (scope: spell(1269209), kind: damage_done_pct, value: 10.0),
+                (scope: spell(1269214), kind: damage_done_pct, value: 10.0),
+                (scope: spell(1269336), kind: damage_done_pct, value: 10.0),
+                (scope: spell(1269340), kind: damage_done_pct, value: 10.0),
                 (scope: all, kind: armor_pen_pct, value: 30.0),
                 (scope: all, kind: armor_pen_pct, value: 20.0, condition: Some(caster_has_aura(382512))),
                 (scope: spell(53), kind: damage_done_pct, value: 10.0),
@@ -26467,8 +27089,6 @@
             name: "Improved Secret Technique",
             duration: None,
             modifiers: [
-                (scope: spell(280719), kind: damage_done_pct, value: 15.0),
-                (scope: spell(280720), kind: damage_done_pct, value: 15.0),
             ],
         ),
         58423: (
@@ -26516,12 +27136,6 @@
             name: "Secret Stratagem",
             duration: None,
             modifiers: [
-                (scope: spell(196819), kind: damage_done_pct, value: 5.0),
-                (scope: spell(328082), kind: damage_done_pct, value: 5.0),
-                (scope: spell(280720), kind: damage_done_pct, value: 5.0),
-                (scope: spell(319175), kind: damage_done_pct, value: 5.0),
-                (scope: spell(319190), kind: damage_done_pct, value: 5.0),
-                (scope: spell(441776), kind: damage_done_pct, value: 5.0),
             ],
         ),
         1264764: (id: 1264764, name: "Shuriken Tornado", duration: None),
@@ -26530,12 +27144,16 @@
             name: "Umbral Edge",
             duration: None,
             modifiers: [
-                (scope: spell(280720), kind: damage_done_pct, value: 15.0),
-                (scope: spell(1269336), kind: damage_done_pct, value: 15.0),
-                (scope: spell(1269340), kind: damage_done_pct, value: 15.0),
             ],
         ),
-        185314: (id: 185314, name: "Deepening Shadows", duration: None),
+        185314: (
+            id: 185314,
+            name: "Deepening Shadows",
+            duration: None,
+            modifiers: [
+                (scope: spell(185313), kind: duration_per_haste_pct, value: 1.5),
+            ],
+        ),
         426593: (
             id: 426593,
             name: "Goremaw's Bite",
@@ -26569,8 +27187,6 @@
             name: "Veiltouched",
             duration: None,
             modifiers: [
-                (scope: school(32), kind: damage_done_pct, value: 5.0),
-                (scope: school(40), kind: damage_done_pct, value: 5.0),
             ],
         ),
         382506: (
@@ -26578,9 +27194,6 @@
             name: "Replicating Shadows",
             duration: None,
             modifiers: [
-                (scope: spell(280720), kind: damage_done_pct, value: 15.0),
-                (scope: spell(1269336), kind: damage_done_pct, value: 15.0),
-                (scope: spell(1269340), kind: damage_done_pct, value: 15.0),
             ],
         ),
         382512: (id: 382512, name: "Improved Find Weakness", duration: None),
@@ -26595,17 +27208,101 @@
             ],
         ),
         382524: (id: 382524, name: "Lingering Shadow", duration: None),
-        386081: (
-            id: 386081,
+        // SimC's `lingering_shadow` buff: 50 stacks as Shadow Dance ends, each
+        // second falling to `ceil(50 - 50 / 18 * tick) - 1`, from its first
+        // tick at once.
+        385960: (
+            id: 385960,
             name: "Lingering Shadow",
             duration: Some(18000),
-            modifiers: [
-                (scope: spell(53), kind: damage_done_pct, value: 25.0),
-                (scope: spell(200758), kind: damage_done_pct, value: 25.0),
-                (scope: spell(197835), kind: damage_done_pct, value: 25.0),
+            max_stacks: 50,
+            periodic: Some((
+                period: 1000,
+                hasted: false,
+                partial_final_tick: false,
+                tick_zero: true,
+                effects: [
+                    if(when: caster_stacks_at_least(aura: 385960, stacks: 50), then: [remove_stacks(aura: 385960, target: caster, stacks: 1)], otherwise: [if(when: caster_stacks_at_least(aura: 385960, stacks: 48), then: [remove_stacks(aura: 385960, target: caster, stacks: 2)], otherwise: [if(when: caster_stacks_at_least(aura: 385960, stacks: 39), then: [remove_stacks(aura: 385960, target: caster, stacks: 3)], otherwise: [if(when: caster_stacks_at_least(aura: 385960, stacks: 37), then: [remove_stacks(aura: 385960, target: caster, stacks: 2)], otherwise: [if(when: caster_stacks_at_least(aura: 385960, stacks: 25), then: [remove_stacks(aura: 385960, target: caster, stacks: 3)], otherwise: [if(when: caster_stacks_at_least(aura: 385960, stacks: 23), then: [remove_stacks(aura: 385960, target: caster, stacks: 2)], otherwise: [if(when: caster_stacks_at_least(aura: 385960, stacks: 14), then: [remove_stacks(aura: 385960, target: caster, stacks: 3)], otherwise: [if(when: caster_stacks_at_least(aura: 385960, stacks: 12), then: [remove_stacks(aura: 385960, target: caster, stacks: 2)], otherwise: [remove_stacks(aura: 385960, target: caster, stacks: 3)])])])])])])])]),
+                ],
+            )),
+            listeners: [
+                (
+                    on: damage_dealt(spell: Some(53), school: None, crit_only: false, direct: Some(true)),
+                    chance: always,
+                    effects: [trigger_spell(spell: 386081, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(200758), school: None, crit_only: false, direct: Some(true)),
+                    chance: always,
+                    effects: [trigger_spell(spell: 386081, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(197835), school: None, crit_only: false, direct: Some(true)),
+                    chance: always,
+                    effects: [trigger_spell(spell: 386081, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(196819), school: None, crit_only: false, direct: Some(true)),
+                    chance: always,
+                    condition: Some(caster_has_aura(1296593)),
+                    effects: [trigger_spell(spell: 1296593, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(328082), school: None, crit_only: false, direct: Some(true)),
+                    chance: always,
+                    condition: Some(caster_has_aura(1296593)),
+                    effects: [trigger_spell(spell: 1296593, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(319175), school: None, crit_only: false, direct: Some(true)),
+                    chance: always,
+                    condition: Some(caster_has_aura(1296593)),
+                    effects: [trigger_spell(spell: 1296593, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(319190), school: None, crit_only: false, direct: Some(true)),
+                    chance: always,
+                    condition: Some(caster_has_aura(1296593)),
+                    effects: [trigger_spell(spell: 1296593, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(1269209), school: None, crit_only: false, direct: Some(true)),
+                    chance: always,
+                    effects: [trigger_spell(spell: 386081, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(1269214), school: None, crit_only: false, direct: Some(true)),
+                    chance: always,
+                    effects: [trigger_spell(spell: 386081, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(1269340), school: None, crit_only: false, direct: Some(true)),
+                    chance: always,
+                    effects: [trigger_spell(spell: 386081, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(1269205), school: None, crit_only: false, direct: Some(true)),
+                    chance: always,
+                    condition: Some(caster_has_aura(1296593)),
+                    effects: [trigger_spell(spell: 1296593, target: target)],
+                ),
+                (
+                    on: damage_dealt(spell: Some(1269565), school: None, crit_only: false, direct: Some(true)),
+                    chance: always,
+                    condition: Some(caster_has_aura(1296593)),
+                    effects: [trigger_spell(spell: 1296593, target: target)],
+                ),
             ],
         ),
-        382517: (id: 382517, name: "Deeper Daggers", duration: None),
+        // Its spell-family share on Shadow Blades' and Lingering Shadow's
+        // copies, which take no other caster modifiers.
+        382517: (
+            id: 382517,
+            name: "Deeper Daggers",
+            duration: None,
+            modifiers: [
+            ],
+        ),
         382516: (
             id: 382516,
             name: "Deeper Daggers",
@@ -26630,6 +27327,21 @@
             duration: None,
             max_stacks: 2,
             modifiers: [
+                (scope: spell(280719), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(121471))),
+                (scope: spell(282449), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(121471))),
+                (scope: spell(1269205), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(121471))),
+                (scope: spell(1269560), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(121471))),
+                (scope: spell(1269565), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(121471))),
+                (scope: spell(280719), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(185422))),
+                (scope: spell(282449), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(185422))),
+                (scope: spell(1269205), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(185422))),
+                (scope: spell(1269560), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(185422))),
+                (scope: spell(1269565), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(185422))),
+                (scope: spell(280719), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(target_has_aura(aura: 316220, from_self: true))),
+                (scope: spell(282449), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(target_has_aura(aura: 316220, from_self: true))),
+                (scope: spell(1269205), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(target_has_aura(aura: 316220, from_self: true))),
+                (scope: spell(1269560), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(target_has_aura(aura: 316220, from_self: true))),
+                (scope: spell(1269565), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(target_has_aura(aura: 316220, from_self: true))),
                 (scope: spell(196819), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(target_has_aura(aura: 316220, from_self: true))),
                 (scope: spell(328082), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(target_has_aura(aura: 316220, from_self: true))),
                 (scope: spell(280720), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(target_has_aura(aura: 316220, from_self: true))),
@@ -26656,7 +27368,8 @@
             duration: None,
             max_stacks: 2,
             modifiers: [
-                (scope: all, kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(185422))),
+                (scope: spell(1269336), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(185422))),
+                (scope: spell(1269340), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(185422))),
                 (scope: spell(185438), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(185422))),
                 (scope: spell(197835), kind: damage_done_pct, value: 5.0, per_stack: true, condition: Some(caster_has_aura(185422))),
             ],
@@ -26664,10 +27377,64 @@
         185422: (
             id: 185422,
             name: "Shadow Dance",
+            modifiers: [
+                (scope: spell(53), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(703), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(1943), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(2098), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(2818), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(5374), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(5938), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(8676), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(27576), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(32645), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(51723), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(57841), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(57842), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(86392), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(113780), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(185438), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(185763), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(193315), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(196819), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(197834), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(197835), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(200758), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(255546), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(280719), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(280720), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(282449), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(315341), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(319175), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(319190), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(328082), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(360194), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(381628), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(385627), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(426592), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(426593), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(441144), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(452538), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(457157), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(457193), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(1247227), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(1264397), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(1265794), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(1265918), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(1269205), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(1269209), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(1269214), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(1269217), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(1269336), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(1269340), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(1269560), kind: crit_damage_pct, value: 10.0),
+                (scope: spell(1269565), kind: crit_damage_pct, value: 10.0),
+            ],
             duration: Some(6000),
             on_expire: [
                 if(when: caster_has_aura(382524), then: [
-                    apply_aura(aura: 386081, target: caster, stacks: 1),
+                    remove_aura(aura: 385960, target: caster),
+                    apply_aura(aura: 385960, target: caster, stacks: 50),
                 ]),
                 remove_aura(aura: 1264398, target: caster),
             ],
@@ -26676,12 +27443,17 @@
             id: 121471,
             name: "Shadow Blades",
             duration: Some(16000),
-            modifiers: [
-                (scope: all, kind: damage_done_pct, value: 20.0),
+            listeners: [
+                (
+                    on: damage_dealt(spell: None, school: None, crit_only: false, class_only: true),
+                    chance: always,
+                    chain: true,
+                    effects: [trigger_spell(spell: 279043, target: target)],
+                ),
             ],
             on_expire: [
                 if(when: caster_has_aura(457056), then: [
-                    apply_aura(aura: 457060, target: caster, stacks: 1),
+                    apply_aura(aura: 457273, target: caster, stacks: 1),
                 ]),
             ],
         ),
@@ -26691,11 +27463,6 @@
             duration: None,
             max_stacks: 2,
             modifiers: [
-                (scope: spell(196819), kind: crit_damage_pct, value: 15.0, per_stack: true),
-                (scope: spell(328082), kind: crit_damage_pct, value: 15.0, per_stack: true),
-                (scope: spell(319175), kind: crit_damage_pct, value: 15.0, per_stack: true),
-                (scope: spell(319190), kind: crit_damage_pct, value: 15.0, per_stack: true),
-                (scope: spell(441776), kind: crit_damage_pct, value: 15.0, per_stack: true),
             ],
         ),
         382526: (
@@ -26703,6 +27470,7 @@
             name: "Finality: Eviscerate",
             duration: Some(20000),
             modifiers: [
+                (scope: spell(1269205), kind: damage_done_pct, value: 20.0),
                 (scope: spell(196819), kind: damage_done_pct, value: 20.0),
                 (scope: spell(328082), kind: damage_done_pct, value: 20.0),
             ],
@@ -26731,8 +27499,6 @@
             name: "Dark Brew",
             duration: None,
             modifiers: [
-                (scope: school(32), kind: damage_done_pct, value: 12.0),
-                (scope: school(40), kind: damage_done_pct, value: 12.0),
             ],
         ),
         1268932: (id: 1268932, name: "Ancient Arts (Rank 1)", duration: None),
@@ -26742,24 +27508,10 @@
             duration: None,
             max_stacks: 2,
             modifiers: [
-                (scope: school(32), kind: damage_done_pct, value: 5.0, per_stack: true),
-                (scope: school(40), kind: damage_done_pct, value: 5.0, per_stack: true),
             ],
         ),
-        1268939: (
-            id: 1268939,
-            name: "Ancient Arts (Rank 4)",
-            duration: None,
-            listeners: [
-                (
-                    on: resource_spent(combo_points),
-                    chance: always,
-                    effects: [
-                        resource((kind: combo_points, amount: 0.4)),
-                    ],
-                ),
-            ],
-        ),
+        1268939: (id: 1268939, name: "Ancient Arts (Rank 4)", duration: None),
+        1269163: (id: 1269163, name: "Ancient Arts", duration: Some(12000)),
         // Trickster (51) hero tree auras.
         441146: (id: 441146, name: "Unseen Blade", duration: None),
         459485: (id: 459485, name: "Unseen Blade (Cooldown)", duration: Some(20000)),
@@ -26769,8 +27521,15 @@
             duration: Some(10000),
             refresh: pandemic(0.3),
             modifiers: [
-                (scope: all, kind: source_damage_taken_pct, value: 5.0),
-                (scope: all, kind: source_damage_taken_pct, value: 5.0, condition: Some(caster_has_aura(1276626))),
+                (scope: spell(282449), kind: crit_chance_add, value: 10.0, condition: Some(caster_has_aura(441398))),
+                (scope: spell(1269205), kind: crit_chance_add, value: 10.0, condition: Some(caster_has_aura(441398))),
+                (scope: spell(1269560), kind: crit_chance_add, value: 10.0, condition: Some(caster_has_aura(441398))),
+                (scope: spell(1269565), kind: crit_chance_add, value: 10.0, condition: Some(caster_has_aura(441398))),
+                (scope: spell(1269209), kind: crit_damage_pct, value: 50.0, condition: Some(caster_has_aura(441273))),
+                (scope: spell(1269214), kind: crit_damage_pct, value: 50.0, condition: Some(caster_has_aura(441273))),
+                (scope: spell(1269217), kind: crit_damage_pct, value: 50.0, condition: Some(caster_has_aura(441273))),
+                (scope: spell(1269336), kind: crit_damage_pct, value: 50.0, condition: Some(caster_has_aura(441273))),
+                (scope: spell(1269340), kind: crit_damage_pct, value: 50.0, condition: Some(caster_has_aura(441273))),
                 (scope: spell(193315), kind: crit_damage_pct, value: 50.0, condition: Some(caster_has_aura(441273))),
                 (scope: spell(53), kind: crit_damage_pct, value: 50.0, condition: Some(caster_has_aura(441273))),
                 (scope: spell(200758), kind: crit_damage_pct, value: 50.0, condition: Some(caster_has_aura(441273))),
@@ -26797,17 +27556,6 @@
             duration: Some(12000),
             max_stacks: 5,
             modifiers: [
-                (scope: spell(196819), kind: damage_done_pct, value: 4.0, per_stack: true),
-                (scope: spell(328082), kind: damage_done_pct, value: 4.0, per_stack: true),
-                (scope: spell(280720), kind: damage_done_pct, value: 4.0, per_stack: true),
-                (scope: spell(319175), kind: damage_done_pct, value: 4.0, per_stack: true),
-                (scope: spell(319190), kind: damage_done_pct, value: 4.0, per_stack: true),
-                (scope: spell(441776), kind: damage_done_pct, value: 4.0, per_stack: true),
-                (scope: spell(2098), kind: damage_done_pct, value: 4.0, per_stack: true),
-                (scope: spell(315341), kind: damage_done_pct, value: 4.0, per_stack: true),
-                (scope: spell(57841), kind: damage_done_pct, value: 4.0, per_stack: true),
-                (scope: spell(57842), kind: damage_done_pct, value: 4.0, per_stack: true),
-                (scope: spell(1943), kind: damage_done_pct, value: 4.0, per_stack: true),
             ],
         ),
         1276626: (id: 1276626, name: "Hoodwink", duration: None),
@@ -26851,9 +27599,6 @@
             name: "Clever Combatant",
             duration: None,
             modifiers: [
-                (scope: spell(185763), kind: crit_chance_add, value: 20.0),
-                (scope: spell(197835), kind: crit_chance_add, value: 10.0),
-                (scope: spell(1269340), kind: crit_chance_add, value: 10.0),
             ],
         ),
         441423: (id: 441423, name: "Coup de Grace", duration: None),
@@ -26948,8 +27693,6 @@
             duration: Some(15000),
             max_stacks: 10,
             modifiers: [
-                (scope: all, kind: damage_done_pct, value: 5.0),
-                (scope: all, kind: damage_done_pct, value: 2.0, per_stack: true),
             ],
         ),
         1249201: (id: 1249201, name: "Chosen's Revelry", duration: None),
@@ -27041,9 +27784,6 @@
             name: "Clear the Witnesses",
             duration: None,
             modifiers: [
-                (scope: spell(51723), kind: damage_done_pct, value: 60.0),
-                (scope: spell(197835), kind: damage_done_pct, value: 60.0),
-                (scope: spell(1269340), kind: damage_done_pct, value: 60.0),
             ],
         ),
         457054: (
@@ -27061,15 +27801,20 @@
                 ),
             ],
         ),
-        457055: (id: 457055, name: "Singular Focus", duration: None),
-        457236: (
-            id: 457236,
+        457055: (
+            id: 457055,
             name: "Singular Focus",
-            duration: Some(12000),
-            modifiers: [
-                (scope: school(8), kind: damage_done_pct, value: 5.0),
-                (scope: school(32), kind: damage_done_pct, value: 5.0),
-                (scope: school(40), kind: damage_done_pct, value: 5.0),
+            duration: None,
+            listeners: [
+                (
+                    on: damage_dealt(spell: None, school: None, crit_only: false),
+                    chance: always,
+                    effects: [
+                        if(when: target_has_aura(aura: 457129, from_self: true), then: [], otherwise: [
+                            trigger_spell(spell: 457236, target: target),
+                        ]),
+                    ],
+                ),
             ],
         ),
         1272989: (
@@ -27087,13 +27832,6 @@
             duration: Some(12000),
             max_stacks: 3,
             modifiers: [
-                (scope: spell(53), kind: damage_done_pct, value: 50.0),
-                (scope: spell(200758), kind: damage_done_pct, value: 50.0),
-                (scope: spell(1329), kind: damage_done_pct, value: 50.0),
-                (scope: spell(5374), kind: damage_done_pct, value: 50.0),
-                (scope: spell(27576), kind: damage_done_pct, value: 50.0),
-                (scope: spell(8676), kind: damage_done_pct, value: 50.0),
-                (scope: spell(185438), kind: damage_done_pct, value: 25.0),
             ],
         ),
         1248785: (id: 1248785, name: "Corrupt the Blood", duration: None),
@@ -27113,14 +27851,13 @@
             )),
         ),
         457056: (id: 457056, name: "Lingering Darkness", duration: None),
-        457060: (
-            id: 457060,
+        457273: (
+            id: 457273,
             name: "Lingering Darkness",
             duration: Some(30000),
             modifiers: [
-                (scope: school(8), kind: damage_done_pct, value: 10.0),
-                (scope: school(32), kind: damage_done_pct, value: 10.0),
-                (scope: school(40), kind: damage_done_pct, value: 10.0),
+                (scope: school(8), kind: damage_done_pct, value: 30.0, condition: Some(caster_has_aura(76803))),
+                (scope: school(32), kind: damage_done_pct, value: 30.0, condition: Some(caster_has_aura(76808))),
             ],
         ),
         457062: (id: 457062, name: "Symbolic Victory", duration: None),
@@ -27130,12 +27867,6 @@
             duration: Some(12000),
             max_stacks: 2,
             modifiers: [
-                (scope: spell(32645), kind: damage_done_pct, value: 18.0),
-                (scope: spell(196819), kind: damage_done_pct, value: 15.0),
-                (scope: spell(328082), kind: damage_done_pct, value: 15.0),
-                (scope: spell(319175), kind: damage_done_pct, value: 15.0),
-                (scope: spell(319190), kind: damage_done_pct, value: 15.0),
-                (scope: spell(441776), kind: damage_done_pct, value: 15.0),
             ],
         ),
         1273017: (
@@ -27205,11 +27936,13 @@
             duration: Some(30000),
             modifiers: [
                 (scope: spell(32645), kind: crit_chance_add, value: 100.0),
-                (scope: spell(32645), kind: damage_done_pct, value: 60.0),
+                (scope: spell(32645), kind: damage_done_pct, value: 35.0),
                 (scope: spell(196819), kind: crit_chance_add, value: 100.0),
-                (scope: spell(196819), kind: damage_done_pct, value: 60.0),
+                (scope: spell(196819), kind: damage_done_pct, value: 35.0),
                 (scope: spell(328082), kind: crit_chance_add, value: 100.0),
-                (scope: spell(328082), kind: damage_done_pct, value: 60.0),
+                (scope: spell(328082), kind: damage_done_pct, value: 35.0),
+                (scope: spell(1269205), kind: crit_chance_add, value: 100.0),
+                (scope: spell(1269205), kind: damage_done_pct, value: 35.0),
             ],
         ),
         // Mage baseline, Arcane (62), Fire (63), Frost (64),
@@ -34497,7 +35230,11 @@
             weapon: Some((speed: 2000, min_damage: 90.0, max_damage: 130.0, ranged: false)),
         ),
     },
-    item_sets: {},
+    item_sets: {
+        1159: (id: 1159, name: "Chosen Bloodslayer's Hexweave (Assassination)", bonuses: [(2, 1296590), (4, 1296591)]),
+        1160: (id: 1160, name: "Chosen Bloodslayer's Hexweave (Outlaw)", bonuses: [(2, 1296588), (4, 1296589)]),
+        1161: (id: 1161, name: "Chosen Bloodslayer's Hexweave (Subtlety)", bonuses: [(2, 1296592), (4, 1296593)]),
+    },
     // Talents that grant nothing don't affect a single-target dummy fight.
     talents: {
         191634: (id: 191634, name: "Stormkeeper", ranks: [[spell(191634)]]),

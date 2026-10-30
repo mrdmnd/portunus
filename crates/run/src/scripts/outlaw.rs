@@ -157,12 +157,14 @@ pub fn outlaw(d: &Decision<SeatObs>) -> Choice {
     } else {
         6.0
     };
-    let act = o.cds().or_else(|| {
-        if o.cp >= finish_threshold {
-            o.finish()
-        } else {
-            o.build()
-        }
-    });
+    let act = super::use_buff_trinket(d, true)
+        .or_else(|| o.cds())
+        .or_else(|| {
+            if o.cp >= finish_threshold {
+                o.finish()
+            } else {
+                o.build()
+            }
+        });
     act.map_or(Choice::Wait(Wait::NextEvent), Choice::cast)
 }
